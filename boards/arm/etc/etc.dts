@@ -1,0 +1,140 @@
+/dts-v1/;
+#include <nordic/nrf52833_qiaa.dtsi>
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "ETC Core";
+	compatible = "nordic,nrf52833-dk-nrf52833";
+
+	chosen {
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
+	};
+};
+
+&gpiote {
+	status = "okay";
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+&i2c1 {
+	compatible = "nordic,nrf-twi";
+	status = "okay"; 
+	sda-pin = <4>;
+	scl-pin = <26>;
+};
+
+&adc {
+	status = "okay";
+};
+
+&spi0 {
+	compatible = "nordic,nrf-spi";
+	status = "okay";
+	sck-pin = <13>;
+	mosi-pin = <7>;
+	miso-pin = <12>;
+
+	status = "okay";
+	cs-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+
+	lora: sx1276@0 {
+		compatible = "semtech,sx1276";
+		reg = <0>;
+		label = "sx1276";
+		reset-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+		dio-gpios = <&gpio0 4 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
+		            <&gpio0 1 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
+		            <&gpio0 0 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
+		            <&gpio0 13(GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
+		            <&gpio0 5 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
+		            <&gpio0 4 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+		rfi-enable-gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+		rfo-enable-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+		pa-boost-enable-gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+		tcxo-power-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+		tcxo-power-startup-delay-ms = <5>;
+		spi-max-frequency = <1000000>;
+	};
+
+	mx25r1635: mx25r1635@1 {
+		compatible = "jedec,spi-nor";
+		reg = <1>;
+		spi-max-frequency = <1000000>;
+		label = "MX25R16";
+		jedec-id = [0b 40 16];
+		size = <67108864>;
+	};
+};
+
+&uart0 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+	current-speed = <115200>;
+	tx-pin = <6>;
+	rx-pin = <8>;
+	rx-pull-up;
+	rts-pin = <5>;
+	cts-pin = <7>;
+	cts-pull-up;
+};
+
+&uart1 {
+	status = "okay";
+	current-speed = <115200>;
+	rx-pin = <17>;
+	tx-pin = <19>;
+
+	quectel_bg95 {
+		compatible = "quectel,bg95";
+		label      = "quectel-bg95";
+		status     = "okay";
+	};
+};
+
+&flash0 {
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x000000000 0xC000>;
+		};
+		slot0_partition: partition@c000 {
+			label = "image-0";
+			reg = <0x0000C000 0x6A000>;
+		};
+		scratch_partition: partition@76000 {
+			label = "image-scratch";
+			reg = <0x00076000 0xA000>;
+		};
+	};
+};
+
+&mx25r1635 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		slot1_partition: partition@0000 {
+			label = "image-1";
+			reg = <0x000000000 0x6A000>;
+		};
+		storage_partition: partition@6A000 {
+			label = "storage";
+			reg = <0x0006A000 0x0034c000>;
+		};
+	};
+};

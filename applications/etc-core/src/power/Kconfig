@@ -1,0 +1,33 @@
+config POWER_MODULE
+	bool "Enable Power module"
+	select PM
+	select PM_DEVICE
+	default y
+	help
+		Enable the Power Management Module
+
+menu "Power Management Module"
+	visible if POWER_MODULE
+
+config POWER_MODULE_RTC
+	bool "Use RTC to control wakeup power"
+	default y
+	select COUNTER
+
+if POWER_MODULE_RTC
+
+config POWER_MODULE_RTC_NAME
+	string "Power module device name for wakeup"
+	default "RTC0"
+
+config POWER_MODULE_SLEEP_TIME_SECOND
+	int "Time for sleep"
+	default 1800
+
+endif
+
+endmenu
+
+module = POWER
+module-str = Power
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

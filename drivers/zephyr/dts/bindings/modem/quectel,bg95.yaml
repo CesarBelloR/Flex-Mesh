@@ -1,0 +1,28 @@
+# Copyright (c) 2020 Analog Life LLC
+# SPDX-License-Identifier: Apache-2.0
+
+description: quectel BG95 modem
+
+compatible: "quectel,bg95"
+
+include: uart-device.yaml
+
+properties:
+    label:
+      required: true
+
+    mdm-power-gpios:
+      type: phandle-array
+      required: false
+
+    mdm-reset-gpios:
+      type: phandle-array
+      required: false
+
+    mdm-dtr-gpios:
+      type: phandle-array
+      required: false
+
+    mdm-wdisable-gpios:
+      type: phandle-array
+      required: false

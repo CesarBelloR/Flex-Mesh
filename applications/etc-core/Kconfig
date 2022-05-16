@@ -1,0 +1,28 @@
+menu "EXACT Core 2.0 Application"
+
+config APP_VERSION
+	string "Application version"
+	default "v1.0.0"
+
+
+config PUBLICATION_INTERVAL_SECONDS
+	int "Interval in seconds that the sample will publish data"
+	default 60
+
+config CONNECTION_RETRY_TIMEOUT_SECONDS
+	int "Number of seconds between each AWS IoT connection retry"
+	default 30
+
+endmenu
+
+menu "Zephyr Kernel"
+source "$ZEPHYR_BASE/Kconfig.zephyr"
+endmenu
+
+rsource "src/drivers/Kconfig"
+rsource "src/ui/Kconfig"
+rsource "src/power/Kconfig"
+
+module = ETC_APP
+module-str = ETC App
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

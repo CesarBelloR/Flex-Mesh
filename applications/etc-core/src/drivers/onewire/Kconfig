@@ -1,0 +1,5 @@
+config DS2484
+	bool "Bridge I2C to One-wire driver"
+	depends on I2C
+	help
+	  Enable driver for the DS2484 the bridge I2C to One-wire protocol.

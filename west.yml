@@ -1,0 +1,15 @@
+manifest:
+  self:
+    path: etc-firmware
+
+  remotes:
+    - name: sdk-nrf
+      url-base: https://github.com/nrfconnect
+
+  projects:
+    - name: nrf
+      remote: sdk-nrf
+      repo-path: sdk-nrf
+      revision: v1.8.0-rc2
+      import: true
+    

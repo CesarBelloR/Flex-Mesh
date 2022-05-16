@@ -1,0 +1,12 @@
+/ {
+	chosen {
+		nordic,pm-ext-flash = &mx25r1635;
+	};
+
+	ds18s20 {
+		compatible = "maxim,ds18s20";
+		status = "okay";
+		label = "DS18S20";
+		dio-gpios = <&gpio0 11 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+	};
+};

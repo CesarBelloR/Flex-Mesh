@@ -1,0 +1,226 @@
+From 7ae35febc6a6016d3e3832982c22b73b3fbda17a Mon Sep 17 00:00:00 2001
+From: Bui Trung Kien <trungkiena6@gmail.com>
+Date: Mon, 25 Apr 2022 13:10:17 +0700
+Subject: [PATCH] nrf: update net library to support 3rd modem
+
+---
+ subsys/net/lib/aws_fota/src/aws_fota_json.c   | 12 ++++---
+ subsys/net/lib/aws_iot/src/aws_iot.c          |  6 +---
+ subsys/net/lib/aws_jobs/src/aws_jobs.c        |  9 +++--
+ .../lib/download_client/src/download_client.c | 33 +++++++++----------
+ .../net/lib/fota_download/src/fota_download.c | 12 +++----
+ 5 files changed, 38 insertions(+), 34 deletions(-)
+
+diff --git a/subsys/net/lib/aws_fota/src/aws_fota_json.c b/subsys/net/lib/aws_fota/src/aws_fota_json.c
+index 8066adf1d..f883834bf 100644
+--- a/subsys/net/lib/aws_fota/src/aws_fota_json.c
++++ b/subsys/net/lib/aws_fota/src/aws_fota_json.c
+@@ -9,7 +9,7 @@
+ #include <cJSON.h>
+ #include <sys/util.h>
+ #include <net/aws_jobs.h>
+-
++#include <stdio.h>
+ #include "aws_fota_json.h"
+ 
+ /**@brief Copy max maxlen bytes from src to dst. Insert null-terminator.
+@@ -112,14 +112,18 @@ int aws_fota_parse_DescribeJobExecution_rsp(const char *job_document,
+ 		ret = -ENODATA;
+ 		goto cleanup;
+ 	}
+-
++	cJSON *protocol = cJSON_GetObjectItemCaseSensitive(location, "protocol");
+ 	cJSON *hostname = cJSON_GetObjectItemCaseSensitive(location, "host");
+ 	cJSON *path = cJSON_GetObjectItemCaseSensitive(location, "path");
+ 
+ 	if ((cJSON_GetStringValue(hostname) != NULL)
+ 	   && (cJSON_GetStringValue(path) != NULL)) {
+-		strncpy_nullterm(hostname_buf, hostname->valuestring,
+-				CONFIG_AWS_FOTA_HOSTNAME_MAX_LEN);
++		char protocol_buf[8] = {0x00};
++		strncpy_nullterm(protocol_buf, protocol->valuestring, 
++			sizeof(protocol_buf));
++		int length = snprintf(hostname_buf, CONFIG_AWS_FOTA_HOSTNAME_MAX_LEN, 
++			"%s://%s", protocol_buf, hostname->valuestring);
++		hostname_buf[length] = '\0';
+ 		strncpy_nullterm(file_path_buf, path->valuestring,
+ 				CONFIG_AWS_FOTA_FILE_PATH_MAX_LEN);
+ 	} else {
+diff --git a/subsys/net/lib/aws_iot/src/aws_iot.c b/subsys/net/lib/aws_iot/src/aws_iot.c
+index a9915baeb..5eb3acd5e 100644
+--- a/subsys/net/lib/aws_iot/src/aws_iot.c
++++ b/subsys/net/lib/aws_iot/src/aws_iot.c
+@@ -14,7 +14,7 @@
+ #include <net/aws_fota.h>
+ #endif
+ 
+-#if defined(CONFIG_BOARD_QEMU_X86) && !defined(CONFIG_NRF_MODEM_LIB)
++#if !defined(CONFIG_NRF_MODEM_LIB)
+ #include "certificates.h"
+ #endif
+ 
+@@ -1046,10 +1046,6 @@ static int connection_poll_start(void)
+ 
+ int aws_iot_ping(void)
+ {
+-	if (client.unacked_ping) {
+-		LOG_DBG("Previous MQTT ping not acknowledged");
+-		return -ECONNRESET;
+-	}
+ 	return mqtt_ping(&client);
+ }
+ 
+diff --git a/subsys/net/lib/aws_jobs/src/aws_jobs.c b/subsys/net/lib/aws_jobs/src/aws_jobs.c
+index 8735806a8..9eba25fd5 100644
+--- a/subsys/net/lib/aws_jobs/src/aws_jobs.c
++++ b/subsys/net/lib/aws_jobs/src/aws_jobs.c
+@@ -239,6 +239,8 @@ static int publish(struct mqtt_client *const client, const uint8_t *job_id,
+ 
+ #define UPDATE_JOB_PAYLOAD "{\"status\":\"%s\",\"statusDetails\": %s,"\
+ "\"expectedVersion\": \"%d\",\"clientToken\": \"%s\"}"
++
++static uint8_t update_job_payload[CONFIG_UPDATE_JOB_PAYLOAD_LEN];
+ int aws_jobs_update_job_execution(struct mqtt_client *const client,
+ 				  const uint8_t *job_id,
+ 				  enum execution_status status,
+@@ -250,18 +252,21 @@ int aws_jobs_update_job_execution(struct mqtt_client *const client,
+ 	if (client_token == NULL) {
+ 		return -EINVAL;
+ 	}
++	
++	/* Make sure it is empty buffer */
++	memset(update_job_payload, 0, CONFIG_UPDATE_JOB_PAYLOAD_LEN);
+ 
+ 	/* Max size document is 1350 char but the max size of the JSON document
+ 	 * is actually 32kb set it to what is the limiting factor which is the
+ 	 * MQTT buffer size for reception.
+ 	 */
+-	uint8_t update_job_payload[CONFIG_UPDATE_JOB_PAYLOAD_LEN];
+ 
+ 	int ret = snprintf(update_job_payload, sizeof(update_job_payload),
+ 			   UPDATE_JOB_PAYLOAD, execution_status_strings[status],
+ 			   (status_details ? (char *)status_details : "null"),
+ 			   expected_version, client_token);
+-
++	update_job_payload[ret] = '\0';
++	LOG_INF("Job Payload %s", log_strdup(update_job_payload));
+ 	if (ret >= CONFIG_UPDATE_JOB_PAYLOAD_LEN) {
+ 		LOG_ERR("Unable to fit formated string in provided buffer.");
+ 		return -ENOMEM;
+diff --git a/subsys/net/lib/download_client/src/download_client.c b/subsys/net/lib/download_client/src/download_client.c
+index 6ec79bfde..f68086966 100644
+--- a/subsys/net/lib/download_client/src/download_client.c
++++ b/subsys/net/lib/download_client/src/download_client.c
+@@ -98,20 +98,27 @@ static int socket_sectag_set(int fd, int sec_tag)
+ 		REQUIRED = 2,
+ 	};
+ 
+-	verify = REQUIRED;
+-
++	if (sec_tag == -1) {
++		verify = NONE;
++	} else {
++		verify = REQUIRED;
++	}
++	
++	LOG_INF("Setting up TLS Peer verification %d", verify);
+ 	err = setsockopt(fd, SOL_TLS, TLS_PEER_VERIFY, &verify, sizeof(verify));
+ 	if (err) {
+ 		LOG_ERR("Failed to setup peer verification, errno %d", errno);
+ 		return -errno;
+ 	}
+ 
+-	LOG_INF("Setting up TLS credentials, tag %d", sec_tag);
+-	err = setsockopt(fd, SOL_TLS, TLS_SEC_TAG_LIST, sec_tag_list,
+-			 sizeof(sec_tag_t) * ARRAY_SIZE(sec_tag_list));
+-	if (err) {
+-		LOG_ERR("Failed to setup socket security tag, errno %d", errno);
+-		return -errno;
++	if (sec_tag != -1) {
++		LOG_INF("Setting up TLS credentials, tag %d", sec_tag);
++		err = setsockopt(fd, SOL_TLS, TLS_SEC_TAG_LIST, sec_tag_list,
++				sizeof(sec_tag_t) * ARRAY_SIZE(sec_tag_list));
++		if (err) {
++			LOG_ERR("Failed to setup socket security tag, errno %d", errno);
++			return -errno;
++		}
+ 	}
+ 
+ 	return 0;
+@@ -222,13 +229,6 @@ static int client_connect(struct download_client *dl, const char *host,
+ 		}
+ 	}
+ 
+-	if (dl->proto == IPPROTO_TLS_1_2 || dl->proto == IPPROTO_DTLS_1_2) {
+-		if (dl->config.sec_tag == -1) {
+-			LOG_WRN("No security tag provided for TLS/DTLS");
+-			return -EINVAL;
+-		}
+-	}
+-
+ 	if (dl->config.sec_tag == -1 && dl->config.set_tls_hostname) {
+ 		LOG_WRN("set_tls_hostname flag is set for non-TLS connection");
+ 		return -EINVAL;
+@@ -282,8 +282,7 @@ static int client_connect(struct download_client *dl, const char *host,
+ 		}
+ 	}
+ 
+-	if ((dl->proto == IPPROTO_TLS_1_2 || dl->proto == IPPROTO_DTLS_1_2)
+-	     && (dl->config.sec_tag != -1)) {
++	if (dl->proto == IPPROTO_TLS_1_2 || dl->proto == IPPROTO_DTLS_1_2){
+ 		err = socket_sectag_set(*fd, dl->config.sec_tag);
+ 		if (err) {
+ 			goto cleanup;
+diff --git a/subsys/net/lib/fota_download/src/fota_download.c b/subsys/net/lib/fota_download/src/fota_download.c
+index 3aa703943..9070432d6 100644
+--- a/subsys/net/lib/fota_download/src/fota_download.c
++++ b/subsys/net/lib/fota_download/src/fota_download.c
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include <zephyr.h>
++#include <stdio.h>
+ #include <logging/log.h>
+ #include <net/fota_download.h>
+ #include <net/download_client.h>
+@@ -292,8 +293,7 @@ int fota_download_start_with_image_type(const char *host, const char *file,
+ 	 * a download needs to be restarted for some reason (e.g. if
+ 	 * continuing a download operation from an offset).
+ 	 */
+-	static char file_buf[FILE_BUF_LEN];
+-	const char *file_buf_ptr = file_buf;
++	static char download_path[FILE_BUF_LEN + 255];
+ 	int err = -1;
+ 
+ 	struct download_client_cfg config = {
+@@ -312,8 +312,8 @@ int fota_download_start_with_image_type(const char *host, const char *file,
+ 	}
+ 
+ 	socket_retries_left = CONFIG_FOTA_SOCKET_RETRIES;
+-
+-	strncpy(file_buf, file, sizeof(file_buf));
++	int length = snprintf(download_path, sizeof(download_path), "%s/%s", host, file);
++	download_path[length] = '\0';
+ 
+ #ifdef PM_S1_ADDRESS
+ 	/* B1 upgrade is supported, check what B1 slot is active,
+@@ -359,14 +359,14 @@ int fota_download_start_with_image_type(const char *host, const char *file,
+ 	}
+ #endif /* PM_S1_ADDRESS */
+ 
+-	err = download_client_connect(&dlc, host, &config);
++	err = download_client_connect(&dlc, download_path, &config);
+ 	if (err != 0) {
+ 		return err;
+ 	}
+ 
+ 	img_type_expected = expected_type;
+ 
+-	err = download_client_start(&dlc, file_buf_ptr, 0);
++	err = download_client_start(&dlc, download_path, 0);
+ 	if (err != 0) {
+ 		download_client_disconnect(&dlc);
+ 		return err;
+-- 
+2.32.0 (Apple Git-132)
+
