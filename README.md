@@ -30,7 +30,7 @@
 * Step 1: Initialize new Zephyr with Nordic SDK from new location with command
 
 ```
-west init -m git@bitbucket.org:etcengineering/etc-core-fw.git --mr <branch you want>
+west init -m git@bitbucket.org:etcengineering/etc-core-fw.git
 
 west update
 ```
