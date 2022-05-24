@@ -2,11 +2,54 @@
 	chosen {
 		nordic,pm-ext-flash = &mx25r1635;
 	};
+};
 
-	ds18s20 {
-		compatible = "maxim,ds18s20";
-		status = "okay";
-		label = "DS18S20";
-		dio-gpios = <&gpio0 11 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+/* A0 = P0.31 = AIN7 */
+/* A1 = P0.5  = AIN3 */
+/* A2 = P0.30 = AIN6 */
+/ {
+	zephyr,user {
+		/* adjust channel number according to pinmux in board.dts */
+		io-channels = <&adc 7>, <&adc 3>, <&adc 6>;
+	};
+};
+	
+/delete-node/ &boot_partition;
+/delete-node/ &slot0_partition;
+/delete-node/ &slot1_partition;
+/delete-node/ &scratch_partition;
+/delete-node/ &storage_partition;
+
+&flash0 {
+	partitions {
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 0x00010000>;
+		};
+		slot0_partition: partition@10000 {
+			label = "image-0";
+			reg = <0x00010000 0x00070000>;
+		};
+	};
+};
+
+&mx25r1635 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		slot1_partition: partition@0 {
+			label = "image-1";
+			reg = <0x00000000 0x00060000>;
+		};
+		etc_partition: partition@60000 {
+			label = "etc-storage";
+			reg = <0x00060000 0x00190000>;
+		};
+		storage_partition: partition@1F0000 {
+			label = "storage";
+			reg = <0x001F0000 0x00010000>;
+		};
 	};
 };

@@ -11,6 +11,85 @@
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
 	};
+
+	leds {
+		compatible = "gpio-leds";
+		led0: led_0 {
+			gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
+			label = "Red LED";
+		};
+		led1: led_1 {
+			gpios = <&gpio1 6 GPIO_ACTIVE_LOW>;
+			label = "Green LED";
+		};
+		led2: led_2 {
+			gpios = <&gpio0 25 GPIO_ACTIVE_LOW>;
+			label = "Blue LED";
+		};
+	};
+
+	pwmleds {
+		compatible = "pwm-leds";
+		pwm_led0: pwm_led_0 {
+			pwms = <&pwm0 34>;
+		};
+		pwm_led1: pwm_led_1 {
+			pwms = <&pwm0 38>;
+		};
+		pwm_led2: pwm_led_2 {
+			pwms = <&pwm0 25>;
+		};
+	};
+
+	buttons {
+		compatible = "gpio-keys";
+		button0: button_0 {
+			gpios = <&gpio1 5 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			label = "Push Button 0";
+		};
+	};
+
+	board-control {
+		sense_enable: sense-enable {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		vsens_enable: vsens-enable {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 23 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		sens_sel0: sens-sel0 {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		sens_sel1: sens-sel1 {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		rtc_int: rtc-int {
+			compatible = "etc,input";
+			control-gpios = <&gpio0 3 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
+		batt_int: batt-int {
+			compatible = "etc,input";
+			control-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
+	};
+	
+	/* These aliases are provided for compatibility with samples */
+	aliases {
+		led0 = &led0;
+		led1 = &led1;
+		led2 = &led2;
+		sw0 = &button0;
+		lora0 = &lora;
+	};
 };
 
 &gpiote {
@@ -25,53 +104,67 @@
 	status = "okay";
 };
 
-&i2c1 {
+&i2c0 {
 	compatible = "nordic,nrf-twi";
 	status = "okay"; 
-	sda-pin = <4>;
-	scl-pin = <26>;
+	sda-pin = <7>;
+	scl-pin = <12>;
 };
 
 &adc {
 	status = "okay";
 };
 
-&spi0 {
+&pwm0 {
+	status = "okay";
+	ch0-pin = <34>;
+	ch0-inverted;
+	ch1-pin = <38>;
+	ch1-inverted;
+	ch2-pin = <25>;
+	ch2-inverted;
+};
+
+&spi1 {
 	compatible = "nordic,nrf-spi";
 	status = "okay";
-	sck-pin = <13>;
-	mosi-pin = <7>;
-	miso-pin = <12>;
+	sck-pin = <26>;
+	mosi-pin = <15>;
+	miso-pin = <27>;
 
 	status = "okay";
-	cs-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+	cs-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
 
 	lora: sx1276@0 {
 		compatible = "semtech,sx1276";
 		reg = <0>;
 		label = "sx1276";
-		reset-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
-		dio-gpios = <&gpio0 4 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
-		            <&gpio0 1 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
-		            <&gpio0 0 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
-		            <&gpio0 13(GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
-		            <&gpio0 5 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>,
-		            <&gpio0 4 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
-		rfi-enable-gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
-		rfo-enable-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
-		pa-boost-enable-gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
-		tcxo-power-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>;
+		dio-gpios = <&gpio0 19 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 		tcxo-power-startup-delay-ms = <5>;
 		spi-max-frequency = <1000000>;
+		power-amplifier-output = "pa-boost";
 	};
+};
 
-	mx25r1635: mx25r1635@1 {
+&spi1 {
+	compatible = "nordic,nrf-spi";
+	status = "okay";
+	sck-pin = <22>;
+	mosi-pin = <21>;
+	miso-pin = <6>;
+
+	status = "okay";
+	cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
+	mx25r1635: mx25r1635@0 {
 		compatible = "jedec,spi-nor";
-		reg = <1>;
+		reg = <0>;
 		spi-max-frequency = <1000000>;
 		label = "MX25R16";
-		jedec-id = [0b 40 16];
-		size = <67108864>;
+		jedec-id = [ 0b 40 16  ];
+		size = <16777216>;
+		wp-gpios = < &gpio1 8 GPIO_ACTIVE_LOW >;
+		hold-gpios = < &gpio0 0 GPIO_ACTIVE_LOW >;
 	};
 };
 
@@ -79,24 +172,23 @@
 	compatible = "nordic,nrf-uarte";
 	status = "okay";
 	current-speed = <115200>;
-	tx-pin = <6>;
-	rx-pin = <8>;
-	rx-pull-up;
-	rts-pin = <5>;
-	cts-pin = <7>;
-	cts-pull-up;
+	tx-pin = <11>;
+	rx-pin = <41>;
 };
 
 &uart1 {
+	compatible = "nordic,nrf-uarte";
 	status = "okay";
 	current-speed = <115200>;
-	rx-pin = <17>;
-	tx-pin = <19>;
+	rx-pin = <16>;
+	tx-pin = <17>;
 
 	quectel_bg95 {
 		compatible = "quectel,bg95";
 		label      = "quectel-bg95";
 		status     = "okay";
+		mdm-power-gpios = <&gpio1 1 0>;
+		mdm-reset-gpios = <&gpio1 4 0>;
 	};
 };
 
@@ -137,4 +229,9 @@
 			reg = <0x0006A000 0x0034c000>;
 		};
 	};
+};
+
+zephyr_udc0: &usbd {
+	compatible = "nordic,nrf-usbd";
+	status = "okay";
 };

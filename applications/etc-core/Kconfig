@@ -19,10 +19,6 @@ menu "Zephyr Kernel"
 source "$ZEPHYR_BASE/Kconfig.zephyr"
 endmenu
 
-rsource "src/drivers/Kconfig"
-rsource "src/ui/Kconfig"
-rsource "src/power/Kconfig"
-
 module = ETC_APP
 module-str = ETC App
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

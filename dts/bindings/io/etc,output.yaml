@@ -1,0 +1,15 @@
+description: ETC Output IO
+
+compatible: "etc,output"
+
+include: base.yaml
+
+properties:
+    status:
+      required: true
+
+    control-gpios:
+      type: phandle-array
+      required: true
+      description: |
+        GPIO output
