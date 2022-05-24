@@ -1,9 +1,0 @@
-menuconfig BQ24195
-	bool "BQ24195 Power Management Integrated Circuits (PMIC)"
-	depends on I2C
-	help
-	  Enable I2C-based driver for BQ24195 PMIC.
-
-if BQ24195
-
-endif # BQ24195

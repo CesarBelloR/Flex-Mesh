@@ -1,5 +1,0 @@
-rsource "bq24195/Kconfig"
-rsource "pcf85263/Kconfig"
-rsource "onewire/Kconfig"
-rsource "ds18s20/Kconfig"
-rsource "adc/Kconfig"

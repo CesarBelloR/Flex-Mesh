@@ -1,7 +1,7 @@
 /***************************************************************************/
 /*!
-\file       adc.h
-\brief      ADC Driver to read analog data
+\file       etc_aws.h
+\brief      AWS service application
 
 \product    General purpose
 \processor  ARM Cortex M
@@ -10,29 +10,16 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#ifndef ADC_H_
-#define ADC_H_
+#ifndef ETC_AWS_H_
+#define ETC_AWS_H_
 
 #include <stdint.h>
-#include <sys/timeutil.h>
-
+#include <stdbool.h>
 /***************************************************************************/
 /* Definitions                                                             */
 /***************************************************************************/
-#define ADC_MODULE_MAX_CHANNEL (5)
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
-/** @brief Initializes the ADC driver
- *
- * @retval return 0 on success
- */
-int adc_init(void);
-
-/** @brief Get raw ADC value
- *
- * @param channel input from 1 to 6
- * @retval return raw ADC value with 12 bit resolution
- */
-int adc_get_channel(int channel);
-#endif /* ADC_H_ */
+int etc_aws_init(void);
+#endif /* ETC_AWS_H_ */
