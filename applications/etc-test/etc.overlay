@@ -1,0 +1,22 @@
+/ {
+	chosen {
+		zephyr,shell-uart = &cdc_acm_uart0;
+	};
+};
+
+&zephyr_udc0 {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_0";
+	};
+};
+
+/* A0 = P0.31 = AIN7 */
+/* A1 = P0.5  = AIN3 */
+/* A2 = P0.30 = AIN6 */
+/ {
+	zephyr,user {
+		/* adjust channel number according to pinmux in board.dts */
+		io-channels = <&adc 7>, <&adc 3>, <&adc 6>;
+	};
+};
