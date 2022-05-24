@@ -54,7 +54,8 @@ git apply 0001-aws_iot-ignore-certification-step.patch
 * Step 4: Build `etc-core` firmware at `applications\etc-core` folder with command
 
 ```
-west build -b etc_ninab4
+cd {ROOT}
+west build -b etc -s etc-firmware/applications/etc-core
 ```
 
 <a name="Flash"></a>
