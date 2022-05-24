@@ -1,0 +1,20 @@
+menuconfig PCF85263
+	bool "PCF85263 RTC"
+	select I2C
+	select POLL
+	help
+	  Enable I2C-based driver for PCF85263 RTC.
+
+if PCF85263
+	config PCF85263_WATCHDOG_FEED_INTERNAL_SECONDS
+		int "Watchdog feed interval time"
+		depends on PCF85263
+		default 60
+		help
+			PCF85263 watchdog feed internal time in seconds. Must less than 124s
+
+module = PCF85263
+module-str = PCF85263
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif

@@ -1,0 +1,19 @@
+menuconfig ADC_MODULES
+	bool "Configure for ADC module"
+	depends on ADC
+	help
+	  Enable ADC Modules 
+
+if ADC_MODULES
+
+config ADC_MODULES_SAMPLE_RATE_MSEC
+	int "Sample rate time in mseconds"
+	default 500
+	help
+	  This is sample ADC rate
+
+module = ADC_MODULES
+module-str = ADC Modules
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # ADC_MODULES

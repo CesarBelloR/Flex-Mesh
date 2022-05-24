@@ -1,0 +1,14 @@
+config ETC_IO
+	bool "ETC GPIO Driver"
+	depends on GPIO
+	help
+	  Enable driver for GPIO
+
+if ETC_IO
+
+module = ETC_IO
+module-str = ETC_IO
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif
+

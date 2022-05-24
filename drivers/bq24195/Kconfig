@@ -1,0 +1,13 @@
+menuconfig BQ24195
+	bool "BQ24195 Power Management Integrated Circuits (PMIC)"
+	depends on I2C
+	help
+	  Enable I2C-based driver for BQ24195 PMIC.
+
+if BQ24195
+
+module = BQ24195
+module-str = BQ24195
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # BQ24195
