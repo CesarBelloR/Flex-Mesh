@@ -63,6 +63,7 @@
 #define MDM_IMEI_LENGTH			  16
 #define MDM_IMSI_LENGTH			  16
 #define MDM_ICCID_LENGTH		  32
+#define MDM_TIME_LENGTH           32
 #define MDM_APN_LENGTH			  32
 #define RSSI_TIMEOUT_SECS		  30
 
@@ -116,6 +117,7 @@ struct modem_data {
 	char mdm_imsi[MDM_IMSI_LENGTH];
 	char mdm_iccid[MDM_ICCID_LENGTH];
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
+	char mdm_time[MDM_TIME_LENGTH];
 
 	/* bytes written to socket in last transaction */
 	int sock_written;

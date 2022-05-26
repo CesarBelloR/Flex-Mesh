@@ -1,0 +1,18 @@
+menuconfig DATE_TIME
+	bool "Date time library"
+	default y
+	select POSIX_CLOCK
+	
+if DATE_TIME
+
+config DATE_TIME_UPDATE_INTERVAL_SECONDS
+	int "Date time update interval, in seconds"
+	default 3600
+	help
+		Setting this option to 0 disables sequential date time updates.
+
+config DATE_TIME_THREAD_SIZE
+	int "Stack size of the thread maintaining date time"
+	default 1024
+
+endif # DATE_TIME

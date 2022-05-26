@@ -1797,3 +1797,32 @@ char* quectel_bg95_get_sim_number(void) {
 #endif
 	return "N.A";
 }
+
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_clock)
+{
+	size_t out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 0, len);
+	mdata.mdm_time[out_len] = '\0';
+	LOG_DBG("Clock: %s", log_strdup(mdata.mdm_time));
+	return 0;
+}
+
+int quectel_bg95_get_time(char* time_buf) {
+	if (!modem_is_ready) {
+		return -1;
+	}
+
+	static const struct modem_cmd cmd = MODEM_CMD("+CCLK: ", on_cmd_atcmdinfo_clock, 0, ",");
+	static char *send_cmd = "AT+CCLK?";
+	int ret;
+
+	/* query modem clock */
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, &cmd, 1U, send_cmd,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+CCLK? ret:%d", ret);
+		return -1;
+	}
+
+	memcpy(time_buf, mdata.mdm_time, sizeof(mdata.mdm_time));
+	return 0;
+}
