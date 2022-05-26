@@ -18,7 +18,6 @@ LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
 
 static void app_driver_init(void) {
 	ui_init();
-	ui_led_set_pattern(UI_LED_ERROR_UNKNOWN);
 	adc_init();
 	pcf85263a_init();
 	bq24195_init();
@@ -27,6 +26,7 @@ static void app_driver_init(void) {
 
 void main(void)
 {
+	app_driver_init();
 #if DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_shell_uart), zephyr_cdc_acm_uart)
 	const struct device *dev;
 	uint32_t dtr = 0;
