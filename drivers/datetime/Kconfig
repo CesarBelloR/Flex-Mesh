@@ -1,9 +1,9 @@
-menuconfig DATE_TIME
+menuconfig ETC_DATE_TIME
 	bool "Date time library"
 	default y
 	select POSIX_CLOCK
 	
-if DATE_TIME
+if ETC_DATE_TIME
 
 config DATE_TIME_UPDATE_INTERVAL_SECONDS
 	int "Date time update interval, in seconds"
@@ -15,4 +15,4 @@ config DATE_TIME_THREAD_SIZE
 	int "Stack size of the thread maintaining date time"
 	default 1024
 
-endif # DATE_TIME
+endif # ETC_DATE_TIME

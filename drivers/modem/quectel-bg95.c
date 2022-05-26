@@ -11,6 +11,7 @@ static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
 static struct modem_context    mctx;
 static const struct socket_op_vtable offload_socket_fd_op_vtable;
+static bool volatile modem_is_ready = false;
 
 #if defined(CONFIG_DNS_RESOLVER)
 static struct zsock_addrinfo result;
@@ -1484,6 +1485,7 @@ restart_rssi:
 		goto restart;
 	}
 
+	modem_is_ready = true;
 error:
 	return ret;
 }
