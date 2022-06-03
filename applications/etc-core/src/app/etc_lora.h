@@ -21,7 +21,18 @@
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
+/** @brief Initializes Lora
+ *
+ * @param None
+ * @retval Zero if success
+ */
 int etc_lora_init(void);
 
+/** @brief Send data over Lora
+ *
+ * @param data point to where data to be sent
+ * @param length length of sending data.
+ * @retval Zero if success
+ */
 int etc_lora_send(void* data, int length);
 #endif /* ETC_LORA_H_ */

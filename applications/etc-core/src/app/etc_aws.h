@@ -21,5 +21,10 @@
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
+/** @brief Initializes the AWS Service
+ *
+ * @param None
+ * @retval Zero if success
+ */
 int etc_aws_init(void);
 #endif /* ETC_AWS_H_ */

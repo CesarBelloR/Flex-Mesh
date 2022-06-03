@@ -93,7 +93,24 @@ extern etc_config_t* p_etc_config;
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
+/** @brief Initializes the Setting Storage
+ *
+ * @param None
+ * @retval None
+ */
 void etc_setting_init(void);
+
+/** @brief Get the configuration
+ *
+ * @param config point to where to get the configuration
+ * @retval Zero if success
+ */
 int  etc_setting_get_config(etc_config_t *config);
+
+/** @brief Set the configuration
+ *
+ * @param config point to where to set the configuration
+ * @retval Zero if success
+ */
 int  etc_setting_set_config(etc_config_t *config);
 #endif /* ETC_SETTING_H_ */
