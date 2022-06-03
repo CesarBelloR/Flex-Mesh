@@ -92,7 +92,7 @@ char* etc_msg_generator(void) {
         /* TODO: Need to add actual data here */
         etc_msg_struct_t msg_data = {0x00};
         memset(&msg_buf, 0, sizeof(msg_buf));
-        snprintf(msg_buf, sizeof(msg_buf), "%d,%d,%.2f,%d,%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", 
+        snprintf(msg_buf, sizeof(msg_buf), "%d,%d,%.2f,%d,\"%s\",%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", 
             msg_data.sensor_id, msg_data.time, msg_data.bat, msg_data.rssi, msg_data.version,
             msg_data.packet, msg_data.v1, msg_data.v2, msg_data.v3, msg_data.v4, msg_data.v5, msg_data.v6);
         cJSON* element_arr = cJSON_CreateStringArray((const char * const*)&msg_buf, 1);
