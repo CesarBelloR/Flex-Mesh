@@ -1,7 +1,7 @@
 /***************************************************************************/
 /*!
-\file       etc_lora.h
-\brief      Lora management application
+\file       etc_msg.h
+\brief      Message for MQTT service
 
 \product    General purpose
 \processor  ARM Cortex M
@@ -10,37 +10,35 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#ifndef ETC_LORA_H_
-#define ETC_LORA_H_
+#ifndef ETC_MSG_H_
+#define ETC_MSG_H_
 
+#include <stdlib.h>
+#include <stdio.h>
 #include <stdint.h>
-#include <stdbool.h>
 /***************************************************************************/
 /* Definitions                                                             */
 /***************************************************************************/
-typedef void (*etc_lora_rx_callback)(void* data, int length);
+#define ETC_MSG_VERSION_LEN (8)
+
+typedef struct {
+    uint32_t sensor_id;
+    uint32_t time;
+    float bat;
+    uint8_t rssi;
+    char version[ETC_MSG_VERSION_LEN];
+    uint8_t packet;
+    float v1, v2, v3, v4, v5, v6;
+} __packed etc_msg_struct_t;
+
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
-/** @brief Initializes Lora
- *
+/** @brief Create the message heart-beat/reading
+ *   based on EXACT Relay/Logger 2.0 Docs
+ * 
  * @param None
- * @retval Zero if success
+ * @retval A message json. Notice: Need to free message after sending to MQTT.
  */
-int etc_lora_init(void);
-
-/** @brief Send data over Lora
- *
- * @param data point to where data to be sent
- * @param length length of sending data.
- * @retval Zero if success
- */
-int etc_lora_send(void* data, int length);
-
-/** @brief Receive data over Lora
- *
- * @param callback to notify income data
- * @retval zero if no error
- */
-int etc_lora_receive(etc_lora_rx_callback callback);
-#endif /* ETC_LORA_H_ */
+char* etc_msg_generator(void);
+#endif /* ETC_MSG_H_ */

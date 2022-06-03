@@ -1,7 +1,7 @@
 /***************************************************************************/
 /*!
-\file       etc_lora.h
-\brief      Lora management application
+\file       etc_app.h
+\brief      ETC application (relay/logger)
 
 \product    General purpose
 \processor  ARM Cortex M
@@ -10,37 +10,27 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#ifndef ETC_LORA_H_
-#define ETC_LORA_H_
+#ifndef ETC_APP_H_
+#define ETC_APP_H_
 
 #include <stdint.h>
 #include <stdbool.h>
 /***************************************************************************/
 /* Definitions                                                             */
 /***************************************************************************/
-typedef void (*etc_lora_rx_callback)(void* data, int length);
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
-/** @brief Initializes Lora
+/** @brief Initializes application mode
  *
  * @param None
  * @retval Zero if success
  */
-int etc_lora_init(void);
+int etc_app_init(void);
 
-/** @brief Send data over Lora
+/** @brief Run the application (logger/relay) mode
  *
- * @param data point to where data to be sent
- * @param length length of sending data.
  * @retval Zero if success
  */
-int etc_lora_send(void* data, int length);
-
-/** @brief Receive data over Lora
- *
- * @param callback to notify income data
- * @retval zero if no error
- */
-int etc_lora_receive(etc_lora_rx_callback callback);
-#endif /* ETC_LORA_H_ */
+int etc_app_run(void);
+#endif /* ETC_APP_H_ */

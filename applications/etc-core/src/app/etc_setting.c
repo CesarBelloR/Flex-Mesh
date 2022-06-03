@@ -23,8 +23,8 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(etc_setting, CONFIG_ETC_APP_LOG_LEVEL);
 
-#define ETC_STORAGE_OFFSET DT_REG_ADDR(DT_NODELABEL(etc_partition))
-#define ETC_STORAGE_SIZE DT_REG_SIZE(DT_NODELABEL(etc_partition))
+#define ETC_STORAGE_OFFSET DT_REG_ADDR(DT_NODELABEL(storage_partition))
+#define ETC_STORAGE_SIZE DT_REG_SIZE(DT_NODELABEL(storage_partition))
 
 enum {
     ETC_CONFIG_ID = 0x01,
@@ -61,7 +61,7 @@ void etc_nvs_init(void) {
 		LOG_ERR("NVS failed to initialize with error code %d", rc);
         return;
 	}
-    LOG_INF("Initialised orain storage successfully");
+    LOG_INF("Initialised etc setting successfully");
 }
 
 static int etc_nvs_write(int element_id, const void* data, size_t len) {

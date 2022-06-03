@@ -23,8 +23,8 @@
 
 /* Define a enum to describe about device mode */
 typedef enum {
-    ETC_DEVICE_MODE_RELAY = 0x00,
-    ETC_DEVICE_MODE_LOGGER = 0x01,
+    ETC_DEVICE_MODE_RELAY = 0x01,
+    ETC_DEVICE_MODE_LOGGER = 0x02,
 } etc_device_mode_e;
 
 /* Define a enum to describe about radio mode */

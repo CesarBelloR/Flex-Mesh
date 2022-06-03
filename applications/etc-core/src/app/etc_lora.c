@@ -19,6 +19,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(ETC_LORA, CONFIG_ETC_APP_LOG_LEVEL);
 
+#include "etc_lora.h"
 #include "etc_setting.h"
 
 #define CONFIG_LORA_RX_THREAD_STACK_SIZE 1024
@@ -29,6 +30,7 @@ static K_KERNEL_STACK_DEFINE(lora_rx_stack, CONFIG_DS18S20_THREAD_STACK_SIZE);
 BUILD_ASSERT(DT_NODE_HAS_STATUS(DEFAULT_RADIO_NODE, okay), "No default LoRa radio specified in DT");
 
 static struct k_thread lora_rx_thread;
+static etc_lora_rx_callback lora_rx_callback;
 const struct device *lora_dev = NULL;
 static struct lora_modem_config etc_lora_rx_config = {
 	.frequency = 915000000,
@@ -92,17 +94,10 @@ int etc_lora_init(void) {
 		return -EINVAL;
 	}
 
-	int ret = 0;
 	k_mutex_init(&etc_lora_config.lock);
 	etc_lora_config.is_tx = false;
 	etc_lora_config.rx_config = &etc_lora_rx_config;
 	etc_lora_config.tx_config = &etc_lora_tx_config;
-
-	ret = lora_config(lora_dev, etc_lora_config.rx_config);
-	if (ret < 0) {
-		LOG_ERR("LoRa config failed with error %d", ret);
-		return ret;
-	}
 
 	k_thread_create(&lora_rx_thread, lora_rx_stack,
 			K_KERNEL_STACK_SIZEOF(lora_rx_stack),
@@ -135,6 +130,22 @@ int etc_lora_send(void* data, int length) {
 	ret = lora_config(lora_dev, p_config->rx_config);
 	if (ret < 0) {
 		LOG_ERR("LoRa config failed error %d", ret);
+		return ret;
+	}
+
+	k_mutex_unlock(&p_config->lock);
+	return 0;
+}
+
+int etc_lora_receive(etc_lora_rx_callback callback) {
+	int ret = 0;
+	k_mutex_lock(&p_config->lock, K_FOREVER);
+
+	lora_rx_callback = callback;
+
+	ret = lora_config(lora_dev, p_config->rx_config);
+	if (ret < 0) {
+		LOG_ERR("LoRa config failed with error %d", ret);
 		return ret;
 	}
 
