@@ -12,7 +12,7 @@
 / {
 	zephyr,user {
 		/* adjust channel number according to pinmux in board.dts */
-		io-channels = <&adc 2>, <&adc 6>, <&adc 3>, <&adc 0>, <&adc 4>;
+		io-channels = <&adc 2>, <&adc 6>, <&adc 3>;
 	};
 };
 	
@@ -45,10 +45,13 @@
 			label = "image-1";
 			reg = <0x00000000 0x00060000>;
 		};
-		
-		storage_partition: partition@60000 {
+		etc_partition: partition@60000 {
+			label = "etc-storage";
+			reg = <0x00060000 0x00190000>;
+		};
+		storage_partition: partition@1F0000 {
 			label = "storage";
-			reg = <0x00060000 0x00100000>;
+			reg = <0x001F0000 0x00010000>;
 		};
 	};
 };

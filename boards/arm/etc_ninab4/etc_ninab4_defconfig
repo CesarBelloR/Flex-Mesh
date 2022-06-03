@@ -16,7 +16,13 @@ CONFIG_SERIAL=y
 
 # enable console
 CONFIG_CONSOLE=y
-CONFIG_UART_CONSOLE=y
+
+# bluetooth
+CONFIG_BT=y
+CONFIG_BT_CTLR=y
+
+# Enable RTT
+CONFIG_USE_SEGGER_RTT=y
 
 # additional board options
 CONFIG_GPIO_AS_PINRESET=y

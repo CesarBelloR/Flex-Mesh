@@ -6,11 +6,6 @@
 	compatible = "etc,ninab4";
 
 	chosen {
-		zephyr,console = &uart0;
-		zephyr,shell-uart = &uart0;
-		zephyr,uart-mcumgr = &uart0;
-		zephyr,bt-mon-uart = &uart0;
-		zephyr,bt-c2h-uart = &uart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
@@ -28,7 +23,9 @@
 			pwms = <&pwm0 32>;
 		};
 	};
-
+	aliases {
+		lora0 = &lora;
+	};
 };
 
 &adc {
@@ -48,7 +45,7 @@
 };
 
 &uart0 {
-	compatible = "nordic,nrf-uart";
+	compatible = "nordic,nrf-uarte";
 	status = "okay";
 	current-speed = <115200>;
 	tx-pin = <37>;     /* P1.05 */
@@ -78,7 +75,29 @@
 };
 
 &spi1 {
-	compatible = "nordic,nrf-spim";
+	compatible = "nordic,nrf-spi";
+	status = "okay";
+	sck-pin = <26>;
+	mosi-pin = <15>;
+	miso-pin = <27>;
+
+	status = "okay";
+	cs-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
+
+	lora: sx1276@0 {
+		compatible = "semtech,sx1276";
+		reg = <0>;
+		label = "sx1276";
+		reset-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>;
+		dio-gpios = <&gpio0 19 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+		tcxo-power-startup-delay-ms = <5>;
+		spi-max-frequency = <1000000>;
+		power-amplifier-output = "pa-boost";
+	};
+};
+
+&spi2 {
+	compatible = "nordic,nrf-spi";
 	status = "okay";
 	sck-pin = <31>;  /* D3 */
 	mosi-pin = <7>;  /* D13 */
