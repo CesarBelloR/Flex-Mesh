@@ -102,6 +102,17 @@ typedef struct {
 	uint8_t enable_weekdays;
 } pcf85263a_alarm_type_2_flag_t;
 
+typedef struct {
+	uint8_t enable_level_pulse;
+	uint8_t enable_periodic;
+	uint8_t enable_offset_correction;
+	uint8_t enable_alarm_1;
+	uint8_t enable_alarm_2;
+	uint8_t enable_timestamp;
+	uint8_t enable_battery_switch;
+	uint8_t enable_wdg;
+} pcf85263a_interrupt_flag_t;
+
 #define PCF85263A_RTC_HOUR_MODE_24 (0x00)
 #define PCF85263A_RTC_HOUR_MODE_12 (0x01)
 
@@ -113,10 +124,11 @@ typedef struct {
 /***************************************************************************/
 /** @brief Initializes the PCF85263A RTC
  *
+ * @param device the I2C channel such as I2C_0, I2C_1
  * @retval return 0 on success, or a negative error code from an I2C
  * transaction or invalid parameter.
  */
-int pcf85263a_init(void);
+int pcf85263a_init(const char* device);
 
 /** @brief Set the RTC to a given Unix time
  *
@@ -197,4 +209,18 @@ int pcf85263a_alarm_enable_type_2(pcf85263a_alarm_type_2_flag_t flag);
  * transaction or invalid state of PCF85263A
  */
 int pcf85263a_alarm_disable_type_2(void);
+
+/** @brief Enable/disable interrupt flag
+ *
+ * @param flag @ref pcf85263a_interrupt_flag_t
+ * @retval None
+ */
+void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag);
+
+/** @brief Enable/disable the IO for interrupt
+ *
+ * @param enable or disable the IO
+ * @retval None
+ */
+void pcf85263a_set_interrupt_io(bool enable);
 #endif /* PCF85263A_H_ */

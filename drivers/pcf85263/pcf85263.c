@@ -164,7 +164,7 @@ static time_t decode_rtc(void)
 
 	time_unix = timeutil_timegm(&time);
 
-	LOG_DBG("Unix time is %d\n", (uint32_t)time_unix);
+	LOG_DBG("Unix time is %u\n", (uint32_t)time_unix);
 
 	return time_unix;
 }
@@ -225,6 +225,16 @@ static int read_register(uint8_t addr, uint8_t *val)
 	int rc = i2c_write_read(cfg->i2c_dev, cfg->addr,
 				&addr, sizeof(addr),
 				val, 1);
+
+	return rc;
+}
+
+static int read_registers(uint8_t addr, uint8_t *val, int num_reg) {
+	const struct pcf85263_config *cfg = &m_pcf85263_config;
+
+	int rc = i2c_write_read(cfg->i2c_dev, cfg->addr,
+				&addr, sizeof(addr),
+				val, num_reg);
 
 	return rc;
 }
@@ -334,14 +344,14 @@ int pcf85263a_rtc_get_time(time_t* unix_time) {
     return rc;
 }
 
-int pcf85263a_init(void)
+int pcf85263a_init(const char* device)
 {
     struct pcf85263_data *data = &m_pcf85263_data;
     struct pcf85263_config *cfg = &m_pcf85263_config;
 
-    cfg->i2c_dev = (struct device*)device_get_binding("I2C_0");
+    cfg->i2c_dev = (struct device*)device_get_binding(device);
     if (cfg->i2c_dev == NULL) {
-        LOG_ERR("Failed to get device_get_binding I2C_0");
+        LOG_ERR("Failed to get device_get_binding %s", log_strdup(device));
         return -EINVAL;
     }
 
@@ -413,14 +423,17 @@ int pcf85263a_alarm_config_type_1(pcf85263a_alarm_type_1_config_t info)
     data->rtc_alm1_registers.rtc_month.month_alarm = bin2bcd(info.months - 1); 
 
 	/* Write to device */
-	rc = write_data_block(PCF85263A_RTC_MODE_SECOND_ALARM1_REG, 
-        PCF85263A_REGISTER_COUNT(PCF85263A_RTC_MODE_SECOND_ALARM1_REG, PCF85263A_RTC_MODE_MONTH_ALARM1_REG));
+    int num_reg = PCF85263A_REGISTER_COUNT(PCF85263A_RTC_MODE_SECOND_ALARM1_REG, PCF85263A_RTC_MODE_MONTH_ALARM1_REG);
+	rc = write_data_block(PCF85263A_RTC_MODE_SECOND_ALARM1_REG, num_reg);
     
     if (rc != 0) {
         LOG_ERR("Failed to set Alarm Type 1");
         return rc;
     }
 
+    uint8_t reg_read[16] = {0x00};
+    rc = read_registers(PCF85263A_RTC_MODE_SECOND_ALARM1_REG, reg_read, num_reg);
+    LOG_HEXDUMP_INF(reg_read, num_reg, "ALARM");
     LOG_DBG("Configured Alarm Type 1 successful");
     return rc;
 }
@@ -441,6 +454,7 @@ int pcf85263a_alarm_enable_type_1(pcf85263a_alarm_type_1_flag_t flag) {
     reg.day_a1e = flag.enable_days;
     reg.mon_a1e = flag.enable_months;
 
+    LOG_DBG("Alarm Enable Register 0x%02x", reg.byte);
     rc = write_register(PCF85263A_RTC_MODE_ALARM_ENABLE_REG, reg.byte);
     if (rc != 0) {
         LOG_ERR("Failed to write register PCF85263A_RTC_MODE_ALARM_ENABLE_REG error %d", rc);
@@ -553,4 +567,49 @@ int pcf85263a_alarm_disable_type_2(void) {
     }
 
     return 0;
+}
+
+void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag) {
+    pcf85263a_inta_reg_t reg = {0x00};
+    int rc = 0;
+
+    rc = read_register(PCF85263A_INTA_ENABLE_REG, &reg.byte);
+    if (rc != 0) {
+        LOG_ERR("Failed to read register PCF85263A_INTA_ENABLE_REG error %d", rc);
+        return;
+    }
+
+    reg.wdiea = flag.enable_wdg;
+    reg.bsiea = flag.enable_battery_switch;
+    reg.tsriea = flag.enable_timestamp;
+    reg.a2iea = flag.enable_alarm_2;
+    reg.a1iea = flag.enable_alarm_1;
+    reg.oiea = flag.enable_offset_correction;
+    reg.piea = flag.enable_periodic;
+    reg.ilpa = flag.enable_level_pulse;
+    LOG_DBG("Interrupt Register 0x%02x", reg.byte);
+    rc = write_register(PCF85263A_INTA_ENABLE_REG, reg.byte);
+    if (rc != 0) {
+        LOG_ERR("Failed to write register PCF85263A_INTA_ENABLE_REG error %d", rc);
+        return;
+    }
+}
+
+void pcf85263a_set_interrupt_io(bool enable) {
+    pcf85263a_pin_io_reg_t reg = {0x00};
+    int rc = 0;
+
+    rc = read_register(PCF85263A_PIN_IO_REG, &reg.byte);
+    if (rc != 0) {
+        LOG_ERR("Failed to read register PCF85263A_PIN_IO_REG error %d", rc);
+        return;
+    }
+
+    reg.intapm = enable ? 2 : 0;
+    LOG_DBG("IO Register 0x%02x", reg.byte);
+    rc = write_register(PCF85263A_PIN_IO_REG, reg.byte);
+    if (rc != 0) {
+        LOG_ERR("Failed to write register PCF85263A_PIN_IO_REG error %d", rc);
+        return;
+    }
 }
