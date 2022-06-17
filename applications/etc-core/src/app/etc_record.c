@@ -112,7 +112,7 @@ int etc_record_put(void* data, int length) {
 	if (p_header->index < RECORD_MANAGER_MAX_ELEMENTS) {
 		uint8_t id = ETC_RECORD_DATA_OFFSET_ID + p_header->write;
 		int rc = etc_record_write(id, data, length);
-		if (rc != length) {
+		if (rc != 0) {
 			LOG_ERR("Failed to write data");
 		} else {
 			if (++p_header->write == RECORD_MANAGER_MAX_ELEMENTS) {
