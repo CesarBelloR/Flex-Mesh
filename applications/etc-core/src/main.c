@@ -13,7 +13,7 @@ static void app_driver_init(void) {
 	ui_init();
 	ui_led_set_pattern(UI_LED_ERROR_UNKNOWN);
 	adc_init();
-	pcf85263a_init();
+	pcf85263a_init("I2C_0");
 	bq24195_init();
 	ds18s20_init();
 }
