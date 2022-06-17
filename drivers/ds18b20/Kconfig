@@ -1,0 +1,13 @@
+menuconfig DS18B20
+	bool "DS18B20 Temperature Sensor"
+	help
+	  Enable driver for the DS18B20 temperature sensor family.
+
+if DS18B20
+
+module = DS18B20
+module-str = DS18B20
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif
+
