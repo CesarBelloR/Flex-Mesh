@@ -1,6 +1,6 @@
 rsource "modem/Kconfig"
 rsource "adc/Kconfig"
-rsource "ds18s20/Kconfig"
+rsource "ds18b20/Kconfig"
 rsource "bq24195/Kconfig"
 rsource "io/Kconfig"
 rsource "onewire/Kconfig"

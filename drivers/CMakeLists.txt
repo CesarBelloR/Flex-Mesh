@@ -1,7 +1,7 @@
 add_subdirectory(modem)
 add_subdirectory(lora)
 add_subdirectory(adc)
-add_subdirectory(ds18s20)
+add_subdirectory(ds18b20)
 add_subdirectory(bq24195)
 add_subdirectory(io)
 add_subdirectory(onewire)
