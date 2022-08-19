@@ -11,7 +11,7 @@
 #include "bq24195.h"
 #include "adc.h"
 #include "ui.h"
-#include "ds18s20.h"
+#include "ds18b20.h"
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
@@ -19,9 +19,8 @@ LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
 static void app_driver_init(void) {
 	ui_init();
 	adc_init();
-	pcf85263a_init();
+	pcf85263a_init("I2C_0");
 	bq24195_init();
-	ds18s20_init();
 }
 
 void main(void)

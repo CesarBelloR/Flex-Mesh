@@ -28,6 +28,7 @@ LOG_MODULE_REGISTER(ETC_ADC, CONFIG_ADC_MODULES_LOG_LEVEL);
 #define ADC_NUM_CHANNELS    	DT_PROP_LEN(DT_PATH(zephyr_user), io_channels)
 #define ADC_NODE				DT_PHANDLE(DT_PATH(zephyr_user), io_channels)
 #define ADC_RESOLUTION		    12
+#define ADC_OVERSAMPLING	    8
 #define ADC_GAIN		        ADC_GAIN_1
 #define ADC_REFERENCE		    ADC_REF_INTERNAL
 #define ADC_ACQUISITION_TIME	ADC_ACQ_TIME_DEFAULT
@@ -40,12 +41,10 @@ static uint8_t channel_ids[ADC_NUM_CHANNELS] = {
 };
 
 static const struct device *adc_dev = NULL;
-static struct k_work_delayable adc_sample_work;
 static int32_t adc_vref;
 static int16_t adc_sample_buffer[ADC_NUM_CHANNELS];
-static int adc_ready;
 
-struct adc_channel_cfg channel_cfg = {
+struct adc_channel_cfg base_cfg = { 
 	.gain = ADC_GAIN,
 	.reference = ADC_REFERENCE,
 	.acquisition_time = ADC_ACQUISITION_TIME,
@@ -54,31 +53,18 @@ struct adc_channel_cfg channel_cfg = {
 	.differential = 0
 };
 
-struct adc_sequence sequence = {
+struct adc_sequence base_seq = { 
 	.channels    = 0,
-	.buffer      = adc_sample_buffer,
-	.buffer_size = sizeof(adc_sample_buffer),
+	.buffer_size = sizeof(int16_t),
 	.resolution  = ADC_RESOLUTION,
+	.oversampling	= ADC_OVERSAMPLING,
 };
 
-static void adc_sample_work_fn(struct k_work *work) 
-{
-	int err = adc_read(adc_dev, &sequence);
-	if (err != 0)
-	{
-		LOG_ERR("ADC reading failed with error %d.", err);
-		k_work_cancel_delayable(&adc_sample_work);
-		adc_ready = -1;
-		return;
-	}
-	LOG_DBG("Sample ADC done");
-	adc_ready = 0;
-	k_work_schedule(&adc_sample_work, K_MSEC(CONFIG_ADC_MODULES_SAMPLE_RATE_MSEC));
-}
+struct adc_channel_cfg channel_cfg[ADC_NUM_CHANNELS];
+struct adc_sequence sequence[ADC_NUM_CHANNELS];
 
 int adc_init(void)
 {
-	adc_ready = 0;
 	adc_dev = DEVICE_DT_GET(ADC_NODE);
 	if (!device_is_ready(adc_dev)) {
 		LOG_ERR("ADC device not found");
@@ -89,27 +75,31 @@ int adc_init(void)
 	 * Configure channels individually prior to sampling
 	 */
 	for (uint8_t i = 0; i < ADC_NUM_CHANNELS; i++) {
-		channel_cfg.channel_id = channel_ids[i];
+		channel_cfg[i] = base_cfg;
+		sequence[i] = base_seq;
+		channel_cfg[i].channel_id = channel_ids[i];
 #ifdef CONFIG_ADC_NRFX_SAADC
-		channel_cfg.input_positive = SAADC_CH_PSELP_PSELP_AnalogInput0
+		channel_cfg[i].input_positive = SAADC_CH_PSELP_PSELP_AnalogInput0
 					     + channel_ids[i];
 #endif
-
-		adc_channel_setup(adc_dev, &channel_cfg);
-		sequence.channels |= BIT(channel_ids[i]);
+		adc_channel_setup(adc_dev, &channel_cfg[i]);
+		sequence[i].channels |= BIT(channel_ids[i]);
+		sequence[i].buffer = &adc_sample_buffer[i];
 	}
 
 	adc_vref = adc_ref_internal(adc_dev);
-	k_work_init_delayable(&adc_sample_work, adc_sample_work_fn);
-	k_work_schedule(&adc_sample_work, K_NO_WAIT);
-	adc_ready = -1;
     return 0;
 }
 
 int adc_get_channel(int channel)
 {
-	if (adc_ready == 0 && (channel >=1 && channel <= 6)) {
-		return adc_sample_buffer[channel + 1]; 
+	if (channel >= 0 && channel <= ADC_NUM_CHANNELS) {
+		int err = adc_read(adc_dev, &sequence[channel]);
+		if (err) {
+			return -1;
+		} else  {
+			return adc_sample_buffer[channel];
+		}
 	}
 	return -1;
 }

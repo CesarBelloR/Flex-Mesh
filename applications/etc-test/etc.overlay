@@ -11,9 +11,9 @@
 	};
 };
 
-/* A0 = P0.31 = AIN7 */
-/* A1 = P0.5  = AIN3 */
-/* A2 = P0.30 = AIN6 */
+/* A0 = P0.31 = AIN7 - ADC_AMB */ 
+/* A1 = P0.5  = AIN3 - ADC_BATT*/
+/* A2 = P0.30 = AIN6 - ADC_TH*/
 / {
 	zephyr,user {
 		/* adjust channel number according to pinmux in board.dts */
