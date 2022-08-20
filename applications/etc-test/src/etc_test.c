@@ -145,7 +145,8 @@ static int cmd_button_pull_module(const struct shell *shell, size_t argc, char *
 		shell_print(shell, "Can't get GPIO_1 for button");
 		return 0;
 	} else {
-		gpio_pin_configure(dev, GPIO_USER_BUTTON_PIN, GPIO_INPUT);
+		gpio_pin_configure(dev, GPIO_USER_BUTTON_PIN, GPIO_INPUT | GPIO_PULL_UP);
+		k_usleep(50);
 		uint32_t t0 = k_uptime_get_32();
 		while(k_uptime_get_32() - t0 < 10000) {
 			int btn_status = gpio_pin_get(dev, GPIO_USER_BUTTON_PIN);
