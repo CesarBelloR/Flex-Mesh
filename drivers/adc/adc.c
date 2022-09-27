@@ -29,7 +29,7 @@ LOG_MODULE_REGISTER(ETC_ADC, CONFIG_ADC_MODULES_LOG_LEVEL);
 #define ADC_NODE				DT_PHANDLE(DT_PATH(zephyr_user), io_channels)
 #define ADC_RESOLUTION		    12
 #define ADC_OVERSAMPLING	    8
-#define ADC_GAIN		        ADC_GAIN_1
+#define ADC_GAIN		        ADC_GAIN_1_5
 #define ADC_REFERENCE		    ADC_REF_INTERNAL
 #define ADC_ACQUISITION_TIME	ADC_ACQ_TIME_DEFAULT
 
@@ -88,6 +88,7 @@ int adc_init(void)
 	}
 
 	adc_vref = adc_ref_internal(adc_dev);
+	LOG_INF("Vref %d", adc_vref);
     return 0;
 }
 
