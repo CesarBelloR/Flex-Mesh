@@ -63,3 +63,11 @@ int etc_app_init(void) {
 int etc_app_run(void) {
     return 0;
 }
+
+static void log_work_handler(struct k_work *work) {
+
+}
+
+static void transmit_work_handler(struct k_work *work) {
+    
+}

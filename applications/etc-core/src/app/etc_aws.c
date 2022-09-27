@@ -22,7 +22,7 @@
 #include "bq24195.h"
 #include "adc.h"
 #include "ui.h"
-#include "ds18s20.h"
+#include "ds18b20.h"
 #include <logging/log.h>
 
 LOG_MODULE_REGISTER(ETC_AWS, CONFIG_ETC_APP_LOG_LEVEL);
@@ -77,8 +77,8 @@ static int shadow_update(bool version_number_include)
 	char *message;
 	time_t message_ts = 0;
 	int16_t bat_voltage = 0;
-	int16_t temp = ds18s20_get_temperature();
-	int16_t humid = ds18s20_get_humidity();
+	int16_t temp = 0;
+	int16_t humid = 0;
 
 	pcf85263a_rtc_get_time(&message_ts);
 	cJSON *root_obj = cJSON_CreateObject();;

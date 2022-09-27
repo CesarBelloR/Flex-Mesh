@@ -43,7 +43,7 @@ static struct nvs_fs etc_fs;
 
 etc_config_t* p_etc_config = &etc_config.etc_config;
 
-void etc_nvs_init(void) {
+static void etc_nvs_init(void) {
     int rc = 0;
 	struct flash_pages_info info;
 	etc_fs.offset = ETC_STORAGE_OFFSET;
@@ -86,6 +86,10 @@ static int etc_nvs_read(int element_id, void* data, size_t len) {
         return -EINVAL;
     }
     return read_len;
+}
+
+void etc_setting_init(void) {
+    etc_nvs_init();
 }
 
 int etc_setting_get_config(etc_config_t *config) {

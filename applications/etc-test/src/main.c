@@ -21,7 +21,6 @@ LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
 #define LTE_PSM_IND_PIN 2
 #define LTE_POWER_KEY_PIN 1
 #define LTE_POWER_PON_TRIG 23
-#define VSENS_EN_PIN 23
 
 const struct device * gpio_0 = NULL;
 const struct device * gpio_1 = NULL;
@@ -39,8 +38,7 @@ static void app_modem_init(void) {
 		LOG_ERR("GPIO 1 is not ready");
 		return;
 	}
-	gpio_pin_configure(gpio_0, VSENS_EN_PIN, GPIO_OUTPUT_ACTIVE);
-	k_sleep(K_MSEC(1000));
+	
 	gpio_pin_configure(gpio_1, LTE_POWER_KEY_PIN, GPIO_OUTPUT);
 	gpio_pin_set(gpio_1, LTE_POWER_KEY_PIN, 0U);
 	k_sleep(K_MSEC(500));

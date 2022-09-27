@@ -5,7 +5,9 @@
 #include "bq24195.h"
 #include "adc.h"
 #include "ui.h"
-#include "ds18s20.h"
+#include "etc_setting.h"
+#include "etc_app.h"
+
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -15,10 +17,18 @@ static void app_driver_init(void) {
 	adc_init();
 	pcf85263a_init("I2C_0");
 	bq24195_init();
-	ds18s20_init();
 }
 
 void main(void)
 {
 	app_driver_init();
+	etc_setting_init();
+	etc_app_init();
+
+	for (;;) {
+		k_cpu_idle();
+#if CONFIG_LOG
+		k_sleep(K_SECONDS(1));
+#endif	
+	}
 }

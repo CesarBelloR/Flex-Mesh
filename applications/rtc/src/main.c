@@ -15,9 +15,9 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 void main(void)
 {
-	const struct device* gpio = device_get_binding("GPIO_1");
+	const struct device* gpio = device_get_binding("GPIO_0");
 	if (gpio == NULL) {
-		LOG_ERR("Can't get GPIO_1");
+		LOG_ERR("Can't get GPIO_0");
 	}
 
 	gpio_pin_configure(gpio, ALARM_PIN, GPIO_INPUT);

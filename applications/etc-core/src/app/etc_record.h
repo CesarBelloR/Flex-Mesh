@@ -18,7 +18,7 @@
 /***************************************************************************/
 /* Definitions                                                             */
 /***************************************************************************/
-#define RECORD_MANAGER_MAX_ELEMENTS (128)
+#define RECORD_MANAGER_MAX_ELEMENTS (36)
 
 typedef union {
     uint8_t bytes;
