@@ -6,7 +6,8 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(etc_test)
 
 target_sources(app PRIVATE src/main.c
-    src/etc_test.c)
+    src/etc_test.c
+    src/modem.c)
 zephyr_cc_option(-Wfatal-errors)
 
 zephyr_include_directories(src)

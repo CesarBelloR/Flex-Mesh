@@ -4,17 +4,47 @@
 #include <logging/log.h>
 #include <stdlib.h>
 #include <drivers/uart.h>
+#include <drivers/lora.h>
 #include <usb/usb_device.h>
 #include <ctype.h>
 #include <device.h>
 #include <drivers/flash.h>
 #include <drivers/gpio.h>
-#include <jesd216.h>
 #include "pcf85263a.h"
 #include "bq24195.h"
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"
+
+#define DEFAULT_RADIO_NODE DT_ALIAS(lora0)
+#define GPIO_SENSE_ENABLE_PIN (13)
+#define GPIO_S0_PIN (9)
+#define GPIO_S1_PIN (10)
+const struct device* dev_gpio = NULL;
+const struct device* dev_lora = DEVICE_DT_GET(DEFAULT_RADIO_NODE);
+
+static void adc_switch_channel(uint8_t channel) {
+	gpio_pin_set(dev_gpio, GPIO_SENSE_ENABLE_PIN, 0U);
+	gpio_pin_set(dev_gpio, GPIO_S0_PIN, 0U);
+	gpio_pin_set(dev_gpio, GPIO_S1_PIN, 0U);
+}
+
+void etc_test_init(void) {
+	dev_gpio = device_get_binding("GPIO_0");
+	if (dev_gpio == NULL) {
+		return;
+	}
+
+	if (!device_is_ready(dev_lora)) {
+		return;
+	}
+
+	gpio_pin_configure(dev_gpio, GPIO_SENSE_ENABLE_PIN, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure(dev_gpio, GPIO_S0_PIN, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure(dev_gpio, GPIO_S1_PIN, GPIO_OUTPUT_INACTIVE);
+
+	adc_switch_channel(0);
+}
 
 static int cmd_version(const struct shell *shell, size_t argc, char **argv)
 {
@@ -160,3 +190,70 @@ static int cmd_button_pull_module(const struct shell *shell, size_t argc, char *
 }
 
 SHELL_CMD_ARG_REGISTER(etc_button_user, NULL, "Check Button User", cmd_button_pull_module, 1, 0);
+
+const struct device *lora_dev = NULL;
+static struct lora_modem_config etc_lora_rx_config = {
+	.frequency = 915000000,
+	.bandwidth = BW_125_KHZ,
+	.datarate = SF_10,
+	.preamble_len = 8,
+	.coding_rate = CR_4_5,
+	.tx_power = 14,
+	.tx = false,
+};
+
+static struct lora_modem_config etc_lora_tx_config  = {
+	.frequency = 915000000,
+	.bandwidth = BW_125_KHZ,
+	.datarate = SF_10,
+	.preamble_len = 8,
+	.coding_rate = CR_4_5,
+	.tx_power = 14,
+	.tx = true,
+};
+
+static int cmd_lora_tx(const struct shell *shell, size_t argc, char **argv) {
+	uint32_t t0 = k_uptime_get_32();
+	uint8_t tx_buf[] = "Hello World";
+	int ret = lora_config(dev_lora, &etc_lora_tx_config);
+	if (ret < 0) {
+		shell_error(shell, "lora_config failed error %d", ret);
+		return 0;
+	}
+	while (k_uptime_get_32() - t0 < 10000) {
+		ret = lora_send(dev_lora, tx_buf, strlen(tx_buf));
+		if (ret < 0) {
+			shell_error(shell, "lora_send failed error %d", ret);
+			break;
+		} else {
+			shell_print(shell, "Transmit data success %s", tx_buf);
+		}
+		k_sleep(K_SECONDS(1));
+	}
+	return 0;
+}
+SHELL_CMD_ARG_REGISTER(etc_lora_tx, NULL, "Transmit a message over Lora", cmd_lora_tx, 1, 0);
+
+static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
+	uint32_t t0 = k_uptime_get_32();
+	int ret = lora_config(dev_lora, &etc_lora_rx_config);
+	if (ret < 0) {
+		shell_error(shell, "lora_config failed error %d", ret);
+		return 0;
+	}
+	int16_t rssi;
+	int8_t snr;
+	uint8_t rx_buf[128] = {0x00};
+	while (k_uptime_get_32() - t0 < 10000) {
+		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
+		if (ret < 0) {
+			shell_error(shell, "No data received");
+			continue;
+		} else {
+			shell_print(shell, "Received data: %s (RSSI:%ddBm, SNR:%ddBm)", rx_buf, rssi, snr);
+		}
+		k_sleep(K_MSEC(500));
+	}
+	return 0;
+}
+SHELL_CMD_ARG_REGISTER(etc_lora_rx, NULL, "Receive message over Lora", cmd_lora_rx, 1, 0);
