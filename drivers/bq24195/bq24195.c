@@ -108,6 +108,20 @@ int bq24195_init(void)
         return -ENOTSUP;
     }
 
+    ret = read_register(BQ24195_SYSTEM_STATUS_REG, &reg);
+    if (ret != 0) {
+        LOG_ERR("Failed to read reg BQ24195_SYSTEM_STATUS_REG error %d", ret);
+        return ret;
+    }
+
+    ret = read_register(BQ24195_FAULT_REG, &reg);
+    if (ret != 0) {
+        LOG_ERR("Failed to read reg BQ24195_FAULT_REG error %d", ret);
+        return ret;
+    }
+
+    LOG_DBG("Fault 0x%02x", reg);
+    bq24195_disable_watchdog();
     return 0;
 }
 
