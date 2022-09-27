@@ -963,21 +963,18 @@ static int on_connect_tls_init(struct modem_socket *sock)
 	int ret = 0;
 
 	if (quectel_bg95_file_find(MDM_TLS_CA_FILE_NAME) == 0) {
-		// quectel_bg95_file_upload(MDM_TLS_CA_FILE_NAME);
 		if (quectel_bg95_file_delete(MDM_TLS_CA_FILE_NAME) != 0) {
 			return -1;
 		}
 	}
 
 	if (quectel_bg95_file_find(MDM_TLS_CLIENT_CERT_FILE_NAME) == 0) {
-		// quectel_bg95_file_upload(MDM_TLS_CLIENT_CERT_FILE_NAME);
 		if (quectel_bg95_file_delete(MDM_TLS_CLIENT_CERT_FILE_NAME) != 0) {
 			return -1;
 		}
 	}
 
 	if (quectel_bg95_file_find(MDM_TLS_PRIV_KEY_FILE_NAME) == 0) {
-		// quectel_bg95_file_upload(MDM_TLS_PRIV_KEY_FILE_NAME);
 		if (quectel_bg95_file_delete(MDM_TLS_PRIV_KEY_FILE_NAME) != 0) {
 			return -1;
 		}
@@ -1312,11 +1309,11 @@ static void pin_init(void)
 {
 	LOG_INF("Setting Modem Pins");
 
-	modem_pin_write(&mctx, MDM_POWER, 0);
-	k_sleep(K_MSEC(500));
 	modem_pin_write(&mctx, MDM_POWER, 1);
-	k_sleep(K_MSEC(1000));
+	k_sleep(K_MSEC(500));
 	modem_pin_write(&mctx, MDM_POWER, 0);
+	k_sleep(K_MSEC(1000));
+	modem_pin_write(&mctx, MDM_POWER, 1);
 	k_sleep(K_MSEC(500));
 
 	LOG_INF("... Done!");
@@ -1352,7 +1349,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
 	SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
-	// SETUP_CMD_NOHANDLE("AT+QICSGP=1,1,\"" MDM_APN "\",\"" MDM_USERNAME "\", \"" MDM_PASSWORD "\",1"),
+	SETUP_CMD_NOHANDLE("AT+QICSGP=1,1,\"" MDM_APN "\",\"" MDM_USERNAME "\", \"" MDM_PASSWORD "\",1"),
 };
 
 /* Func: modem_pdp_context_active
