@@ -79,9 +79,9 @@ static const size_t led_pins[3] = {
 static void pwm_out(struct led *led, struct led_color *color)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(color->c); i++) {
-		pwm_pin_set_usec(led->pwm_dev, led_pins[i],
-				 (1000000 / CONFIG_UI_LED_PWM_FREQUENCY),
-				 color->c[i], 0);
+		pwm_pin_set(led->pwm_dev, led_pins[i],
+				 PWM_USEC(1000000 / CONFIG_UI_LED_PWM_FREQUENCY),
+				 PWM_USEC(color->c[i]), 0);
 	}
 }
 

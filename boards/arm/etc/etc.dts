@@ -1,6 +1,7 @@
 /dts-v1/;
 #include <nordic/nrf52833_qiaa.dtsi>
 #include <dt-bindings/gpio/gpio.h>
+#include "etc_pinctrl.dtsi"
 
 / {
 	model = "ETC Core";
@@ -31,13 +32,13 @@
 	pwmleds {
 		compatible = "pwm-leds";
 		pwm_led0: pwm_led_0 {
-			pwms = <&pwm0 34>;
+			pwms = <&pwm0 0 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
 		};
 		pwm_led1: pwm_led_1 {
-			pwms = <&pwm0 38>;
+			pwms = <&pwm0 1 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
 		};
 		pwm_led2: pwm_led_2 {
-			pwms = <&pwm0 25>;
+			pwms = <&pwm0 2 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
 		};
 	};
 
@@ -107,8 +108,7 @@
 &i2c0 {
 	compatible = "nordic,nrf-twim";
 	status = "okay"; 
-	sda-pin = <7>;
-	scl-pin = <12>;
+	pinctrl-0 = <&i2c0_default>;
 };
 
 &adc {
@@ -117,20 +117,13 @@
 
 &pwm0 {
 	status = "okay";
-	ch0-pin = <34>;
-	ch0-inverted;
-	ch1-pin = <38>;
-	ch1-inverted;
-	ch2-pin = <25>;
-	ch2-inverted;
+	pinctrl-0 = <&pwm0_default>;
 };
 
 &spi1 {
 	compatible = "nordic,nrf-spi";
 	status = "okay";
-	sck-pin = <26>;
-	mosi-pin = <15>;
-	miso-pin = <27>;
+	pinctrl-0 = <&spi1_default>;
 
 	status = "okay";
 	cs-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
@@ -150,9 +143,7 @@
 &spi2 {
 	compatible = "nordic,nrf-spim";
 	status = "okay";
-	sck-pin = <22>;
-	mosi-pin = <21>;
-	miso-pin = <6>;
+	pinctrl-0 = <&spi2_default>;
 
 	status = "okay";
 	cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
@@ -172,22 +163,22 @@
 	compatible = "nordic,nrf-uarte";
 	status = "disabled";
 	current-speed = <115200>;
-	tx-pin = <14>;
-	rx-pin = <41>;
+	pinctrl-0 = <&uart0_default>;
 };
 
 &uart1 {
 	compatible = "nordic,nrf-uarte";
 	status = "okay";
 	current-speed = <115200>;
-	rx-pin = <17>;
-	tx-pin = <16>;
+	pinctrl-0 = <&uart1_default>;
+	pinctrl-1 = <&uart1_sleep>;
+	pinctrl-names = "default", "sleep";
 
 	quectel_bg95 {
 		compatible = "quectel,bg95";
 		label      = "quectel-bg95";
 		status     = "okay";
-		mdm-power-gpios = <&gpio0 29 0>;
+		mdm-power-gpios = <&gpio1 1 0>;
 	};
 };
 
