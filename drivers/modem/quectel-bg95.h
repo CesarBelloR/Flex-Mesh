@@ -76,18 +76,6 @@
 /* Modem ATOI routine. */
 #define ATOI(s_, value_, desc_)	  modem_atoi(s_, value_, desc_, __func__)
 
-/* pin settings */
-enum mdm_control_pins {
-	MDM_POWER = 0,
-	MDM_RESET,
-#if DT_INST_NODE_HAS_PROP(0, mdm_dtr_gpios)
-	MDM_DTR,
-#endif
-#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
-	MDM_WDISABLE,
-#endif
-};
-
 /* driver data */
 struct modem_data {
 	struct net_if *net_iface;
@@ -118,6 +106,7 @@ struct modem_data {
 	char mdm_iccid[MDM_ICCID_LENGTH];
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
 	char mdm_time[MDM_TIME_LENGTH];
+	int mdm_rssi;
 
 	/* bytes written to socket in last transaction */
 	int sock_written;
@@ -152,34 +141,6 @@ struct socket_read_data {
 	size_t		 recv_buf_len;
 	struct sockaddr	 *recv_addr;
 	uint16_t	 recv_read_len;
-};
-
-/* Modem pins - Power, Reset & others. */
-static struct modem_pin modem_pins[] = {
-#if DT_INST_NODE_HAS_PROP(0, mdm_power_gpios)
-	/* MDM_POWER */
-	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_power_gpios),
-		  DT_INST_GPIO_PIN(0, mdm_power_gpios),
-		  DT_INST_GPIO_FLAGS(0, mdm_power_gpios) | GPIO_OUTPUT_LOW),
-#endif
-#if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
-	/* MDM_RESET */
-	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_reset_gpios),
-		  DT_INST_GPIO_PIN(0, mdm_reset_gpios),
-		  DT_INST_GPIO_FLAGS(0, mdm_reset_gpios) | GPIO_OUTPUT_LOW),
-#endif
-#if DT_INST_NODE_HAS_PROP(0, mdm_dtr_gpios)
-	/* MDM_DTR */
-	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_dtr_gpios),
-		  DT_INST_GPIO_PIN(0, mdm_dtr_gpios),
-		  DT_INST_GPIO_FLAGS(0, mdm_dtr_gpios) | GPIO_OUTPUT_LOW),
-#endif
-#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
-	/* MDM_WDISABLE */
-	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_wdisable_gpios),
-		  DT_INST_GPIO_PIN(0, mdm_wdisable_gpios),
-		  DT_INST_GPIO_FLAGS(0, mdm_wdisable_gpios) | GPIO_OUTPUT_LOW),
-#endif
 };
 
 char* quectel_bg95_get_imei(void);

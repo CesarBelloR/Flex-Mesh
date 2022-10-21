@@ -118,14 +118,17 @@
 &pwm0 {
 	status = "okay";
 	pinctrl-0 = <&pwm0_default>;
+	pinctrl-1 = <&pwm0_sleep>;
+	pinctrl-names = "default", "sleep";
 };
 
 &spi1 {
 	compatible = "nordic,nrf-spi";
 	status = "okay";
 	pinctrl-0 = <&spi1_default>;
+	pinctrl-1 = <&spi1_sleep>;
+	pinctrl-names = "default", "sleep";
 
-	status = "okay";
 	cs-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
 
 	lora: sx1276@0 {
@@ -144,8 +147,9 @@
 	compatible = "nordic,nrf-spim";
 	status = "okay";
 	pinctrl-0 = <&spi2_default>;
+	pinctrl-1 = <&spi2_sleep>;
+	pinctrl-names = "default", "sleep";
 
-	status = "okay";
 	cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
 	mx25r1635: mx25r1635@0 {
 		compatible = "jedec,spi-nor";
@@ -164,6 +168,8 @@
 	status = "disabled";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
+	pinctrl-1 = <&uart0_sleep>;
+	pinctrl-names = "default", "sleep";
 };
 
 &uart1 {
