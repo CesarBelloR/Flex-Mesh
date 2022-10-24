@@ -1,16 +1,8 @@
 / {
 	chosen {
-		zephyr,shell-uart = &cdc_acm_uart0;
-		zephyr,console = &cdc_acm_uart0;
 	};
 };
 
-&zephyr_udc0 {
-	cdc_acm_uart0: cdc_acm_uart0 {
-		compatible = "zephyr,cdc-acm-uart";
-		label = "CDC_ACM_0";
-	};
-};
 
 /* A7 = P0.31 = AIN7 - ADC_AMB */ 
 /* A3 = P0.5  = AIN3 - ADC_BATT*/
