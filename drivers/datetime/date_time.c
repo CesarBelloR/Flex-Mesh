@@ -72,7 +72,7 @@ static int time_modem_get(void)
 	/* Example of modem time response:
 	 * "20/02/25,17:15:02+04"
 	 */
-	LOG_DBG("Response from modem: %s", log_strdup(buf));
+	LOG_DBG("Response from modem: %s", (buf));
 
 	/* Replace '/' ',' and ':' with whitespace for easier parsing by strtol.
 	 * strtol skips over whitespace.

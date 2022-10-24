@@ -351,7 +351,7 @@ int pcf85263a_init(const char* device)
 
     cfg->i2c_dev = (struct device*)device_get_binding(device);
     if (cfg->i2c_dev == NULL) {
-        LOG_ERR("Failed to get device_get_binding %s", log_strdup(device));
+        LOG_ERR("Failed to get device_get_binding %s", (device));
         return -EINVAL;
     }
 

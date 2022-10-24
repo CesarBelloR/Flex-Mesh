@@ -139,7 +139,7 @@ static int shadow_update(bool version_number_include)
 		.len = strlen(message)
 	};
 
-	LOG_INF("Publishing: %s to AWS IoT broker", log_strdup(message));
+	LOG_INF("Publishing: %s to AWS IoT broker", message);
 
 	err = aws_iot_send(&tx_data);
 	if (err) {
@@ -220,7 +220,7 @@ static void app_on_subscribed(const char *buf, const char *topic,
 		goto clean_exit;
 	}
 
-	LOG_DBG("Received message %s", log_strdup(str));
+	LOG_DBG("Received message %s", str);
 	
 	setting_obj = cJSON_GetObjectItemCaseSensitive(root_obj, "setting");
 	if (setting_obj == NULL) {
@@ -348,7 +348,7 @@ static int app_topics_subscribe(void)
 		LOG_ERR("aws_iot_subscription_topics_add, error: %d", err);
 	}
 
-	LOG_DBG("Subscribed topics: %s", log_strdup(subscribed_topic));
+	LOG_DBG("Subscribed topics: %s", subscribed_topic);
 
 	return err;
 }

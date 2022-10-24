@@ -1,0 +1,13 @@
+&uart1 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+	current-speed = <115200>;
+	rx-pin = <17>;
+	tx-pin = <19>;
+
+	quectel_bg95 {
+		compatible = "quectel,bg95";
+		label      = "quectel-bg95";
+		status     = "okay";
+	};
+};
