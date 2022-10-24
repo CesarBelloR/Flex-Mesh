@@ -7,12 +7,12 @@
 #include <zephyr.h>
 #include <drivers/pwm.h>
 #include <string.h>
-
+#include <zephyr/pm/device.h>
 #include "ui.h"
 #include "led_pwm.h"
 #include "led_effect.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ui_led_pwm, CONFIG_UI_LOG_LEVEL);
 
 struct led {
@@ -29,39 +29,17 @@ struct led {
 };
 
 static const struct led_effect effect[] = {
-	[UI_LTE_DISCONNECTED] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL,
-					UI_LED_OFF_PERIOD_NORMAL,
-					UI_LTE_DISCONNECTED_COLOR),
-	[UI_LTE_CONNECTING] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL,
-					UI_LED_OFF_PERIOD_NORMAL,
-					UI_LTE_CONNECTING_COLOR),
-	[UI_LTE_CONNECTED] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL,
-					UI_LED_OFF_PERIOD_NORMAL,
-					UI_LTE_CONNECTED_COLOR),
-	[UI_CLOUD_CONNECTING] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL,
-					UI_LED_OFF_PERIOD_NORMAL,
-					UI_CLOUD_CONNECTING_COLOR),
-	[UI_CLOUD_CONNECTED] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL,
-					UI_LED_OFF_PERIOD_NORMAL,
-					UI_CLOUD_CONNECTED_COLOR),
-	[UI_CLOUD_PAIRING] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL,
-					UI_LED_OFF_PERIOD_NORMAL,
-					UI_CLOUD_PAIRING_COLOR),
-	[UI_LED_ERROR_CLOUD] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_ERROR,
-					UI_LED_OFF_PERIOD_ERROR,
-					UI_LED_ERROR_CLOUD_COLOR),
-	[UI_LED_ERROR_MODEM_REC] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_ERROR,
-					UI_LED_OFF_PERIOD_ERROR,
-					UI_LED_ERROR_MODEM_REC_COLOR),
-	[UI_LED_ERROR_MODEM_IRREC] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_ERROR,
-					UI_LED_OFF_PERIOD_ERROR,
-					UI_LED_ERROR_MODEM_IRREC_COLOR),
-	[UI_LED_ERROR_LTE_LC] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_ERROR,
-					UI_LED_OFF_PERIOD_ERROR,
-					UI_LED_ERROR_LTE_LC_COLOR),
-	[UI_LED_ERROR_UNKNOWN] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_ERROR,
-					UI_LED_OFF_PERIOD_ERROR,
-					UI_LED_ERROR_UNKNOWN_COLOR),
+	[UI_LTE_DISCONNECTED] = LED_EFFECT_LED_ON(UI_LTE_DISCONNECTED_COLOR),
+	[UI_LTE_CONNECTING] = LED_EFFECT_LED_ON(UI_LTE_CONNECTING_COLOR),
+	[UI_LTE_CONNECTED] = LED_EFFECT_LED_ON(UI_LTE_CONNECTED_COLOR),
+	[UI_CLOUD_CONNECTING] = LED_EFFECT_LED_ON(UI_CLOUD_CONNECTING_COLOR),
+	[UI_CLOUD_CONNECTED] = LED_EFFECT_LED_ON(UI_CLOUD_CONNECTED_COLOR),
+	[UI_CLOUD_PAIRING] = LED_EFFECT_LED_ON(UI_CLOUD_PAIRING_COLOR),
+	[UI_LED_ERROR_CLOUD] = LED_EFFECT_LED_ON(UI_LED_ERROR_CLOUD_COLOR),
+	[UI_LED_ERROR_MODEM_REC] = LED_EFFECT_LED_ON(UI_LED_ERROR_MODEM_REC_COLOR),
+	[UI_LED_ERROR_MODEM_IRREC] = LED_EFFECT_LED_ON(UI_LED_ERROR_MODEM_IRREC_COLOR),
+	[UI_LED_ERROR_LTE_LC] = LED_EFFECT_LED_ON(UI_LED_ERROR_LTE_LC_COLOR),
+	[UI_LED_ERROR_UNKNOWN] = LED_EFFECT_LED_ON(UI_LED_ERROR_UNKNOWN_COLOR),
 };
 
 static struct led_effect custom_effect =
@@ -70,19 +48,15 @@ static struct led_effect custom_effect =
 		LED_NOCOLOR());
 
 static struct led leds;
-static const size_t led_pins[3] = {
-	CONFIG_UI_LED_RED_PIN,
-	CONFIG_UI_LED_GREEN_PIN,
-	CONFIG_UI_LED_BLUE_PIN,
-};
+static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
+static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
+static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
 
 static void pwm_out(struct led *led, struct led_color *color)
 {
-	for (size_t i = 0; i < ARRAY_SIZE(color->c); i++) {
-		pwm_pin_set_usec(led->pwm_dev, led_pins[i],
-				 (1000000 / CONFIG_UI_LED_PWM_FREQUENCY),
-				 color->c[i], 0);
-	}
+	pwm_set_dt(&pwm_led0, PWM_USEC(1000000 / CONFIG_UI_LED_PWM_FREQUENCY), PWM_USEC(color->c[0]));
+	pwm_set_dt(&pwm_led1, PWM_USEC(1000000 / CONFIG_UI_LED_PWM_FREQUENCY), PWM_USEC(color->c[1]));
+	pwm_set_dt(&pwm_led2, PWM_USEC(1000000 / CONFIG_UI_LED_PWM_FREQUENCY), PWM_USEC(color->c[2]));
 }
 
 static void pwm_off(struct led *led)
@@ -155,17 +129,28 @@ static void led_update(struct led *led)
 
 int ui_leds_init(void)
 {
-	const char *dev_name = CONFIG_UI_LED_PWM_DEV_NAME;
 	int err = 0;
 
-	leds.pwm_dev = device_get_binding(dev_name);
-	leds.id = 0;
-	leds.effect = &effect[UI_LTE_DISCONNECTED];
-
-	if (!leds.pwm_dev) {
-		LOG_ERR("Could not bind to device %s", dev_name);
+	if (!device_is_ready(pwm_led0.dev)) {
+		LOG_ERR("Error: PWM device %s is not ready\n",
+		       pwm_led0.dev->name);
 		return -ENODEV;
 	}
+
+	if (!device_is_ready(pwm_led1.dev)) {
+		LOG_ERR("Error: PWM device %s is not ready\n",
+		       pwm_led1.dev->name);
+		return -ENODEV;
+	}
+
+	if (!device_is_ready(pwm_led2.dev)) {
+		LOG_ERR("Error: PWM device %s is not ready\n",
+		       pwm_led2.dev->name);
+		return -ENODEV;
+	}
+
+	leds.id = 0;
+	leds.effect = &effect[UI_LTE_DISCONNECTED];
 
 	k_work_init_delayable(&leds.work, work_handler);
 	led_update(&leds);
@@ -176,7 +161,7 @@ int ui_leds_init(void)
 void ui_leds_start(void)
 {
 #ifdef CONFIG_PM_DEVICE
-	int err = pm_device_state_set(leds.pwm_dev, PM_DEVICE_STATE_ACTIVE);
+	int err = pm_device_action_run(leds.pwm_dev, PM_DEVICE_STATE_ACTIVE);
 	if (err) {
 		LOG_ERR("PWM enable failed");
 	}
@@ -188,7 +173,7 @@ void ui_leds_stop(void)
 {
 	k_work_cancel_delayable_sync(&leds.work, &leds.work_sync);
 #ifdef CONFIG_PM_DEVICE
-	int err = pm_device_state_set(leds.pwm_dev, PM_DEVICE_STATE_SUSPENDED);
+	int err = pm_device_action_run(leds.pwm_dev, PM_DEVICE_STATE_SUSPENDED);
 	if (err) {
 		LOG_ERR("PWM disable failed");
 	}

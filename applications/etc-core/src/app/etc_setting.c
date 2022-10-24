@@ -11,11 +11,12 @@
  */
 /***************************************************************************/
 #include <zephyr.h>
-#include <power/reboot.h>
-#include <device.h>
+#include <sys/reboot.h>
+#include <zephyr/device.h>
 #include <string.h>
-#include <drivers/flash.h>
-#include <storage/flash_map.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/fs/nvs.h>
 #include <fs/nvs.h>
 
 #include "etc_setting.h"
@@ -23,8 +24,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(etc_setting, CONFIG_ETC_APP_LOG_LEVEL);
 
-#define ETC_STORAGE_OFFSET DT_REG_ADDR(DT_NODELABEL(storage_partition))
-#define ETC_STORAGE_SIZE DT_REG_SIZE(DT_NODELABEL(storage_partition))
+#define STORAGE_NODE_LABEL storage
 
 enum {
     ETC_CONFIG_ID = 0x01,
@@ -46,21 +46,26 @@ etc_config_t* p_etc_config = &etc_config.etc_config;
 static void etc_nvs_init(void) {
     int rc = 0;
 	struct flash_pages_info info;
-	etc_fs.offset = ETC_STORAGE_OFFSET;
-	rc = flash_get_page_info_by_offs(
-		device_get_binding(DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL),
-		etc_fs.offset, &info);
+	etc_fs.flash_device = FLASH_AREA_DEVICE(STORAGE_NODE_LABEL);
+	if (!device_is_ready(etc_fs.flash_device)) {
+		LOG_ERR("Flash device %s is not ready", etc_fs.flash_device->name);
+		return;
+	}
+
+	etc_fs.offset = FLASH_AREA_OFFSET(STORAGE_NODE_LABEL);
+	rc = flash_get_page_info_by_offs(etc_fs.flash_device, etc_fs.offset, &info);
 	if (rc) {
 		LOG_DBG("Unable to get page info");
 	}
 	etc_fs.sector_size = info.size;
-	etc_fs.sector_count = (ETC_STORAGE_SIZE / info.size);
+	etc_fs.sector_count = (FLASH_AREA_SIZE(STORAGE_NODE_LABEL) / info.size);
 
-	rc = nvs_init(&etc_fs, DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL);
+	rc = nvs_mount(&etc_fs);
 	if (rc) {
-		LOG_ERR("NVS failed to initialize with error code %d", rc);
-        return;
+		LOG_ERR("Flash Init failed");
+		return;
 	}
+
     LOG_INF("Initialised etc setting successfully");
 }
 

@@ -11,11 +11,11 @@
  */
 /***************************************************************************/
 #include <zephyr.h>
-#include <power/reboot.h>
-#include <device.h>
+#include <sys/reboot.h>
+#include <zephyr/device.h>
 #include <string.h>
-#include <drivers/flash.h>
-#include <storage/flash_map.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/storage/flash_map.h>
 #include <fs/nvs.h>
 #include <cJSON.h>
 #include <cJSON_os.h>

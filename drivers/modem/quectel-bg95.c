@@ -23,6 +23,17 @@ static K_KERNEL_STACK_DEFINE(modem_rx_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_STA
 static K_KERNEL_STACK_DEFINE(modem_workq_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_WORKQ_STACK_SIZE);
 NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE, 0, NULL);
 
+static const struct gpio_dt_spec power_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_power_gpios);
+#if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
+static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
+#endif
+#if DT_INST_NODE_HAS_PROP(0, mdm_dtr_gpios)
+static const struct gpio_dt_spec dtr_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_dtr_gpios);
+#endif
+#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
+static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wdisable_gpios);
+#endif
+
 static inline int digits(int n)
 {
 	int count = 0;
@@ -76,8 +87,8 @@ static int modem_atoi(const char *s, const int err_value,
 
 	ret = (int)strtol(s, &endptr, 10);
 	if (!endptr || *endptr != '\0') {
-		LOG_ERR("bad %s '%s' in %s", log_strdup(s), log_strdup(desc),
-			log_strdup(func));
+		LOG_ERR("bad %s '%s' in %s", s, desc,
+			func);
 		return err_value;
 	}
 
@@ -200,7 +211,7 @@ static void socket_close(struct modem_socket *sock)
 			     NULL, 0U, buf,
 			     &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", buf, ret);
 	}
 
 	modem_socket_put(&mdata.socket_config, sock->sock_fd);
@@ -237,14 +248,14 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 
 	/* Check the RSSI value. */
 	if (rssi == 31) {
-		mctx.data_rssi = -51;
+		mdata.mdm_rssi = -51;
 	} else if (rssi >= 0 && rssi <= 31) {
-		mctx.data_rssi = -114 + ((rssi * 2) + 1);
+		mdata.mdm_rssi = -114 + ((rssi * 2) + 1);
 	} else {
-		mctx.data_rssi = -1000;
+		mdata.mdm_rssi = -1000;
 	}
 
-	LOG_INF("RSSI: %d", mctx.data_rssi);
+	LOG_INF("RSSI: %d", mdata.mdm_rssi);
 	return 0;
 }
 
@@ -279,7 +290,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_manufacturer)
 					   sizeof(mdata.mdm_manufacturer) - 1,
 					   data->rx_buf, 0, len);
 	mdata.mdm_manufacturer[out_len] = '\0';
-	LOG_INF("Manufacturer: %s", log_strdup(mdata.mdm_manufacturer));
+	LOG_INF("Manufacturer: %s", mdata.mdm_manufacturer);
 	return 0;
 }
 
@@ -292,7 +303,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_model)
 	mdata.mdm_model[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("Model: %s", log_strdup(mdata.mdm_model));
+	LOG_INF("Model: %s", mdata.mdm_model);
 	return 0;
 }
 
@@ -305,7 +316,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_revision)
 	mdata.mdm_revision[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("Revision: %s", log_strdup(mdata.mdm_revision));
+	LOG_INF("Revision: %s", mdata.mdm_revision);
 	return 0;
 }
 
@@ -318,7 +329,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imei)
 	mdata.mdm_imei[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("IMEI: %s", log_strdup(mdata.mdm_imei));
+	LOG_INF("IMEI: %s", mdata.mdm_imei);
 	return 0;
 }
 
@@ -332,7 +343,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imsi)
 	mdata.mdm_imsi[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("IMSI: %s", log_strdup(mdata.mdm_imsi));
+	LOG_INF("IMSI: %s", mdata.mdm_imsi);
 	return 0;
 }
 
@@ -355,7 +366,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_iccid)
 		}
 	}
 
-	LOG_INF("ICCID: %s", log_strdup(mdata.mdm_iccid));
+	LOG_INF("ICCID: %s", mdata.mdm_iccid);
 	return 0;
 }
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
@@ -1117,6 +1128,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		MODEM_CMD("+QSSLOPEN: ", on_cmd_atcmdinfo_sslopen, 2U, ",") };
 	char		    buf[sizeof("AT+Q###OPEN=#,##,###,####.####.####.####,######") + 256] = {0};
 	int		    ret;
+	char		ip_str[NET_IPV6_ADDR_LEN];
 
 
 	if (sock->id < mdata.socket_config.base_socket_num - 1) {
@@ -1150,15 +1162,24 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	}
 
 	k_sem_reset(&mdata.sem_sock_conn);
+
+	ret = modem_context_sprint_ip_addr(addr, ip_str, sizeof(ip_str));
+	if (ret != 0) {
+		LOG_ERR("Error formatting IP string %d", ret);
+		LOG_ERR("Closing the socket!!!");
+		socket_close(sock);
+		errno = -ret;
+		return -1;
+	}
 	
 	/* Formulate the complete string. */
 	/* Open the socket with buffer access mode */
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
 		snprintk(buf, sizeof(buf), "AT+QSSLOPEN=%d,%d,%d,\"%s\",%d,0", 1, sock->sock_fd, sock->sock_fd,
-			modem_context_sprint_ip_addr(addr), dst_port);
+			ip_str, dst_port);
 	} else {
 		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, protocol,
-			modem_context_sprint_ip_addr(addr), dst_port);
+			ip_str, dst_port);
 	}
 
 	/* Send out the command. */
@@ -1166,7 +1187,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 			     NULL, 0U, buf,
 			     &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", buf, ret);
 		LOG_ERR("Closing the socket!!!");
 		socket_close(sock);
 		errno = -ret;
@@ -1309,12 +1330,9 @@ static void pin_init(void)
 {
 	LOG_INF("Setting Modem Pins");
 
-	modem_pin_write(&mctx, MDM_POWER, 1);
-	k_sleep(K_MSEC(500));
-	modem_pin_write(&mctx, MDM_POWER, 0);
+	gpio_pin_set_dt(&power_gpio, 1);
 	k_sleep(K_MSEC(1000));
-	modem_pin_write(&mctx, MDM_POWER, 1);
-	k_sleep(K_MSEC(500));
+	gpio_pin_set_dt(&power_gpio, 0);
 
 	LOG_INF("... Done!");
 }
@@ -1449,13 +1467,13 @@ restart_rssi:
 
 	/* Keep trying to read RSSI until we get a valid value - Eventually, exit. */
 	while (counter++ < MDM_WAIT_FOR_RSSI_COUNT &&
-	      (mctx.data_rssi >= 0 || mctx.data_rssi <= -1000)) {
+	      (mdata.mdm_rssi >= 0 || mdata.mdm_rssi <= -1000)) {
 		modem_rssi_query_work(NULL);
 		k_sleep(MDM_WAIT_FOR_RSSI_DELAY);
 	}
 
 	/* Is the RSSI invalid ? */
-	if (mctx.data_rssi >= 0 || mctx.data_rssi <= -1000) {
+	if (mdata.mdm_rssi >= 0 || mdata.mdm_rssi <= -1000) {
 		rssi_retry_count++;
 
 		if (rssi_retry_count >= MDM_NETWORK_RETRY_COUNT) {
@@ -1510,7 +1528,7 @@ static int modem_set_socket_timeout(struct modem_socket *sock, int timeout) {
 	/* Send out the command. */
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf, &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", buf, ret);
 	}
 	return ret;
 }
@@ -1633,9 +1651,9 @@ static int offload_getaddrinfo(const char *node, const char *service,
 	}
 
 	LOG_DBG("DNS RESULT: %s",
-		log_strdup(net_addr_ntop(result.ai_family,
+		net_addr_ntop(result.ai_family,
 					 &net_sin(&result_addr)->sin_addr,
-					 sendbuf, NET_IPV4_ADDR_LEN)));
+					 sendbuf, NET_IPV4_ADDR_LEN));
 
 	*res = (struct zsock_addrinfo *)&result;
 	return 0;
@@ -1747,10 +1765,42 @@ static int modem_init(const struct device *dev)
 	mctx.data_model	       = mdata.mdm_model;
 	mctx.data_revision     = mdata.mdm_revision;
 	mctx.data_imei	       = mdata.mdm_imei;
+#if defined(CONFIG_MODEM_SIM_NUMBERS)
+	mctx.data_imsi	       = mdata.mdm_imsi;
+	mctx.data_iccid	       = mdata.mdm_iccid;
+#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
+	mctx.data_rssi		   = &mdata.mdm_rssi;
 
-	/* pin setup */
-	mctx.pins	       = modem_pins;
-	mctx.pins_len	       = ARRAY_SIZE(modem_pins);
+	ret = gpio_pin_configure_dt(&power_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "power");
+		goto error;
+	}
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
+	ret = gpio_pin_configure_dt(&reset_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "reset");
+		goto error;
+	}
+#endif
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_dtr_gpios)
+	ret = gpio_pin_configure_dt(&dtr_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "dtr");
+		goto error;
+	}
+#endif
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
+	ret = gpio_pin_configure_dt(&wdisable_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "wdisable");
+		goto error;
+	}
+#endif
+
 	mctx.driver_data       = &mdata;
 
 	ret = modem_context_register(&mctx);
@@ -1801,7 +1851,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_clock)
 {
 	size_t out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 0, len);
 	mdata.mdm_time[out_len] = '\0';
-	LOG_DBG("Clock: %s", log_strdup(mdata.mdm_time));
+	LOG_DBG("Clock: %s", mdata.mdm_time);
 	return 0;
 }
 
