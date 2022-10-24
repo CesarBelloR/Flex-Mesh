@@ -51,7 +51,7 @@ config MODEM_QUECTEL_BG95_M3_PASSWORD
 
 config MODEM_QUECTEL_BG95_M3_INIT_PRIORITY
 	int "Quectel BG95 M3 driver init priority"
-	default 80
+	default 95
 	help
 	  Quectel BG95 M3 device driver initialization priority.
 	  Do not mess with it unless you know what you are doing.

@@ -8,6 +8,8 @@
 	compatible = "nordic,nrf52833-dk-nrf52833";
 
 	chosen {
+		zephyr,console = &cdc_acm_uart0;
+		zephyr,shell-uart = &cdc_acm_uart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
@@ -83,6 +85,21 @@
 		};
 	};
 	
+	fstab {
+		compatible = "zephyr,fstab";
+		lfs1: lfs1 {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs1";
+			partition = <&lfs1_part>;
+			automount;
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <64>;
+			lookahead-size = <32>;
+			block-cycles = <512>;
+		};
+	};
+
 	/* These aliases are provided for compatibility with samples */
 	aliases {
 		led0 = &led0;
@@ -90,6 +107,9 @@
 		led2 = &led2;
 		sw0 = &button0;
 		lora0 = &lora;
+		pwm-led0 = &pwm_led0;
+		pwm-led1 = &pwm_led1;
+		pwm-led2 = &pwm_led2;
 	};
 };
 
@@ -99,15 +119,18 @@
 
 &gpio0 {
 	status = "okay";
+	label = "GPIO_0";
 };
 
 &gpio1 {
 	status = "okay";
+	label = "GPIO_1";
 };
 
 &i2c0 {
 	compatible = "nordic,nrf-twim";
 	status = "okay"; 
+	label = "I2C_0";
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-1 = <&i2c0_sleep>;
 	pinctrl-names = "default", "sleep";
@@ -115,10 +138,12 @@
 
 &adc {
 	status = "okay";
+	label = "ADC";
 };
 
 &pwm0 {
 	status = "okay";
+	label = "PWM_0";
 	pinctrl-0 = <&pwm0_default>;
 	pinctrl-1 = <&pwm0_sleep>;
 	pinctrl-names = "default", "sleep";
@@ -127,10 +152,10 @@
 &spi1 {
 	compatible = "nordic,nrf-spi";
 	status = "okay";
+	label = "SPI_1";
 	pinctrl-0 = <&spi1_default>;
 	pinctrl-1 = <&spi1_sleep>;
 	pinctrl-names = "default", "sleep";
-
 	cs-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
 
 	lora: sx1276@0 {
@@ -144,9 +169,9 @@
 		power-amplifier-output = "pa-boost";
 	};
 };
-
 &spi2 {
 	compatible = "nordic,nrf-spim";
+	label = "SPI_2";
 	status = "okay";
 	pinctrl-0 = <&spi2_default>;
 	pinctrl-1 = <&spi2_sleep>;
@@ -168,6 +193,7 @@
 &uart0 {
 	compatible = "nordic,nrf-uarte";
 	status = "disabled";
+	label = "UART_0";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-1 = <&uart0_sleep>;
@@ -177,6 +203,7 @@
 &uart1 {
 	compatible = "nordic,nrf-uarte";
 	status = "okay";
+	label = "UART_1";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart1_default>;
 	pinctrl-1 = <&uart1_sleep>;
@@ -191,7 +218,6 @@
 };
 
 &flash0 {
-
 	partitions {
 		compatible = "fixed-partitions";
 		#address-cells = <1>;
@@ -214,13 +240,17 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		slot1_partition: partition@0000 {
+		slot1_partition: partition@0 {
 			label = "image-1";
-			reg = <0x000000000 0x6A000>;
+			reg = <0x00000000 0x00060000>;
 		};
-		storage_partition: partition@6A000 {
+		lfs1_part: partition@60000 {
+			label = "lfs-storage";
+			reg = <0x00060000 0x00190000>;
+		};
+		storage_partition: partition@1F0000 {
 			label = "storage";
-			reg = <0x0006A000 0x0034c000>;
+			reg = <0x001F0000 0x00010000>;
 		};
 	};
 };
@@ -228,4 +258,9 @@
 zephyr_udc0: &usbd {
 	compatible = "nordic,nrf-usbd";
 	status = "okay";
+
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_0";
+	};
 };

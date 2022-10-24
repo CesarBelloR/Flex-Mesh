@@ -24,11 +24,6 @@
 #include "modem_cmd_handler.h"
 #include "modem_iface_uart.h"
 
-#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-#include "tls_internal.h"
-#include <net/tls_credentials.h>
-#endif
-#define CONFIG_MODEM_SIM_NUMBERS
 #define MDM_UART_DEV			  DEVICE_DT_GET(DT_INST_BUS(0))
 #define MDM_UART_NODE			  DT_INST_BUS(0)
 #define MDM_CMD_TIMEOUT			  K_SECONDS(10)

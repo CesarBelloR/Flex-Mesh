@@ -17,6 +17,9 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
 
+BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),
+	     "Console device is not ACM CDC UART device");
+
 #define LTE_POWER_ON_OFF_PIN 4
 #define LTE_PSM_IND_PIN 2
 #define LTE_POWER_KEY_PIN 1
@@ -60,11 +63,8 @@ static void app_driver_init(void) {
 
 void main(void)
 {
-#if DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_shell_uart), zephyr_cdc_acm_uart)
-	const struct device *dev;
 	uint32_t dtr = 0;
-
-	dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_shell_uart));
+	const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_shell_uart));
 	if (!device_is_ready(dev) || usb_enable(NULL)) {
 		return;
 	}
@@ -73,11 +73,11 @@ void main(void)
 		uart_line_ctrl_get(dev, UART_LINE_CTRL_DTR, &dtr);
 		k_sleep(K_MSEC(100));
 	}
-#endif
+
 	app_driver_init();
 	k_sleep(K_MSEC(100));
-	app_modem_init();
-	k_sleep(K_SECONDS(1));
-	extern void modem_init(void);
-	modem_init();
+	// app_modem_init();
+	// k_sleep(K_SECONDS(1));
+	// extern void modem_init(void);
+	// modem_init();
 }

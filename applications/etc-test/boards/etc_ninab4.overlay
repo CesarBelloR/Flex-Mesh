@@ -1,31 +1,25 @@
 / {
 	chosen {
-		zephyr,shell-uart = &cdc_acm_uart0;
-		zephyr,console = &cdc_acm_uart0;
-		nordic,pm-ext-flash = &mx25r1635;
+		nordic,pm-ext-flash = &mx25l6433;
 	};
 };
 
-&zephyr_udc0 {
-	cdc_acm_uart0: cdc_acm_uart0 {
-		compatible = "zephyr,cdc-acm-uart";
-		label = "CDC_ACM_0";
-	};
-};
-
-/* A7 = P0.31 = AIN7 - ADC_AMB */ 
-/* A3 = P0.5  = AIN3 - ADC_BATT*/
-/* A2 = P0.4 = AIN2 - ADC_TH*/
+/* A0 = P0.04 = AIN2 */
+/* A1 = P0.30 = AIN6 */
+/* A2 = P0.5  = AIN3 */
+/* A3 = P0.2  = AIN0 */
+/* A4 = P0.28 = AIN4 */
 / {
 	zephyr,user {
 		/* adjust channel number according to pinmux in board.dts */
-		io-channels = <&adc 7>, <&adc 3>, <&adc 2>;
+		io-channels = <&adc 2>, <&adc 6>, <&adc 3>;
 	};
 };
-
+	
 /delete-node/ &boot_partition;
 /delete-node/ &slot0_partition;
 /delete-node/ &slot1_partition;
+/delete-node/ &scratch_partition;
 /delete-node/ &storage_partition;
 
 &flash0 {
@@ -41,7 +35,7 @@
 	};
 };
 
-&mx25r1635 {
+&mx25l6433 {
 	partitions {
 		compatible = "fixed-partitions";
 		#address-cells = <1>;

@@ -1,5 +1,5 @@
 &pinctrl {
-    uart0_default: uart0_default {
+	uart0_default: uart0_default {
 		group1 {
 			psels = <NRF_PSEL(UART_TX, 0, 14)>,
 				<NRF_PSEL(UART_RX, 1, 9)>;
@@ -29,22 +29,22 @@
 		};
 	};
 
-    i2c0_default: i2c0_default {
-        group1 {
-            psels = <NRF_PSEL(TWIM_SDA, 0, 7)>,
-                <NRF_PSEL(TWIM_SCL, 0, 12)>;
-        };
-    };
+	i2c0_default: i2c0_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 0, 7)>,
+				<NRF_PSEL(TWIM_SCL, 0, 12)>;
+		};
+	};
 
 	i2c0_sleep: i2c0_sleep {
-        group1 {
-            psels = <NRF_PSEL(TWIM_SDA, 0, 7)>,
-                <NRF_PSEL(TWIM_SCL, 0, 12)>;
-			low-power-enable;
-        };
-    };
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 0, 7)>,
+				<NRF_PSEL(TWIM_SCL, 0, 12)>;
+				low-power-enable;
+		};
+	};
 
-    spi1_default: spi1_default {
+	spi1_default: spi1_default {
 		group1 {
 			psels = <NRF_PSEL(SPIM_SCK, 0, 26)>,
 				<NRF_PSEL(SPIM_MOSI, 0, 15)>,
@@ -61,7 +61,7 @@
 		};
 	};
 
-    spi2_default: spi2_default {
+	spi2_default: spi2_default {
 		group1 {
 			psels = <NRF_PSEL(SPIM_SCK, 0, 22)>,
 				<NRF_PSEL(SPIM_MOSI, 0, 21)>,
@@ -78,21 +78,21 @@
 		};
 	};
 
-    pwm0_default: pwm0_default {
+	pwm0_default: pwm0_default {
 		group1 {
 			psels = <NRF_PSEL(PWM_OUT0, 1, 2)>,
-                <NRF_PSEL(PWM_OUT1, 1, 6)>,
-                <NRF_PSEL(PWM_OUT2, 0, 25)>;
-			nordic,invert;
+				<NRF_PSEL(PWM_OUT1, 1, 6)>,
+				<NRF_PSEL(PWM_OUT2, 0, 25)>;
+				nordic,invert;
 		};
 	};
 
 	pwm0_sleep: pwm0_sleep {
 		group1 {
 			psels = <NRF_PSEL(PWM_OUT0, 1, 2)>,
-                <NRF_PSEL(PWM_OUT1, 1, 6)>,
-                <NRF_PSEL(PWM_OUT2, 0, 25)>;
-			low-power-enable;
+				<NRF_PSEL(PWM_OUT1, 1, 6)>,
+				<NRF_PSEL(PWM_OUT2, 0, 25)>;
+				low-power-enable;
 		};
 	};
 };
