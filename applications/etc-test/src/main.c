@@ -76,8 +76,8 @@ void main(void)
 
 	app_driver_init();
 	k_sleep(K_MSEC(100));
-	// app_modem_init();
-	// k_sleep(K_SECONDS(1));
-	// extern void modem_init(void);
-	// modem_init();
+	app_modem_init();
+	k_sleep(K_SECONDS(1));
+	extern void modem_init(void);
+	modem_init();
 }
