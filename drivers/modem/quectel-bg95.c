@@ -530,7 +530,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 				k_timeout_t timeout)
 {
 	int  ret;
-	char send_buf[sizeof("AT+Q###SEND=##,####,")] = {0};
+	char send_buf[sizeof("AT+Q###SEND=##,####")] = {0};
 	char ctrlz = 0x1A;
 
 	if (buf_len > MDM_MAX_DATA_LENGTH) {
