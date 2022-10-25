@@ -1,0 +1,322 @@
+#include <zephyr/kernel.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <app_event_manager.h>
+#include <math.h>
+
+#define MODULE modem_module
+#define MODULE_MODEM_THREAD_STACK_SIZE 2048
+
+
+#include "modules_common.h"
+#include "events/app_event.h"
+#include "events/data_event.h"
+#include "events/modem_event.h"
+#include "events/cloud_event.h"
+#include "events/util_event.h"
+
+#ifdef CONFIG_LWM2M_CARRIER
+#include <lwm2m_carrier.h>
+#endif /* CONFIG_LWM2M_CARRIER */
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
+
+struct modem_msg_data {
+	union {
+		struct app_event app;
+		struct cloud_event cloud;
+		struct util_event util;
+		struct modem_event modem;
+	} module;
+};
+
+/* Modem module super states. */
+static enum state_type {
+	/* Initialization state where all libraries that the module depends
+	 * on need to be initialized before you can enter any other state.
+	 */
+	STATE_INIT,
+	STATE_DISCONNECTED,
+	STATE_CONNECTING,
+	STATE_CONNECTED,
+	STATE_SHUTDOWN,
+} state;
+
+/* Enumerator that specifies the data type that is sampled. */
+enum sample_type {
+	MODEM_STATIC,
+};
+
+/* Value that holds the latest RSRP value. */
+static int16_t rsrp_value_latest;
+
+const k_tid_t module_thread;
+
+/* Modem module message queue. */
+#define MODEM_QUEUE_ENTRY_COUNT		10
+#define MODEM_QUEUE_BYTE_ALIGNMENT	4
+
+K_MSGQ_DEFINE(msgq_modem, sizeof(struct modem_msg_data),
+	      MODEM_QUEUE_ENTRY_COUNT, MODEM_QUEUE_BYTE_ALIGNMENT);
+
+static struct module_data self = {
+	.name = "modem",
+	.msg_q = &msgq_modem,
+	.supports_shutdown = true,
+};
+
+/* Convenience functions used in internal state handling. */
+static char *state2str(enum state_type state)
+{
+	switch (state) {
+	case STATE_INIT:
+		return "STATE_INIT";
+	case STATE_DISCONNECTED:
+		return "STATE_DISCONNECTED";
+	case STATE_CONNECTING:
+		return "STATE_CONNECTING";
+	case STATE_CONNECTED:
+		return "STATE_CONNECTED";
+	case STATE_SHUTDOWN:
+		return "STATE_SHUTDOWN";
+	default:
+		return "Unknown state";
+	}
+}
+
+static void state_set(enum state_type new_state)
+{
+	if (new_state == state) {
+		LOG_DBG("State: %s", state2str(state));
+		return;
+	}
+
+	LOG_DBG("State transition %s --> %s",
+		state2str(state),
+		state2str(new_state));
+
+	state = new_state;
+}
+
+/* Handlers */
+static bool app_event_handler(const struct app_event_header *aeh)
+{
+	struct modem_msg_data msg = {0};
+	bool enqueue_msg = false;
+
+	if (is_modem_event(aeh)) {
+		struct modem_event *evt = cast_modem_event(aeh);
+
+		msg.module.modem = *evt;
+		enqueue_msg = true;
+	}
+
+	if (is_app_event(aeh)) {
+		struct app_event *evt = cast_app_event(aeh);
+
+		msg.module.app = *evt;
+		enqueue_msg = true;
+	}
+
+	if (is_cloud_event(aeh)) {
+		struct cloud_event *evt = cast_cloud_event(aeh);
+
+		msg.module.cloud = *evt;
+		enqueue_msg = true;
+	}
+
+	if (enqueue_msg) {
+		int err = module_enqueue_msg(&self, &msg);
+
+		if (err) {
+			LOG_ERR("Message could not be enqueued");
+			SEND_ERROR(modem, MODEM_EVT_ERROR, err);
+		}
+	}
+
+	return false;
+}
+
+static int static_modem_data_get(void)
+{
+	return 0;
+}
+
+static bool data_type_is_requested(enum app_data_type *data_list,
+				   size_t count,
+				   enum app_data_type type)
+{
+	for (size_t i = 0; i < count; i++) {
+		if (data_list[i] == type) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static int configure_low_power(void)
+{
+	return 0;
+}
+
+static int lte_connect(void)
+{
+	return 0;
+}
+
+static int modem_data_init(void)
+{
+	return 0;
+}
+
+static int setup(void)
+{
+	return 0;
+}
+
+/* Message handler for STATE_INIT */
+static void on_state_init(struct modem_msg_data *msg)
+{
+	if (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_INITIALIZED)) {
+		int err;
+
+		state_set(STATE_DISCONNECTED);
+
+		err = setup();
+		__ASSERT(err == 0, "Failed running setup()");
+		SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
+
+		err = lte_connect();
+		if (err) {
+			LOG_ERR("Failed connecting to LTE, error: %d", err);
+			SEND_ERROR(modem, MODEM_EVT_ERROR, err);
+		}
+	}
+}
+
+/* Message handler for STATE_DISCONNECTED. */
+static void on_state_disconnected(struct modem_msg_data *msg)
+{
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
+		state_set(STATE_CONNECTED);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTING)) {
+		state_set(STATE_CONNECTING);
+	}
+
+	if ((IS_EVENT(msg, app, APP_EVT_LTE_DISCONNECT)) ||
+	    (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_EVENT_LTE_LINK_UP_REQUEST)) ||
+	    (IS_EVENT(msg, cloud, CLOUD_EVT_LTE_CONNECT))) {
+		LOG_DBG("Connect to LTE");
+	}
+}
+
+/* Message handler for STATE_CONNECTING. */
+static void on_state_connecting(struct modem_msg_data *msg)
+{
+	if ((IS_EVENT(msg, app, APP_EVT_LTE_DISCONNECT)) ||
+	    (IS_EVENT(msg, cloud, CLOUD_EVT_LTE_DISCONNECT))) {
+		int err;
+		state_set(STATE_DISCONNECTED);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
+		state_set(STATE_CONNECTED);
+	}
+}
+
+/* Message handler for STATE_CONNECTED. */
+static void on_state_connected(struct modem_msg_data *msg)
+{
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED)) {
+		state_set(STATE_DISCONNECTED);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_EVENT_LTE_LINK_DOWN_REQUEST)) {
+		LOG_DBG("MODEM_EVT_CARRIER_EVENT_LTE_LINK_DOWN_REQUEST");
+	}
+
+	if ((IS_EVENT(msg, app, APP_EVT_LTE_DISCONNECT)) ||
+	    (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_EVENT_LTE_LINK_DOWN_REQUEST)) ||
+	    (IS_EVENT(msg, cloud, CLOUD_EVT_LTE_DISCONNECT))) {
+		state_set(STATE_DISCONNECTED);
+		LOG_DBG("Disconnect to LTE");
+	}
+}
+
+/* Message handler for all states. */
+static void on_all_states(struct modem_msg_data *msg)
+{
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATION_REQUEST)) {
+		LOG_DBG("CLOUD_EVT_USER_ASSOCIATION_REQUEST");
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
+		LOG_DBG("CLOUD_EVT_USER_ASSOCIATED");
+	}
+
+	if (IS_EVENT(msg, app, APP_EVT_START)) {
+		LOG_DBG("APP_EVT_START");
+	}
+
+	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
+		LOG_DBG("APP_EVT_DATA_GET");
+	}
+}
+
+static void module_thread_fn(void)
+{
+	int err;
+	struct modem_msg_data msg = { 0 };
+
+	self.thread_id = k_current_get();
+
+	state_set(STATE_DISCONNECTED);
+	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
+
+	err = setup();
+	if (err) {
+		LOG_ERR("Failed setting up the modem, error: %d", err);
+		SEND_ERROR(modem, MODEM_EVT_ERROR, err);
+	}
+
+	while (true) {
+		module_get_next_msg(&self, &msg);
+
+		switch (state) {
+		case STATE_INIT:
+			on_state_init(&msg);
+			break;
+		case STATE_DISCONNECTED:
+			on_state_disconnected(&msg);
+			break;
+		case STATE_CONNECTING:
+			on_state_connecting(&msg);
+			break;
+		case STATE_CONNECTED:
+			on_state_connected(&msg);
+			break;
+		case STATE_SHUTDOWN:
+			/* The shutdown state has no transition. */
+			break;
+		default:
+			LOG_WRN("Invalid state: %d", state);
+			break;
+		}
+
+		on_all_states(&msg);
+	}
+}
+
+K_THREAD_DEFINE(modem_module_thread, MODULE_MODEM_THREAD_STACK_SIZE,
+		module_thread_fn, NULL, NULL, NULL,
+		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
+
+APP_EVENT_LISTENER(MODULE, app_event_handler);
+APP_EVENT_SUBSCRIBE_EARLY(MODULE, modem_event);
+APP_EVENT_SUBSCRIBE(MODULE, app_event);
+APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
+APP_EVENT_SUBSCRIBE_FINAL(MODULE, util_event);
