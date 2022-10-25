@@ -8,8 +8,8 @@
 	compatible = "nordic,nrf52833-dk-nrf52833";
 
 	chosen {
-		zephyr,console = &cdc_acm_uart0;
-		zephyr,shell-uart = &cdc_acm_uart0;
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
@@ -134,11 +134,20 @@
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-1 = <&i2c0_sleep>;
 	pinctrl-names = "default", "sleep";
+
+	bq24195@6b {
+		compatible = "ti,bq24195";
+		label = "BQ24195";
+		reg = <0x6b>;
+		design-voltage = <3700>;
+		design-capacity = <1800>;
+		taper-current = <45>;
+		terminate-voltage = <3000>;
+	};
 };
 
 &adc {
 	status = "okay";
-	label = "ADC";
 };
 
 &pwm0 {
@@ -192,7 +201,7 @@
 
 &uart0 {
 	compatible = "nordic,nrf-uarte";
-	status = "disabled";
+	status = "okay";
 	label = "UART_0";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
@@ -242,15 +251,19 @@
 
 		slot1_partition: partition@0 {
 			label = "image-1";
-			reg = <0x00000000 0x00060000>;
+			reg = <0x00000000 0x00070000>;
 		};
-		lfs1_part: partition@60000 {
-			label = "lfs-storage";
-			reg = <0x00060000 0x00190000>;
+		lfs1_part: partition@70000 {
+			label = "littlefs-storage";
+			reg = <0x00070000 0x00180000>;
 		};
 		storage_partition: partition@1F0000 {
 			label = "storage";
-			reg = <0x001F0000 0x00010000>;
+			reg = <0x001F0000 0x00005000>;
+		};
+		nvs_partition: partition@1F5000 {
+			label = "nvs-storage";
+			reg = <0x001F5000 0x00005000>;
 		};
 	};
 };
