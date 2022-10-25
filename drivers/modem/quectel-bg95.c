@@ -527,7 +527,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 				k_timeout_t timeout)
 {
 	int  ret;
-	char send_buf[sizeof("AT+Q###SEND=##,####")] = {0};
+	char send_buf[sizeof("AT+Q###SEND=##,####,")] = {0};
 	char ctrlz = 0x1A;
 
 	if (buf_len > MDM_MAX_DATA_LENGTH) {
@@ -569,9 +569,9 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 		goto exit;
 	}
 
-	/* Write all data on the console and send CTRL+Z. */
+	/* Write all data on the console. Do not send CTRL+Z, as we are */
+	/* in fixed length mode. */
 	mctx.iface.write(&mctx.iface, buf, buf_len);
-	mctx.iface.write(&mctx.iface, &ctrlz, 1);
 	LOG_HEXDUMP_DBG(buf, buf_len, "SEND");
 	/* Wait for 'SEND OK' or 'SEND FAIL' */
 	k_sem_reset(&mdata.sem_response);
@@ -631,12 +631,6 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 	/* Ensure that valid parameters are passed. */
 	if (!buf || len == 0) {
 		errno = EINVAL;
-		return -1;
-	}
-
-	/* UDP is not supported. */
-	if (sock->ip_proto == IPPROTO_UDP) {
-		errno = ENOTSUP;
 		return -1;
 	}
 
@@ -1122,11 +1116,10 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 {
 	struct modem_socket *sock     = (struct modem_socket *) obj;
 	uint16_t	    dst_port  = 0;
-	char		    *protocol = "TCP";
 	struct modem_cmd    cmd[]     = {
 		MODEM_CMD("+QIOPEN: ", on_cmd_atcmdinfo_sockopen, 2U, ","),
 		MODEM_CMD("+QSSLOPEN: ", on_cmd_atcmdinfo_sslopen, 2U, ",") };
-	char		    buf[sizeof("AT+Q###OPEN=#,##,###,####.####.####.####,######") + 256] = {0};
+	char		    buf[sizeof("AT+Q###OPEN=#,##,!###!,!####.####.####.####!,######") + 256] = {0};
 	int		    ret;
 	char		ip_str[NET_IPV6_ADDR_LEN];
 
@@ -1152,11 +1145,6 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		dst_port = ntohs(net_sin(addr)->sin_port);
 	}
 
-	/* UDP is not supported. */
-	if (sock->ip_proto == IPPROTO_UDP) {
-		errno = ENOTSUP;
-		return -1;
-	}
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
 		on_connect_tls_init(sock);
 	}
@@ -1177,8 +1165,11 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
 		snprintk(buf, sizeof(buf), "AT+QSSLOPEN=%d,%d,%d,\"%s\",%d,0", 1, sock->sock_fd, sock->sock_fd,
 			ip_str, dst_port);
+	} else if (sock->ip_proto == IPPROTO_UDP) {
+		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, "UDP",
+			ip_str, dst_port);
 	} else {
-		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, protocol,
+		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, "TCP",
 			ip_str, dst_port);
 	}
 
