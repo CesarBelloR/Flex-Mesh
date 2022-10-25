@@ -214,6 +214,7 @@
 		label      = "quectel-bg95";
 		status     = "okay";
 		mdm-power-gpios = <&gpio1 1 0>;
+		mdm-on-off-gpios = <&gpio1 4 0>;
 	};
 };
 

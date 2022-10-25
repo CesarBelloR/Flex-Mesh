@@ -11,6 +11,10 @@ properties:
     label:
       required: true
 
+    mdm-on-off-gpios:
+      type: phandle-array
+      required: false
+
     mdm-power-gpios:
       type: phandle-array
       required: false

@@ -7,17 +7,11 @@
 LOG_MODULE_REGISTER(board, LOG_LEVEL_INF);
 
 #define VSENS_EN_PIN 23
-#define LTE_ON_OFF_PIN 4
 #define BQ24195_I2C_7BIT_ADDR (0x6B)
 
 static int init(const struct device *dev)
 {
 	const struct device *gpio_0_dev = device_get_binding("GPIO_0");
-	if (gpio_0_dev == NULL) {
-		return -EINVAL;
-	}
-
-	const struct device *gpio_1_dev = device_get_binding("GPIO_1");
 	if (gpio_0_dev == NULL) {
 		return -EINVAL;
 	}
@@ -35,7 +29,6 @@ static int init(const struct device *dev)
 	LOG_INF("Workaround for BQ24195 %d", ret);
 	k_msleep(50);
 
-	gpio_pin_configure(gpio_1_dev, LTE_ON_OFF_PIN, GPIO_OUTPUT_ACTIVE);
 	return 0;
 }
 

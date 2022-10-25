@@ -24,6 +24,9 @@ static K_KERNEL_STACK_DEFINE(modem_workq_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_
 NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE, 0, NULL);
 
 static const struct gpio_dt_spec power_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_power_gpios);
+#if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
+static const struct gpio_dt_spec on_off_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_on_off_gpios);
+#endif
 #if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
 static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
 #endif
@@ -1330,6 +1333,11 @@ static void pin_init(void)
 {
 	LOG_INF("Setting Modem Pins");
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
+	gpio_pin_set_dt(&on_off_gpio, 1);
+	k_sleep(K_MSEC(500));
+#endif
+
 	gpio_pin_set_dt(&power_gpio, 1);
 	k_sleep(K_MSEC(1000));
 	gpio_pin_set_dt(&power_gpio, 0);
@@ -1770,6 +1778,12 @@ static int modem_init(const struct device *dev)
 	mctx.data_iccid	       = mdata.mdm_iccid;
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
 	mctx.data_rssi		   = &mdata.mdm_rssi;
+
+	ret = gpio_pin_configure_dt(&on_off_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "on_off");
+		goto error;
+	}
 
 	ret = gpio_pin_configure_dt(&power_gpio, GPIO_OUTPUT_LOW);
 	if (ret < 0) {
