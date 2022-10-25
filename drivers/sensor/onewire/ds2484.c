@@ -24,7 +24,7 @@ LOG_MODULE_REGISTER(DS2484, CONFIG_DS2484_LOG_LEVEL);
 #define DS2844_ROM_MAX_SIZE (8)
 
 struct ds2484_config {
-	const struct device* bus;
+	const struct device *bus;
 	uint8_t addr;
 };
 
@@ -36,28 +36,21 @@ struct ds2484_data {
 	uint8_t _config;
 };
 
-typedef enum
-{
-	CMD_1WT = 0x78,	 // 1-Wire triplet
+typedef enum {
+	CMD_1WT = 0x78, // 1-Wire triplet
 	CMD_1WSB = 0x87, // 1-Wire single bit
 	CMD_1WRB = 0x96, // 1-Wire read byte
 	CMD_1WWB = 0xA5, // 1-Wire write byte
 	CMD_1WRS = 0xB4, // 1-Wire reset
 	CMD_CHSL = 0xC3, // channel select
 	CMD_WCFG = 0xD2, // write configuration
-	CMD_SRP = 0xE1,	 // set read pointer
+	CMD_SRP = 0xE1, // set read pointer
 	CMD_DRST = 0xF0, // device reset
 } ds248x_cmd_t;
 
-typedef enum
-{
-	POINTER_CONFIG = 0xC3,
-	POINTER_DATA = 0xE1,
-	POINTER_STATUS = 0xF0
-} ds248x_pointer_t;
+typedef enum { POINTER_CONFIG = 0xC3, POINTER_DATA = 0xE1, POINTER_STATUS = 0xF0 } ds248x_pointer_t;
 
-typedef enum
-{
+typedef enum {
 	WIRE_COMMAND_SELECT = 0x55,
 	WIRE_COMMAND_SKIP = 0xCC,
 	WIRE_COMMAND_SEARCH = 0xF0
@@ -77,7 +70,7 @@ static int write_register(uint8_t addr, uint8_t val)
 {
 	const struct ds2484_config *cfg = &m_ds2484_config;
 	int rc = 0;
-	uint8_t tx_buf[2] = {addr, val};
+	uint8_t tx_buf[2] = { addr, val };
 	rc = i2c_write(cfg->bus, tx_buf, sizeof(tx_buf), cfg->addr);
 	return rc;
 }
@@ -86,12 +79,12 @@ static int write_command(uint8_t addr)
 {
 	const struct ds2484_config *cfg = &m_ds2484_config;
 	int rc = 0;
-	uint8_t tx_buf[1] = {addr};
+	uint8_t tx_buf[1] = { addr };
 	rc = i2c_write(cfg->bus, tx_buf, sizeof(tx_buf), cfg->addr);
 	return rc;
 }
 
-static int ds2484_send_config(void) 
+static int ds2484_send_config(void)
 {
 	struct ds2484_data *data = &m_ds2484_data;
 	uint8_t tx = data->_config | (~data->_config) << 4;
@@ -104,13 +97,14 @@ static int ds2484_send_config(void)
 	return 0;
 }
 
-static int ds2484_set_read_pointer(ds248x_pointer_t address) 
+static int ds2484_set_read_pointer(ds248x_pointer_t address)
 {
-    return write_register(CMD_SRP, (uint8_t)address);
+	return write_register(CMD_SRP, (uint8_t)address);
 }
 
-static int ds2484_check_error(uint8_t* status) {
-	static bool cb_sent[2] = {false, false};
+static int ds2484_check_error(uint8_t *status)
+{
+	static bool cb_sent[2] = { false, false };
 	if (status[0] & DS248X_STATUS_SD) {
 		if (!cb_sent[0]) {
 			LOG_DBG("Short condition detected");
@@ -120,33 +114,33 @@ static int ds2484_check_error(uint8_t* status) {
 		cb_sent[0] = false;
 	}
 
-    if (status[0] & DS248X_STATUS_RST) {
-        if (!cb_sent[1]) {
-            LOG_DBG("Reset condition detected");
-            cb_sent[1] = true;
-        }
-    } else {
-        cb_sent[1] = false;
-    }
+	if (status[0] & DS248X_STATUS_RST) {
+		if (!cb_sent[1]) {
+			LOG_DBG("Reset condition detected");
+			cb_sent[1] = true;
+		}
+	} else {
+		cb_sent[1] = false;
+	}
 	return 0;
 }
 
-static int ds2484_wait_busy(uint8_t *status) {
+static int ds2484_wait_busy(uint8_t *status)
+{
 	const struct ds2484_config *cfg = &m_ds2484_config;
-    uint8_t buf[1] = {0x00};
-    int poll_count = 0;
+	uint8_t buf[1] = { 0x00 };
+	int poll_count = 0;
 
 	i2c_read(cfg->bus, buf, sizeof(buf), cfg->addr);
 
-	while ((buf[0] & DS248X_STATUS_1WB) && ((poll_count++) < DS248X_POLL_LIMIT))
-	{
+	while ((buf[0] & DS248X_STATUS_1WB) && ((poll_count++) < DS248X_POLL_LIMIT)) {
 		i2c_read(cfg->bus, buf, sizeof(buf), cfg->addr);
 		LOG_DBG("Status 0x%02x", buf[0]);
 	}
 
-    if (status) {
-        memcpy(status, buf, sizeof(buf));
-    }
+	if (status) {
+		memcpy(status, buf, sizeof(buf));
+	}
 
 	if (poll_count >= DS248X_POLL_LIMIT) {
 		return -EINVAL;
@@ -161,19 +155,19 @@ int ds2484_init(void)
 	struct ds2484_config *config = &m_ds2484_config;
 	struct ds2484_data *data = &m_ds2484_data;
 
-	config->bus = (struct device*)device_get_binding("I2C_0");
-    if (config->bus == NULL) {
-        LOG_ERR("Failed to get device_get_binding I2C_0");
-        return -EINVAL;
-    }
+	config->bus = (struct device *)device_get_binding("I2C_0");
+	if (config->bus == NULL) {
+		LOG_ERR("Failed to get device_get_binding I2C_0");
+		return -EINVAL;
+	}
 
-    config->addr = DS2484_DEFAULT_7BIT_ADDR;
+	config->addr = DS2484_DEFAULT_7BIT_ADDR;
 	memset(data->_rom, 0, sizeof(data->_rom));
 	data->_last_family_discrepancy = 0;
 	data->_last_device_flag = false;
 	data->_last_family_discrepancy = 0;
 
-	if (ds2484_load_config() != 0)  {
+	if (ds2484_load_config() != 0) {
 		LOG_ERR("Failed to load configuration");
 		return -EINVAL;
 	}
@@ -187,7 +181,7 @@ int ds2484_set_config(ds248x_config_t config)
 	return ds2484_send_config();
 }
 
-int ds2484_clear_config(ds248x_config_t config) 
+int ds2484_clear_config(ds248x_config_t config)
 {
 	struct ds2484_data *data = &m_ds2484_data;
 	data->_config &= ~(config);
@@ -197,22 +191,22 @@ int ds2484_clear_config(ds248x_config_t config)
 int ds2484_load_config(void)
 {
 	struct ds2484_data *data = &m_ds2484_data;
-    uint8_t buf[1] = {0x00};
+	uint8_t buf[1] = { 0x00 };
 
-    int ret = ds2484_set_read_pointer(POINTER_CONFIG);
+	int ret = ds2484_set_read_pointer(POINTER_CONFIG);
 	if (ret != 0) {
 		LOG_ERR("Failed to ds2484_set_read_pointer error %d", ret);
 		return ret;
 	}
 
 	ret = read_register(buf);
-    data->_config = buf[0];
+	data->_config = buf[0];
 	return ret;
 }
 
-int ds2484_device_reset(void) 
+int ds2484_device_reset(void)
 {
-	uint8_t buf[1] = {0x00};
+	uint8_t buf[1] = { 0x00 };
 
 	int ret = write_command(CMD_DRST);
 	if (ret != 0) {
@@ -223,15 +217,15 @@ int ds2484_device_reset(void)
 	ds2484_request_reset_search();
 
 	ret = read_register(buf);
-    if ((buf[0] & 0b11110111) != 0b10000) {
-        LOG_ERR("Reset not successful");
-        return -EINVAL;
-    }
+	if ((buf[0] & 0b11110111) != 0b10000) {
+		LOG_ERR("Reset not successful");
+		return -EINVAL;
+	}
 
 	return 0;
 }
 
-int ds2484_write_byte(uint8_t data) 
+int ds2484_write_byte(uint8_t data)
 {
 	int ret = write_register(CMD_1WWB, data);
 	if (ret != 0) {
@@ -242,7 +236,7 @@ int ds2484_write_byte(uint8_t data)
 	return ds2484_wait_busy(NULL);
 }
 
-int ds2484_read_byte(uint8_t* data)
+int ds2484_read_byte(uint8_t *data)
 {
 	int ret = write_command(CMD_1WRB);
 	if (ret != 0) {
@@ -262,7 +256,7 @@ int ds2484_read_byte(uint8_t* data)
 		return ret;
 	}
 
-	uint8_t buf[1] = {0x00};
+	uint8_t buf[1] = { 0x00 };
 	ret = read_register(buf);
 	if (ret != 0) {
 		LOG_ERR("Failed to read register error %d", ret);
@@ -273,7 +267,7 @@ int ds2484_read_byte(uint8_t* data)
 	return 0;
 }
 
-int ds2484_write_bytes(const uint8_t* data, size_t len) 
+int ds2484_write_bytes(const uint8_t *data, size_t len)
 {
 	int ret = 0;
 	for (int i = 0; i < len; i++) {
@@ -286,9 +280,9 @@ int ds2484_write_bytes(const uint8_t* data, size_t len)
 	return 0;
 }
 
-int ds2484_read_bytes(uint8_t* data, size_t  len) 
+int ds2484_read_bytes(uint8_t *data, size_t len)
 {
-	char buf[1] = {0x00};
+	char buf[1] = { 0x00 };
 	int ret = 0;
 	for (int i = 0; i < len; i++) {
 		ret = ds2484_read_byte(buf);
@@ -302,15 +296,15 @@ int ds2484_read_bytes(uint8_t* data, size_t  len)
 	return 0;
 }
 
-int ds2484_write_bit(bool bit) 
+int ds2484_write_bit(bool bit)
 {
-	uint8_t buf[1] = {0x00};
+	uint8_t buf[1] = { 0x00 };
 	buf[0] = bit ? 0x80 : 0x00;
 
 	return ds2484_write_byte(buf[0]);
 }
 
-int ds2484_read_bit(bool* data) 
+int ds2484_read_bit(bool *data)
 {
 	int ret = 0;
 
@@ -320,7 +314,7 @@ int ds2484_read_bit(bool* data)
 		return ret;
 	}
 
-	uint8_t buf[1] = {0x00};
+	uint8_t buf[1] = { 0x00 };
 	ret = ds2484_wait_busy(buf);
 	if (ret != 0) {
 		LOG_ERR("Failed to wait_busy error %d", ret);
@@ -330,17 +324,17 @@ int ds2484_read_bit(bool* data)
 	return buf[0] & DS248X_STATUS_SBR;
 }
 
-int ds2484_request_reset(void) 
+int ds2484_request_reset(void)
 {
-	uint8_t buf[1] = {0};
+	uint8_t buf[1] = { 0 };
 	int ret = 0;
 	struct ds2484_data *data = &m_ds2484_data;
 
-	bool spu = 	data->_config & DS248X_CONFIG_SPU;
+	bool spu = data->_config & DS248X_CONFIG_SPU;
 
-    if (spu && (ds2484_clear_config(strong_pull_up) != 0)) {
-        return -EINVAL;
-    }
+	if (spu && (ds2484_clear_config(strong_pull_up) != 0)) {
+		return -EINVAL;
+	}
 
 	ret = write_command(CMD_1WRS);
 	if (ret != 0) {
@@ -355,7 +349,8 @@ int ds2484_request_reset(void)
 	}
 
 	if (spu & (ds2484_set_config(strong_pull_up) != 0)) {
-		return -EINVAL;;
+		return -EINVAL;
+		;
 	}
 
 	return (buf[0] & DS248X_STATUS_PPD);
@@ -366,7 +361,7 @@ int ds2484_request_skip(void)
 	return ds2484_write_byte(WIRE_COMMAND_SKIP);
 }
 
-int ds2484_request_select(const char* rom) 
+int ds2484_request_select(const char *rom)
 {
 	struct ds2484_data *data = &m_ds2484_data;
 	int ret = ds2484_write_byte(WIRE_COMMAND_SKIP);
@@ -385,13 +380,12 @@ int ds2484_request_search(char *rom)
 	uint8_t id_bit_counter = 1;
 	uint8_t last_zero = 0;
 	uint8_t rom_byte_mask = 1;
-	uint8_t buf[2] = {0x00};
+	uint8_t buf[2] = { 0x00 };
 	bool id_bit = false;
 	bool cmp_id_bit = false;
 	bool search_direction = false;
 
-	if (data->_last_device_flag || (ds2484_request_reset() != 0))
-	{
+	if (data->_last_device_flag || (ds2484_request_reset() != 0)) {
 		LOG_ERR("No %s devices on the bus", data->_last_device_flag ? "more" : "");
 		return -EINVAL;
 	}
@@ -400,26 +394,21 @@ int ds2484_request_search(char *rom)
 		goto done;
 	}
 
-    while (rom_byte_counter < 8) {
-		if (id_bit_counter < data->_last_discrepancy)
-		{
+	while (rom_byte_counter < 8) {
+		if (id_bit_counter < data->_last_discrepancy) {
 			search_direction = ((data->_rom[rom_byte_counter] & rom_byte_mask) > 0);
-		}
-		else
-		{
+		} else {
 			search_direction = (id_bit_counter == data->_last_discrepancy);
 		}
 
 		buf[0] = CMD_1WT;
 		buf[1] = search_direction ? 0x80 : 0x00;
 
-		if (write_register(CMD_1WT, search_direction ? 0x80 : 0x00) != 0)
-		{
+		if (write_register(CMD_1WT, search_direction ? 0x80 : 0x00) != 0) {
 			goto done;
 		}
 
-		if (ds2484_wait_busy(&buf[0]) != 0)
-		{
+		if (ds2484_wait_busy(&buf[0]) != 0) {
 			goto done;
 		}
 
@@ -429,63 +418,56 @@ int ds2484_request_search(char *rom)
 
 		ds2484_check_error(buf);
 
-		if ((id_bit && cmp_id_bit) || (buf[0] & DS248X_STATUS_SD))
-		{
+		if ((id_bit && cmp_id_bit) || (buf[0] & DS248X_STATUS_SD)) {
 			LOG_ERR("No devices or SHORT on the bus");
 			goto done;
 		}
 
-		if (!id_bit && !cmp_id_bit && !search_direction)
-		{
+		if (!id_bit && !cmp_id_bit && !search_direction) {
 			last_zero = id_bit_counter;
 
-			if (last_zero < 9)
-			{
+			if (last_zero < 9) {
 				data->_last_family_discrepancy = last_zero;
 			}
 		}
 
-		if (search_direction)
-		{
+		if (search_direction) {
 			data->_rom[rom_byte_counter] |= rom_byte_mask;
-		}
-		else
-		{
+		} else {
 			data->_rom[rom_byte_counter] &= (uint8_t)~rom_byte_mask;
 		}
 
 		id_bit_counter++;
 		rom_byte_mask <<= 1;
 
-		if (rom_byte_mask == 0)
-		{
+		if (rom_byte_mask == 0) {
 			rom_byte_counter++;
 			rom_byte_mask = 1;
 		}
-    }
+	}
 
-    if (id_bit_counter < 65) {
+	if (id_bit_counter < 65) {
 		goto done;
-    }
+	}
 
-    data->_last_discrepancy = last_zero;
+	data->_last_discrepancy = last_zero;
 
-    if (data->_last_discrepancy == 0) {
+	if (data->_last_discrepancy == 0) {
 		data->_last_device_flag = true;
-    }
+	}
 
-    if (data->_rom[0] == 0) {
+	if (data->_rom[0] == 0) {
 		goto done;
-    }
+	}
 
-    // compare CRC
-    if (!crc8(data->_rom, 8, 0x31, 0, false)) {
+	// compare CRC
+	if (!crc8(data->_rom, 8, 0x31, 0, false)) {
 		return -1;
-    }
+	}
 
-    if (rom) {
+	if (rom) {
 		memcpy(rom, data->_rom, sizeof(data->_rom));
-    }
+	}
 done:
 	return ds2484_request_reset_search();
 }
@@ -493,27 +475,27 @@ done:
 int ds2484_request_reset_search(void)
 {
 	struct ds2484_data *data = &m_ds2484_data;
-    data->_last_discrepancy = 0;
-    data->_last_family_discrepancy = 0;
-    data->_last_device_flag = false;
+	data->_last_discrepancy = 0;
+	data->_last_family_discrepancy = 0;
+	data->_last_device_flag = false;
 
-    memset(data->_rom, 0, sizeof(data->_rom));
+	memset(data->_rom, 0, sizeof(data->_rom));
 	return 0;
 }
 
 int ds2484_request_search_family(uint8_t family_code)
 {
 	struct ds2484_data *data = &m_ds2484_data;
-    memset(data->_rom, 0, sizeof(data->_rom));
+	memset(data->_rom, 0, sizeof(data->_rom));
 
-    data->_rom[0] = family_code;
-    data->_last_discrepancy = 64;
-    data->_last_family_discrepancy = 0;
-    data->_last_device_flag = false;
+	data->_rom[0] = family_code;
+	data->_last_discrepancy = 64;
+	data->_last_family_discrepancy = 0;
+	data->_last_device_flag = false;
 	return 0;
 }
 
-int ds2484_crc_validate(uint8_t* data, size_t len)
+int ds2484_crc_validate(uint8_t *data, size_t len)
 {
 	uint8_t crc = crc8(data, len - 1, 0x31, 0, false);
 	if (crc != data[len - 1]) {

@@ -1,0 +1,5 @@
+add_subdirectory_ifdef(CONFIG_ADC_MODULES adc)
+add_subdirectory_ifdef(CONFIG_DATE_TIME datetime)
+add_subdirectory_ifdef(CONFIG_POWER_MODULE power)
+add_subdirectory_ifdef(CONFIG_DS18B20_TIMER sensor/ds18b20)
+add_subdirectory_ifdef(CONFIG_UI_MODULE ui)
