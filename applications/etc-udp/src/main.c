@@ -14,6 +14,7 @@ LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 #define NET_CONFIG_PEER_IPV4_ADDR "142.93.158.106"
 #define NET_CONFIG_PEER_IPV6_ADDR "2604:a880:cad:d0::de9:1001"
 #define NET_PORT 8080
+#define NET_IPPROTO IPPROTO_UDP
 
 void main(void)
 {
@@ -26,7 +27,8 @@ void main(void)
 	addr4.sin_port = htons(NET_PORT);
 	inet_pton(AF_INET, NET_CONFIG_PEER_IPV4_ADDR, &addr4.sin_addr);
 
-	sock = socket(addr->sa_family, SOCK_DGRAM, IPPROTO_UDP);
+#if 1
+	sock = socket(addr->sa_family, SOCK_DGRAM, NET_IPPROTO);
 	if (sock < 0) {
 		LOG_ERR("Failed to create UDP socket %d", -errno);
 		return;
@@ -53,12 +55,12 @@ void main(void)
 	if (ret < 0) {
 		LOG_ERR("Failed to close socket %d", -errno);
 	}
-
+#endif
 	addr = (struct sockaddr *)&addr6;
 	addr6.sin_family = AF_INET6;
 	addr6.sin_port = htons(NET_PORT);
 	inet_pton(AF_INET6, NET_CONFIG_PEER_IPV6_ADDR, &addr6.sin_addr);
-	sock = socket(addr->sa_family, SOCK_DGRAM, IPPROTO_UDP);
+	sock = socket(addr->sa_family, SOCK_DGRAM, NET_IPPROTO);
 	if (sock < 0) {
 		LOG_ERR("Failed to create UDP socket %d", -errno);
 		return;
@@ -74,7 +76,7 @@ void main(void)
 
 	LOG_INF("Connected success to %s:%d", NET_CONFIG_PEER_IPV6_ADDR, NET_PORT);
 	uint8_t msgv6[] = "Hello, world v6!\r\n";
-	ret = send(sock, msgv6, strlen(msg), 0);
+	ret = send(sock, msgv6, strlen(msgv6), 0);
 	if (ret < 0) {
 		LOG_ERR("Failed to send UDP message %d", -errno);
 	}

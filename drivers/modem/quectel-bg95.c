@@ -37,6 +37,9 @@ static const struct gpio_dt_spec dtr_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_dtr_gpi
 static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wdisable_gpios);
 #endif
 
+/* Implementation in net/ip/utils.h */
+extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
+
 static inline int digits(int n)
 {
 	int count = 0;
@@ -96,6 +99,82 @@ static int modem_atoi(const char *s, const int err_value,
 	}
 
 	return ret;
+}
+
+/**
+ * @brief Convert IPv6 address to string form without using short form (::)
+ * Use net_addr_ntop() from net_ip.h for IPv4 addresses and 
+ * IPv6 addresses with short form.
+ * 
+ * @param family IP address family (AF_INET6 supported only)
+ * @param src Pointer to struct in_addr if family is AF_INET or
+ *        pointer to struct in6_addr if family is AF_INET6
+ * @param dst Buffer for IP address as a null terminated string
+ * @param size Number of bytes available in the buffer
+ *
+ * @return dst pointer if ok, NULL if error
+*/
+static int modem_net_addr_ntop_ip6 (sa_family_t family, const void *src,
+			   char *dst, size_t size)
+{
+	struct in6_addr *addr6;
+	uint16_t *w;
+	uint8_t i, bl, bh;;
+	char *ptr = dst;
+	int len = -1;
+	uint16_t value;
+	bool needcolon = false;
+
+	if (family != AF_INET6) {
+		return -EINVAL;
+	}
+
+	addr6 = (struct in6_addr *)src;
+	w = (uint16_t *)addr6->s6_addr16;
+	len = 8;
+
+	for (i = 0U; i < len; i++) {
+		/* IPv6 address */
+		if (needcolon) {
+			*ptr++ = ':';
+		}
+
+		value = (uint32_t)sys_be16_to_cpu(UNALIGNED_GET(&w[i]));
+		bh = value >> 8;
+		bl = value & 0xff;
+
+		if (bh) {
+			if (bh > 0x0f) {
+				ptr = net_byte_to_hex(ptr, bh, 'a', false);
+			} else {
+				if (bh < 10) {
+					*ptr++ = (char)(bh + '0');
+				} else {
+					*ptr++ = (char) (bh - 10 + 'a');
+				}
+			}
+
+			ptr = net_byte_to_hex(ptr, bl, 'a', true);
+		} else if (bl > 0x0f) {
+			ptr = net_byte_to_hex(ptr, bl, 'a', false);
+		} else {
+			if (bl < 10) {
+				*ptr++ = (char)(bl + '0');
+			} else {
+				*ptr++ = (char) (bl - 10 + 'a');
+			}
+		}
+
+		needcolon = true;
+	}
+
+	if (!(ptr - dst)) {
+		return -ENOMEM;
+	}
+
+	*ptr = '\0';
+
+	return 0;
 }
 
 static inline int find_len(char *data)
@@ -531,7 +610,6 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 {
 	int  ret;
 	char send_buf[sizeof("AT+Q###SEND=##,####,")] = {0};
-	char ctrlz = 0x1A;
 
 	if (buf_len > MDM_MAX_DATA_LENGTH) {
 		buf_len = MDM_MAX_DATA_LENGTH;
@@ -1154,7 +1232,15 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 
 	k_sem_reset(&mdata.sem_sock_conn);
 
-	ret = modem_context_sprint_ip_addr(addr, ip_str, sizeof(ip_str));
+	/* Use custom implementation for IPv6 addresses. Modem */
+	/* does not support short form (omitting 0 values). */
+	if (addr->sa_family == AF_INET6) {
+		ret = modem_net_addr_ntop_ip6(addr->sa_family, 
+							&net_sin6(addr)->sin6_addr,
+							ip_str, sizeof(ip_str));
+	} else {
+		ret = modem_context_sprint_ip_addr(addr, ip_str, sizeof(ip_str));
+	}
 	if (ret != 0) {
 		LOG_ERR("Error formatting IP string %d", ret);
 		LOG_ERR("Closing the socket!!!");
