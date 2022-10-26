@@ -28,6 +28,7 @@ static int init(const struct device *dev)
 	int ret = i2c_write(i2c_0_dev, tx_buf, sizeof(tx_buf), BQ24195_I2C_7BIT_ADDR);
 	LOG_INF("Workaround for BQ24195 %d", ret);
 	k_msleep(50);
+
 	return 0;
 }
 

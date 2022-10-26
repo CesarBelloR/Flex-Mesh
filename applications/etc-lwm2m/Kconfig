@@ -1,0 +1,15 @@
+menu "EXACT Core 2.0 LwM2M Application"
+
+config TEST_VERSION
+	string "LwM2M version"
+	default "v1.0.0"
+
+endmenu
+
+menu "Zephyr Kernel"
+source "$ZEPHYR_BASE/Kconfig.zephyr"
+endmenu
+
+module = ETC_LWM2M
+module-str = ETC LwM2M
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
