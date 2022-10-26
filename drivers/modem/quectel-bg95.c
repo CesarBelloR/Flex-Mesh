@@ -1122,7 +1122,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	struct modem_cmd    cmd[]     = {
 		MODEM_CMD("+QIOPEN: ", on_cmd_atcmdinfo_sockopen, 2U, ","),
 		MODEM_CMD("+QSSLOPEN: ", on_cmd_atcmdinfo_sslopen, 2U, ",") };
-	char		    buf[sizeof("AT+Q###OPEN=#,##,!###!,!####.####.####.####!,######") + 256] = {0};
+	char		    buf[sizeof("AT+Q###OPEN=#,##,!###!,!####:####:####:####:####:####:####:####!,######") + 256] = {0};
 	int		    ret;
 	char		ip_str[NET_IPV6_ADDR_LEN];
 
@@ -1366,7 +1366,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
 	SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
-	SETUP_CMD_NOHANDLE("AT+QICSGP=1,1,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
+	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
 };
 
 /* Func: modem_pdp_context_active
