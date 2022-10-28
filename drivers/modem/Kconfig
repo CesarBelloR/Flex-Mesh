@@ -58,4 +58,18 @@ config MODEM_QUECTEL_BG95_M3_INIT_PRIORITY
 	  Note that the priority needs to be lower than the net stack
 	  so that it can start before the networking sub-system.
 
+config MODEM_QUECTEL_BG95_M3_PSK_ID
+	string "PSK ID when using DTLS"
+	default ""
+	help
+	  When using DTLS over UDP, the modem uses the PSK method to encrypt the
+	  data. This option specifies the PSK ID to use.
+
+config MODEM_QUECTEL_BG95_M3_PSK_KEY
+	string "PSK Key in hex format when using DTLS"
+	default ""
+	help
+	  When using DTLS over UDP, the modem uses the PSK method to encrypt the
+	  data. This option specifies the PSK key to use.
+
 endif

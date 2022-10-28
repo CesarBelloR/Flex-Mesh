@@ -281,7 +281,7 @@ static void socket_close(struct modem_socket *sock)
 {
 	char buf[sizeof("AT+Q###CLOSE=##")] = {0};
 	int  ret;
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(buf, sizeof(buf), "AT+QSSLCLOSE=%d", sock->sock_fd);
 	} else {
 		snprintk(buf, sizeof(buf), "AT+QICLOSE=%d", sock->sock_fd);
@@ -617,7 +617,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 
 	/* Create a buffer with the correct params. */
 	mdata.sock_written = buf_len;
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(send_buf, sizeof(send_buf), "AT+QSSLSEND=%d,%ld", sock->sock_fd, (long)buf_len);
 	} else {
 		snprintk(send_buf, sizeof(send_buf), "AT+QISEND=%d,%ld", sock->sock_fd, (long)buf_len);
@@ -759,7 +759,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 		return -1;
 	}
 
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", sock->sock_fd, len);
 	} else {
 		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", sock->sock_fd, len);
@@ -1044,6 +1044,63 @@ exit:
 	return ret;
 }
 
+static int on_connect_dtls_init(struct modem_socket *sock)
+{
+	int ret = 0;
+	char psk_fn[sizeof("!##_server.psk!")];
+	char buf[256];
+
+	// File name is <SSL context ID>_server.psk.
+	snprintk(psk_fn, sizeof(psk_fn), "%d_server.psk", sock->sock_fd);
+	if (quectel_bg95_file_find(psk_fn) == 0) {
+		if (quectel_bg95_file_delete(psk_fn) != 0) {
+			return -1;
+		}
+	}
+
+	// Modem expects file content in format <PSK_ID>&<PSK_KEY>
+	ret = snprintk(buf, sizeof(buf), "%s&%s", 
+				CONFIG_MODEM_QUECTEL_BG95_M3_PSK_ID, 
+				CONFIG_MODEM_QUECTEL_BG95_M3_PSK_KEY);
+	if (ret >= sizeof(buf)) {
+		LOG_WRN("PSK file truncated");
+		ret = sizeof(buf) - 1;
+	}
+	ret = quectel_bg95_file_download(psk_fn, buf, ret);
+	if (ret != 0) {
+		LOG_DBG("Failed to download PSK file %d", ret);
+	}
+
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0X00AE", "ciphersuite", sock->sock_fd);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
+		return -1;
+	}
+
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtlsversion", sock->sock_fd, 1);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for DTLS Version");
+		return -1;
+	}
+		
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->sock_fd, 1);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for DTLS enable");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int on_connect_tls_init(struct modem_socket *sock)
 {
 	int ret = 0;
@@ -1200,7 +1257,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	struct modem_cmd    cmd[]     = {
 		MODEM_CMD("+QIOPEN: ", on_cmd_atcmdinfo_sockopen, 2U, ","),
 		MODEM_CMD("+QSSLOPEN: ", on_cmd_atcmdinfo_sslopen, 2U, ",") };
-	char		    buf[sizeof("AT+Q###OPEN=#,##,!###!,!####:####:####:####:####:####:####:####!,######") + 256] = {0};
+	char		buf[sizeof("AT+Q###OPEN=#,##,!###!,!####:####:####:####:####:####:####:####!,######") + 256] = {0};
 	int		    ret;
 	char		ip_str[NET_IPV6_ADDR_LEN];
 
@@ -1228,19 +1285,14 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
 		on_connect_tls_init(sock);
+	} else if (sock->ip_proto == IPPROTO_DTLS_1_2) {
+		on_connect_dtls_init(sock);
 	}
+	
 
 	k_sem_reset(&mdata.sem_sock_conn);
 
-	/* Use custom implementation for IPv6 addresses. Modem */
-	/* does not support short form (omitting 0 values). */
-	if (addr->sa_family == AF_INET6) {
-		ret = modem_net_addr_ntop_ip6(addr->sa_family, 
-							&net_sin6(addr)->sin6_addr,
-							ip_str, sizeof(ip_str));
-	} else {
-		ret = modem_context_sprint_ip_addr(addr, ip_str, sizeof(ip_str));
-	}
+	ret = modem_context_sprint_ip_addr(addr, ip_str, sizeof(ip_str));
 	if (ret != 0) {
 		LOG_ERR("Error formatting IP string %d", ret);
 		LOG_ERR("Closing the socket!!!");
@@ -1251,7 +1303,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	
 	/* Formulate the complete string. */
 	/* Open the socket with buffer access mode */
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(buf, sizeof(buf), "AT+QSSLOPEN=%d,%d,%d,\"%s\",%d,0", 1, sock->sock_fd, sock->sock_fd,
 			ip_str, dst_port);
 	} else if (sock->ip_proto == IPPROTO_UDP) {
