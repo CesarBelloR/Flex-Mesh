@@ -4,6 +4,10 @@ config TEST_VERSION
 	string "LwM2M version"
 	default "v1.0.0"
 
+config LWM2M_USE_BOOTSTRAP
+	bool "Set to true if client should use bootstrap"
+	default true
+
 endmenu
 
 menu "Zephyr Kernel"

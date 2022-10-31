@@ -23,11 +23,17 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #if defined(CONFIG_NET_IPV6)
 #define SERVER_ADDR ""
 #elif defined(CONFIG_NET_IPV4)
-#define SERVER_ADDR "142.93.158.106"
+#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
+#define SERVER_PORT 5684
 #else
 #error LwM2M requires either IPV6 or IPV4 support
 #endif
 
+#if CONFIG_LWM2M_USE_BOOTSTRAP
+#define EP_NAME "bg95test_bt"
+#else
+#define EP_NAME "bg95test"
+#endif
 
 #define WAIT_TIME	K_SECONDS(10)
 #define CONNECT_TIME	K_SECONDS(10)
@@ -46,6 +52,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 /* If led0 gpios doesn't exist the relevant IPSO object will simply not be created. */
 static const struct gpio_dt_spec led_gpio = GPIO_DT_SPEC_GET_OR(DT_ALIAS(led0), gpios, {});
+
+static uint16_t ssid = CONFIG_LWM2M_SERVER_DEFAULT_SSID;
 
 static uint8_t bat_idx = LWM2M_DEVICE_PWR_SRC_TYPE_BAT_INT;
 static int bat_mv = 3800;
@@ -72,11 +80,10 @@ static uint8_t supported_protocol[1];
 
 /* "000102030405060708090a0b0c0d0e0f" */
 static unsigned char client_psk[] = {
-	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+	0xa0, 0xb1, 0xc2, 0xd3, 0xe4
 };
 
-static const char client_psk_id[] = "Client_identity";
+static const char client_psk_id[] = CONFIG_MODEM_QUECTEL_BG95_M3_PSK_ID;
 #endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
 static struct k_sem quit_lock;
@@ -278,10 +285,10 @@ static int lwm2m_setup(void)
 		return ret;
 	}
 	LOG_INF("server_url %d %p", server_url_len, server_url);
-	server_url_len = snprintk(server_url, server_url_len, "coap%s//%s%s%s",
+	server_url_len = snprintk(server_url, server_url_len, "coap%s//%s%s%s:%u",
 				  IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT) ? "s:" : ":",
 				  strchr(SERVER_ADDR, ':') ? "[" : "", SERVER_ADDR,
-				  strchr(SERVER_ADDR, ':') ? "]" : "");
+				  strchr(SERVER_ADDR, ':') ? "]" : "", SERVER_PORT);
 	LOG_INF("Server URL %s", server_url);
 	lwm2m_engine_set_res_data_len("0/0/0", server_url_len + 1);
 
@@ -293,7 +300,7 @@ static int lwm2m_setup(void)
 				(void *)client_psk, sizeof(client_psk));
 #endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
-#if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP)
+#if CONFIG_LWM2M_USE_BOOTSTRAP
 	/* Mark 1st instance of security object as a bootstrap server */
 	lwm2m_engine_set_u8("0/0/1", 1);
 
@@ -304,6 +311,7 @@ static int lwm2m_setup(void)
 	 * Short Server ID.
 	 */
 	lwm2m_engine_set_u16("0/0/10", CONFIG_LWM2M_SERVER_DEFAULT_SSID);
+	lwm2m_engine_create_obj_inst("1/0");
 	lwm2m_engine_set_u16("1/0/0", CONFIG_LWM2M_SERVER_DEFAULT_SSID);
 #endif
 
@@ -500,7 +508,7 @@ static void observe_cb(enum lwm2m_observe_event event,
 
 void main(void)
 {
-	uint32_t flags = IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP) ?
+	uint32_t flags = IS_ENABLED(CONFIG_LWM2M_USE_BOOTSTRAP) ?
 				LWM2M_RD_CLIENT_FLAG_BOOTSTRAP : 0;
 	int ret;
 
@@ -519,7 +527,7 @@ void main(void)
 	client.tls_tag = TLS_TAG;
 #endif
 
-#if defined(CONFIG_HWINFO)
+#if 0
 	uint8_t dev_id[16];
 	char dev_str[33];
 	ssize_t length;
@@ -543,7 +551,7 @@ void main(void)
 	lwm2m_rd_client_start(&client, dev_str, flags, rd_client_event, observe_cb);
 #else
 	/* client.sec_obj_inst is 0 as a starting point */
-	lwm2m_rd_client_start(&client, CONFIG_BOARD, flags, rd_client_event, observe_cb);
+	lwm2m_rd_client_start(&client, EP_NAME, flags, rd_client_event, observe_cb);
 #endif
 
 	k_sem_take(&quit_lock, K_FOREVER);
