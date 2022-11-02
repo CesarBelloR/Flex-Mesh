@@ -21,13 +21,16 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define APP_BANNER "Run LWM2M client"
 
 
-#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
-#define SERVER_PORT 5684
+//#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
+#define SERVER_ADDR "eu.iot.avsystem.cloud"
+// From Google DNS through native_posix
+//#define SERVER_ADDR "13.53.112.42"
+#define SERVER_PORT 5683
 
 #if CONFIG_LWM2M_USE_BOOTSTRAP
 #define EP_NAME "bg95test_bt"
 #else
-#define EP_NAME "bg95test"
+#define EP_NAME "andi-test"
 #endif
 
 #define WAIT_TIME	K_SECONDS(10)

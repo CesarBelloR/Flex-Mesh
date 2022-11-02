@@ -198,12 +198,12 @@ static inline int find_len(char *data)
  */
 static int on_cmd_sockread_common(int socket_fd,
 				  struct modem_cmd_handler_data *data,
+				  int socket_data_length,
 				  uint16_t len)
 {
 	struct modem_socket	 *sock = NULL;
 	struct socket_read_data	 *sock_data;
 	int ret, i;
-	int socket_data_length;
 	int bytes_to_skip;
 
 	if (!len) {
@@ -216,24 +216,21 @@ static int on_cmd_sockread_common(int socket_fd,
 		LOG_ERR("Incorrect format! Ignoring data!");
 		return -EINVAL;
 	}
-
-	socket_data_length = find_len(data->rx_buf->data);
-
-	/* No (or not enough) data available on the socket. */
-	bytes_to_skip = digits(socket_data_length) + 2 + 4;
+	
+	/* zero length */
 	if (socket_data_length <= 0) {
-		mdata.recvfrom_ready  = true;
-		return -EINVAL;
+		LOG_ERR("Length problem (%d).  Aborting!", socket_data_length);
+		return -EAGAIN;
 	}
 
 	/* check to make sure we have all of the data. */
-	if (net_buf_frags_len(data->rx_buf) < (socket_data_length + bytes_to_skip)) {
+	if (net_buf_frags_len(data->rx_buf) < (socket_data_length + 2 + 4)) {
 		LOG_DBG("Not enough data -- wait!");
 		return -EAGAIN;
 	}
 
-	/* Skip "len" and CRLF */
-	bytes_to_skip = digits(socket_data_length) + 2;
+	/* Skip CRLF */
+	bytes_to_skip = 2;
 	for (i = 0; i < bytes_to_skip; i++) {
 		net_buf_pull_u8(data->rx_buf);
 	}
@@ -480,10 +477,11 @@ MODEM_CMD_DEFINE(on_cmd_send_fail)
 	return 0;
 }
 
-/* Handler: Read data */
+/* Handler: Read data +QIRD: <length>[0] OR +QSSLRECV: <length>[0] */
 MODEM_CMD_DEFINE(on_cmd_sock_readdata)
 {
-	return on_cmd_sockread_common(mdata.sock_fd, data, len);
+	return on_cmd_sockread_common(mdata.sock_fd, data, 
+						ATOI(argv[0], 0, "length"), len);
 }
 
 /* Handler: Data receive indication. */
@@ -747,8 +745,8 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	LOG_DBG("");
 	/* Modem command to read the data. */
 	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("+QIRD: ", on_cmd_sock_readdata, 0U, ""),
-		MODEM_CMD("+QSSLRECV: ", on_cmd_sock_readdata, 0U, "") };
+		MODEM_CMD("+QIRD: ", on_cmd_sock_readdata, 1U, ""),
+		MODEM_CMD("+QSSLRECV: ", on_cmd_sock_readdata, 1U, "") };
 
 	if (!buf || len == 0) {
 		errno = EINVAL;
