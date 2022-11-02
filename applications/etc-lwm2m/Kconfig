@@ -6,7 +6,7 @@ config TEST_VERSION
 
 config LWM2M_USE_BOOTSTRAP
 	bool "Set to true if client should use bootstrap"
-	default true
+	default false
 
 endmenu
 

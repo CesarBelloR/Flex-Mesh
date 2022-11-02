@@ -1,6 +1,6 @@
 menuconfig UI_MODULE
 	bool "Enable UI module"
-	default y
+	default n
 	help
 		Enable the User Interface module for user interaction
 

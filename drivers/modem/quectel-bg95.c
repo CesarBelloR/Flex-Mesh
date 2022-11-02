@@ -1,5 +1,6 @@
 #define DT_DRV_COMPAT quectel_bg95
 
+#include <fcntl.h>
 #include <logging/log.h>
 LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
@@ -871,6 +872,12 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 		return offload_poll(fds, nfds, timeout);
 	}
 
+	case F_GETFL:
+		return 0;
+
+	case F_SETFL:
+		return 0;
+
 	default:
 		errno = EINVAL;
 		return -1;
@@ -1650,7 +1657,7 @@ static int map_credentials(struct modem_socket *sock, const void *optval, sockle
 #else
 static int map_credentials(struct modem_socket *sock, const void *optval, socklen_t optlen)
 {
-	return -EINVAL;
+	return 0;
 }
 #endif
 
@@ -1701,7 +1708,7 @@ static int offload_setsockopt(void *obj, int level, int optname,
 			break;
 	}
 	} else {
-		return -EINVAL;
+		return 0;
 	}
 
 	return ret;

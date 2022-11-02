@@ -20,14 +20,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define APP_BANNER "Run LWM2M client"
 
-#if defined(CONFIG_NET_IPV6)
-#define SERVER_ADDR ""
-#elif defined(CONFIG_NET_IPV4)
+
 #define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
 #define SERVER_PORT 5684
-#else
-#error LwM2M requires either IPV6 or IPV4 support
-#endif
 
 #if CONFIG_LWM2M_USE_BOOTSTRAP
 #define EP_NAME "bg95test_bt"
@@ -78,12 +73,11 @@ static uint8_t supported_protocol[1];
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 #define TLS_TAG			1
 
-/* "000102030405060708090a0b0c0d0e0f" */
 static unsigned char client_psk[] = {
 	0xa0, 0xb1, 0xc2, 0xd3, 0xe4
 };
 
-static const char client_psk_id[] = CONFIG_MODEM_QUECTEL_BG95_M3_PSK_ID;
+static const char client_psk_id[] = "bg95test";
 #endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
 static struct k_sem quit_lock;
