@@ -20,6 +20,7 @@ static struct sockaddr result_addr;
 static char result_canonname[DNS_MAX_NAME_SIZE + 1];
 #endif
 
+
 static K_KERNEL_STACK_DEFINE(modem_rx_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(modem_workq_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_WORKQ_STACK_SIZE);
 NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE, 0, NULL);
@@ -230,7 +231,7 @@ static int on_cmd_sockread_common(int socket_fd,
 	}
 
 	/* Skip CRLF */
-	bytes_to_skip = 2;
+	bytes_to_skip = 4;
 	for (i = 0; i < bytes_to_skip; i++) {
 		net_buf_pull_u8(data->rx_buf);
 	}
@@ -741,6 +742,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	struct modem_socket *sock = (struct modem_socket *)obj;
 	char   sendbuf[sizeof("AT+Q###RECV=##,####")] = {0};
 	int    ret;
+	int	   next_packet_size;
 	struct socket_read_data sock_data;
 	LOG_DBG("");
 	/* Modem command to read the data. */
@@ -758,10 +760,32 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 		return -1;
 	}
 
-	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
-		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", sock->sock_fd, len);
+	/* Wait for packet, if there are none available. */
+	next_packet_size = modem_socket_next_packet_size(&mdata.socket_config,
+							 sock);
+	if (!next_packet_size) {
+		if ((flags & ZSOCK_MSG_DONTWAIT) || mdata.sock_nonblock) {
+			errno = EAGAIN;
+			return -1;
+		}
+
+		if (!sock->is_connected) {
+			errno = 0;
+			return 0;
+		}
+
+		modem_socket_wait_data(&mdata.socket_config, sock);
+		next_packet_size = modem_socket_next_packet_size(
+			&mdata.socket_config, sock);
+	}
+
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || 
+		(sock->ip_proto == IPPROTO_DTLS_1_2)) {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", 
+				sock->sock_fd, len);
 	} else {
-		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", sock->sock_fd, len);
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", 
+				sock->sock_fd, len);
 	}
 
 retry:
@@ -845,6 +869,32 @@ static int offload_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 	return modem_socket_poll(&mdata.socket_config, fds, nfds, msecs);
 }
 
+static int offload_fcntl(void *obj, unsigned int request, va_list args) {
+	int retval = 0;
+
+	switch (request) {
+	case F_GETFL:	
+		if (mdata.sock_nonblock) {
+			retval |= O_NONBLOCK;
+		}
+		break;
+
+	case F_SETFL:
+		if ((va_arg(args, int) & O_NONBLOCK) != 0) {
+			mdata.sock_nonblock = true;
+		} else {
+			mdata.sock_nonblock = false;
+		}
+		break;
+
+	default:
+		LOG_ERR("Invalid request : %d", request);
+		retval = -EINVAL;
+	}
+
+	return retval;
+}
+
 /* Func: offload_ioctl
  * Desc: Function call to handle various misc requests.
  */
@@ -857,8 +907,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 	case ZFD_IOCTL_POLL_UPDATE:
 		return -EOPNOTSUPP;
 
-	case ZFD_IOCTL_POLL_OFFLOAD:
-	{
+	case ZFD_IOCTL_POLL_OFFLOAD: {
 		/* Poll on the given socket. */
 		struct zsock_pollfd *fds;
 		int nfds, timeout;
@@ -870,15 +919,11 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 		return offload_poll(fds, nfds, timeout);
 	}
 
-	case F_GETFL:
-		return 0;
-
-	case F_SETFL:
-		return 0;
-
 	default:
-		errno = EINVAL;
-		return -1;
+		/* Forward to offloaded fcntl()
+	 	*  In Zephyr, fcntl() is just an alias of ioctl().
+	 	*/
+		return offload_fcntl(obj, request, args);
 	}
 }
 
@@ -1877,6 +1922,7 @@ static int modem_init(const struct device *dev)
 	if (ret < 0) {
 		goto error;
 	}
+	mdata.sock_nonblock = false;
 
 	/* cmd handler */
 	mdata.cmd_handler_data.cmds[CMD_RESP]	   = response_cmds;
