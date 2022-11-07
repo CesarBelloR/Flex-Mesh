@@ -16,21 +16,26 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/net/lwm2m.h>
+#include <zephyr/sys/util.h>
 #include <stdio.h>
 
 #define APP_BANNER "Run LWM2M client"
 
 
-//#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
-#define SERVER_ADDR "eu.iot.avsystem.cloud"
+#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
+//#define SERVER_ADDR "eu.iot.avsystem.cloud"
 // From Google DNS through native_posix
 //#define SERVER_ADDR "13.53.112.42"
-#define SERVER_PORT 5683
+#define SERVER_PORT CONFIG_LWM2M_PEER_PORT
 
 #if CONFIG_LWM2M_USE_BOOTSTRAP
 #define EP_NAME "bg95test_bt"
 #else
+#if CONFIG_LWM2M_DTLS_SUPPORT
+#define EP_NAME "bg95test"
+#else
 #define EP_NAME "andi-test"
+#endif
 #endif
 
 #define WAIT_TIME	K_SECONDS(10)
@@ -76,11 +81,9 @@ static uint8_t supported_protocol[1];
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 #define TLS_TAG			1
 
-static unsigned char client_psk[] = {
-	0xa0, 0xb1, 0xc2, 0xd3, 0xe4
-};
+static unsigned char client_psk[(sizeof(CONFIG_NET_DTLS_PSK) - 1) / 2];
 
-static const char client_psk_id[] = "bg95test";
+static const char client_psk_id[] = CONFIG_NET_DTLS_PSKID;
 #endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
 static struct k_sem quit_lock;
@@ -292,6 +295,8 @@ static int lwm2m_setup(void)
 	/* Security Mode */
 	lwm2m_engine_set_u8("0/0/2", IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT) ? 0 : 3);
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
+	hex2bin(CONFIG_NET_DTLS_PSK, sizeof(CONFIG_NET_DTLS_PSK) - 1,
+			client_psk, sizeof(client_psk));
 	lwm2m_engine_set_string("0/0/3", (char *)client_psk_id);
 	lwm2m_engine_set_opaque("0/0/5",
 				(void *)client_psk, sizeof(client_psk));

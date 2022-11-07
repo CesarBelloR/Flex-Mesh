@@ -8,6 +8,14 @@ config LWM2M_USE_BOOTSTRAP
 	bool "Set to true if client should use bootstrap"
 	default false
 
+config NET_DTLS_PSKID
+	string "PSK ID in string format"
+	default ""
+
+config NET_DTLS_PSK
+	string "PSK Key"
+	default ""
+
 endmenu
 
 menu "Zephyr Kernel"
