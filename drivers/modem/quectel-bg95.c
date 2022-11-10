@@ -204,7 +204,7 @@ static void socket_close(struct modem_socket *sock)
 	} else {
 		snprintk(buf, sizeof(buf), "AT+QICLOSE=%d", sock->sock_fd);
 	}
-	
+
 	k_sem_reset(&mdata.sem_response);
 	/* Tell the modem to close the socket. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
@@ -276,7 +276,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sslopen)
 {
 	int err = ATOI(argv[1], 0, "sock_err");
 
-	LOG_INF("Error in open TLS socket: %d", err);
 	modem_cmd_handler_set_error(data, err);
 	k_sem_give(&mdata.sem_sock_conn);
 
@@ -511,7 +510,7 @@ MODEM_CMD_DEFINE(on_cmd_dns)
 	if (mdata.dns_ip_count == mdata.dns_result) {
 		k_sem_give(&mdata.sem_dns_ready);
 	}
-	
+
 	return 0;
 }
 #endif
@@ -1110,7 +1109,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		LOG_DBG("Error to set QSSLCFG->ignorelocaltime");
 		return -1;
 	}
-	
+
 	return 0;
 }
 
@@ -1157,7 +1156,9 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		errno = ENOTSUP;
 		return -1;
 	}
+
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+		LOG_DBG("Initialize the TLS");
 		on_connect_tls_init(sock);
 	}
 
@@ -1171,7 +1172,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		errno = -ret;
 		return -1;
 	}
-	
+
 	/* Formulate the complete string. */
 	/* Open the socket with buffer access mode */
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
@@ -1700,14 +1701,15 @@ static bool offload_is_supported(int family, int type, int proto)
 static int offload_socket(int family, int type, int proto)
 {
 	int ret;
-
+	LOG_DBG("");
 	/* defer modem's socket create call to bind() */
 	ret = modem_socket_get(&mdata.socket_config, family, type, proto);
 	if (ret < 0) {
 		errno = -ret;
+		LOG_ERR("Error here %d", ret);
 		return -1;
 	}
-
+	LOG_DBG("OK");
 	errno = 0;
 	return ret;
 }
@@ -1830,7 +1832,7 @@ NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, NULL,
 				  &api_funcs, MDM_MAX_DATA_LENGTH);
 
 /* Register NET sockets. */
-NET_SOCKET_REGISTER(quectel_bg95, NET_SOCKET_DEFAULT_PRIO, AF_UNSPEC,
+NET_SOCKET_OFFLOAD_REGISTER(quectel_bg95, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY, AF_UNSPEC,
 		    offload_is_supported, offload_socket);
 
 char* quectel_bg95_get_imei(void) {
@@ -1874,4 +1876,8 @@ int quectel_bg95_get_time(char* time_buf) {
 
 	memcpy(time_buf, mdata.mdm_time, sizeof(mdata.mdm_time));
 	return 0;
+}
+
+bool quectel_bg95_is_ready(void) {
+	return modem_is_ready;
 }

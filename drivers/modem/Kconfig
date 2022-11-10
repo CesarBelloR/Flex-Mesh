@@ -4,6 +4,7 @@ config MODEM_QUECTEL_BG95_M3
 	select MODEM_CMD_HANDLER
 	select MODEM_IFACE_UART
 	select MODEM_SOCKET
+	select NET_OFFLOAD
 	select NET_SOCKETS_OFFLOAD
 	help
 	  Choose this setting to enable quectel BG95-M3 customized LTE-CatM1/NB-IoT modem

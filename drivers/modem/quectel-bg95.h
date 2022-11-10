@@ -24,12 +24,16 @@
 #include "modem_cmd_handler.h"
 #include "modem_iface_uart.h"
 
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+#include "tls_internal.h"
+#include <net/tls_credentials.h>
+#endif
 #define MDM_UART_DEV			  DEVICE_DT_GET(DT_INST_BUS(0))
 #define MDM_UART_NODE			  DT_INST_BUS(0)
 #define MDM_CMD_TIMEOUT			  K_SECONDS(10)
 #define MDM_DNS_TIMEOUT			  K_SECONDS(60)
-#define MDM_RECV_TIMEOUT          K_SECONDS(10)
-#define MDM_CMD_CONN_TIMEOUT		  K_SECONDS(120)
+#define MDM_RECV_TIMEOUT		  K_SECONDS(10)
+#define MDM_CMD_CONN_TIMEOUT		  K_SECONDS(150)
 #define MDM_REGISTRATION_TIMEOUT	  K_SECONDS(180)
 #define MDM_SENDMSG_SLEEP		  K_MSEC(1)
 #define MDM_MAX_DATA_LENGTH		  1024
@@ -141,5 +145,5 @@ struct socket_read_data {
 char* quectel_bg95_get_imei(void);
 char* quectel_bg95_get_revision(void);
 char* quectel_bg95_get_sim_number(void);
-
+bool quectel_bg95_is_ready(void);
 #endif /* QUECTEL_BG95_H */
