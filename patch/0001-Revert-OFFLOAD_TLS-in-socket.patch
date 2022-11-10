@@ -1,0 +1,63 @@
+From e38e6616ab585ac971f5a448a730aa583cf28369 Mon Sep 17 00:00:00 2001
+From: Bui Trung Kien <trungkiena6@gmail.com>
+Date: Thu, 10 Nov 2022 16:05:02 +0700
+Subject: [PATCH] Revert OFFLOAD_TLS in socket
+
+---
+ subsys/net/lib/sockets/CMakeLists.txt     | 4 +++-
+ subsys/net/lib/sockets/Kconfig            | 9 +++++++++
+ subsys/net/lib/sockets/sockets_internal.h | 3 ++-
+ 3 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/subsys/net/lib/sockets/CMakeLists.txt b/subsys/net/lib/sockets/CMakeLists.txt
+index 189c794883..c0a9060a2b 100644
+--- a/subsys/net/lib/sockets/CMakeLists.txt
++++ b/subsys/net/lib/sockets/CMakeLists.txt
+@@ -17,7 +17,9 @@ endif()
+ 
+ zephyr_sources_ifdef(CONFIG_NET_SOCKETS_CAN                sockets_can.c)
+ zephyr_sources_ifdef(CONFIG_NET_SOCKETS_PACKET             sockets_packet.c)
+-zephyr_sources_ifdef(CONFIG_NET_SOCKETS_SOCKOPT_TLS        sockets_tls.c)
++if (CONFIG_NET_SOCKETS_SOCKOPT_TLS AND NOT CONFIG_NET_SOCKETS_OFFLOAD_TLS)
++zephyr_sources(sockets_tls.c)
++endif()
+ zephyr_sources_ifdef(CONFIG_NET_SOCKETS_OFFLOAD            socket_offload.c)
+ zephyr_sources_ifdef(CONFIG_NET_SOCKETS_OFFLOAD_DISPATCHER socket_dispatcher.c)
+ 
+diff --git a/subsys/net/lib/sockets/Kconfig b/subsys/net/lib/sockets/Kconfig
+index 84f8e1b167..8ddbf6d5a6 100644
+--- a/subsys/net/lib/sockets/Kconfig
++++ b/subsys/net/lib/sockets/Kconfig
+@@ -173,6 +173,15 @@ config NET_SOCKETS_OFFLOAD
+ 	  See NET_OFFLOAD for a more deeply integrated approach which offloads
+ 	  from the net_context() API within the Zephyr IP stack.
+ 
++config NET_SOCKETS_OFFLOAD_TLS
++	bool "Offload TLS socket calls to the offloaded sockets"
++	depends on NET_SOCKETS_OFFLOAD
++	default y
++	help
++	  If enabled, the offloading engine is expected to handle TLS/DTLS
++	  socket calls. Othwerwise, Zephyrs native TLS socket implementation
++	  will be used, and only TCP/UDP socket calls will be offloaded.
++
+ config NET_SOCKETS_OFFLOAD_PRIORITY
+ 	int "Default processing priority for offloaded sockets"
+ 	default 40
+diff --git a/subsys/net/lib/sockets/sockets_internal.h b/subsys/net/lib/sockets/sockets_internal.h
+index ca2be1da1b..f3770dc3be 100644
+--- a/subsys/net/lib/sockets/sockets_internal.h
++++ b/subsys/net/lib/sockets/sockets_internal.h
+@@ -34,7 +34,8 @@ static inline uintptr_t sock_get_flag(struct net_context *ctx, uintptr_t mask)
+ 
+ void net_socket_update_tc_rx_time(struct net_pkt *pkt, uint32_t end_tick);
+ 
+-#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
++#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) && \
++    !defined(CONFIG_NET_SOCKETS_OFFLOAD_TLS)
+ bool net_socket_is_tls(void *obj);
+ #else
+ static inline bool net_socket_is_tls(void *obj)
+-- 
+2.37.1 (Apple Git-137.1)
+
