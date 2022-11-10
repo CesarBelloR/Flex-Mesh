@@ -1,5 +1,6 @@
 #define DT_DRV_COMPAT quectel_bg95
 
+#include <fcntl.h>
 #include <logging/log.h>
 LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
@@ -19,11 +20,15 @@ static struct sockaddr result_addr;
 static char result_canonname[DNS_MAX_NAME_SIZE + 1];
 #endif
 
+
 static K_KERNEL_STACK_DEFINE(modem_rx_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(modem_workq_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_WORKQ_STACK_SIZE);
 NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE, 0, NULL);
 
 static const struct gpio_dt_spec power_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_power_gpios);
+#if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
+static const struct gpio_dt_spec on_off_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_on_off_gpios);
+#endif
 #if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
 static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
 #endif
@@ -33,6 +38,9 @@ static const struct gpio_dt_spec dtr_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_dtr_gpi
 #if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
 static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wdisable_gpios);
 #endif
+
+/* Implementation in net/ip/utils.h */
+extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
 
 static inline int digits(int n)
 {
@@ -115,12 +123,12 @@ static inline int find_len(char *data)
  */
 static int on_cmd_sockread_common(int socket_fd,
 				  struct modem_cmd_handler_data *data,
+				  int socket_data_length,
 				  uint16_t len)
 {
 	struct modem_socket	 *sock = NULL;
 	struct socket_read_data	 *sock_data;
 	int ret, i;
-	int socket_data_length;
 	int bytes_to_skip;
 
 	if (!len) {
@@ -133,24 +141,21 @@ static int on_cmd_sockread_common(int socket_fd,
 		LOG_ERR("Incorrect format! Ignoring data!");
 		return -EINVAL;
 	}
-
-	socket_data_length = find_len(data->rx_buf->data);
-
-	/* No (or not enough) data available on the socket. */
-	bytes_to_skip = digits(socket_data_length) + 2 + 4;
+	
+	/* zero length */
 	if (socket_data_length <= 0) {
-		mdata.recvfrom_ready  = true;
-		return -EINVAL;
+		LOG_ERR("Length problem (%d).  Aborting!", socket_data_length);
+		return -EAGAIN;
 	}
 
 	/* check to make sure we have all of the data. */
-	if (net_buf_frags_len(data->rx_buf) < (socket_data_length + bytes_to_skip)) {
+	if (net_buf_frags_len(data->rx_buf) < (socket_data_length + 2 + 4)) {
 		LOG_DBG("Not enough data -- wait!");
 		return -EAGAIN;
 	}
 
-	/* Skip "len" and CRLF */
-	bytes_to_skip = digits(socket_data_length) + 2;
+	/* Skip CRLF */
+	bytes_to_skip = 4;
 	for (i = 0; i < bytes_to_skip; i++) {
 		net_buf_pull_u8(data->rx_buf);
 	}
@@ -199,12 +204,12 @@ static void socket_close(struct modem_socket *sock)
 {
 	char buf[sizeof("AT+Q###CLOSE=##")] = {0};
 	int  ret;
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(buf, sizeof(buf), "AT+QSSLCLOSE=%d", sock->sock_fd);
 	} else {
 		snprintk(buf, sizeof(buf), "AT+QICLOSE=%d", sock->sock_fd);
 	}
-
+	
 	k_sem_reset(&mdata.sem_response);
 	/* Tell the modem to close the socket. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
@@ -276,6 +281,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sslopen)
 {
 	int err = ATOI(argv[1], 0, "sock_err");
 
+	LOG_INF("Error in open TLS socket: %d", err);
 	modem_cmd_handler_set_error(data, err);
 	k_sem_give(&mdata.sem_sock_conn);
 
@@ -396,10 +402,11 @@ MODEM_CMD_DEFINE(on_cmd_send_fail)
 	return 0;
 }
 
-/* Handler: Read data */
+/* Handler: Read data +QIRD: <length>[0] OR +QSSLRECV: <length>[0] */
 MODEM_CMD_DEFINE(on_cmd_sock_readdata)
 {
-	return on_cmd_sockread_common(mdata.sock_fd, data, len);
+	return on_cmd_sockread_common(mdata.sock_fd, data, 
+						ATOI(argv[0], 0, "length"), len);
 }
 
 /* Handler: Data receive indication. */
@@ -510,7 +517,7 @@ MODEM_CMD_DEFINE(on_cmd_dns)
 	if (mdata.dns_ip_count == mdata.dns_result) {
 		k_sem_give(&mdata.sem_dns_ready);
 	}
-
+	
 	return 0;
 }
 #endif
@@ -526,8 +533,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 				k_timeout_t timeout)
 {
 	int  ret;
-	char send_buf[sizeof("AT+Q###SEND=##,####")] = {0};
-	char ctrlz = 0x1A;
+	char send_buf[sizeof("AT+Q###SEND=##,####,")] = {0};
 
 	if (buf_len > MDM_MAX_DATA_LENGTH) {
 		buf_len = MDM_MAX_DATA_LENGTH;
@@ -535,7 +541,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 
 	/* Create a buffer with the correct params. */
 	mdata.sock_written = buf_len;
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(send_buf, sizeof(send_buf), "AT+QSSLSEND=%d,%ld", sock->sock_fd, (long)buf_len);
 	} else {
 		snprintk(send_buf, sizeof(send_buf), "AT+QISEND=%d,%ld", sock->sock_fd, (long)buf_len);
@@ -568,9 +574,9 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 		goto exit;
 	}
 
-	/* Write all data on the console and send CTRL+Z. */
+	/* Write all data on the console. Do not send CTRL+Z, as we are */
+	/* in fixed length mode. */
 	mctx.iface.write(&mctx.iface, buf, buf_len);
-	mctx.iface.write(&mctx.iface, &ctrlz, 1);
 	LOG_HEXDUMP_DBG(buf, buf_len, "SEND");
 	/* Wait for 'SEND OK' or 'SEND FAIL' */
 	k_sem_reset(&mdata.sem_response);
@@ -633,12 +639,6 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 		return -1;
 	}
 
-	/* UDP is not supported. */
-	if (sock->ip_proto == IPPROTO_UDP) {
-		errno = ENOTSUP;
-		return -1;
-	}
-
 	if (!sock->is_connected) {
 		errno = ENOTCONN;
 		return -1;
@@ -666,12 +666,13 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	struct modem_socket *sock = (struct modem_socket *)obj;
 	char   sendbuf[sizeof("AT+Q###RECV=##,####")] = {0};
 	int    ret;
+	int	   next_packet_size;
 	struct socket_read_data sock_data;
 	LOG_DBG("");
 	/* Modem command to read the data. */
 	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("+QIRD: ", on_cmd_sock_readdata, 0U, ""),
-		MODEM_CMD("+QSSLRECV: ", on_cmd_sock_readdata, 0U, "") };
+		MODEM_CMD("+QIRD: ", on_cmd_sock_readdata, 1U, ""),
+		MODEM_CMD("+QSSLRECV: ", on_cmd_sock_readdata, 1U, "") };
 
 	if (!buf || len == 0) {
 		errno = EINVAL;
@@ -683,10 +684,32 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 		return -1;
 	}
 
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
-		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", sock->sock_fd, len);
+	/* Wait for packet, if there are none available. */
+	next_packet_size = modem_socket_next_packet_size(&mdata.socket_config,
+							 sock);
+	if (!next_packet_size) {
+		if ((flags & ZSOCK_MSG_DONTWAIT) || mdata.sock_nonblock) {
+			errno = EAGAIN;
+			return -1;
+		}
+
+		if (!sock->is_connected) {
+			errno = 0;
+			return 0;
+		}
+
+		modem_socket_wait_data(&mdata.socket_config, sock);
+		next_packet_size = modem_socket_next_packet_size(
+			&mdata.socket_config, sock);
+	}
+
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || 
+		(sock->ip_proto == IPPROTO_DTLS_1_2)) {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", 
+				sock->sock_fd, len);
 	} else {
-		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", sock->sock_fd, len);
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", 
+				sock->sock_fd, len);
 	}
 
 retry:
@@ -770,6 +793,32 @@ static int offload_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 	return modem_socket_poll(&mdata.socket_config, fds, nfds, msecs);
 }
 
+static int offload_fcntl(void *obj, unsigned int request, va_list args) {
+	int retval = 0;
+
+	switch (request) {
+	case F_GETFL:	
+		if (mdata.sock_nonblock) {
+			retval |= O_NONBLOCK;
+		}
+		break;
+
+	case F_SETFL:
+		if ((va_arg(args, int) & O_NONBLOCK) != 0) {
+			mdata.sock_nonblock = true;
+		} else {
+			mdata.sock_nonblock = false;
+		}
+		break;
+
+	default:
+		LOG_ERR("Invalid request : %d", request);
+		retval = -EINVAL;
+	}
+
+	return retval;
+}
+
 /* Func: offload_ioctl
  * Desc: Function call to handle various misc requests.
  */
@@ -782,8 +831,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 	case ZFD_IOCTL_POLL_UPDATE:
 		return -EOPNOTSUPP;
 
-	case ZFD_IOCTL_POLL_OFFLOAD:
-	{
+	case ZFD_IOCTL_POLL_OFFLOAD: {
 		/* Poll on the given socket. */
 		struct zsock_pollfd *fds;
 		int nfds, timeout;
@@ -796,8 +844,10 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 	}
 
 	default:
-		errno = EINVAL;
-		return -1;
+		/* Forward to offloaded fcntl()
+	 	*  In Zephyr, fcntl() is just an alias of ioctl().
+	 	*/
+		return offload_fcntl(obj, request, args);
 	}
 }
 
@@ -968,6 +1018,63 @@ exit:
 	return ret;
 }
 
+static int on_connect_dtls_init(struct modem_socket *sock)
+{
+	int ret = 0;
+	char psk_fn[sizeof("!##_server.psk!")];
+	char buf[256];
+
+	// File name is <SSL context ID>_server.psk.
+	snprintk(psk_fn, sizeof(psk_fn), "%d_server.psk", sock->sock_fd);
+	if (quectel_bg95_file_find(psk_fn) == 0) {
+		if (quectel_bg95_file_delete(psk_fn) != 0) {
+			return -1;
+		}
+	}
+
+	// Modem expects file content in format <PSK_ID>&<PSK_KEY>
+	ret = snprintk(buf, sizeof(buf), "%s&%s", 
+				CONFIG_MODEM_QUECTEL_BG95_M3_PSK_ID, 
+				CONFIG_MODEM_QUECTEL_BG95_M3_PSK_KEY);
+	if (ret >= sizeof(buf)) {
+		LOG_WRN("PSK file truncated");
+		ret = sizeof(buf) - 1;
+	}
+	ret = quectel_bg95_file_download(psk_fn, buf, ret);
+	if (ret != 0) {
+		LOG_DBG("Failed to download PSK file %d", ret);
+	}
+
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0X00AE", "ciphersuite", sock->sock_fd);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
+		return -1;
+	}
+
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtlsversion", sock->sock_fd, 1);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for DTLS Version");
+		return -1;
+	}
+		
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->sock_fd, 1);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for DTLS enable");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int on_connect_tls_init(struct modem_socket *sock)
 {
 	int ret = 0;
@@ -1109,7 +1216,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		LOG_DBG("Error to set QSSLCFG->ignorelocaltime");
 		return -1;
 	}
-
+	
 	return 0;
 }
 
@@ -1121,11 +1228,10 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 {
 	struct modem_socket *sock     = (struct modem_socket *) obj;
 	uint16_t	    dst_port  = 0;
-	char		    *protocol = "TCP";
 	struct modem_cmd    cmd[]     = {
 		MODEM_CMD("+QIOPEN: ", on_cmd_atcmdinfo_sockopen, 2U, ","),
 		MODEM_CMD("+QSSLOPEN: ", on_cmd_atcmdinfo_sslopen, 2U, ",") };
-	char		    buf[sizeof("AT+Q###OPEN=#,##,###,####.####.####.####,######") + 256] = {0};
+	char		buf[sizeof("AT+Q###OPEN=#,##,!###!,!####:####:####:####:####:####:####:####!,######") + 256] = {0};
 	int		    ret;
 	char		ip_str[NET_IPV6_ADDR_LEN];
 
@@ -1151,16 +1257,12 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		dst_port = ntohs(net_sin(addr)->sin_port);
 	}
 
-	/* UDP is not supported. */
-	if (sock->ip_proto == IPPROTO_UDP) {
-		errno = ENOTSUP;
-		return -1;
-	}
-
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
-		LOG_DBG("Initialize the TLS");
 		on_connect_tls_init(sock);
+	} else if (sock->ip_proto == IPPROTO_DTLS_1_2) {
+		on_connect_dtls_init(sock);
 	}
+	
 
 	k_sem_reset(&mdata.sem_sock_conn);
 
@@ -1172,14 +1274,17 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		errno = -ret;
 		return -1;
 	}
-
+	
 	/* Formulate the complete string. */
 	/* Open the socket with buffer access mode */
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(buf, sizeof(buf), "AT+QSSLOPEN=%d,%d,%d,\"%s\",%d,0", 1, sock->sock_fd, sock->sock_fd,
 			ip_str, dst_port);
+	} else if (sock->ip_proto == IPPROTO_UDP) {
+		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, "UDP",
+			ip_str, dst_port);
 	} else {
-		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, protocol,
+		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, "TCP",
 			ip_str, dst_port);
 	}
 
@@ -1331,6 +1436,11 @@ static void pin_init(void)
 {
 	LOG_INF("Setting Modem Pins");
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
+	gpio_pin_set_dt(&on_off_gpio, 1);
+	k_sleep(K_MSEC(500));
+#endif
+
 	gpio_pin_set_dt(&power_gpio, 1);
 	k_sleep(K_MSEC(1000));
 	gpio_pin_set_dt(&power_gpio, 0);
@@ -1350,7 +1460,7 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("+QSSLURC: \"recv\",",   on_cmd_unsol_recv,  1U, ""),
 	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
 	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
-	MODEM_CMD("RDY", on_cmd_unsol_rdy, 0U, ""),
+	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
 };
 
 /* Commands sent to the modem to set it up at boot time. */
@@ -1368,7 +1478,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
 	SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
-	SETUP_CMD_NOHANDLE("AT+QICSGP=1,1,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
+	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
 };
 
 /* Func: modem_pdp_context_active
@@ -1672,6 +1782,8 @@ const struct socket_dns_offload offload_dns_ops = {
 };
 #endif
 
+static int offload_socket(int family, int type, int proto);
+
 /* Setup the Modem NET Interface. */
 static void modem_net_iface_init(struct net_if *iface)
 {
@@ -1683,6 +1795,8 @@ static void modem_net_iface_init(struct net_if *iface)
 			     sizeof(data->mac_addr),
 			     NET_LINK_ETHERNET);
 	data->net_iface = iface;
+
+	net_if_socket_offload_set(iface, offload_socket);
 
 #ifdef CONFIG_DNS_RESOLVER
 	socket_offload_dns_register(&offload_dns_ops);
@@ -1701,15 +1815,14 @@ static bool offload_is_supported(int family, int type, int proto)
 static int offload_socket(int family, int type, int proto)
 {
 	int ret;
-	LOG_DBG("");
+
 	/* defer modem's socket create call to bind() */
 	ret = modem_socket_get(&mdata.socket_config, family, type, proto);
 	if (ret < 0) {
 		errno = -ret;
-		LOG_ERR("Error here %d", ret);
 		return -1;
 	}
-	LOG_DBG("OK");
+
 	errno = 0;
 	return ret;
 }
@@ -1737,6 +1850,7 @@ static int modem_init(const struct device *dev)
 	if (ret < 0) {
 		goto error;
 	}
+	mdata.sock_nonblock = false;
 
 	/* cmd handler */
 	mdata.cmd_handler_data.cmds[CMD_RESP]	   = response_cmds;
@@ -1772,6 +1886,12 @@ static int modem_init(const struct device *dev)
 	mctx.data_iccid	       = mdata.mdm_iccid;
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
 	mctx.data_rssi		   = &mdata.mdm_rssi;
+
+	ret = gpio_pin_configure_dt(&on_off_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "on_off");
+		goto error;
+	}
 
 	ret = gpio_pin_configure_dt(&power_gpio, GPIO_OUTPUT_LOW);
 	if (ret < 0) {
@@ -1832,8 +1952,9 @@ NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, NULL,
 				  &api_funcs, MDM_MAX_DATA_LENGTH);
 
 /* Register NET sockets. */
-NET_SOCKET_OFFLOAD_REGISTER(quectel_bg95, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY, AF_UNSPEC,
-		    offload_is_supported, offload_socket);
+NET_SOCKET_OFFLOAD_REGISTER(quectel_bg95, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY,
+			    AF_UNSPEC, offload_is_supported, offload_socket);
+
 
 char* quectel_bg95_get_imei(void) {
 	return mdata.mdm_imei;
