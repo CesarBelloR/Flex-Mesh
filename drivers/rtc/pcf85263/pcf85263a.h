@@ -24,7 +24,7 @@
 /***************************************************************************/
 struct pcf85263a_rtc_time_registers {
 	pcf85263a_100th_seconds_reg_t rtc_100th_sec;
-    pcf85263a_seconds_reg_t rtc_sec;
+	pcf85263a_seconds_reg_t rtc_sec;
 	pcf85263a_minutes_reg_t rtc_min;
 	pcf85263a_hours_reg_t rtc_hours;
 	pcf85263a_days_reg_t rtc_date;
@@ -35,20 +35,20 @@ struct pcf85263a_rtc_time_registers {
 
 struct pcf85263a_rtc_alarm_1_registers {
 	pcf85263a_rtc_alarm_second_alarm_1_reg_t rtc_sec;
-    pcf85263a_rtc_alarm_minute_alarm_1_reg_t rtc_min;
+	pcf85263a_rtc_alarm_minute_alarm_1_reg_t rtc_min;
 	pcf85263a_rtc_alarm_hour_alarm_1_reg_t rtc_hours;
 	pcf85263a_rtc_alarm_day_alarm_1_reg_t rtc_date;
 	pcf85263a_rtc_alarm_month_alarm_1_reg_t rtc_month;
 } __packed;
 
 struct pcf85263a_rtc_alarm_2_registers {
-    pcf85263a_rtc_alarm_minute_alarm_2_reg_t rtc_min;
+	pcf85263a_rtc_alarm_minute_alarm_2_reg_t rtc_min;
 	pcf85263a_rtc_alarm_hour_alarm_2_reg_t rtc_hours;
 	pcf85263a_rtc_alarm_weekday_alarm_2_reg_t rtc_weekday;
 } __packed;
 
 struct pcf85263a_rtc_tsr1_registers {
-    pcf85263a_tsr1_seconds_reg_t rtc_sec;
+	pcf85263a_tsr1_seconds_reg_t rtc_sec;
 	pcf85263a_tsr1_minutes_reg_t rtc_min;
 	pcf85263a_tsr1_hours_reg_t rtc_hours;
 	pcf85263a_tsr1_days_reg_t rtc_date;
@@ -57,7 +57,7 @@ struct pcf85263a_rtc_tsr1_registers {
 } __packed;
 
 struct pcf85263a_rtc_tsr2_registers {
-    pcf85263a_tsr2_seconds_reg_t rtc_sec;
+	pcf85263a_tsr2_seconds_reg_t rtc_sec;
 	pcf85263a_tsr2_minutes_reg_t rtc_min;
 	pcf85263a_tsr2_hours_reg_t rtc_hours;
 	pcf85263a_tsr2_days_reg_t rtc_date;
@@ -66,7 +66,7 @@ struct pcf85263a_rtc_tsr2_registers {
 } __packed;
 
 struct pcf85263a_rtc_tsr3_registers {
-    pcf85263a_tsr3_seconds_reg_t rtc_sec;
+	pcf85263a_tsr3_seconds_reg_t rtc_sec;
 	pcf85263a_tsr3_minutes_reg_t rtc_min;
 	pcf85263a_tsr3_hours_reg_t rtc_hours;
 	pcf85263a_tsr3_days_reg_t rtc_date;
@@ -128,7 +128,7 @@ typedef struct {
  * @retval return 0 on success, or a negative error code from an I2C
  * transaction or invalid parameter.
  */
-int pcf85263a_init(const char* device);
+int pcf85263a_init(const char *device);
 
 /** @brief Set the RTC to a given Unix time
  *
@@ -152,7 +152,7 @@ int pcf85263a_rtc_set_time(time_t unix_time);
  * @retval return 0 on success, or a negative error code from an I2C
  * transaction or invalid parameter.
  */
-int pcf85263a_rtc_get_time(time_t* unix_time);
+int pcf85263a_rtc_get_time(time_t *unix_time);
 
 /** @brief Initializes the Watchdog feature in PCF85263A
  *

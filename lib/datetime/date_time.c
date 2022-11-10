@@ -301,6 +301,10 @@ int date_time_set(const struct tm *new_date_time)
 	return 0;
 }
 
+int date_time_set_second(uint32_t new_date_time_sec) {
+	return pcf85263a_rtc_set_time((time_t)new_date_time_sec);
+}
+
 int date_time_uptime_to_unix_time_ms(int64_t *uptime)
 {
 	int64_t uptime_prev;

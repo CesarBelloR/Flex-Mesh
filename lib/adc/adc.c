@@ -57,15 +57,18 @@ int adc_init(void)
 
 int adc_get_channel(int channel)
 {
-	int16_t buf;
+	int16_t sample_buffer[1];
 	int err = 0;
 	struct adc_sequence sequence = {
-		.buffer = &buf,
+		.buffer      = sample_buffer,
 		/* buffer size in bytes, not number of samples */
-		.buffer_size = sizeof(buf),
+		.buffer_size = sizeof(sample_buffer),
 	};
 
+
 	if (channel >= 0 && channel < ADC_NUM_CHANNELS) {
+		sequence.resolution = 10;
+		sequence.oversampling = 0;
 		(void)adc_sequence_init_dt(&adc_channels[channel], &sequence);
 
 		err = adc_read(adc_channels[channel].dev, &sequence);
@@ -73,7 +76,7 @@ int adc_get_channel(int channel)
 			LOG_ERR("Could not read (%d)", err);
 			return -1;
 		} else {
-			return buf;
+			return sample_buffer[0];
 		}
 	}
 	return -1;

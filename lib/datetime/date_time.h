@@ -44,6 +44,16 @@ typedef void (*date_time_evt_handler_t)(const struct date_time_evt *evt);
  */
 int date_time_set(const struct tm *new_date_time);
 
+/**
+ * @brief Set the current date/time based UTC time
+ * 
+ * @param new_date_time_sec New date/time in UTC seconds
+ *  @return 0        If the operation was successful.
+ *  @return -EINVAL  If a member of the passing variable new_date_time does not
+ *                   adhere to the tm structure format, or pointer is passed in as NULL.
+ */
+int date_time_set_second(uint32_t new_date_time_sec);
+
 /** @brief Get the date time UTC when the passing variable uptime was set.
  *         This function requires that k_uptime_get() has been called on the
  *         passing variable uptime prior to the function call.
@@ -74,7 +84,7 @@ int date_time_uptime_to_unix_time_ms(int64_t *uptime);
  */
 int date_time_local_second(uint32_t *local_time_s);
 
-/** @brief Get the current date time UTC.
+/** @brief Get the current date time UTC in miliseconds
  *
  *  @warning If the function fails, the passed in variable retains its
  *           old value.
@@ -88,6 +98,18 @@ int date_time_local_second(uint32_t *local_time_s);
  */
 int date_time_now(int64_t *unix_time_ms);
 
+/** @brief Get the current date time UTC in seconds
+ *
+ *  @warning If the function fails, the passed in variable retains its
+ *           old value.
+ *
+ *  @param[out] unix_time_ms Pointer to a variable to store the current date
+ *                           time UTC.
+ *
+ *  @return 0        If the operation was successful.
+ *  @return -ENODATA If the library does not have a valid date time UTC.
+ *  @return -EINVAL  If the passed in pointer is NULL.
+ */
 int date_time_now_second(uint32_t *unix_time_s);
 
 /** @brief Convenience function that checks if the library has obtained
@@ -150,6 +172,10 @@ int date_time_clear(void);
  */
 int date_time_timestamp_clear(int64_t *unix_timestamp);
 
+/**
+ * @brief Start date/time thread 
+ * 
+ */
 void date_time_start_work(void);
 #ifdef __cplusplus
 }
