@@ -61,8 +61,12 @@ static void app_driver_init(void) {
 	bq24195_init();
 }
 
+char key[] = "ElL10TaC4T";
+
 void main(void)
 {
+	etc_cape_init(key, 10, 0);
+	etc_cape_set_key(key, 10); 
 	uint32_t dtr = 0;
 	const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_shell_uart));
 	if (!device_is_ready(dev) || usb_enable(NULL)) {
@@ -75,9 +79,7 @@ void main(void)
 	}
 
 	app_driver_init();
-	k_sleep(K_MSEC(100));
-	app_modem_init();
-	k_sleep(K_SECONDS(1));
-	extern void modem_init(void);
-	modem_init();
+	while(1) {
+		k_sleep(K_MSEC(100));
+	}
 }
