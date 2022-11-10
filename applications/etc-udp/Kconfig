@@ -4,6 +4,10 @@ config APP_VERSION
 	string "Application version"
 	default "v1.0.0"
 
+config NATIVE_TLS
+	bool "Use the native TLS stack instead of the offloaded stack."
+	default false
+
 endmenu
 
 menu "Zephyr Kernel"
