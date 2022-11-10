@@ -173,27 +173,23 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
+	extern bool quectel_bg95_is_ready(void);
+	if (quectel_bg95_is_ready()) {
+		state_set(STATE_CONNECTED);
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
+	} else {
+		state_set(STATE_DISCONNECTED);
+	}
 	return 0;
 }
 
 /* Message handler for STATE_INIT */
 static void on_state_init(struct modem_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_INITIALIZED)) {
-		int err;
-
-		state_set(STATE_DISCONNECTED);
-
-		err = setup();
-		__ASSERT(err == 0, "Failed running setup()");
-		SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
-
-		err = lte_connect();
-		if (err) {
-			LOG_ERR("Failed connecting to LTE, error: %d", err);
-			SEND_ERROR(modem, MODEM_EVT_ERROR, err);
-		}
-	}
+	LOG_DBG("");
+	int err = setup();
+	__ASSERT(err == 0, "Failed running setup()");
+	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
 }
 
 /* Message handler for STATE_DISCONNECTED. */

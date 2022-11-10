@@ -12,16 +12,19 @@
 #include <fs/littlefs.h>
 #include <app_event_manager.h>
 #include <zephyr/sys/reboot.h>
-
+#include "data/etc_cape.h"
 #include "events/app_event.h"
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
+char key[] = "ElL10TaC4T";
+
 void main(void)
 {
 	struct mcuboot_img_header img_hdr;
-
+	etc_cape_init(key, 10, 0);
+	etc_cape_set_key(key, 10); 
 	int rc = boot_write_img_confirmed();
 	if(rc)
 		LOG_ERR("Img confirmed failed\n");

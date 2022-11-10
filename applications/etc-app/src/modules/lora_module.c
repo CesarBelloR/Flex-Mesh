@@ -1,6 +1,11 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
 #include <app_event_manager.h>
+#include <drivers/lora.h>
+#include <zephyr.h>
+#include "data/etc_cape.h"
+#include "data/data_codec.h"
+#include <net/aws_iot.h>
 
 #define MODULE lora_module
 #define MODULE_LORA_THREAD_STACK_SIZE 2048
@@ -14,6 +19,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
+#define LORA_ACKUNCRYPT_LEN 69
 struct lora_msg_data {
 	union {
 		struct app_event app;
@@ -37,10 +43,42 @@ static enum sub_state_type {
 /* Lora module message queue. */
 #define LORA_QUEUE_ENTRY_COUNT 10
 #define LORA_QUEUE_BYTE_ALIGNMENT 4
+#define MODULE_LORA_SENSOR_BUFFER_COUNT 32
+
+static struct data_lora_sensors lora_buf[MODULE_LORA_SENSOR_BUFFER_COUNT];
+
+static int head_lora_buf = 0;
 
 K_MSGQ_DEFINE(msgq_lora, sizeof(struct lora_msg_data),
 	      LORA_QUEUE_ENTRY_COUNT, LORA_QUEUE_BYTE_ALIGNMENT);
 
+static void rx_thread_fn(void);
+static K_KERNEL_STACK_DEFINE(lora_rx_stack, 1024);
+
+static void lora_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(lora_work, lora_work_fn);
+
+static struct lora_modem_config etc_lora_rx_config = {
+	.frequency = 915000000,
+	.bandwidth = BW_125_KHZ,
+	.datarate = SF_7,
+	.preamble_len = 8,
+	.coding_rate = CR_4_5,
+	.tx_power = 14,
+	.tx = false,
+};
+static struct lora_modem_config etc_lora_tx_config  = {
+	.frequency = 915000000,
+	.bandwidth = BW_125_KHZ,
+	.datarate = SF_7,
+	.preamble_len = 8,
+	.coding_rate = CR_4_5,
+	.tx_power = 14,
+	.tx = true,
+};
+
+const struct device* lora_dev = DEVICE_DT_GET(DT_ALIAS(lora0));
+static struct k_thread	       lora_rx_thread;
 static struct module_data self = {
 	.name = "lora",
 	.msg_q = &msgq_lora,
@@ -143,14 +181,25 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static int setup(void)
 {
+	if (!device_is_ready(lora_dev))
+	{
+		return -1;
+	}
+
+	k_thread_create(&lora_rx_thread, lora_rx_stack,
+			K_KERNEL_STACK_SIZEOF(lora_rx_stack),
+			(k_thread_entry_t) rx_thread_fn,
+			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
+	k_work_reschedule(&lora_work, K_SECONDS(1 * 30));
 	return 0;
 }
 
 /* Message handler for STATE_INIT. */
 static void on_state_init(struct lora_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
+	if (IS_EVENT(msg, app, APP_EVT_START)) {
 		state_set(STATE_RUNNING);
+		sub_state_set(SUB_STATE_RECEIVE_MODE);
 	}
 }
 
@@ -185,6 +234,96 @@ static void on_sub_state_transmit(struct lora_msg_data *msg)
 /* Message handler for SUB_STATE_RECEIVE_MODE. */
 static void on_sub_state_receive(struct lora_msg_data *msg)
 {
+
+}
+
+static void data_encode(void) {
+	if (head_lora_buf == 0) {
+		return;
+	}
+
+	LOG_INF("Head lora buf %d", head_lora_buf);
+	char* data_msg = data_codec_prepare_cloud_packet(lora_buf, head_lora_buf);
+	if (data_msg == NULL) {
+		LOG_WRN("No message to publish");
+		return;
+	}
+	const char topic_lora_data[] = "etc/sensor/data";
+
+	struct aws_iot_data tx_data = {
+		.qos = MQTT_QOS_0_AT_MOST_ONCE,
+		.topic.str = topic_lora_data,
+		.topic.len = strlen(topic_lora_data),
+		.ptr = data_msg,
+		.len = strlen(data_msg)
+	};
+
+	LOG_INF("Publishing: %s", data_msg);
+
+	int err = aws_iot_send(&tx_data);
+	if (err) {
+		LOG_ERR("aws_iot_send, error: %d", err);
+	}
+
+	head_lora_buf = 0;
+}
+
+static void lora_work_fn(struct k_work *work) {
+	data_encode();
+	k_work_reschedule(&lora_work, K_SECONDS(1 * 30));
+}
+
+static void lora_module_send(const char* msg, int msg_len)
+{
+	struct data_lora_sensors new_lora_data = {
+		.queued = true,
+		.env_ts = k_uptime_get(),
+	};
+	memcpy(new_lora_data.sensor_msg, msg, msg_len);
+	new_lora_data.sensor_msg[msg_len] = '\0';
+	data_codec_populate_lora_sensor_buffer(lora_buf, &new_lora_data, &head_lora_buf, ARRAY_SIZE(lora_buf));
+}
+
+static void lora_module_report_data(const uint8_t* package) {
+	char *token = strchr((const char*)package, ',');
+	int count = 0;
+	while (token != NULL) {
+		count += 1;
+		if (count == 7) {
+			LOG_INF("Token %s", token);
+			token += 1;
+			lora_module_send(token, strlen(token));
+		};
+		token = strchr(token + 1, ',');
+	}
+}
+
+static void rx_thread_fn(void) {
+	uint32_t t0 = k_uptime_get_32();
+	int ret = lora_config(lora_dev, &etc_lora_rx_config);
+	if (ret < 0) {
+		LOG_ERR("Lora_config failed error %d", ret);
+	}
+	ret = 0;
+	uint8_t rx_buf[128] = {0x00};
+	int16_t rssi;
+	int8_t snr;
+	while (1) {
+		ret = lora_recv(lora_dev, rx_buf, sizeof(rx_buf), K_FOREVER, &rssi, &snr);
+		if (ret < 0) {
+			continue;
+		} else {
+			char decoded_buffer[LORA_ACKUNCRYPT_LEN] = {0};
+  			etc_cape_decrypt(rx_buf, decoded_buffer, ret); 
+			if (decoded_buffer[0] == 'S') {
+				LOG_INF("Received data: RSSI:%ddBm, SNR:%ddBm", rssi, snr);
+				LOG_INF("%.*s", LORA_ACKUNCRYPT_LEN, decoded_buffer);
+				lora_module_report_data(decoded_buffer);
+			}
+			memset(rx_buf, 0, sizeof(rx_buf));
+		}
+		k_sleep(K_MSEC(100));
+	}
 }
 
 static void module_thread_fn(void)

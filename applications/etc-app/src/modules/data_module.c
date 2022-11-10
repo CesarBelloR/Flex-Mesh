@@ -8,7 +8,7 @@
 #include <app_event_manager.h>
 #include <zephyr/settings/settings.h>
 #include <date_time.h>
-
+#include <net/aws_iot.h>
 #include "data/data_codec.h"
 
 #define MODULE data_module
@@ -24,6 +24,7 @@
 #include "events/sensor_event.h"
 #include "events/ui_event.h"
 #include "events/util_event.h"
+#include "events/lora_event.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
@@ -40,6 +41,7 @@ struct data_msg_data {
 		struct data_event data;
 		struct app_event app;
 		struct util_event util;
+		struct lora_event lora;
 	} module;
 };
 
@@ -52,6 +54,7 @@ static enum state_type {
 
 static struct data_sensors sensors_buf[MODULE_DATA_SENSOR_BUFFER_COUNT];
 static struct data_battery bat_buf[MODULE_DATA_BATTERY_BUFFER_COUNT];
+
 static struct data_modem_static modem_stat;
 
 /* Size of the static modem (modem_stat) data structure.
@@ -60,9 +63,9 @@ static struct data_modem_static modem_stat;
 #define MODEM_STATIC_ARRAY_SIZE 1
 
 /* Head of ringbuffers. */
-static int head_sensor_buf;
-static int head_modem_dyn_buf;
-static int head_bat_buf;
+static int head_sensor_buf = 0;
+static int head_modem_dyn_buf = 0;
+static int head_bat_buf = 0;
 
 static K_SEM_DEFINE(config_load_sem, 0, 1);
 
@@ -211,11 +214,6 @@ static int setup(void)
 	return 0;
 }
 
-/* This function allocates buffer on the heap, which needs to be freed after use. */
-static void data_encode(void)
-{
-}
-
 static void config_get(void)
 {
 	SEND_EVENT(data, DATA_EVT_CONFIG_GET);
@@ -291,6 +289,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+		// data_encode();
 		return;
 	}
 
@@ -316,17 +315,18 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
+		LOG_INF("APP_EVT_DATA_GET");
 		/* Store which data is requested by the app, later to be used
 		 * to confirm data is reported to the data manger.
 		 */
-		requested_data_list_set(msg->module.app.data_list,
-					msg->module.app.count);
+		// requested_data_list_set(msg->module.app.data_list,
+		// 			msg->module.app.count);
 
 		/* Start countdown until data must have been received by the
 		 * Data module in order to be sent to cloud
 		 */
-		k_work_reschedule(&data_send_work,
-				      K_SECONDS(msg->module.app.timeout));
+		// k_work_reschedule(&data_send_work,
+		// 		      (K_NO_WAIT));
 
 		return;
 	}
@@ -440,3 +440,4 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, gnss_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, sensor_event);
+APP_EVENT_SUBSCRIBE_EARLY(MODULE, lora_event);

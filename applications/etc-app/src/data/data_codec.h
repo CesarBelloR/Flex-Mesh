@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "events/lora_event.h"
 
 /** @brief Structure containing battery data published to cloud. */
 struct data_battery {
@@ -39,4 +40,40 @@ struct data_modem_static {
 	bool queued : 1;
 };
 
+struct data_lora_sensors {
+	int64_t env_ts;
+	char sensor_msg[LORA_EVENT_MSG_DATA_LEN];
+	/** Flag signifying that the data entry is to be encoded. */
+	bool queued : 1;
+};
+
+/** @brief Type of data to be handled by the respective API. Used to signify what data structure
+ *         that is passed in to the function.
+ */
+enum json_common_buffer_type {
+	JSON_COMMON_SENSOR,
+	JSON_COMMON_LORA_SENSOR,
+	JSON_COMMON_COUNT
+};
+
+/** @brief Operation to be carried out with the passed in data. */
+enum json_common_op_code {
+	JSON_COMMON_INVALID,
+	/** Encode data and add it to a passed in parent array object. This option does not
+	 *  label the encoded data.
+	 */
+	JSON_COMMON_ADD_DATA_TO_ARRAY,
+	/** Encode data and add it to a passed in parent object. */
+	JSON_COMMON_ADD_DATA_TO_OBJECT,
+	/** Encode data and set the passed in object pointer to point to it. */
+	JSON_COMMON_GET_POINTER_TO_OBJECT
+};
+
+void data_codec_populate_lora_sensor_buffer(
+				struct data_lora_sensors *sensor_buffer,
+				struct data_lora_sensors *new_sensor_data,
+				int *head_sensor_buf,
+				size_t buffer_count);
+
+char* data_codec_prepare_cloud_packet(struct data_lora_sensors *sensor_buf, size_t sensor_buf_count);
 #endif /* DATA_CODEC_H__ */

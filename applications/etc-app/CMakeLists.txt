@@ -19,3 +19,6 @@ target_sources(app PRIVATE src/main.c)
 add_subdirectory_ifdef(CONFIG_WATCHDOG_APPLICATION src/watchdog)
 add_subdirectory(src/events)
 add_subdirectory(src/modules)
+add_subdirectory(src/data)
+
+zephyr_include_directories_ifdef(CONFIG_AWS_IOT_PROVISION_CERTIFICATES certs)

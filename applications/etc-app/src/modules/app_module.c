@@ -51,6 +51,14 @@ static enum sub_state_type {
 #define APP_QUEUE_ENTRY_COUNT		10
 #define APP_QUEUE_BYTE_ALIGNMENT	4
 
+/* Timer callback used to signal when timeout has occurred both in active
+ * and passive mode.
+ */
+static void data_sample_timer_handler(struct k_timer *timer);
+
+/* Data sample timer used in active mode. */
+K_TIMER_DEFINE(data_sample_timer, data_sample_timer_handler, NULL);
+
 K_MSGQ_DEFINE(msgq_app, sizeof(struct app_msg_data), APP_QUEUE_ENTRY_COUNT,
 	      APP_QUEUE_BYTE_ALIGNMENT);
 
@@ -190,7 +198,15 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static int setup(void)
 {
+	// k_timer_start(&data_sample_timer, K_SECONDS(10), K_SECONDS(10));
 	return 0;
+}
+
+static void data_sample_timer_handler(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+	LOG_DBG("Send request to get data");
+	SEND_EVENT(app, APP_EVT_DATA_GET);
 }
 
 /* Message handler for STATE_INIT. */
@@ -211,6 +227,7 @@ static void on_sub_state_passive(struct app_msg_data *msg)
 /* Message handler for SUB_STATE_ACTIVE_MODE. */
 static void on_sub_state_active(struct app_msg_data *msg)
 {
+	
 }
 
 /* Message handler for all states. */
@@ -227,7 +244,7 @@ static void module_thread_fn(void)
 	err = module_start(&self);
 	if (err) {
 		LOG_ERR("Failed starting module, error: %d", err);
-		SEND_ERROR(lora, LORA_EVT_ERROR, err);
+		SEND_ERROR(app, APP_EVT_ERROR, err);
 	}
 
 	state_set(STATE_INIT);
@@ -235,9 +252,8 @@ static void module_thread_fn(void)
 	err = setup();
 	if (err) {
 		LOG_ERR("setup, error: %d", err);
-		SEND_ERROR(lora, LORA_EVT_ERROR, err);
+		SEND_ERROR(app, APP_EVT_ERROR, err);
 	}
-
 
 	while (true) {
 		module_get_next_msg(&self, &msg);
