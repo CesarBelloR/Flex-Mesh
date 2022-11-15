@@ -409,6 +409,63 @@ MODEM_CMD_DEFINE(on_cmd_sock_readdata)
 						ATOI(argv[0], 0, "length"), len);
 }
 
+/* Handler: Read data size +QIRD: <length>[0] OR +QSSLRECV: <length>[0] */
+MODEM_CMD_DEFINE(on_cmd_sock_getdatasize)
+{
+	int received, read, unread;
+
+	received = ATOI(argv[0], 0, "recvd");
+	read = ATOI(argv[1], 0, "read");
+	unread = ATOI(argv[2], 0, "unread");
+	LOG_DBG("recvd %d, read %d, unread %d", received, read, unread);
+	mdata.unread_size = unread;
+
+	return 0;
+}
+
+/* Func: get_data_size
+ * Desc: This function will retrieve the size of the
+ * data available on the socket object.
+ */
+static ssize_t get_data_size(struct modem_socket *sock)
+{
+	char   sendbuf[sizeof("AT+Q###RECV=##,####")] = {0};
+	int    ret;
+	struct socket_read_data sock_data;
+	/* Modem command to read the data. */
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("+QIRD: ", on_cmd_sock_getdatasize, 3U, ","),
+		MODEM_CMD("+QSSLRECV: ", on_cmd_sock_getdatasize, 3U, ",") };
+
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || 
+		(sock->ip_proto == IPPROTO_DTLS_1_2)) {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", 
+				sock->sock_fd, 0);
+	} else {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", 
+				sock->sock_fd, 0);
+	}
+
+	/* Socket read settings */
+	(void) memset(&sock_data, 0, sizeof(sock_data));
+	// sock->data	       = &sock_data;
+	// mdata.sock_fd	   = sock->sock_fd;
+	/* Tell the modem to give us the available data's length */
+	/* (AT+QIRD=sock_fd,0). */
+	k_sem_reset(&mdata.sem_response);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     cmd, ARRAY_SIZE(cmd), sendbuf, &mdata.sem_response,
+			     MDM_RECV_TIMEOUT);
+	if (ret < 0) {
+		errno = -ret;
+		ret = -1;
+	} else {
+		ret = mdata.unread_size;
+	}
+
+	return ret;
+}
+
 /* Handler: Data receive indication. */
 MODEM_CMD_DEFINE(on_cmd_unsol_recv)
 {
@@ -743,6 +800,19 @@ retry:
 
 	/* return length of received data */
 	errno = 0;
+
+	/* Update data on socket with current size. */
+	int new_size = get_data_size(sock);
+	ret = modem_socket_packet_size_update(&mdata.socket_config, sock, new_size);
+	if (ret < 0) {
+		LOG_ERR("socket_id:%d err: %d", sock->sock_fd, ret);
+	}
+	if (new_size > 0) {
+		/* Data ready indication. */
+		LOG_DBG("Data Receive Indication for socket: %d", sock->sock_fd);
+		modem_socket_data_ready(&mdata.socket_config, sock);
+	}
+
 	ret = sock_data.recv_read_len;
 
 exit:
