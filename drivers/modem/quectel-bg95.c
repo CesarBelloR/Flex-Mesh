@@ -155,7 +155,7 @@ static int on_cmd_sockread_common(int socket_fd,
 	}
 
 	/* Skip CRLF */
-	bytes_to_skip = 4;
+	bytes_to_skip = 3;
 	for (i = 0; i < bytes_to_skip; i++) {
 		net_buf_pull_u8(data->rx_buf);
 	}
@@ -798,8 +798,8 @@ retry:
 		memcpy(from, &sock->dst, *fromlen);
 	}
 
-	/* return length of received data */
-	errno = 0;
+	LOG_HEXDUMP_DBG(sock_data.recv_buf, sock_data.recv_read_len, "RECV");
+
 
 	/* Update data on socket with current size. */
 	int new_size = get_data_size(sock);
@@ -813,6 +813,8 @@ retry:
 		modem_socket_data_ready(&mdata.socket_config, sock);
 	}
 
+	/* return length of received data */
+	errno = 0;
 	ret = sock_data.recv_read_len;
 
 exit:
