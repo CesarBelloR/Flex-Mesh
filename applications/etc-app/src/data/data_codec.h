@@ -75,5 +75,8 @@ void data_codec_populate_lora_sensor_buffer(
 				int *head_sensor_buf,
 				size_t buffer_count);
 
-char* data_codec_prepare_cloud_packet(struct data_lora_sensors *sensor_buf, size_t sensor_buf_count);
+char* data_codec_prepare_cloud_packet(struct data_lora_sensors *sensor_buf, 
+				size_t sensor_buf_count,
+				struct data_modem_static *modem_data,
+				struct data_battery *batt_data);
 #endif /* DATA_CODEC_H__ */

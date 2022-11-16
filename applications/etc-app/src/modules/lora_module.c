@@ -43,7 +43,7 @@ static enum sub_state_type {
 /* Lora module message queue. */
 #define LORA_QUEUE_ENTRY_COUNT 10
 #define LORA_QUEUE_BYTE_ALIGNMENT 4
-#define MODULE_LORA_SENSOR_BUFFER_COUNT 32
+#define MODULE_LORA_SENSOR_BUFFER_COUNT 8
 
 static struct data_lora_sensors lora_buf[MODULE_LORA_SENSOR_BUFFER_COUNT];
 
@@ -243,12 +243,13 @@ static void data_encode(void) {
 	}
 
 	LOG_INF("Head lora buf %d", head_lora_buf);
-	char* data_msg = data_codec_prepare_cloud_packet(lora_buf, head_lora_buf);
+	char* data_msg = data_codec_prepare_cloud_packet(lora_buf, head_lora_buf,
+							NULL, NULL);
 	if (data_msg == NULL) {
 		LOG_WRN("No message to publish");
 		return;
 	}
-	const char topic_lora_data[] = "etc/sensor/data";
+	const char topic_lora_data[] = "exact/core/readings";
 
 	struct aws_iot_data tx_data = {
 		.qos = MQTT_QOS_0_AT_MOST_ONCE,
