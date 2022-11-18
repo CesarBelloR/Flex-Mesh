@@ -125,6 +125,9 @@ struct modem_data {
 	char file_name[MDM_FILE_NAME_MAX_LENGTH];
 	int file_size;
 
+	/* Unread data status */
+	int unread_size;
+
 	/* Semaphore(s) */
 	struct k_sem sem_response;
 	struct k_sem sem_tx_ready;
