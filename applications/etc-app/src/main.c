@@ -8,6 +8,7 @@
 #include <pm/pm.h>
 #include <pm/device.h>
 #include <drivers/hwinfo.h>
+#include <stats/stats.h>
 #include <fs/fs.h>
 #include <fs/littlefs.h>
 #include <app_event_manager.h>
@@ -18,14 +19,82 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
+#ifdef CONFIG_MCUMGR_CMD_FS_MGMT
+#include <device.h>
+#endif
+#ifdef CONFIG_MCUMGR_CMD_OS_MGMT
+#include "os_mgmt/os_mgmt.h"
+#endif
+#ifdef CONFIG_MCUMGR_CMD_IMG_MGMT
+#include "img_mgmt/img_mgmt.h"
+#endif
+#ifdef CONFIG_MCUMGR_CMD_STAT_MGMT
+#include "stat_mgmt/stat_mgmt.h"
+#endif
+#ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
+#include "shell_mgmt/shell_mgmt.h"
+#endif
+#ifdef CONFIG_MCUMGR_CMD_FS_MGMT
+#include "fs_mgmt/fs_mgmt.h"
+#endif
+
+#define PARTITION_NODE DT_NODELABEL(lfs1)
+
+#if DT_NODE_EXISTS(PARTITION_NODE)
+FS_FSTAB_DECLARE_ENTRY(PARTITION_NODE);
+#else /* PARTITION_NODE */
+FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(storage);
+#endif /* PARTITION_NODE */
+
+struct fs_mount_t *mount_point = &FS_FSTAB_ENTRY(PARTITION_NODE);
+
+/* Define an example stats group; approximates seconds since boot. */
+STATS_SECT_START(smp_svr_stats)
+STATS_SECT_ENTRY(ticks)
+STATS_SECT_END;
+
+/* Assign a name to the `ticks` stat. */
+STATS_NAME_START(smp_svr_stats)
+STATS_NAME(smp_svr_stats, ticks)
+STATS_NAME_END(smp_svr_stats);
+/* Define an instance of the stats group. */
+STATS_SECT_DECL(smp_svr_stats) smp_svr_stats;
+
 char key[] = "ElL10TaC4T";
 
 void main(void)
 {
+	int rc = STATS_INIT_AND_REG(smp_svr_stats, STATS_SIZE_32,
+		"smp_svr_stats");
+	if (rc < 0) {
+		LOG_ERR("Error initializing stats system [%d]", rc);
+	}
+#ifdef CONFIG_MCUMGR_CMD_OS_MGMT
+	os_mgmt_register_group();
+#endif
+#ifdef CONFIG_MCUMGR_CMD_IMG_MGMT
+	img_mgmt_register_group();
+#endif
+#ifdef CONFIG_MCUMGR_CMD_STAT_MGMT
+	stat_mgmt_register_group();
+#endif
+#ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
+	shell_mgmt_register_group();
+#endif
+#ifdef CONFIG_MCUMGR_CMD_FS_MGMT
+	fs_mgmt_register_group();
+#endif
+#ifdef CONFIG_MCUMGR_SMP_BT
+	start_smp_bluetooth();
+#endif
+#ifdef CONFIG_MCUMGR_SMP_UDP
+	start_smp_udp();
+#endif
 	struct mcuboot_img_header img_hdr;
 	etc_cape_init(key, 10, 0);
 	etc_cape_set_key(key, 10); 
-	int rc = boot_write_img_confirmed();
+	
+	rc = boot_write_img_confirmed();
 	if(rc)
 		LOG_ERR("Img confirmed failed\n");
 

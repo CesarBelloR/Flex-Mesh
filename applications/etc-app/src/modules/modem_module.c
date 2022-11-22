@@ -5,7 +5,7 @@
 #include <math.h>
 
 #define MODULE modem_module
-#define MODULE_MODEM_THREAD_STACK_SIZE 2048
+#define MODULE_MODEM_THREAD_STACK_SIZE 512
 
 
 #include "modules_common.h"

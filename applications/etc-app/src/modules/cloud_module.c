@@ -12,7 +12,7 @@
 
 #define MODULE cloud
 #define MODULE_CLOUD_CONNECT_RETRIES 5
-#define MODULE_CLOUD_THREAD_STACK_SIZE 2048
+#define MODULE_CLOUD_THREAD_STACK_SIZE 1024
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>

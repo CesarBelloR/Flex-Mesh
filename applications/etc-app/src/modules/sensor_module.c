@@ -4,7 +4,7 @@
 #include <app_event_manager.h>
 
 #define MODULE sensor_module
-#define MODULE_SENSOR_THREAD_STACK_SIZE 2048
+#define MODULE_SENSOR_THREAD_STACK_SIZE 512
 
 #include "modules_common.h"
 #include "events/app_event.h"
