@@ -7,4 +7,5 @@ target_sources(app PRIVATE
 	       ${CMAKE_CURRENT_SOURCE_DIR}/ui_module.c
 	       ${CMAKE_CURRENT_SOURCE_DIR}/modules_common.c
 	       ${CMAKE_CURRENT_SOURCE_DIR}/modem_module.c
+	       ${CMAKE_CURRENT_SOURCE_DIR}/util_module.c
 )
