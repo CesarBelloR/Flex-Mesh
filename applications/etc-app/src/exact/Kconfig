@@ -1,0 +1,5 @@
+menu "EXACT Services and Libraries"
+rsource "etc_data_fs/Kconfig"
+rsource "etc_date_time/Kconfig"
+rsource "watchdog/Kconfig"
+endmenu
