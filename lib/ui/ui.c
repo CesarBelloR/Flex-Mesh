@@ -1,5 +1,5 @@
 #include <logging/log.h>
-
+#include <stdlib.h>
 #include "ui.h"
 #include "led_pwm.h"
 
@@ -95,3 +95,21 @@ int ui_init()
 
 	return err;
 }
+
+#ifdef CONFIG_SHELL
+#include <zephyr/shell/shell.h>
+static int cmd_ui_set(const struct shell *shell, size_t argc, char **argv)
+{
+	int pattern = atoi(argv[1]);
+	shell_print(shell, "Set UI color %d", pattern);
+	ui_led_set_pattern((enum ui_led_pattern)pattern);
+	return 0;
+}
+
+/* Creating subcommands (level 1 command) array for command "demo". */
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_ui,
+	SHELL_CMD(set,   NULL, "Set the LED patten", cmd_ui_set),
+	SHELL_SUBCMD_SET_END
+);
+SHELL_CMD_REGISTER(ui, &sub_ui, "ETC UI Commands", NULL);
+#endif
