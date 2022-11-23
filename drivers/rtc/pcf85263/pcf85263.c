@@ -303,7 +303,7 @@ int pcf85263a_rtc_set_time(time_t unix_time)
 
 	/* Convert unix_time to civil time */
 	gmtime_r(&unix_time, &time_buffer);
-	LOG_DBG("Desired time is %d-%d-%d %d:%d:%d\n", (time_buffer.tm_year + 1900),
+	LOG_DBG("Desired time is %4d-%02d-%02d %2d:%02d:%02d", (time_buffer.tm_year + 1900),
 		(time_buffer.tm_mon + 1), time_buffer.tm_mday, time_buffer.tm_hour,
 		time_buffer.tm_min, time_buffer.tm_sec);
 
