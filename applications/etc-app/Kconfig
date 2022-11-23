@@ -12,8 +12,7 @@ config CONNECTION_RETRY_TIMEOUT_SECONDS
 	int "Number of seconds between each AWS IoT connection retry"
 	default 30
 
-rsource "src/watchdog/Kconfig"
-
+rsource "src/exact/Kconfig"
 endmenu
 
 menu "Zephyr Kernel"

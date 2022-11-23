@@ -56,6 +56,12 @@ enum json_common_buffer_type {
 	JSON_COMMON_COUNT
 };
 
+typedef union {
+	struct data_lora_sensors lora;
+	struct data_battery battery;
+	struct data_sensors sensor;
+} data_etc_sensors;
+
 /** @brief Operation to be carried out with the passed in data. */
 enum json_common_op_code {
 	JSON_COMMON_INVALID,

@@ -3,9 +3,9 @@
 #include <app_event_manager.h>
 #include <drivers/lora.h>
 #include <zephyr.h>
+#include "etc_date_time.h"
 #include "data/etc_cape.h"
 #include "data/data_codec.h"
-#include <net/aws_iot.h>
 
 #define MODULE lora_module
 #define MODULE_LORA_THREAD_STACK_SIZE 1024
@@ -234,7 +234,7 @@ static void lora_data_send(const char* msg, int msg_len)
 
 	memcpy(lora_module_event->data.sensor_msg, msg, msg_len);
 	lora_module_event->data.sensor_msg[msg_len] = '\0';
-	lora_module_event->data.timestamp = k_uptime_get();
+	lora_module_event->data.timestamp = date_time_now_second();
 	lora_module_event->type = LORA_EVT_RX_DATA_READY;
 
 	APP_EVENT_SUBMIT(lora_module_event);

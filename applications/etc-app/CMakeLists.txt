@@ -17,7 +17,7 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE src/main.c)
 target_sources_ifdef(CONFIG_MCUMGR_SMP_BT app PRIVATE src/bluetooth.c)
 
-add_subdirectory_ifdef(CONFIG_WATCHDOG_APPLICATION src/watchdog)
+add_subdirectory(src/exact)
 add_subdirectory(src/events)
 add_subdirectory(src/modules)
 add_subdirectory(src/data)

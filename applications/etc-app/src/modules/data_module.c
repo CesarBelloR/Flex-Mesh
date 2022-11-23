@@ -7,9 +7,10 @@
 #include <zephyr/kernel.h>
 #include <app_event_manager.h>
 #include <zephyr/settings/settings.h>
-#include <date_time.h>
 #include <net/aws_iot.h>
 #include "data/data_codec.h"
+#include "etc_date_time.h"
+#include "etc_data_fs.h"
 
 #define MODULE data_module
 #define MODULE_DATA_THREAD_STACK_SIZE 2048
@@ -363,9 +364,10 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
 		struct data_lora_sensors new_lora_data = {
 			.queued = true,
-			.env_ts = k_uptime_get(),
+			.env_ts = msg->module.lora.data.timestamp,
 		};
 		memcpy(new_lora_data.sensor_msg, msg->module.lora.data.sensor_msg, LORA_EVENT_MSG_DATA_LEN);
+		etc_data_fs_notify_data((uint8_t*)&new_lora_data, sizeof(struct data_lora_sensors));
 		data_codec_populate_lora_sensor_buffer(lora_buf, &new_lora_data, &head_lora_buf, ARRAY_SIZE(lora_buf));
 	}
 }
