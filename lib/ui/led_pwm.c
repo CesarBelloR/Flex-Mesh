@@ -150,7 +150,7 @@ int ui_leds_init(void)
 	}
 
 	leds.id = 0;
-	leds.effect = &effect[UI_LTE_DISCONNECTED];
+	leds.effect = &effect[UI_LTE_CONNECTING];
 
 	k_work_init_delayable(&leds.work, work_handler);
 	led_update(&leds);

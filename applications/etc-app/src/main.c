@@ -17,6 +17,7 @@
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
+#include "ui.h"
 #include "data/etc_cape.h"
 #include "events/app_event.h"
 
@@ -152,6 +153,7 @@ void main(void)
 		    (unsigned int) img_hdr.h.v1.sem_ver.revision,
 		    (unsigned int) img_hdr.h.v1.sem_ver.build_num);
 	}
+	ui_init();
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 	date_time_start_work();
 #endif
