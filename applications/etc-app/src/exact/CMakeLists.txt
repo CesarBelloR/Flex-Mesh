@@ -1,3 +1,4 @@
 add_subdirectory_ifdef(CONFIG_ETC_DATA_FS etc_data_fs)
 add_subdirectory_ifdef(CONFIG_ETC_DATE_TIME etc_date_time)
+add_subdirectory_ifdef(CONFIG_ETC_INTERFACE etc_interface)
 add_subdirectory_ifdef(CONFIG_WATCHDOG_APPLICATION watchdog)

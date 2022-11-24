@@ -6,6 +6,7 @@
 #include <app_event_manager.h>
 #include "adc.h"
 #include "etc_date_time.h"
+#include "etc_interface.h"
 #define MODULE sensor_module
 #define MODULE_SENSOR_THREAD_STACK_SIZE 512
 
@@ -50,6 +51,7 @@ K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 /* Forward declarations */
 static void sensor_poll_work_fn(struct k_work *work);
 
+static bool sensor_is_processing = false;
 static struct module_data self = {
 	.name = "sensor",
 	.msg_q = &msgq_sensor,
@@ -184,6 +186,8 @@ static float sensor_ntc_converter(int raw_data) {
 }
 
 static void sensor_poll_work_fn(struct k_work *work) {
+	if (sensor_is_processing) return;
+	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
 	data->temperature[0] = sensor_ntc_converter(adc_get_channel(0));
@@ -202,6 +206,11 @@ static void sensor_poll_work_fn(struct k_work *work) {
 	}
 	sensor_module_send(data);
 	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
+	sensor_is_processing = false;
+}
+
+static void sensor_interface_handler(void) {
+	k_work_reschedule(&sensor_poll_work, K_NO_WAIT);
 }
 
 /* Message handler for STATE_INIT. */
@@ -253,6 +262,7 @@ static void module_thread_fn(void)
 	k_work_init_delayable(&sensor_poll_work, sensor_poll_work_fn);
 	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
 
+	etc_interface_register_event_handler(sensor_interface_handler);
 	while (true) {
 		module_get_next_msg(&self, &msg);
 
