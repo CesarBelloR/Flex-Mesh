@@ -2,14 +2,18 @@
 #include <cJSON.h>
 #include <cJSON_os.h>
 #include <math.h>
-#include "data_codec.h"
-#include <zephyr/logging/log.h>
 #include <string.h>
+#include "data_codec.h"
+#include "app_version.h"
+
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(data_codec, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define DATA_CODEC_BUFFER_MAX_SIZE 512
+#define DATA_CODEC_TEMP_BUFFER_MAX_SIZE 32
 
-static char data_codec_buffer_size[DATA_CODEC_BUFFER_MAX_SIZE];
+static char data_codec_buffer[DATA_CODEC_BUFFER_MAX_SIZE];
+static char data_codec_temp_buffer[DATA_CODEC_TEMP_BUFFER_MAX_SIZE];
 
 static inline bool is_digit(char in) {
 	if (in >= '0' && in <= '9') {
@@ -39,9 +43,28 @@ void data_codec_populate_lora_sensor_buffer(
 		buffer_count - 1);
 }
 
-static cJSON *create_data_arr_logger(struct data_sensors *sens_data[],
-				uint8_t sens_data_len,
-				struct data_battery *batt_data) 
+void data_codec_populate_sensor_internal_buffer(
+				struct data_sensors *sensor_buffer,
+				struct data_sensors *new_sensor_data,
+				int *head_sensor_buf,
+				size_t buffer_count)
+{
+	if (!new_sensor_data->queued) {
+		return;
+	}
+
+	/* Go to start of buffer if end is reached. */
+	if (*head_sensor_buf == buffer_count) {
+		*head_sensor_buf = 0;
+	}
+
+	sensor_buffer[*head_sensor_buf] = *new_sensor_data;
+	*head_sensor_buf += 1;
+	LOG_DBG("Entry: %d of %d in sensor buffer filled", *head_sensor_buf,
+		buffer_count - 1);
+}
+
+static cJSON *create_data_arr_logger(struct data_sensors sens_data, struct data_battery *batt_data) 
 {
 	cJSON *data_arr;
 	cJSON *item;
@@ -54,20 +77,28 @@ static cJSON *create_data_arr_logger(struct data_sensors *sens_data[],
 	item = cJSON_CreateNumber(0);
 	cJSON_AddItemToArray(data_arr, item);
 	/* batt */
-	item = cJSON_CreateNumber(batt_data->bat);
-	cJSON_AddItemToArray(data_arr, item);
+	if (batt_data != NULL) {
+		item = cJSON_CreateNumber(batt_data->bat);
+		cJSON_AddItemToArray(data_arr, item);
+	}
 	/* sig */
 	item = cJSON_CreateNumber(-50);
 	cJSON_AddItemToArray(data_arr, item);
 	/* fw */
-	item = cJSON_CreateString("1.0");
+	item = cJSON_CreateString(APP_VERSION_STR);
 	cJSON_AddItemToArray(data_arr, item);
 	/* packet */
 	item = cJSON_CreateNumber(0);
 	cJSON_AddItemToArray(data_arr, item);
 	
-	for (int i = 0; i < sens_data_len; i++) {
-		item = cJSON_CreateNumber(sens_data[i]->temperature);
+	for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+		if (data_codec_compare_temperature_is_valid(sens_data.temperature[i])) {
+			int length = sprintf(data_codec_temp_buffer, "%2.2f", sens_data.temperature[i]);
+			data_codec_temp_buffer[length] = '\0';
+			item = cJSON_CreateString(data_codec_temp_buffer);
+		} else {
+			item = cJSON_CreateString("*");
+		}
 		cJSON_AddItemToArray(data_arr, item);
 	}
 
@@ -173,10 +204,12 @@ static int create_packet_header(cJSON *root_obj,
 	return 0;
 } 
 
-char *data_codec_prepare_logger_packet(struct data_sensors *sens_data[],
-				uint8_t sens_data_len,
+char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer, 
+				size_t lora_buf_count,
+				struct data_sensors *sensor_buffer,
+				size_t sensor_buf_count,
 				struct data_modem_static *modem_data,
-				struct data_battery *batt_data) 
+				struct data_battery *batt_data)
 {
 	int err;
 	char *buffer;
@@ -193,72 +226,24 @@ char *data_codec_prepare_logger_packet(struct data_sensors *sens_data[],
 
 	arr = cJSON_CreateArray();
 	cJSON_AddItemToObject(root_obj, "data", arr);
-
-	data_arr = create_data_arr_logger(sens_data, sens_data_len, batt_data);
-	if (data_arr == NULL) {
-		goto exit;
-	}
-	cJSON_AddItemToArray(arr, data_arr);
-
-	bool ret = cJSON_PrintPreallocated(root_obj, data_codec_buffer_size, sizeof(data_codec_buffer_size), false);
-	if (ret == false) {
-		LOG_ERR("Failed to allocate memory for JSON string");
-		err = -ENOMEM;
-		goto exit;
-	}
-
-	return data_codec_buffer_size;
-
-exit:
-	cJSON_Delete(root_obj);
-	return NULL;
-}
-
-char* data_codec_prepare_cloud_packet(struct data_lora_sensors *sensor_buf, 
-				size_t sensor_buf_count,
-				struct data_modem_static *modem_data,
-				struct data_battery *batt_data)
-{
-	int err;
-	bool object_added = false;
-	cJSON *data_arr;
-	bool ret = false;
-
-	cJSON *root_obj = cJSON_CreateObject();
-
-	if (root_obj == NULL) {
-		goto exit;
-	}
-
-	create_packet_header(root_obj, modem_data, batt_data);
-
-	cJSON* data_obj = cJSON_CreateArray();
-	if (data_obj == NULL) {
-		LOG_ERR("Can't create data obj for snapshot payload");
-		goto exit;
-	}
-
-	cJSON_AddItemToObject(root_obj, "data", data_obj);
+	
 	for (int i = 0; i < sensor_buf_count; i++) {
-        	struct data_lora_sensors *sensor = &sensor_buf[i];
-		if (!sensor->queued) {
-			continue;
+		data_arr = create_data_arr_logger(sensor_buffer[i], batt_data);
+		if (data_arr == NULL) {
+			goto exit;
 		}
-		data_arr = create_data_arr_lora(sensor);
-		if (data_arr != NULL) {
-			cJSON_AddItemToArray(data_obj, data_arr);
-		}
+		cJSON_AddItemToArray(arr, data_arr);
 	}
 
-	ret = cJSON_PrintPreallocated(root_obj, data_codec_buffer_size, 
-				sizeof(data_codec_buffer_size), false);
+	bool ret = cJSON_PrintPreallocated(root_obj, data_codec_buffer, sizeof(data_codec_buffer), false);
 	if (ret == false) {
 		LOG_ERR("Failed to allocate memory for JSON string");
 		err = -ENOMEM;
 		goto exit;
 	}
 
-	return data_codec_buffer_size;
+	return data_codec_buffer;
+
 exit:
 	cJSON_Delete(root_obj);
 	return NULL;

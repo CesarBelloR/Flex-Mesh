@@ -521,7 +521,7 @@ static int shadow_update(bool version_number_include)
 		goto cleanup;
 	}
 
-	cJSON_bool ret = cJSON_PrintPreallocated(root_obj, shadow_msg, sizeof(shadow_msg), true);
+	cJSON_bool ret = cJSON_PrintPreallocated(root_obj, shadow_msg, sizeof(shadow_msg), false);
 	if (ret == false) {
 		LOG_ERR("cJSON_Print, error: returned NULL");
 		err = -ENOMEM;
