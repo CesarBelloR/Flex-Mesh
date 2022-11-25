@@ -34,7 +34,7 @@
 #define MDM_SENDMSG_SLEEP		  K_MSEC(1)
 #define MDM_MAX_DATA_LENGTH		  1024
 #define MDM_RECV_MAX_BUF		  16
-#define MDM_RECV_BUF_SIZE		  1024
+#define MDM_RECV_BUF_SIZE		  256
 #define MDM_MAX_SOCKETS			  5
 #define MDM_BASE_SOCKET_NUM		  0
 #define MDM_NETWORK_RETRY_COUNT		  10
@@ -148,6 +148,6 @@ char* quectel_bg95_get_imei(void);
 char* quectel_bg95_get_revision(void);
 char* quectel_bg95_get_sim_number(void);
 bool quectel_bg95_is_ready(void);
-
+int quectel_bg95_get_time(char* time_buf);
 
 #endif /* QUECTEL_BG95_H */
