@@ -1,8 +1,11 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
+#include <math.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/gpio.h>
 #include <app_event_manager.h>
-
+#include "adc.h"
+#include "etc_date_time.h"
 #define MODULE sensor_module
 #define MODULE_SENSOR_THREAD_STACK_SIZE 512
 
@@ -30,18 +33,47 @@ static enum state_type {
 	STATE_SHUTDOWN
 } state;
 
+static struct k_work_delayable sensor_poll_work;
+static struct sensor_data static_sensor_data;
+
 /* Sensor module message queue. */
 #define SENSOR_QUEUE_ENTRY_COUNT	10
 #define SENSOR_QUEUE_BYTE_ALIGNMENT	4
 
+#define SENSOR_GPIO_SENSE_ENABLE_PIN (13)
+#define SENSOR_GPIO_S0_PIN (9)
+#define SENSOR_GPIO_S1_PIN (10)
+
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
+
+/* Forward declarations */
+static void sensor_poll_work_fn(struct k_work *work);
 
 static struct module_data self = {
 	.name = "sensor",
 	.msg_q = &msgq_sensor,
 	.supports_shutdown = true,
 };
+
+const struct device* dev_gpio = NULL;
+
+static void sensor_adc_switch_channel(int8_t channel) {
+	gpio_pin_set(dev_gpio, SENSOR_GPIO_SENSE_ENABLE_PIN, 0U);
+	gpio_pin_set(dev_gpio, SENSOR_GPIO_S0_PIN, channel & 0x01);
+	gpio_pin_set(dev_gpio, SENSOR_GPIO_S1_PIN, (channel >> 1) & 0x01);
+}
+
+static void sensor_adc_hw_init(void) {
+	dev_gpio = device_get_binding("GPIO_0");
+	if (dev_gpio == NULL) {
+		return;
+	}
+
+	gpio_pin_configure(dev_gpio, SENSOR_GPIO_SENSE_ENABLE_PIN, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure(dev_gpio, SENSOR_GPIO_S0_PIN, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure(dev_gpio, SENSOR_GPIO_S1_PIN, GPIO_OUTPUT_INACTIVE);
+}
 
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type new_state)
@@ -111,41 +143,71 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void apply_config(struct sensor_msg_data *msg)
+static void sensor_module_send(struct sensor_data* sensor)
 {
-}
-
-static void environmental_data_get(void)
-{
-	struct sensor_event *sensor_event;
-	LOG_DBG("No external sensors, submitting dummy sensor data");
-	sensor_event = new_sensor_event();
-	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED;
+	struct sensor_event *sensor_event = new_sensor_event();
+	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
+	sensor_event->data.sensors = sensor;
 	APP_EVENT_SUBMIT(sensor_event);
 }
 
 static int setup(void)
 {
+	adc_init();
+	sensor_adc_hw_init();
 	return 0;
 }
 
-static bool environmental_data_requested(enum app_data_type *data_list,
-					 size_t count)
-{
-	for (size_t i = 0; i < count; i++) {
-		if (data_list[i] == APP_DATA_ENVIRONMENTAL) {
-			return true;
+#define SENSOR_NTC_NOMINAL_RESISTANCE 10000.0
+#define SENSOR_NTC_NOMINAL_TEMP 25.0
+#define SENSOR_NTC_BETA 3434.0
+#define SENSOR_NTC_RESISTOR_REF 10000.0
+#define SENSOR_RAW_ADC_MAX 4095
+
+static float sensor_ntc_converter(int raw_data) {
+	raw_data = (int)((float)(raw_data) * 3.6 / 3.3);
+	if (raw_data > SENSOR_RAW_ADC_MAX) {
+		raw_data = SENSOR_RAW_ADC_MAX;
+	}
+	if (raw_data == SENSOR_RAW_ADC_MAX) {
+		return SENSOR_NTC_NO_CONNECTED;
+	}
+	float tmp_value = (float)SENSOR_RAW_ADC_MAX / (float)raw_data - 1.0;
+	tmp_value = SENSOR_NTC_RESISTOR_REF / tmp_value;
+	tmp_value = tmp_value / SENSOR_NTC_NOMINAL_RESISTANCE;
+	tmp_value = logf(tmp_value);
+	tmp_value = tmp_value / SENSOR_NTC_BETA;
+	tmp_value += 1.0 / (SENSOR_NTC_NOMINAL_TEMP + 273.15);
+	tmp_value = 1.0 / tmp_value;
+	tmp_value -= 273.15;
+	return tmp_value;
+}
+
+static void sensor_poll_work_fn(struct k_work *work) {
+	struct sensor_data* data = &static_sensor_data;
+	data->timestamp = date_time_now_second();
+	data->temperature[0] = sensor_ntc_converter(adc_get_channel(0));
+	if (fabs(data->temperature[0] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+		LOG_DBG("Ambient temp %2.2f", data->temperature[0]);
+	}
+	for (int8_t i = 1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+		sensor_adc_switch_channel(i - 1);
+		k_msleep(50);
+		data->temperature[i] = sensor_ntc_converter(adc_get_channel(2));
+		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
+		} else {
+			LOG_DBG("Channel %d doesn't available", i - 1);
 		}
 	}
-
-	return false;
+	sensor_module_send(data);
+	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
 }
 
 /* Message handler for STATE_INIT. */
 static void on_state_init(struct sensor_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
-		apply_config(msg);
 		state_set(STATE_RUNNING);
 	}
 }
@@ -153,19 +215,6 @@ static void on_state_init(struct sensor_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct sensor_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
-		apply_config(msg);
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-		if (!environmental_data_requested(
-			msg->module.app.data_list,
-			msg->module.app.count)) {
-			return;
-		}
-
-		environmental_data_get();
-	}
 }
 
 /* Message handler for all states. */
@@ -200,6 +249,9 @@ static void module_thread_fn(void)
 		LOG_ERR("setup, error: %d", err);
 		SEND_ERROR(sensor, SENSOR_EVT_ERROR, err);
 	}
+
+	k_work_init_delayable(&sensor_poll_work, sensor_poll_work_fn);
+	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
 
 	while (true) {
 		module_get_next_msg(&self, &msg);

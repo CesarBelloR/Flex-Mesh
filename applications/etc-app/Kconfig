@@ -12,6 +12,10 @@ config CONNECTION_RETRY_TIMEOUT_SECONDS
 	int "Number of seconds between each AWS IoT connection retry"
 	default 30
 
+config SENSOR_POLL_INTERVAL_SECONDS
+	int "Number of seconds in polling interval that the sample will publish data"
+	default 900
+
 rsource "src/exact/Kconfig"
 endmenu
 

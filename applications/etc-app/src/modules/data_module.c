@@ -165,9 +165,8 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	}
 
 	if (is_sensor_event(aeh)) {
-		struct sensor_event *event =
-				cast_sensor_event(aeh);
-
+		struct sensor_event *event = cast_sensor_event(aeh);
+		
 		msg.module.sensor = *event;
 		enqueue_msg = true;
 	}
@@ -230,13 +229,13 @@ static void config_get(void)
 }
 
 static void data_encode(void) {
-	if (head_lora_buf == 0) {
+	if (head_sensor_buf == 0) {
 		return;
 	}
 
-	LOG_INF("Head lora buf %d", head_lora_buf);
-	char* data_msg = data_codec_prepare_cloud_packet(lora_buf, head_lora_buf,
-							NULL, NULL);
+	LOG_INF("Head sensor buf %d", head_sensor_buf);
+	char* data_msg = data_codec_prepare_cloud_packet(NULL, 0, sensors_buf, head_sensor_buf,
+		NULL, NULL);
 	if (data_msg == NULL) {
 		LOG_WRN("No message to publish");
 		return;
@@ -259,6 +258,7 @@ static void data_encode(void) {
 	}
 
 	head_lora_buf = 0;
+	head_sensor_buf = 0;
 }
 
 static void data_send_work_fn(struct k_work *work)
@@ -267,6 +267,10 @@ static void data_send_work_fn(struct k_work *work)
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 
+	if (head_sensor_buf != 0) {
+		SEND_EVENT(data, DATA_EVT_DATA_READY);
+	}
+	
 	k_work_reschedule(&data_send_work, K_SECONDS(1 * 30));
 }
 
@@ -352,23 +356,26 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		struct data_sensors new_sensor_data = {
-			.temperature = msg->module.sensor.data.sensors.temperature,
-			.env_ts = msg->module.sensor.data.sensors.timestamp,
 			.queued = true
 		};
+
+		memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
+		etc_data_fs_notify_data((uint8_t*)&new_sensor_data, sizeof(struct data_sensors));
+		data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED)) {
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+		#if 0 /* NO MVP */
 		struct data_lora_sensors new_lora_data = {
 			.queued = true,
 			.env_ts = msg->module.lora.data.timestamp,
 		};
 		memcpy(new_lora_data.sensor_msg, msg->module.lora.data.sensor_msg, LORA_EVENT_MSG_DATA_LEN);
-		etc_data_fs_notify_data((uint8_t*)&new_lora_data, sizeof(struct data_lora_sensors));
 		data_codec_populate_lora_sensor_buffer(lora_buf, &new_lora_data, &head_lora_buf, ARRAY_SIZE(lora_buf));
+		#endif
 	}
 }
 

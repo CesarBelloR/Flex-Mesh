@@ -448,7 +448,7 @@ static void etc_data_fs_write_file(const uint8_t* msg, size_t msg_len) {
 }
 
 void etc_data_fs_notify_data(uint8_t* data, uint8_t len) {
-	etc_data_fs_write(data, len);
+	etc_data_fs_write_file(data, len);
 }
 
 #ifdef CONFIG_SHELL

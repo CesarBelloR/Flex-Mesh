@@ -124,7 +124,7 @@ void main(void)
 	rc = main_external_flash_erase((uintptr_t)mount_point->storage_dev);
 	if (rc < 0) {
 		LOG_ERR("Failed to erase flash memory %d", rc);
-		return rc;
+		return;
 	}
 #endif 
 	struct mcuboot_img_header img_hdr;
