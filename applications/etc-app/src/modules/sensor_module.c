@@ -34,6 +34,7 @@ static enum state_type {
 } state;
 
 static struct k_work_delayable sensor_poll_work;
+static struct sensor_data static_sensor_data;
 
 /* Sensor module message queue. */
 #define SENSOR_QUEUE_ENTRY_COUNT	10
@@ -142,7 +143,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void sensor_module_send(struct sensor_data sensor)
+static void sensor_module_send(struct sensor_data* sensor)
 {
 	struct sensor_event *sensor_event = new_sensor_event();
 	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
@@ -159,18 +160,19 @@ static int setup(void)
 
 #define SENSOR_NTC_NOMINAL_RESISTANCE 10000.0
 #define SENSOR_NTC_NOMINAL_TEMP 25.0
-#define SENSOR_NTC_BETA 3950.0
+#define SENSOR_NTC_BETA 3434.0
 #define SENSOR_NTC_RESISTOR_REF 10000.0
+#define SENSOR_RAW_ADC_MAX 4095
 
 static float sensor_ntc_converter(int raw_data) {
 	raw_data = (int)((float)(raw_data) * 3.6 / 3.3);
-	if (raw_data > 4095) {
-		raw_data = 4095;
+	if (raw_data > SENSOR_RAW_ADC_MAX) {
+		raw_data = SENSOR_RAW_ADC_MAX;
 	}
-	if (raw_data == 4095) {
+	if (raw_data == SENSOR_RAW_ADC_MAX) {
 		return SENSOR_NTC_NO_CONNECTED;
 	}
-	float tmp_value = 4095.0 / (float)raw_data - 1.0;
+	float tmp_value = (float)SENSOR_RAW_ADC_MAX / (float)raw_data - 1.0;
 	tmp_value = SENSOR_NTC_RESISTOR_REF / tmp_value;
 	tmp_value = tmp_value / SENSOR_NTC_NOMINAL_RESISTANCE;
 	tmp_value = logf(tmp_value);
@@ -182,18 +184,18 @@ static float sensor_ntc_converter(int raw_data) {
 }
 
 static void sensor_poll_work_fn(struct k_work *work) {
-	struct sensor_data data;
-	data.timestamp = date_time_now_second();
-	data.temperature[0] = sensor_ntc_converter(adc_get_channel(0));
-	if (fabs(data.temperature[0] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
-		LOG_DBG("Ambient temp %2.2f", data.temperature[0]);
+	struct sensor_data* data = &static_sensor_data;
+	data->timestamp = date_time_now_second();
+	data->temperature[0] = sensor_ntc_converter(adc_get_channel(0));
+	if (fabs(data->temperature[0] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+		LOG_DBG("Ambient temp %2.2f", data->temperature[0]);
 	}
 	for (int8_t i = 1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		sensor_adc_switch_channel(i - 1);
 		k_msleep(50);
-		data.temperature[i] = sensor_ntc_converter(adc_get_channel(2));
-		if (fabs(data.temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
-			LOG_DBG("Channel %d temp %f", i - 1,data.temperature[i]);
+		data->temperature[i] = sensor_ntc_converter(adc_get_channel(2));
+		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
 		} else {
 			LOG_DBG("Channel %d doesn't available", i - 1);
 		}

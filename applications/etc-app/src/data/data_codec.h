@@ -21,10 +21,7 @@ struct data_battery {
 };
 
 struct data_sensors {
-	/** Environmental sensors timestamp. UNIX milliseconds. */
-	int64_t env_ts;
-	/** Temperature in celcius. */
-	float temperature[SENSOR_EVENT_NUM_DEV_MAX];
+	struct sensor_data data;
 	/** Flag signifying that the data entry is to be encoded. */
 	bool queued : 1;
 };

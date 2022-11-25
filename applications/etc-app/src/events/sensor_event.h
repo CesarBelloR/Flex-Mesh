@@ -38,7 +38,7 @@ struct sensor_event {
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
-		struct sensor_data sensors;
+		struct sensor_data* sensors;
 	} data;
 };
 

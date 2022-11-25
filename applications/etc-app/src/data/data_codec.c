@@ -92,9 +92,8 @@ static cJSON *create_data_arr_logger(struct data_sensors sens_data, struct data_
 	cJSON_AddItemToArray(data_arr, item);
 	
 	for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
-		if (data_codec_compare_temperature_is_valid(sens_data.temperature[i])) {
-			int length = sprintf(data_codec_temp_buffer, "%2.2f", sens_data.temperature[i]);
-			data_codec_temp_buffer[length] = '\0';
+		if (data_codec_compare_temperature_is_valid(sens_data.data.temperature[i])) {
+			snprintf(data_codec_temp_buffer, sizeof(data_codec_temp_buffer), "%2.2f", sens_data.data.temperature[i]);
 			item = cJSON_CreateString(data_codec_temp_buffer);
 		} else {
 			item = cJSON_CreateString("*");

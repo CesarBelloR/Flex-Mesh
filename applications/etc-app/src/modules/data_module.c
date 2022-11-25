@@ -356,13 +356,10 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		struct data_sensors new_sensor_data = {
-			.env_ts = msg->module.sensor.data.sensors.timestamp,
 			.queued = true
 		};
-		for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 
-		}
-		memcpy(new_sensor_data.temperature, msg->module.sensor.data.sensors.temperature, SENSOR_EVENT_NUM_DEV_MAX * sizeof(float));
+		memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
 		etc_data_fs_notify_data((uint8_t*)&new_sensor_data, sizeof(struct data_sensors));
 		data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
 	}
