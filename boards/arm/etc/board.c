@@ -16,17 +16,8 @@ static int init(const struct device *dev)
 		return -EINVAL;
 	}
 
-	const struct device *i2c_0_dev = device_get_binding("I2C_0");
-	if (i2c_0_dev == NULL) {
-		return -EINVAL;
-	}
-
 	gpio_pin_configure(gpio_0_dev, VSENS_EN_PIN, GPIO_OUTPUT_ACTIVE);
 
-	/* Ticket HW-353 - Battery workaround */
-	uint8_t tx_buf[2] = {0x00, 0x37};
-	int ret = i2c_write(i2c_0_dev, tx_buf, sizeof(tx_buf), BQ24195_I2C_7BIT_ADDR);
-	LOG_INF("Workaround for BQ24195 %d", ret);
 	k_msleep(50);
 	return 0;
 }

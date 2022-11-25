@@ -1,6 +1,7 @@
 menuconfig BQ24195
 	bool "BQ24195 Power Management Integrated Circuits (PMIC)"
 	depends on I2C
+	depends on DT_HAS_TI_BQ24195_ENABLED
 	help
 	  Enable I2C-based driver for BQ24195 PMIC.
 
