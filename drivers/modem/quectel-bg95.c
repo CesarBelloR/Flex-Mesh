@@ -130,6 +130,7 @@ static int on_cmd_sockread_common(int socket_fd,
 	struct socket_read_data	 *sock_data;
 	int ret, i;
 	int bytes_to_skip;
+	char *skipto;
 
 	if (!len) {
 		LOG_ERR("Invalid length, Aborting!");
@@ -154,8 +155,13 @@ static int on_cmd_sockread_common(int socket_fd,
 		return -EAGAIN;
 	}
 
-	/* Skip CRLF */
-	bytes_to_skip = 3;
+	/* See how many characters we need to skip.
+	*  Modem sends: +####: <length>\r\n<data>
+	*  We need to skip <length>\r\n
+	*/
+	skipto = memchr((void *)data->rx_buf->data, (int)'\n',
+			data->rx_buf->len);
+	bytes_to_skip = (skipto - (char *)data->rx_buf->data) + 1;
 	for (i = 0; i < bytes_to_skip; i++) {
 		net_buf_pull_u8(data->rx_buf);
 	}
@@ -457,6 +463,7 @@ static ssize_t get_data_size(struct modem_socket *sock)
 			     cmd, ARRAY_SIZE(cmd), sendbuf, &mdata.sem_response,
 			     MDM_RECV_TIMEOUT);
 	if (ret < 0) {
+		LOG_ERR("Could not retrieve recv buffer size");
 		errno = -ret;
 		ret = -1;
 	} else {
