@@ -6,7 +6,6 @@
 #include <app_event_manager.h>
 #include "adc.h"
 #include "etc_date_time.h"
-#include "etc_interface.h"
 #define MODULE sensor_module
 #define MODULE_SENSOR_THREAD_STACK_SIZE 512
 
@@ -15,7 +14,7 @@
 #include "events/data_event.h"
 #include "events/sensor_event.h"
 #include "events/util_event.h"
-
+#include "events/ui_event.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(sensor_module, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -24,6 +23,7 @@ struct sensor_msg_data {
 		struct app_event app;
 		struct data_event data;
 		struct util_event util;
+		struct ui_event ui;
 	} module;
 };
 
@@ -133,6 +133,13 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
+	if (is_ui_event(aeh)) {
+		struct ui_event *event = cast_ui_event(aeh);
+
+		msg.module.ui = *event;
+		enqueue_msg = true;
+	}
+
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -185,7 +192,7 @@ static float sensor_ntc_converter(int raw_data) {
 	return tmp_value;
 }
 
-static void sensor_poll_work_fn(struct k_work *work) {
+static void sensor_poll_handler(void) {
 	if (sensor_is_processing) return;
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
@@ -205,12 +212,12 @@ static void sensor_poll_work_fn(struct k_work *work) {
 		}
 	}
 	sensor_module_send(data);
-	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
 	sensor_is_processing = false;
 }
 
-static void sensor_interface_handler(void) {
-	k_work_reschedule(&sensor_poll_work, K_NO_WAIT);
+static void sensor_poll_work_fn(struct k_work *work) {
+	sensor_poll_handler();
+	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
 }
 
 /* Message handler for STATE_INIT. */
@@ -235,6 +242,11 @@ static void on_all_states(struct sensor_msg_data *msg)
 		 */
 		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
+	}
+
+	if (IS_EVENT(msg, ui, UI_EVT_INPUT_DATA_READY)) {
+		/* The UI input (HALL Sensor or Button) is triggered */
+		sensor_poll_handler();
 	}
 }
 
@@ -262,7 +274,6 @@ static void module_thread_fn(void)
 	k_work_init_delayable(&sensor_poll_work, sensor_poll_work_fn);
 	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
 
-	etc_interface_register_event_handler(sensor_interface_handler);
 	while (true) {
 		module_get_next_msg(&self, &msg);
 
@@ -293,3 +304,4 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
+APP_EVENT_SUBSCRIBE(MODULE, ui_event);
