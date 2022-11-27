@@ -114,15 +114,27 @@ void etc_set_device_id(const char* device_id) {
 }
 
 char* etc_get_hw_version(void) {
-	return saved_hw_version;
+	char* res = NULL;
+	k_mutex_lock(&device_mutex, K_FOREVER);
+	res = saved_hw_version;
+	k_mutex_unlock(&device_mutex);
+	return res;
 }
 
 char* etc_get_fw_version(void) {
-	return saved_fw_version;
+	char* res = NULL;
+	k_mutex_lock(&device_mutex, K_FOREVER);
+	res = saved_fw_version;
+	k_mutex_unlock(&device_mutex);
+	return res;
 }
 
 char* etc_get_device_id(void) {
-	return saved_device_id;
+	char* res = NULL;
+	k_mutex_lock(&device_mutex, K_FOREVER);
+	res = saved_device_id;
+	k_mutex_unlock(&device_mutex);
+	return res;
 }
 
 static int etc_settings_init(const struct device *unused)
