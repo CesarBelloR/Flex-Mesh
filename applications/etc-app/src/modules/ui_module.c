@@ -15,6 +15,7 @@
 #include "events/cloud_event.h"
 #include "events/led_state_event.h"
 #include "events/lora_event.h"
+#include "etc_interface.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
@@ -206,21 +207,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void button_handler(uint32_t button_states, uint32_t has_changed)
-{
-	if (has_changed & button_states) {
-
-		struct ui_event *ui_event =
-				new_ui_event();
-
-		ui_event->type = UI_EVT_BUTTON_DATA_READY;
-		ui_event->data.ui.button_number = 1;
-		ui_event->data.ui.timestamp = k_uptime_get();
-
-		APP_EVENT_SUBMIT(ui_event);
-	}
-}
-
 /* Static module functions. */
 static void update_led_pattern(enum led_state pattern)
 {
@@ -255,8 +241,20 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	}
 }
 
+static void ui_module_send(void)
+{
+	struct ui_event *event = new_ui_event();
+	event->type = UI_EVT_INPUT_DATA_READY;
+	APP_EVENT_SUBMIT(event);
+}
+
+static void ui_input_handler(void) {
+	ui_module_send();
+}
+
 static int setup(const struct device *dev)
 {
+	etc_interface_register_event_handler(ui_input_handler);
 	return 0;
 }
 

@@ -321,11 +321,6 @@ static void on_all_states(struct data_msg_data *msg)
 		return;
 	}
 
-	if (IS_EVENT(msg, ui, UI_EVT_BUTTON_DATA_READY)) {
-		SEND_EVENT(data, DATA_EVT_UI_DATA_READY);
-		return;
-	}
-
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_NOT_READY)) {
 	}
 

@@ -14,7 +14,7 @@
 #include "events/data_event.h"
 #include "events/sensor_event.h"
 #include "events/util_event.h"
-
+#include "events/ui_event.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(sensor_module, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -23,6 +23,7 @@ struct sensor_msg_data {
 		struct app_event app;
 		struct data_event data;
 		struct util_event util;
+		struct ui_event ui;
 	} module;
 };
 
@@ -50,6 +51,7 @@ K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 /* Forward declarations */
 static void sensor_poll_work_fn(struct k_work *work);
 
+static bool sensor_is_processing = false;
 static struct module_data self = {
 	.name = "sensor",
 	.msg_q = &msgq_sensor,
@@ -131,6 +133,13 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
+	if (is_ui_event(aeh)) {
+		struct ui_event *event = cast_ui_event(aeh);
+
+		msg.module.ui = *event;
+		enqueue_msg = true;
+	}
+
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -183,7 +192,9 @@ static float sensor_ntc_converter(int raw_data) {
 	return tmp_value;
 }
 
-static void sensor_poll_work_fn(struct k_work *work) {
+static void sensor_poll_handler(void) {
+	if (sensor_is_processing) return;
+	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
 	data->temperature[0] = sensor_ntc_converter(adc_get_channel(0));
@@ -201,6 +212,11 @@ static void sensor_poll_work_fn(struct k_work *work) {
 		}
 	}
 	sensor_module_send(data);
+	sensor_is_processing = false;
+}
+
+static void sensor_poll_work_fn(struct k_work *work) {
+	sensor_poll_handler();
 	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
 }
 
@@ -226,6 +242,11 @@ static void on_all_states(struct sensor_msg_data *msg)
 		 */
 		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
+	}
+
+	if (IS_EVENT(msg, ui, UI_EVT_INPUT_DATA_READY)) {
+		/* The UI input (HALL Sensor or Button) is triggered */
+		sensor_poll_handler();
 	}
 }
 
@@ -283,3 +304,4 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
+APP_EVENT_SUBSCRIBE(MODULE, ui_event);
