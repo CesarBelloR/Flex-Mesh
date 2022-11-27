@@ -6,7 +6,7 @@
 #include <zephyr/sys/reboot.h>
 
 #define MODULE app
-#define MODULE_APP_THREAD_STACK_SIZE 2048
+#define MODULE_APP_THREAD_STACK_SIZE 1024
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
