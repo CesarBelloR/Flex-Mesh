@@ -9,6 +9,9 @@
 extern "C" {
 #endif
 
+#define SENSOR_EVENT_NUM_DEV_MAX 5
+#define SENSOR_NTC_NO_CONNECTED -273.150
+
 /** @brief Sensor event types submitted by the Sensor module. */
 enum sensor_event_type {
 	SENSOR_EVT_ENVIRONMENTAL_DATA_READY,
@@ -23,7 +26,7 @@ struct sensor_data {
 	/** Uptime when the data was sampled. */
 	int64_t timestamp;
 	/** Temperature in Celsius degrees. */
-	double temperature;
+	float temperature[SENSOR_EVENT_NUM_DEV_MAX];
 };
 
 struct sensor_event {
@@ -35,7 +38,7 @@ struct sensor_event {
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
-		struct sensor_data sensors;
+		struct sensor_data* sensors;
 	} data;
 };
 

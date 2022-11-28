@@ -14,6 +14,9 @@ CONFIG_CONSOLE=y
 # additional board options
 CONFIG_GPIO_AS_PINRESET=n
 
+# Enable UART Console
+CONFIG_UART_CONSOLE=y
+
 # Enable RTT
 CONFIG_USE_SEGGER_RTT=y
 

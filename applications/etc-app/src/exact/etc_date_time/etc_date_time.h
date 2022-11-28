@@ -103,14 +103,11 @@ int date_time_now(int64_t *unix_time_ms);
  *  @warning If the function fails, the passed in variable retains its
  *           old value.
  *
- *  @param[out] unix_time_ms Pointer to a variable to store the current date
- *                           time UTC.
- *
  *  @return 0        If the operation was successful.
  *  @return -ENODATA If the library does not have a valid date time UTC.
  *  @return -EINVAL  If the passed in pointer is NULL.
  */
-int date_time_now_second(uint32_t *unix_time_s);
+int date_time_now_second(void);
 
 /** @brief Convenience function that checks if the library has obtained
  *	   an initial valid date time.

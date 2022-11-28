@@ -1,0 +1,13 @@
+menuconfig ETC_SETTINGS
+	bool "ETC Settings Library"
+	depends on FILE_SYSTEM
+	help
+	  Settings subsystem for ETC
+
+if ETC_SETTINGS
+
+module = ETC_SETTINGS
+module-str = etc settings
+source "subsys/logging/Kconfig.template.log_config"
+
+endif

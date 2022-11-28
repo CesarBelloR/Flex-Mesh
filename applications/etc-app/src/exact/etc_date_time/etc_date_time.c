@@ -1,4 +1,3 @@
-#include "date_time.h"
 #include <zephyr.h>
 #include <zephyr/types.h>
 #include <device.h>
@@ -10,7 +9,9 @@
 #include <sys/timeutil.h>
 #include <posix/time.h>
 #include <logging/log.h>
-LOG_MODULE_REGISTER(date_time, CONFIG_RDB_LOG_LEVEL);
+#include "etc_date_time.h"
+#include "pcf85263a.h"
+LOG_MODULE_REGISTER(date_time, CONFIG_DATE_TIME_LOG_LEVEL);
 
 extern int quectel_bg95_get_time(char* time_buf);
 
@@ -28,12 +29,14 @@ K_SEM_DEFINE(time_fetch_sem, 0, 1);
 static struct k_work_delayable time_work;
 
 static struct time_aux {
+	int64_t date_time_local_second;
 	int64_t date_time_utc;
 	int64_t last_date_time_update;
 	int     time_zone;
 } time_aux;
 
 static bool initial_valid_time;
+static bool flag_set_rtc_time;
 static date_time_evt_handler_t app_evt_handler;
 
 static struct date_time_evt evt;
@@ -50,7 +53,7 @@ static void date_time_notify_event(const struct date_time_evt *evt)
 static void date_time_print_datetime(struct tm *tm_time)
 {
  LOG_DBG("Datetime: %4d-%02d-%02d (wday=%d)  TIME: %2d:%02d:%02d", tm_time->tm_year - 100,
-									tm_time->tm_mon, tm_time->tm_mday, tm_time->tm_wday, tm_time->tm_hour, tm_time->tm_min,
+									tm_time->tm_mon + 1, tm_time->tm_mday, tm_time->tm_wday, tm_time->tm_hour, tm_time->tm_min,
 									tm_time->tm_sec);
 }
 
@@ -120,7 +123,7 @@ static int time_modem_get(void)
 	time_aux.date_time_utc = (int64_t)timeutil_timegm64(&date_time) * 1000;
 	LOG_DBG("Time UTC %d - Time Zone %d - Local Time %d", (int)(time_aux.date_time_utc / 1000), time_aux.time_zone,
 		(int)(time_aux.date_time_utc / 1000 + time_aux.time_zone));
-	
+	time_aux.date_time_local_second = (int)(time_aux.date_time_utc / 1000 + time_aux.time_zone);
 	time_aux.last_date_time_update = k_uptime_get();
 	return 0;
 }
@@ -142,14 +145,14 @@ static int current_time_check(void)
 	return 0;
 }
 
-static void date_time_store(int64_t curr_time_ms)
+static void date_time_store(int64_t curr_time_second)
 {
 	struct timespec tp = { 0 };
 	struct tm ltm = { 0 };
 	int ret;
 
-	tp.tv_sec = curr_time_ms / 1000;
-	tp.tv_nsec = (curr_time_ms % 1000) * 1000000;
+	tp.tv_sec = curr_time_second;
+	tp.tv_nsec = 0;
 
 	ret = clock_settime(CLOCK_REALTIME, &tp);
 	if (ret != 0) {
@@ -184,7 +187,8 @@ static void new_date_time_get(void)
 		if (err == 0) {
 			LOG_DBG("Time from cellular network obtained");
 			initial_valid_time = true;
-			date_time_store(time_aux.date_time_utc);
+			date_time_store(time_aux.date_time_local_second);
+			date_time_set_second(time_aux.date_time_local_second);
 			evt.type = DATE_TIME_OBTAINED_MODEM;
 			date_time_notify_event(&evt);
 			continue;
@@ -206,9 +210,6 @@ static void date_time_handler(struct k_work *work)
 	if (CONFIG_DATE_TIME_UPDATE_INTERVAL_SECONDS > 0) {
 		k_sem_give(&time_fetch_sem);
 
-		LOG_DBG("New date time update in: %d seconds",
-			CONFIG_DATE_TIME_UPDATE_INTERVAL_SECONDS);
-
 		if (date_time_is_valid()) {
  			k_work_reschedule(&time_work, K_SECONDS(CONFIG_DATE_TIME_UPDATE_INTERVAL_SECONDS));
 			LOG_DBG("New date time update in: %d seconds",
@@ -223,6 +224,8 @@ static void date_time_handler(struct k_work *work)
 
 static int date_time_init(const struct device *unused)
 {
+	flag_set_rtc_time = false;
+	pcf85263a_init("I2C_0");
 	k_work_init_delayable(&time_work, date_time_handler);
 	return 0;
 }
@@ -302,6 +305,10 @@ int date_time_set(const struct tm *new_date_time)
 }
 
 int date_time_set_second(uint32_t new_date_time_sec) {
+	if (flag_set_rtc_time) {
+		return 0;
+	}
+	flag_set_rtc_time = true;
 	return pcf85263a_rtc_set_time((time_t)new_date_time_sec);
 }
 
@@ -320,7 +327,6 @@ int date_time_uptime_to_unix_time_ms(int64_t *uptime)
 		LOG_WRN("Valid time not currently available");
 		return -ENODATA;
 	}
-
 	*uptime += time_aux.date_time_utc - time_aux.last_date_time_update;
 	
 	/** Check if the passed in uptime was allready converted,
@@ -372,15 +378,14 @@ int date_time_local_second(uint32_t *local_time_s)
 	return ret;
 }
 
-int date_time_now_second(uint32_t *unix_time_s)
+int date_time_now_second(void)
 {
 	int64_t unix_time_ms = 0;
-	*unix_time_s = 0;
 	int ret = date_time_now(&unix_time_ms);
 	if (ret == 0) {
-		*unix_time_s = unix_time_ms/ 1000;
+		return unix_time_ms/ 1000;
 	}
-	return ret;
+	return -1;
 }
 
 bool date_time_is_valid(void)

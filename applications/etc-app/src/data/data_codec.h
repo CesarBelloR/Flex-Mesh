@@ -6,7 +6,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "events/lora_event.h"
+#include "events/sensor_event.h"
 
 /** @brief Structure containing battery data published to cloud. */
 struct data_battery {
@@ -19,10 +21,7 @@ struct data_battery {
 };
 
 struct data_sensors {
-	/** Environmental sensors timestamp. UNIX milliseconds. */
-	int64_t env_ts;
-	/** Temperature in celcius. */
-	double temperature;
+	struct sensor_data data;
 	/** Flag signifying that the data entry is to be encoded. */
 	bool queued : 1;
 };
@@ -56,6 +55,12 @@ enum json_common_buffer_type {
 	JSON_COMMON_COUNT
 };
 
+typedef union {
+	struct data_lora_sensors lora;
+	struct data_battery battery;
+	struct data_sensors sensor;
+} data_etc_sensors;
+
 /** @brief Operation to be carried out with the passed in data. */
 enum json_common_op_code {
 	JSON_COMMON_INVALID,
@@ -69,13 +74,28 @@ enum json_common_op_code {
 	JSON_COMMON_GET_POINTER_TO_OBJECT
 };
 
+static inline bool data_codec_compare_temperature_is_valid(float temperature) {
+	if (fabs(temperature - SENSOR_NTC_NO_CONNECTED) > 0.5) {
+		return true;
+	}
+	return false;
+}
+
 void data_codec_populate_lora_sensor_buffer(
 				struct data_lora_sensors *sensor_buffer,
 				struct data_lora_sensors *new_sensor_data,
 				int *head_sensor_buf,
 				size_t buffer_count);
 
-char* data_codec_prepare_cloud_packet(struct data_lora_sensors *sensor_buf, 
+void data_codec_populate_sensor_internal_buffer(
+				struct data_sensors *sensor_buffer,
+				struct data_sensors *new_sensor_data,
+				int *head_sensor_buf,
+				size_t buffer_count);
+
+char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer, 
+				size_t lora_buf_count,
+				struct data_sensors *sensor_buffer,
 				size_t sensor_buf_count,
 				struct data_modem_static *modem_data,
 				struct data_battery *batt_data);

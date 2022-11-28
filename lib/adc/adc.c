@@ -65,10 +65,7 @@ int adc_get_channel(int channel)
 		.buffer_size = sizeof(sample_buffer),
 	};
 
-
 	if (channel >= 0 && channel < ADC_NUM_CHANNELS) {
-		sequence.resolution = 10;
-		sequence.oversampling = 0;
 		(void)adc_sequence_init_dt(&adc_channels[channel], &sequence);
 
 		err = adc_read(adc_channels[channel].dev, &sequence);
