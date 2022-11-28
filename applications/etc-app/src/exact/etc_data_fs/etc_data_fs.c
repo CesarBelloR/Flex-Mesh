@@ -57,6 +57,13 @@ static int create_log_dir(const char *path)
 
 	fs_dir_t_init(&dir);
 
+	/* Check if directory already exists. If yes, return early. */
+	rc = fs_opendir(&dir, path);
+	if (rc == 0) {
+		fs_closedir(&dir);
+		return 0;
+	}
+
 	/* the fist directory name is the mount point*/
 	/* the firs path's letter might be meaningless `/`, let's skip it */
 	next = strchr(path + 1, '/');
@@ -257,6 +264,8 @@ static int allocate_new_file(struct fs_file_t *file)
 	struct fs_dirent ent;
 
 	assert(file);
+
+	create_log_dir(CONFIG_DATA_FS_DIR);
 	
 	if (data_state == DATA_FS_NOT_INITIALIZED) {
 		/* Search for the last used log number. */
@@ -419,6 +428,9 @@ static void etc_data_fs_write(const uint8_t* msg, size_t msg_len) {
 static void etc_data_fs_write_file(const uint8_t* msg, size_t msg_len) {
 	struct fs_file_t file;
 	int rc;
+
+	create_log_dir(CONFIG_DATA_FS_DIR);
+
 	fs_file_t_init(&file);
 	memset(file_name, 0, sizeof(file_name));
 	snprintf(file_name, sizeof(file_name), "%s/%s%d",
