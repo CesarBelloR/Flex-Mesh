@@ -18,7 +18,6 @@ static int init(const struct device *dev)
 
 	gpio_pin_configure(gpio_0_dev, VSENS_EN_PIN, GPIO_OUTPUT_ACTIVE);
 
-	k_msleep(50);
 	return 0;
 }
 
