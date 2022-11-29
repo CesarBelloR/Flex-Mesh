@@ -1,29 +1,38 @@
-description: Texas Instruments BQ24195 Fuel Gauge
+description: Texas Instruments BQ24195 Singe Cell USB Charger
 
 compatible: "ti,bq24195"
 
 include: i2c-device.yaml
 
 properties:
-    design-voltage:
+    max-current:
       type: int
       required: true
-      description: Battery Design Voltage in mV (3300 - 4400)
+      description: Input current limit (mA)
 
-    design-capacity:
+    min-voltage:
       type: int
       required: true
-      description: Battery Design Capacity in mAh
+      description: Minimum input voltage limit (mV)
 
-    taper-current:
+    charge-current:
       type: int
       required: true
-      description: Battery Taper current in mAh
+      description: Maximum current during fast charging (mA)
 
-    terminate-voltage:
+    charge-voltage:
       type: int
       required: true
-      description: Battery Terminate Voltage in mV
+      description: Charging cut-off voltage (mV)
+    
+    has-charge-timer:
+      type: boolean
+      description: Enable the charging timer
+
+    charge-timer-val:
+      type: int
+      default: 8
+      description: Charging timer value (hours)
 
     int-gpios:
       type: phandle-array
@@ -34,9 +43,3 @@ properties:
         specific events happening (e.g. change in State of Charge). While in
         shutdown mode it acts as an input and toggling it will make the sensor
         exit the mode.
-
-    zephyr,lazy-load:
-      type: boolean
-      description: |
-        Configuring the sensor can take a long time, using lazy loading we can delay
-        until the first sample request and keep the boot time as short as possible.

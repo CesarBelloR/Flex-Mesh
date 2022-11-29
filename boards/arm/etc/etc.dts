@@ -142,10 +142,11 @@
 		compatible = "ti,bq24195";
 		label = "BQ24195";
 		reg = <0x6b>;
-		design-voltage = <3700>;
-		design-capacity = <1800>;
-		taper-current = <45>;
-		terminate-voltage = <3000>;
+		min-voltage = <4360>;
+		max-current = <2000>;
+		charge-current = <2048>;
+		charge-voltage = <4208>;
+		int-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
 	};
 };
 
