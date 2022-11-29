@@ -138,8 +138,48 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+extern char* quectel_bg95_get_imei(void);
+extern char* quectel_bg95_get_revision(void);
+extern char* quectel_bg95_get_sim_number(void);
+
 static int static_modem_data_get(void)
-{
+{	
+	int err;
+
+	struct modem_event *modem_event = new_modem_event();
+
+	strncpy(modem_event->data.modem_static.board_version,
+		quectel_bg95_get_revision(),
+		sizeof(modem_event->data.modem_static.board_version) - 1);
+
+	strncpy(modem_event->data.modem_static.modem_fw,
+		quectel_bg95_get_revision(),
+		sizeof(modem_event->data.modem_static.modem_fw) - 1);
+
+	strncpy(modem_event->data.modem_static.iccid,
+		quectel_bg95_get_sim_number(),
+		sizeof(modem_event->data.modem_static.iccid) - 1);
+
+	strncpy(modem_event->data.modem_static.imei,
+		quectel_bg95_get_imei(),
+		sizeof(modem_event->data.modem_static.imei) - 1);
+
+	modem_event->data.modem_static.board_version
+		[sizeof(modem_event->data.modem_static.board_version) - 1] = '\0';
+
+	modem_event->data.modem_static.modem_fw
+		[sizeof(modem_event->data.modem_static.modem_fw) - 1] = '\0';
+
+	modem_event->data.modem_static.iccid
+		[sizeof(modem_event->data.modem_static.iccid) - 1] = '\0';
+
+	modem_event->data.modem_static.imei
+		[sizeof(modem_event->data.modem_static.imei) - 1] = '\0';
+
+	modem_event->data.modem_static.timestamp = k_uptime_get();
+	modem_event->type = MODEM_EVT_MODEM_STATIC_DATA_READY;
+
+	APP_EVENT_SUBMIT(modem_event);
 	return 0;
 }
 
@@ -177,6 +217,7 @@ static int setup(void)
 	if (quectel_bg95_is_ready()) {
 		state_set(STATE_CONNECTED);
 		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
+		static_modem_data_get();
 	} else {
 		state_set(STATE_DISCONNECTED);
 	}
