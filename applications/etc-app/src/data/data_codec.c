@@ -3,6 +3,7 @@
 #include <cJSON_os.h>
 #include <math.h>
 #include <string.h>
+#include "etc_date_time.h"
 #include "data_codec.h"
 #include "app_version.h"
 
@@ -14,6 +15,9 @@ LOG_MODULE_REGISTER(data_codec, CONFIG_ETC_APP_LOG_LEVEL);
 
 static char data_codec_buffer[DATA_CODEC_BUFFER_MAX_SIZE];
 static char data_codec_temp_buffer[DATA_CODEC_TEMP_BUFFER_MAX_SIZE];
+
+/* External declarations */
+extern int quectel_bg95_get_rssi(void);
 
 static inline bool is_digit(char in) {
 	if (in >= '0' && in <= '9') {
@@ -64,25 +68,34 @@ void data_codec_populate_sensor_internal_buffer(
 		buffer_count - 1);
 }
 
-static cJSON *create_data_arr_logger(struct data_sensors sens_data, struct data_battery *batt_data) 
+static cJSON *create_data_arr_logger(struct data_sensors sens_data, 
+				struct data_battery *batt_data,
+				struct data_modem_static *modem_data) 
 {
 	cJSON *data_arr;
 	cJSON *item;
+	char *id = "";
+	uint16_t bat = 0;
+
+	if (modem_data != NULL) {
+		id = modem_data->imei;
+	}
+	if (batt_data != NULL) {
+		bat = batt_data->bat;
+	}
 
 	data_arr = cJSON_CreateArray();
 	/* sensor_id */
-	item = cJSON_CreateNumber(123456);
+	item = cJSON_CreateString(id);
 	cJSON_AddItemToArray(data_arr, item);
 	/* time */
-	item = cJSON_CreateNumber(0);
+	item = cJSON_CreateNumber(sens_data.data.timestamp);
 	cJSON_AddItemToArray(data_arr, item);
 	/* batt */
-	if (batt_data != NULL) {
-		item = cJSON_CreateNumber(batt_data->bat);
-		cJSON_AddItemToArray(data_arr, item);
-	}
+	item = cJSON_CreateNumber(bat);
+	cJSON_AddItemToArray(data_arr, item);
 	/* sig */
-	item = cJSON_CreateNumber(-50);
+	item = cJSON_CreateNumber(quectel_bg95_get_rssi());
 	cJSON_AddItemToArray(data_arr, item);
 	/* fw */
 	item = cJSON_CreateString(APP_VERSION_STR);
@@ -94,7 +107,7 @@ static cJSON *create_data_arr_logger(struct data_sensors sens_data, struct data_
 	for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		if (data_codec_compare_temperature_is_valid(sens_data.data.temperature[i])) {
 			snprintf(data_codec_temp_buffer, sizeof(data_codec_temp_buffer), "%2.2f", sens_data.data.temperature[i]);
-			item = cJSON_CreateString(data_codec_temp_buffer);
+			item = cJSON_CreateRaw(data_codec_temp_buffer);
 		} else {
 			item = cJSON_CreateString("*");
 		}
@@ -186,12 +199,12 @@ static int create_packet_header(cJSON *root_obj,
 	if (modem_data != NULL) {
 		cJSON_AddStringToObject(root_obj, "modem_id", modem_data->imei);
 	}
-	cJSON_AddNumberToObject(root_obj, "time", 0);
+	cJSON_AddNumberToObject(root_obj, "time", date_time_now_second());
 	if (batt_data != NULL) {
 		cJSON_AddNumberToObject(root_obj, "batt", batt_data->bat);
 	}
-	cJSON_AddNumberToObject(root_obj, "sig", -50);
-	cJSON_AddStringToObject(root_obj, "fw", "1.0");
+	cJSON_AddNumberToObject(root_obj, "sig", quectel_bg95_get_rssi());
+	cJSON_AddStringToObject(root_obj, "fw", APP_VERSION_STR);
 	/* Packet counter that increments with every packet. */
 	cJSON_AddNumberToObject(root_obj, "packet", pckt_cnt);
 
@@ -215,6 +228,7 @@ char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer,
 	bool object_added = false;
 	cJSON *data_arr;
 	cJSON *arr;
+	char *retval = NULL;
 
 	cJSON *root_obj = cJSON_CreateObject();
 	if (root_obj == NULL) {
@@ -227,7 +241,8 @@ char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer,
 	cJSON_AddItemToObject(root_obj, "data", arr);
 	
 	for (int i = 0; i < sensor_buf_count; i++) {
-		data_arr = create_data_arr_logger(sensor_buffer[i], batt_data);
+		data_arr = create_data_arr_logger(sensor_buffer[i], batt_data,
+						modem_data);
 		if (data_arr == NULL) {
 			goto exit;
 		}
@@ -241,9 +256,9 @@ char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer,
 		goto exit;
 	}
 
-	return data_codec_buffer;
+	retval = data_codec_buffer;
 
 exit:
 	cJSON_Delete(root_obj);
-	return NULL;
+	return retval;
 }

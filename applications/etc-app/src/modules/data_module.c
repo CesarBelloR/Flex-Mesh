@@ -228,14 +228,15 @@ static void config_get(void)
 	SEND_EVENT(data, DATA_EVT_CONFIG_GET);
 }
 
-static void data_encode(void) {
+static void data_encode(void) 
+{
 	if (head_sensor_buf == 0) {
 		return;
 	}
 
 	LOG_INF("Head sensor buf %d", head_sensor_buf);
 	char* data_msg = data_codec_prepare_cloud_packet(NULL, 0, sensors_buf, head_sensor_buf,
-		NULL, NULL);
+		&modem_stat, NULL);
 	if (data_msg == NULL) {
 		LOG_WRN("No message to publish");
 		return;
