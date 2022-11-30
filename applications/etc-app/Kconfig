@@ -16,6 +16,10 @@ config SENSOR_POLL_INTERVAL_SECONDS
 	int "Number of seconds in polling interval that the sample will publish data"
 	default 900
 
+config BATTERY_POLL_INTERVAL_SECONDS
+	int "Number of seconds in sampling the battery"
+	default 60
+
 config ETC_LORA_MODULE
 	bool "Enable/disable LoRa module"
 	default y

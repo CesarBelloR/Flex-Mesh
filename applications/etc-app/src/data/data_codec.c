@@ -96,7 +96,7 @@ static cJSON *create_data_arr_logger(struct data_sensors *sens_data,
 		id = modem_data->imei;
 	}
 	if (batt_data != NULL) {
-		bat = batt_data->bat;
+		bat = batt_data->data.battery_mV;
 	}
 
 	data_arr = cJSON_CreateArray();
@@ -214,7 +214,7 @@ static int create_packet_header(cJSON *root_obj,
 	}
 	cJSON_AddNumberToObject(root_obj, "time", date_time_now_second());
 	if (batt_data != NULL) {
-		cJSON_AddNumberToObject(root_obj, "batt", batt_data->bat);
+		cJSON_AddNumberToObject(root_obj, "batt", batt_data->data.battery_mV);
 	}
 	cJSON_AddNumberToObject(root_obj, "sig", quectel_bg95_get_rssi());
 	cJSON_AddStringToObject(root_obj, "fw", APP_VERSION_STR);

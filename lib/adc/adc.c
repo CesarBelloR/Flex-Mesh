@@ -78,3 +78,7 @@ int adc_get_channel(int channel)
 	}
 	return -1;
 }
+
+int adc_get_raw_to_millivolts(int channel, int* raw) {
+	return adc_raw_to_millivolts_dt(&adc_channels[channel], raw);
+}

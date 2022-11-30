@@ -4,6 +4,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 #include <app_event_manager.h>
+#include "common.h"
 #include "adc.h"
 #include "etc_date_time.h"
 #define MODULE sensor_module
@@ -35,7 +36,9 @@ static enum state_type {
 } state;
 
 static struct k_work_delayable sensor_poll_work;
+static struct k_work_delayable battery_poll_work;
 static struct sensor_data static_sensor_data;
+static struct battery_data static_battery_data;
 
 /* Sensor module message queue. */
 #define SENSOR_QUEUE_ENTRY_COUNT	10
@@ -45,11 +48,25 @@ static struct sensor_data static_sensor_data;
 #define SENSOR_GPIO_S0_PIN (9)
 #define SENSOR_GPIO_S1_PIN (10)
 
+/* Sensor Analog constant information */
+#define SENSOR_NTC_NOMINAL_RESISTANCE 10000.0
+#define SENSOR_NTC_NOMINAL_TEMP 25.0
+#define SENSOR_NTC_BETA 3434.0
+#define SENSOR_NTC_RESISTOR_REF 10000.0
+#define SENSOR_RAW_ADC_MAX 4095
+
+#define SENSOR_BATTERY_ADC_MAX SENSOR_RAW_ADC_MAX
+#define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
+
+const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
+const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
+
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
 
 /* Forward declarations */
 static void sensor_poll_work_fn(struct k_work *work);
+static void battery_poll_work_fn(struct k_work *work);
 
 static bool sensor_is_processing = false;
 static struct module_data self = {
@@ -152,11 +169,19 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void sensor_module_send(struct sensor_data* sensor)
+static void sensor_module_send_sensor(struct sensor_data* sensor)
 {
 	struct sensor_event *sensor_event = new_sensor_event();
 	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
 	sensor_event->data.sensors = sensor;
+	APP_EVENT_SUBMIT(sensor_event);
+}
+
+static void sensor_module_send_battery(struct battery_data* sensor)
+{
+	struct sensor_event *sensor_event = new_sensor_event();
+	sensor_event->type = SENSOR_EVT_BATTERY_DATA_READY;
+	sensor_event->data.battery = sensor;
 	APP_EVENT_SUBMIT(sensor_event);
 }
 
@@ -166,12 +191,6 @@ static int setup(void)
 	sensor_adc_hw_init();
 	return 0;
 }
-
-#define SENSOR_NTC_NOMINAL_RESISTANCE 10000.0
-#define SENSOR_NTC_NOMINAL_TEMP 25.0
-#define SENSOR_NTC_BETA 3434.0
-#define SENSOR_NTC_RESISTOR_REF 10000.0
-#define SENSOR_RAW_ADC_MAX 4095
 
 static float sensor_ntc_converter(int raw_data) {
 	raw_data = (int)((float)(raw_data) * 3.6 / 3.3);
@@ -197,27 +216,42 @@ static void sensor_poll_handler(void) {
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
-	data->temperature[0] = sensor_ntc_converter(adc_get_channel(0));
-	if (fabs(data->temperature[0] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+	data->temperature[SENSOR_INPUT_AMBIENT] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB));
+	if (fabs(data->temperature[SENSOR_INPUT_AMBIENT] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 		LOG_DBG("Ambient temp %2.2f", data->temperature[0]);
 	}
-	for (int8_t i = 1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+	for (int8_t i = SENSOR_INPUT_IN1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		sensor_adc_switch_channel(i - 1);
 		k_msleep(50);
-		data->temperature[i] = sensor_ntc_converter(adc_get_channel(2));
+		data->temperature[i] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR));
 		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
 		} else {
 			LOG_DBG("Channel %d doesn't available", i - 1);
 		}
 	}
-	sensor_module_send(data);
+	sensor_module_send_sensor(data);
 	sensor_is_processing = false;
+}
+
+static void battery_poll_handler(void) {
+	int raw_adc_battery = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
+	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_adc_battery);
+	int adc_mv_battery = raw_adc_battery * (sFullOhms / sOutputOhms);
+	struct battery_data* data = &static_battery_data;
+	data->timestamp = date_time_now_second();
+	data->battery_mV = adc_mv_battery;
+	sensor_module_send_battery(data);
 }
 
 static void sensor_poll_work_fn(struct k_work *work) {
 	sensor_poll_handler();
 	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
+}
+
+static void battery_poll_work_fn(struct k_work *work) {
+	battery_poll_handler();
+	k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_BATTERY_POLL_INTERVAL_SECONDS));
 }
 
 /* Message handler for STATE_INIT. */
@@ -272,7 +306,9 @@ static void module_thread_fn(void)
 	}
 
 	k_work_init_delayable(&sensor_poll_work, sensor_poll_work_fn);
+	k_work_init_delayable(&battery_poll_work, battery_poll_work_fn);
 	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
+	k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_BATTERY_POLL_INTERVAL_SECONDS));
 
 	while (true) {
 		module_get_next_msg(&self, &msg);

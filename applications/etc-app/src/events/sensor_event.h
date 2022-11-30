@@ -19,7 +19,7 @@ extern "C" {
 enum sensor_event_type {
 	SENSOR_EVT_ENVIRONMENTAL_DATA_READY,
 	SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED,
-	SENSOR_EVT_HALL_DATA_READY,
+	SENSOR_EVT_BATTERY_DATA_READY,
 	SENSOR_EVT_SHUTDOWN_READY,
 	SENSOR_EVT_ERROR,
 };
@@ -43,6 +43,13 @@ struct sensor_data {
 	float temperature[SENSOR_EVENT_NUM_DEV_MAX];
 };
 
+struct battery_data {
+	/** Uptime when the data was sampled. */
+	int64_t timestamp;
+	/** Temperature in Celsius degrees. */
+	uint16_t battery_mV;
+};
+
 struct sensor_event {
 	struct app_event_header header;
 
@@ -53,6 +60,7 @@ struct sensor_event {
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
 		struct sensor_data* sensors;
+		struct battery_data* battery;
 	} data;
 };
 
