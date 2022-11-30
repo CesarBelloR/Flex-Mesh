@@ -25,6 +25,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "events/util_event.h"
 #include "events/modem_event.h"
 #include "modules_common.h"
+#include "app_version.h"
 
 struct cloud_msg_data
 {
@@ -498,7 +499,7 @@ static int shadow_update(bool version_number_include)
 
 	if (version_number_include) {
 		err = json_add_str(reported_obj, "version",
-				    CONFIG_APP_VERSION);
+				    APP_VERSION_STR);
 	} else {
 		err = 0;
 	}
