@@ -75,7 +75,8 @@ enum json_common_op_code {
 };
 
 static inline bool data_codec_compare_temperature_is_valid(float temperature) {
-	if (fabs(temperature - SENSOR_NTC_NO_CONNECTED) > 0.5) {
+	if ((temperature >= SENSOR_TEMP_C_MIN) && 
+	    (temperature <= SENSOR_TEMP_C_MAX)) {
 		return true;
 	}
 	return false;

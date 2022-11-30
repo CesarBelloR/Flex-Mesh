@@ -68,7 +68,22 @@ void data_codec_populate_sensor_internal_buffer(
 		buffer_count - 1);
 }
 
-static cJSON *create_data_arr_logger(struct data_sensors sens_data, 
+static cJSON *create_sensor_value_item(float temperature)
+{
+	cJSON *item;
+
+	if (data_codec_compare_temperature_is_valid(temperature)) {
+		snprintf(data_codec_temp_buffer, sizeof(data_codec_temp_buffer),
+			"%2.2f", temperature);
+		item = cJSON_CreateRaw(data_codec_temp_buffer);
+	} else {
+		item = cJSON_CreateString("*");
+	}
+
+	return item;
+}
+
+static cJSON *create_data_arr_logger(struct data_sensors *sens_data, 
 				struct data_battery *batt_data,
 				struct data_modem_static *modem_data) 
 {
@@ -89,7 +104,7 @@ static cJSON *create_data_arr_logger(struct data_sensors sens_data,
 	item = cJSON_CreateString(id);
 	cJSON_AddItemToArray(data_arr, item);
 	/* time */
-	item = cJSON_CreateNumber(sens_data.data.timestamp);
+	item = cJSON_CreateNumber(sens_data->data.timestamp);
 	cJSON_AddItemToArray(data_arr, item);
 	/* batt */
 	item = cJSON_CreateNumber(bat);
@@ -104,15 +119,13 @@ static cJSON *create_data_arr_logger(struct data_sensors sens_data,
 	item = cJSON_CreateNumber(0);
 	cJSON_AddItemToArray(data_arr, item);
 	
-	for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
-		if (data_codec_compare_temperature_is_valid(sens_data.data.temperature[i])) {
-			snprintf(data_codec_temp_buffer, sizeof(data_codec_temp_buffer), "%2.2f", sens_data.data.temperature[i]);
-			item = cJSON_CreateRaw(data_codec_temp_buffer);
-		} else {
-			item = cJSON_CreateString("*");
-		}
+	for (int i = SENSOR_INPUT_IN1; i < SENSOR_INPUT_MAX; i++) {
+		item = create_sensor_value_item(sens_data->data.temperature[i]);
 		cJSON_AddItemToArray(data_arr, item);
 	}
+	item = create_sensor_value_item(sens_data->data.temperature[SENSOR_INPUT_AMBIENT]);
+	cJSON_AddItemToArray(data_arr, item);
+
 
 	return data_arr;
 }
@@ -241,7 +254,7 @@ char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer,
 	cJSON_AddItemToObject(root_obj, "data", arr);
 	
 	for (int i = 0; i < sensor_buf_count; i++) {
-		data_arr = create_data_arr_logger(sensor_buffer[i], batt_data,
+		data_arr = create_data_arr_logger(&sensor_buffer[i], batt_data,
 						modem_data);
 		if (data_arr == NULL) {
 			goto exit;

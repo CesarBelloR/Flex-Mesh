@@ -9,8 +9,11 @@
 extern "C" {
 #endif
 
-#define SENSOR_EVENT_NUM_DEV_MAX 5
 #define SENSOR_NTC_NO_CONNECTED -273.150
+/* Minimum sensor temperature that is a valid reading. */
+#define SENSOR_TEMP_C_MIN	-40.0f
+/* Maximum sensor temperature that is a valid reading. */
+#define SENSOR_TEMP_C_MAX	120.0f
 
 /** @brief Sensor event types submitted by the Sensor module. */
 enum sensor_event_type {
@@ -20,6 +23,17 @@ enum sensor_event_type {
 	SENSOR_EVT_SHUTDOWN_READY,
 	SENSOR_EVT_ERROR,
 };
+
+enum sensor_input {
+	SENSOR_INPUT_AMBIENT = 0,
+	SENSOR_INPUT_IN1,
+	SENSOR_INPUT_IN2,
+	SENSOR_INPUT_IN3,
+	SENSOR_INPUT_IN4,
+	SENSOR_INPUT_MAX
+};
+
+#define SENSOR_EVENT_NUM_DEV_MAX SENSOR_INPUT_MAX
 
 /** @brief Structure used to provide environmental data. */
 struct sensor_data {

@@ -2081,3 +2081,8 @@ int quectel_bg95_get_time(char* time_buf) {
 bool quectel_bg95_is_ready(void) {
 	return modem_is_ready;
 }
+
+int quectel_bg95_get_rssi(void)
+{
+	return mdata.mdm_rssi;
+}
