@@ -1622,22 +1622,9 @@ restart:
 
 	/* Let the modem respond. */
 	LOG_INF("Waiting for modem to respond");
-	/* Give the modem a while to start responding to simple 'AT' commands.
-	 * Also wait for CSPS=1 or RRCSTATE=1 notification
-	 */
-	ret = -1;
-	while (counter++ < 50 && ret < 0) {
-		k_sleep(K_SECONDS(2));
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				     NULL, 0, "AT", &mdata.sem_response,
-				     MDM_CMD_TIMEOUT);
-		if (ret < 0 && ret != -ETIMEDOUT) {
-			break;
-		}
-	}
-
+	ret = k_sem_take(&mdata.sem_response, MDM_MAX_BOOT_TIME);
 	if (ret < 0) {
-		LOG_ERR("MODEM WAIT LOOP ERROR: %d", ret);
+		LOG_ERR("Timeout waiting for RDY");
 		goto error;
 	}
 
