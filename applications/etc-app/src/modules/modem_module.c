@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <app_event_manager.h>
 #include <math.h>
+#include <devicetree.h>
+#include <modem_api.h>
 
 #define MODULE modem_module
 #define MODULE_MODEM_THREAD_STACK_SIZE 512
@@ -52,6 +54,8 @@ enum sample_type {
 static int16_t rsrp_value_latest;
 
 const k_tid_t module_thread;
+
+const struct device *modem_dev;
 
 /* Modem module message queue. */
 #define MODEM_QUEUE_ENTRY_COUNT		10
@@ -138,6 +142,22 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void modem_evt_handler(const struct modem_api_evt *const evt)
+{
+	struct modem_event *modem_event = new_modem_event();
+
+	switch (evt->type) {
+	case MODEM_API_CONNECTED_EVT:
+		modem_event->type = MODEM_EVT_LTE_CONNECTED;
+		APP_EVENT_SUBMIT(modem_event);
+		break;
+	case MODEM_API_DISCONNECTED_EVT:
+		modem_event->type = MODEM_EVT_LTE_DISCONNECTED;
+		APP_EVENT_SUBMIT(modem_event);
+		break;
+	}
+}
+
 extern char* quectel_bg95_get_imei(void);
 extern char* quectel_bg95_get_revision(void);
 extern char* quectel_bg95_get_sim_number(void);
@@ -220,6 +240,11 @@ static int setup(void)
 		static_modem_data_get();
 	} else {
 		state_set(STATE_DISCONNECTED);
+	}
+
+	modem_dev = device_get_binding("quectel-bg95");
+	if (modem_dev != NULL) {
+		modem_evt_handler_init(modem_dev, modem_evt_handler);
 	}
 	return 0;
 }

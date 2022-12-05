@@ -23,6 +23,7 @@
 #include "modem_socket.h"
 #include "modem_cmd_handler.h"
 #include "modem_iface_uart.h"
+#include "modem_api.h"
 
 #define MDM_UART_DEV			  DEVICE_DT_GET(DT_INST_BUS(0))
 #define MDM_UART_NODE			  DT_INST_BUS(0)
@@ -41,9 +42,9 @@
 #define MDM_INIT_RETRY_COUNT		  10
 #define MDM_PDP_ACT_RETRY_COUNT		  10
 #define MDM_WAIT_FOR_RSSI_COUNT		  10
-#define MDM_WAIT_FOR_RSSI_DELAY		  K_SECONDS(2)
 #define BUF_ALLOC_TIMEOUT		  K_SECONDS(1)
 #define MDM_MAX_BOOT_TIME		  K_SECONDS(50)
+#define MDM_RSSI_INVALID		  -1000
 
 #define MDM_FILE_NAME_MAX_LENGTH (80)
 
@@ -61,6 +62,7 @@
 #define MDM_TIME_LENGTH           32
 #define MDM_APN_LENGTH			  32
 #define RSSI_TIMEOUT_SECS		  30
+#define MDM_WAIT_FOR_RSSI_TIMEOUT	  K_SECONDS(2)
 
 #define MDM_APN				      CONFIG_MODEM_QUECTEL_BG95_M3_APN
 #define MDM_USERNAME			  CONFIG_MODEM_QUECTEL_BG95_M3_USERNAME
@@ -127,6 +129,12 @@ struct modem_data {
 
 	/* Unread data status */
 	int unread_size;
+
+	/* Modem status */
+	bool is_connected;
+
+	/* Modem API */
+	modem_api_evt_handler_t evt_callback;
 
 	/* Semaphore(s) */
 	struct k_sem sem_response;

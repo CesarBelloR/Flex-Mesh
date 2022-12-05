@@ -12,7 +12,6 @@ static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
 static struct modem_context    mctx;
 static const struct socket_op_vtable offload_socket_fd_op_vtable;
-static bool volatile modem_is_ready = false;
 
 #if defined(CONFIG_DNS_RESOLVER)
 static struct zsock_addrinfo result;
@@ -263,7 +262,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 	} else if (rssi >= 0 && rssi <= 31) {
 		mdata.mdm_rssi = -114 + ((rssi * 2) + 1);
 	} else {
-		mdata.mdm_rssi = -1000;
+		mdata.mdm_rssi = MDM_RSSI_INVALID;
 	}
 
 	LOG_INF("RSSI: %d", mdata.mdm_rssi);
@@ -1483,6 +1482,98 @@ static void modem_rx(void)
 	}
 }
 
+/* Func: modem_pdp_context_active
+ * Desc: This helper function is called from modem_setup, and is
+ * used to open the PDP context. If there is trouble activating the
+ * PDP context, we try to deactive and reactive MDM_PDP_ACT_RETRY_COUNT times.
+ * If it fails, we return an error.
+ */
+static int modem_pdp_context_activate(void)
+{
+	int ret;
+	int retry_count = 0;
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0U, "AT+QIACT=1", &mdata.sem_response,
+			     MDM_REGISTRATION_TIMEOUT);
+
+	/* If there is trouble activating the PDP context, we try to deactivate/reactive it. */
+	while (ret == -EIO && retry_count < MDM_PDP_ACT_RETRY_COUNT) {
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0U, "AT+QIDEACT=1", &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+
+		/* If there's any error for AT+QIDEACT, restart the module. */
+		if (ret != 0) {
+			return ret;
+		}
+
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0U, "AT+QIACT=1", &mdata.sem_response,
+			     MDM_REGISTRATION_TIMEOUT);
+
+		retry_count++;
+	}
+
+	if (ret == -EIO && retry_count >= MDM_PDP_ACT_RETRY_COUNT) {
+		LOG_ERR("Retried activating/deactivating too many times.");
+	}
+
+	return ret;
+}
+
+/**
+ * @brief Call the set event callback with the specified event.
+ * 
+ * @param evt_type Event type to be forwarded to callback.
+ * @return 0 on success, negative on error.
+*/
+static int modem_event_callback(enum modem_api_evt_type evt_type)
+{
+	const struct modem_api_evt evt = {
+		.type = evt_type,
+	};
+
+	if (mdata.evt_callback == NULL) {
+		return -ENOSYS;
+	}
+
+	mdata.evt_callback(&evt);
+
+	return 0;
+}
+
+/**
+ * @brief Activate pdp context and call event handler when device disconnects/
+ * 	  connects.
+*/
+static void modem_connect_work(void) 
+{
+	int ret;
+
+	if (mdata.mdm_rssi == MDM_RSSI_INVALID) {
+		if (mdata.is_connected) {
+			modem_event_callback(MODEM_API_DISCONNECTED_EVT);
+		}
+		mdata.is_connected = false;
+		return;
+	}
+	if (mdata.is_connected) {
+		return;
+	}
+
+	/* If the RSSI is valid, which means that the network is ready, 
+	 * and the modem is not connected, we try to activate the PDP context. */
+	ret = modem_pdp_context_activate();
+	if (ret < 0) {
+		LOG_ERR("Error activating modem with pdp context");
+	} else if (ret == 0) {
+		modem_event_callback(MODEM_API_CONNECTED_EVT);
+		LOG_INF("Network connected.");
+		mdata.is_connected = true;
+	}
+}
+
 /* Func: modem_rssi_query_work
  * Desc: Routine to get Modem RSSI.
  */
@@ -1491,6 +1582,7 @@ static void modem_rssi_query_work(struct k_work *work)
 	struct modem_cmd cmd  = MODEM_CMD("+CSQ: ", on_cmd_atcmdinfo_rssi_csq, 2U, ",");
 	static char *send_cmd = "AT+CSQ";
 	int ret;
+	k_timeout_t timeout = K_SECONDS(RSSI_TIMEOUT_SECS);
 
 	/* query modem RSSI */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
@@ -1500,11 +1592,17 @@ static void modem_rssi_query_work(struct k_work *work)
 		LOG_ERR("AT+CSQ ret:%d", ret);
 	}
 
+	modem_connect_work();
+
+	if (!mdata.is_connected) {
+		timeout = MDM_WAIT_FOR_RSSI_TIMEOUT;
+	}
+
 	/* Re-start RSSI query work */
 	if (work) {
 		k_work_reschedule_for_queue(&modem_workq,
 					    &mdata.rssi_query_work,
-					    K_SECONDS(RSSI_TIMEOUT_SECS));
+					    timeout);
 	}
 }
 
@@ -1560,46 +1658,6 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
 };
 
-/* Func: modem_pdp_context_active
- * Desc: This helper function is called from modem_setup, and is
- * used to open the PDP context. If there is trouble activating the
- * PDP context, we try to deactive and reactive MDM_PDP_ACT_RETRY_COUNT times.
- * If it fails, we return an error.
- */
-static int modem_pdp_context_activate(void)
-{
-	int ret;
-	int retry_count = 0;
-
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     NULL, 0U, "AT+QIACT=1", &mdata.sem_response,
-			     MDM_REGISTRATION_TIMEOUT);
-
-	/* If there is trouble activating the PDP context, we try to deactivate/reactive it. */
-	while (ret == -EIO && retry_count < MDM_PDP_ACT_RETRY_COUNT) {
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     NULL, 0U, "AT+QIDEACT=1", &mdata.sem_response,
-			     MDM_CMD_TIMEOUT);
-
-		/* If there's any error for AT+QIDEACT, restart the module. */
-		if (ret != 0) {
-			return ret;
-		}
-
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     NULL, 0U, "AT+QIACT=1", &mdata.sem_response,
-			     MDM_REGISTRATION_TIMEOUT);
-
-		retry_count++;
-	}
-
-	if (ret == -EIO && retry_count >= MDM_PDP_ACT_RETRY_COUNT) {
-		LOG_ERR("Retried activating/deactivating too many times.");
-	}
-
-	return ret;
-}
-
 /* Func: modem_setup
  * Desc: This function is used to setup the modem from zero. The idea
  * is that this function will be called right after the modem is
@@ -1608,7 +1666,6 @@ static int modem_pdp_context_activate(void)
 static int modem_setup(void)
 {
 	int ret = 0, counter;
-	int rssi_retry_count = 0, init_retry_count = 0;
 
 	/* Setup the pins to ensure that Modem is enabled. */
 	pin_init();
@@ -1636,48 +1693,11 @@ restart:
 		goto error;
 	}
 
-restart_rssi:
-
-	/* query modem RSSI */
-	modem_rssi_query_work(NULL);
-	k_sleep(MDM_WAIT_FOR_RSSI_DELAY);
-
-	/* Keep trying to read RSSI until we get a valid value - Eventually, exit. */
-	while (counter++ < MDM_WAIT_FOR_RSSI_COUNT &&
-	      (mdata.mdm_rssi >= 0 || mdata.mdm_rssi <= -1000)) {
-		modem_rssi_query_work(NULL);
-		k_sleep(MDM_WAIT_FOR_RSSI_DELAY);
-	}
-
-	/* Is the RSSI invalid ? */
-	if (mdata.mdm_rssi >= 0 || mdata.mdm_rssi <= -1000) {
-		rssi_retry_count++;
-
-		if (rssi_retry_count >= MDM_NETWORK_RETRY_COUNT) {
-			LOG_ERR("Failed network init. Too many attempts!");
-			ret = -ENETUNREACH;
-			goto error;
-		}
-
-		/* Try again! */
-		LOG_ERR("Failed network init. Restarting process.");
-		counter = 0;
-		goto restart_rssi;
-	}
-
-	/* Network is ready - Start RSSI work in the background. */
-	LOG_INF("Network is ready.");
+	/* Modem is ready - Start RSSI work in the background. */
+	LOG_INF("Modem is initialized.");
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
-				    K_SECONDS(RSSI_TIMEOUT_SECS));
+				    MDM_WAIT_FOR_RSSI_TIMEOUT);
 
-	/* Once the network is ready, we try to activate the PDP context. */
-	ret = modem_pdp_context_activate();
-	if (ret < 0 && init_retry_count++ < MDM_INIT_RETRY_COUNT) {
-		LOG_ERR("Error activating modem with pdp context");
-		goto restart;
-	}
-
-	modem_is_ready = true;
 error:
 	return ret;
 }
@@ -1869,8 +1889,27 @@ static void modem_net_iface_init(struct net_if *iface)
 #endif
 }
 
-static struct net_if_api api_funcs = {
-	.init = modem_net_iface_init,
+/**
+ * @brief Initialize the event handler callback.
+ * 
+ * @param dev Pointer to the device
+ * @param evt_handler Event handler callback function
+ * @return 0 on success, negative on error
+*/
+static int quectel_bg95_evt_handler_init(const struct device *dev, 
+					 modem_api_evt_handler_t evt_handler)
+{
+	struct modem_data *data = dev->data;
+
+	data->evt_callback = evt_handler;
+
+	return 0;
+}
+
+static struct modem_api api_funcs = {
+	.iface_api.init = modem_net_iface_init,
+
+	.evt_handler_init = quectel_bg95_evt_handler_init,
 };
 
 static bool offload_is_supported(int family, int type, int proto)
@@ -2045,7 +2084,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_clock)
 }
 
 int quectel_bg95_get_time(char* time_buf) {
-	if (!modem_is_ready) {
+	if (!mdata.is_connected) {
 		return -1;
 	}
 
@@ -2066,7 +2105,7 @@ int quectel_bg95_get_time(char* time_buf) {
 }
 
 bool quectel_bg95_is_ready(void) {
-	return modem_is_ready;
+	return mdata.is_connected;
 }
 
 int quectel_bg95_get_rssi(void)
