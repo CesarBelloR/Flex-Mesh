@@ -58,7 +58,6 @@ static void app_driver_init(void) {
 	ui_init();
 	adc_init();
 	pcf85263a_init("I2C_0");
-	bq24195_init();
 }
 
 char key[] = "ElL10TaC4T";
