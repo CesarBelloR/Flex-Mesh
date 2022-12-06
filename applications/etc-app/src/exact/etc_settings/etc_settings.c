@@ -177,18 +177,30 @@ static int cmd_info(const struct shell *shell, size_t argc, char **argv)
 
 static int cmd_set_hardware_version(const struct shell *shell, size_t argc, char **argv)
 {
+	if (strlen(argv[1] == 0)) {
+		shell_error(shell, "Invalid input hardware");
+		return 0;
+	}
 	etc_set_hw_version(argv[1]);
 	return 0;
 }
 
 static int cmd_set_firmware_version(const struct shell *shell, size_t argc, char **argv)
 {
+	if (strlen(argv[1] == 0)) {
+		shell_error(shell, "Invalid input hardware");
+		return 0;
+	}
 	etc_set_fw_version(argv[1]);
 	return 0;
 }
 
 static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv)
 {
+	if (strlen(argv[1] == 0)) {
+		shell_error(shell, "Invalid input hardware");
+		return 0;
+	}
 	etc_set_device_id(argv[1]);
 	return 0;
 }
