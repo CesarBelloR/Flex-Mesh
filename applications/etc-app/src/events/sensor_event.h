@@ -41,6 +41,8 @@ struct sensor_data {
 	int64_t timestamp;
 	/** Temperature in Celsius degrees. */
 	float temperature[SENSOR_EVENT_NUM_DEV_MAX];
+	/** Voltage of battery in mV */
+	uint16_t battery_mV;
 };
 
 struct battery_data {
@@ -60,7 +62,6 @@ struct sensor_event {
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
 		struct sensor_data* sensors;
-		struct battery_data* battery;
 	} data;
 };
 

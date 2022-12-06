@@ -38,7 +38,6 @@ static enum state_type {
 static struct k_work_delayable sensor_poll_work;
 static struct k_work_delayable battery_poll_work;
 static struct sensor_data static_sensor_data;
-static struct battery_data static_battery_data;
 
 /* Sensor module message queue. */
 #define SENSOR_QUEUE_ENTRY_COUNT	10
@@ -49,15 +48,16 @@ static struct battery_data static_battery_data;
 #define SENSOR_GPIO_S1_PIN (10)
 
 /* Sensor Analog constant information */
-#define SENSOR_NTC_NOMINAL_RESISTANCE 10000.0
+#define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
 #define SENSOR_NTC_NOMINAL_TEMP 25.0
-#define SENSOR_NTC_BETA 3434.0
-#define SENSOR_NTC_RESISTOR_REF 10000.0
+#define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
+#define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
 #define SENSOR_RAW_ADC_MAX 4095
 
 #define SENSOR_BATTERY_ADC_MAX SENSOR_RAW_ADC_MAX
 #define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
 
+/* Battery constant information */
 const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
 const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
 
@@ -177,26 +177,12 @@ static void sensor_module_send_sensor(struct sensor_data* sensor)
 	APP_EVENT_SUBMIT(sensor_event);
 }
 
-static void sensor_module_send_battery(struct battery_data* sensor)
-{
-	struct sensor_event *sensor_event = new_sensor_event();
-	sensor_event->type = SENSOR_EVT_BATTERY_DATA_READY;
-	sensor_event->data.battery = sensor;
-	APP_EVENT_SUBMIT(sensor_event);
-}
-
 static int setup(void)
 {
 	adc_init();
 	sensor_adc_hw_init();
 	return 0;
 }
-
-#define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
-#define SENSOR_NTC_NOMINAL_TEMP 25.0
-#define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
-#define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
-#define SENSOR_RAW_ADC_MAX 4095
 
 static float sensor_ntc_converter(int data) {
 	float raw_data = ((float)(data) * 3.6 / 3.3);
@@ -230,28 +216,18 @@ static void sensor_poll_handler(void) {
 			LOG_DBG("Channel %d doesn't available", i - 1);
 		}
 	}
-	sensor_module_send_sensor(data);
-	sensor_is_processing = false;
-}
 
-static void battery_poll_handler(void) {
 	int raw_adc_battery = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
 	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_adc_battery);
 	int adc_mv_battery = raw_adc_battery * (sFullOhms / sOutputOhms);
-	struct battery_data* data = &static_battery_data;
-	data->timestamp = date_time_now_second();
 	data->battery_mV = adc_mv_battery;
-	sensor_module_send_battery(data);
+	sensor_module_send_sensor(data);
+	sensor_is_processing = false;
 }
 
 static void sensor_poll_work_fn(struct k_work *work) {
 	sensor_poll_handler();
 	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
-}
-
-static void battery_poll_work_fn(struct k_work *work) {
-	battery_poll_handler();
-	k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_BATTERY_POLL_INTERVAL_SECONDS));
 }
 
 /* Message handler for STATE_INIT. */
@@ -306,9 +282,7 @@ static void module_thread_fn(void)
 	}
 
 	k_work_init_delayable(&sensor_poll_work, sensor_poll_work_fn);
-	k_work_init_delayable(&battery_poll_work, battery_poll_work_fn);
 	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
-	k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_BATTERY_POLL_INTERVAL_SECONDS));
 
 	while (true) {
 		module_get_next_msg(&self, &msg);

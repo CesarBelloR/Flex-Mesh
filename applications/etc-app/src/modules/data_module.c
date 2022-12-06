@@ -362,15 +362,6 @@ static void on_all_states(struct data_msg_data *msg)
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 
-	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_DATA_READY)) {
-		struct data_battery new_battery_data = {
-			.queued = true
-		};
-
-		memcpy(&new_battery_data.data, msg->module.sensor.data.battery, sizeof(struct battery_data));
-		LOG_INF("At %lld - Battery Level %d mv", new_battery_data.data.timestamp, new_battery_data.data.battery_mV);
-	}
-
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED)) {
 	}
 
