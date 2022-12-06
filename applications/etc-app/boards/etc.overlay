@@ -13,6 +13,13 @@
 		/* adjust channel number according to pinmux in board.dts */
 		io-channels = <&adc 7>, <&adc 3>, <&adc 2>;
 	};
+
+	ntc {
+		compatible = "temp,ntc";
+		b-value-k = <3380>;
+		norminal-25c-ohms = <10000>;
+		reference-res-ohms = <10000>;
+	};
 };
 
 &adc {

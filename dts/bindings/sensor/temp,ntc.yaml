@@ -1,0 +1,20 @@
+description: NTC thermistor sensor converter
+
+compatible: "temp,ntc"
+
+properties:
+    b-value-k:
+      type: int
+      required: true
+      description: Temperature charactersitics Norminal-B-Constant
+
+    norminal-25c-ohms:
+      type: int
+      required: true
+      description: Norminal 25oC resistor value in ohms
+
+    reference-res-ohms:
+      type: int
+      required: true
+      description: Reference resistor value in ohms
+    
