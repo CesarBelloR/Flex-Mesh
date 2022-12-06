@@ -164,7 +164,7 @@ static time_t decode_rtc(void)
 
 	time_unix = timeutil_timegm(&time);
 
-	LOG_DBG("Unix time is %u\n", (uint32_t)time_unix);
+	LOG_DBG("Unix time is %u", (uint32_t)time_unix);
 
 	return time_unix;
 }
@@ -365,6 +365,7 @@ int pcf85263a_init(const char* device)
 static void pcf85263a_watchdog_handler(struct k_work *work)
 {
     pcf85263a_watchdog_feed();
+    LOG_INF("Feed for watchdog");
 	k_work_schedule(&m_pcf85263_watchdog_work, K_SECONDS(CONFIG_PCF85263_WATCHDOG_FEED_INTERNAL_SECONDS));
 }
 
@@ -377,8 +378,8 @@ int pcf85263a_watchdog_init(void)
     watchdog_reg.wdm = 1UL;
     /* Maximum timeout of watchdog (124s) */
     watchdog_reg.wdr = 31UL;
-    /* Configure for step 4s per tick */
-    watchdog_reg.wds = 00;
+    /* Configure for step 1s per tick */
+    watchdog_reg.wds = 01;
     data->watchdog_registers = watchdog_reg;
 
     int ret = write_register(PCF85263A_WATCH_DOG_REG, data->watchdog_registers.byte);
@@ -386,7 +387,7 @@ int pcf85263a_watchdog_init(void)
         k_work_init_delayable(&m_pcf85263_watchdog_work, pcf85263a_watchdog_handler);
         k_work_schedule(&m_pcf85263_watchdog_work, 
             K_SECONDS(CONFIG_PCF85263_WATCHDOG_FEED_INTERNAL_SECONDS));
-        LOG_DBG("Initialized Watchdog with PCF85263A successfully");
+        LOG_INF("Initialized Watchdog with PCF85263A successfully");
     } else {
         LOG_ERR("Failed to initialize Watchdog with PCF85263A");
     }
@@ -397,6 +398,12 @@ int pcf85263a_watchdog_feed(void)
 {
     struct pcf85263_data *data = &m_pcf85263_data;
     return write_register(PCF85263A_WATCH_DOG_REG, data->watchdog_registers.byte);
+}
+
+int pcf85263a_watchdog_stop_feed(void) 
+{
+    k_work_cancel_delayable(&m_pcf85263_watchdog_work);
+    return 0;
 }
 
 int pcf85263a_alarm_config_type_1(pcf85263a_alarm_type_1_config_t info)
