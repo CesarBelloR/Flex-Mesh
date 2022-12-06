@@ -11,7 +11,6 @@
 #include <drivers/flash.h>
 #include <drivers/gpio.h>
 #include "pcf85263a.h"
-#include "bq24195.h"
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"
@@ -203,21 +202,6 @@ static int cmd_external_flash_get_info(const struct shell *shell, size_t argc, c
 }
 
 SHELL_CMD_ARG_REGISTER(etc_flash_info, NULL, "Get information of external flash", cmd_external_flash_get_info, 1, 0);
-
-static int cmd_charge_module(const struct shell *shell, size_t argc, char **argv)
-{
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-	int ret = bq24195_init();
-	if (ret) {
-		shell_print(shell, "BQ24195 error");
-	} else {
-		shell_print(shell, "BQ24195 passed");
-	}
-	return 0;
-}
-
-SHELL_CMD_ARG_REGISTER(etc_charge, NULL, "Check BQ24195 IC", cmd_charge_module, 1, 0);
 
 #define GPIO_USER_BUTTON_PIN 5
 static int cmd_button_pull_module(const struct shell *shell, size_t argc, char **argv)
