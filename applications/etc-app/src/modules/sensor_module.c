@@ -15,6 +15,7 @@
 #include "events/sensor_event.h"
 #include "events/util_event.h"
 #include "events/ui_event.h"
+#include "events/cloud_event.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(sensor_module, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -24,6 +25,7 @@ struct sensor_msg_data {
 		struct data_event data;
 		struct util_event util;
 		struct ui_event ui;
+		struct cloud_event cloud;
 	} module;
 };
 
@@ -140,6 +142,13 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
+	if (is_cloud_event(aeh)) {
+		struct cloud_event *event = cast_cloud_event(aeh);
+
+		msg.module.cloud = *event;
+		enqueue_msg = true;
+	}
+
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -242,6 +251,17 @@ static void on_all_states(struct sensor_msg_data *msg)
 		/* The UI input (HALL Sensor or Button) is triggered */
 		sensor_poll_handler();
 	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		/* In boot-up, device connected to cloud, start a sensor poll to get data */
+		static bool is_send = false;
+		if (!is_send) {
+			LOG_DBG("Device is online. Collecting and sending first sensor data");
+			is_send = true;
+			sensor_poll_handler();
+		}
+		return;
+	}
 }
 
 static void module_thread_fn(void)
@@ -298,4 +318,5 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
+APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, ui_event);
