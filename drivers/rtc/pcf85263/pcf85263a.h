@@ -168,6 +168,13 @@ int pcf85263a_watchdog_init(void);
  */
 int pcf85263a_watchdog_feed(void);
 
+/**
+ * @brief Stop feeding watchdog by cancel the schedule
+ * 
+ * @return return 0 on success, or a negative error code
+ */
+int pcf85263a_watchdog_stop_feed(void);
+
 /** @brief Configure the Alarm mode 1 - Seconds/Minutes/Hours/Day/Month
  *
  * @retval return 0 on success, or a negative error code from an I2C

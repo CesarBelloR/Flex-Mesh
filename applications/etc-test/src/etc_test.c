@@ -148,7 +148,7 @@ static int cmd_pcf85263_get_time(const struct shell *shell, size_t argc, char **
 	ARG_UNUSED(argv);
 	time_t utc_time = 0;
 	pcf85263a_rtc_get_time(&utc_time);
-	shell_print(shell, "Get time UTC %d", utc_time);
+	shell_print(shell, "Get time UTC %d", (int)utc_time);
 	return 0;
 }
 
@@ -277,11 +277,46 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 		} else {
 			char RXString[ACKUNCRYPT] = {0};
   			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
-			LOG_HEXDUMP_INF(RXString, ACKUNCRYPT, "RECV");
-			shell_print(shell, "Received data: %s (RSSI:%ddBm, SNR:%ddBm)", rx_buf, rssi, snr);
+			shell_print(shell, "Received data: RSSI:%ddBm, SNR:%ddBm", rssi, snr);
+			shell_hexdump_line(shell, 0, RXString, ACKUNCRYPT);
 		}
 		k_sleep(K_MSEC(500));
 	}
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_lora_rx, NULL, "Receive message over Lora", cmd_lora_rx, 1, 0);
+
+#define GPIO_RTC_INT_PIN 3
+static struct gpio_callback watchdog_cb_data;
+void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callback *cb,
+		    uint32_t pins)
+{
+	LOG_INF("Watchdog triggered interrupt pin");
+}
+
+static int cmd_hw_wdt(const struct shell *shell, size_t argc, char **argv) {
+	pcf85263a_interrupt_flag_t flag = {0};
+	flag.enable_wdg = 1;
+	const struct device *dev = device_get_binding("GPIO_0");
+	if (dev == NULL) {
+		shell_print(shell, "Can't get GPIO_0 for button");
+		return 0;
+	} else {
+		
+		gpio_pin_configure(dev, GPIO_RTC_INT_PIN, GPIO_INPUT | GPIO_PULL_UP);
+		gpio_pin_interrupt_configure(dev, GPIO_RTC_INT_PIN, GPIO_INT_EDGE_FALLING);
+		gpio_init_callback(&watchdog_cb_data, gpio_watchdog_interrupt_event, BIT(GPIO_RTC_INT_PIN));
+		gpio_add_callback(dev, &watchdog_cb_data);
+	}
+	pcf85263a_set_interrupt_io(true);
+	pcf85263a_interrupt_enable(flag);
+	pcf85263a_watchdog_init();
+	return 0;
+}
+SHELL_CMD_ARG_REGISTER(etc_hw_wdt, NULL, "Enable hardware watchdog from PCF85", cmd_hw_wdt, 1, 0);
+
+static int cmd_stop_wdt(const struct shell *shell, size_t argc, char **argv) {
+	pcf85263a_watchdog_stop_feed();
+	return 0;
+}
+SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd_stop_wdt, 1, 0);
