@@ -84,6 +84,10 @@ int date_time_uptime_to_unix_time_ms(int64_t *uptime);
  */
 int date_time_local_second(uint32_t *local_time_s);
 
+/** @brief Get the current UTC date time.
+ */
+int date_time_utc_second(uint32_t *utc_time_s);
+
 /** @brief Get the current date time UTC in miliseconds
  *
  *  @warning If the function fails, the passed in variable retains its
