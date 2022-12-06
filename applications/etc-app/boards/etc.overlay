@@ -10,6 +10,13 @@
 		full-ohms = <(2000000 + 2000000)>;
 		io-channels = <&adc 3>;
 	};
+
+	ntc {
+		compatible = "temp,ntc";
+		b-value-k = <3380>;
+		norminal-25c-ohms = <10000>;
+		reference-res-ohms = <10000>;
+	};
 };
 
 /* A7 = P0.31 = AIN7 - ADC_AMB */ 

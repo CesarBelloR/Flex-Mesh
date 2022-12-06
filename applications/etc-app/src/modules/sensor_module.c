@@ -192,14 +192,14 @@ static int setup(void)
 	return 0;
 }
 
-static float sensor_ntc_converter(int raw_data) {
-	raw_data = (int)((float)(raw_data) * 3.6 / 3.3);
-	if (raw_data > SENSOR_RAW_ADC_MAX) {
-		raw_data = SENSOR_RAW_ADC_MAX;
-	}
-	if (raw_data == SENSOR_RAW_ADC_MAX) {
-		return SENSOR_NTC_NO_CONNECTED;
-	}
+#define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
+#define SENSOR_NTC_NOMINAL_TEMP 25.0
+#define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
+#define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
+#define SENSOR_RAW_ADC_MAX 4095
+
+static float sensor_ntc_converter(int data) {
+	float raw_data = ((float)(data) * 3.6 / 3.3);
 	float tmp_value = (float)SENSOR_RAW_ADC_MAX / (float)raw_data - 1.0;
 	tmp_value = SENSOR_NTC_RESISTOR_REF / tmp_value;
 	tmp_value = tmp_value / SENSOR_NTC_NOMINAL_RESISTANCE;
