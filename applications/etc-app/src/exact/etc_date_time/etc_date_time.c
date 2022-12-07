@@ -187,7 +187,7 @@ static void new_date_time_get(void)
 		if (err == 0) {
 			LOG_DBG("Time from cellular network obtained");
 			initial_valid_time = true;
-			date_time_store(time_aux.date_time_local_second);
+			date_time_store(time_aux.date_time_utc / 1000);
 			date_time_set_second(time_aux.date_time_local_second);
 			evt.type = DATE_TIME_OBTAINED_MODEM;
 			date_time_notify_event(&evt);
@@ -378,6 +378,17 @@ int date_time_local_second(uint32_t *local_time_s)
 	return ret;
 }
 
+int date_time_utc_second(uint32_t *utc_time_s)
+{
+	int64_t unix_time_ms = 0;
+	*utc_time_s = 0;
+	int ret = date_time_now(&unix_time_ms);
+	if (ret == 0) {
+		*utc_time_s = (unix_time_ms/ 1000);
+	}
+	return ret;
+}
+
 int date_time_now_second(void)
 {
 	int64_t unix_time_ms = 0;
@@ -457,3 +468,62 @@ void date_time_start_work(void)
 }
 
 SYS_INIT(date_time_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+
+#ifdef CONFIG_SHELL
+#include <zephyr/shell/shell.h>
+static void date_print(const struct shell *shell, struct tm *tm_local, struct tm* tm_utc)
+{
+	shell_print(shell,
+		    "%d-%02u-%02u "
+		    "%02u:%02u:%02u UTC",
+		    tm_utc->tm_year + 1900,
+		    tm_utc->tm_mon + 1,
+		    tm_utc->tm_mday,
+		    tm_utc->tm_hour,
+		    tm_utc->tm_min,
+		    tm_utc->tm_sec);
+
+	shell_print(shell,
+		    "%d-%02u-%02u "
+		    "%02u:%02u:%02u Local",
+		    tm_local->tm_year + 1900,
+		    tm_local->tm_mon + 1,
+		    tm_local->tm_mday,
+		    tm_local->tm_hour,
+		    tm_local->tm_min,
+		    tm_local->tm_sec);
+}
+
+static int cmd_date_time_get(const struct shell *shell, size_t argc, char **argv)
+{
+	struct tm tm_local, tm_utc;
+	struct timespec tp;
+	clock_gettime(CLOCK_REALTIME, &tp);
+	gmtime_r(&tp.tv_sec, &tm_utc);
+	tp.tv_sec += time_aux.time_zone;
+	gmtime_r(&tp.tv_sec, &tm_local);
+	date_print(shell, &tm_local, &tm_utc);
+	return 0;
+}
+
+static int cmd_date_time_set(const struct shell *shell, size_t argc, char **argv)
+{
+	uint32_t utc_date_time_seconds = (uint32_t)atoi(argv[1]);
+	time_aux.date_time_utc = (int64_t)utc_date_time_seconds * 1000;
+	date_time_store(utc_date_time_seconds);
+	time_t rtc_time_set = utc_date_time_seconds + time_aux.time_zone;
+	pcf85263a_rtc_set_time((time_t)rtc_time_set);
+	shell_print(shell, "Set UTC date time: %u", utc_date_time_seconds);
+	shell_print(shell, "Set RTC local time: %u", (uint32_t)rtc_time_set);
+	return 0;
+}
+
+/* Creating subcommands (level 1 command) array for command "demo". */
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_date_time,
+	SHELL_CMD(get,   NULL, "Get current date/time", cmd_date_time_get),
+	SHELL_CMD(set,   NULL, "Set current date/time", cmd_date_time_set),
+	SHELL_SUBCMD_SET_END
+);
+/* Creating root (level 0) command "demo" */
+SHELL_CMD_REGISTER(date, &sub_date_time, "ETC Date/Time Commands", NULL);
+#endif
