@@ -12,10 +12,7 @@
 
 /** @brief Structure containing battery data published to cloud. */
 struct data_battery {
-	/** Battery voltage level. */
-	uint16_t bat;
-	/** Battery data timestamp. UNIX milliseconds. */
-	int64_t bat_ts;
+	struct battery_data data;
 	/** Flag signifying that the data entry is to be encoded. */
 	bool queued : 1;
 };

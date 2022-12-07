@@ -35,4 +35,6 @@ int adc_init(void);
  * @retval return raw ADC value with 12 bit resolution
  */
 int adc_get_channel(int channel);
+
+int adc_get_raw_to_millivolts(int channel, int* raw);
 #endif /* ADC_H_ */

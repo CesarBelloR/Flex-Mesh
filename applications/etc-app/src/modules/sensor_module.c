@@ -4,6 +4,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 #include <app_event_manager.h>
+#include "common.h"
 #include "adc.h"
 #include "etc_date_time.h"
 #define MODULE sensor_module
@@ -37,6 +38,7 @@ static enum state_type {
 } state;
 
 static struct k_work_delayable sensor_poll_work;
+static struct k_work_delayable battery_poll_work;
 static struct sensor_data static_sensor_data;
 
 /* Sensor module message queue. */
@@ -47,11 +49,26 @@ static struct sensor_data static_sensor_data;
 #define SENSOR_GPIO_S0_PIN (9)
 #define SENSOR_GPIO_S1_PIN (10)
 
+/* Sensor Analog constant information */
+#define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
+#define SENSOR_NTC_NOMINAL_TEMP 25.0
+#define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
+#define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
+#define SENSOR_RAW_ADC_MAX 4095
+
+#define SENSOR_BATTERY_ADC_MAX SENSOR_RAW_ADC_MAX
+#define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
+
+/* Battery constant information */
+const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
+const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
+
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
 
 /* Forward declarations */
 static void sensor_poll_work_fn(struct k_work *work);
+static void battery_poll_work_fn(struct k_work *work);
 
 static bool sensor_is_processing = false;
 static struct module_data self = {
@@ -161,7 +178,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void sensor_module_send(struct sensor_data* sensor)
+static void sensor_module_send_sensor(struct sensor_data* sensor)
 {
 	struct sensor_event *sensor_event = new_sensor_event();
 	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
@@ -175,12 +192,6 @@ static int setup(void)
 	sensor_adc_hw_init();
 	return 0;
 }
-
-#define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
-#define SENSOR_NTC_NOMINAL_TEMP 25.0
-#define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
-#define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
-#define SENSOR_RAW_ADC_MAX 4095
 
 static float sensor_ntc_converter(int data) {
 	float raw_data = ((float)(data) * 3.6 / 3.3);
@@ -200,21 +211,26 @@ static void sensor_poll_handler(void) {
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
-	data->temperature[0] = sensor_ntc_converter(adc_get_channel(0));
-	if (fabs(data->temperature[0] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+	data->temperature[SENSOR_INPUT_AMBIENT] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB));
+	if (fabs(data->temperature[SENSOR_INPUT_AMBIENT] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 		LOG_DBG("Ambient temp %2.2f", data->temperature[0]);
 	}
-	for (int8_t i = 1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+	for (int8_t i = SENSOR_INPUT_IN1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		sensor_adc_switch_channel(i - 1);
 		k_msleep(50);
-		data->temperature[i] = sensor_ntc_converter(adc_get_channel(2));
+		data->temperature[i] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR));
 		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
 		} else {
 			LOG_DBG("Channel %d doesn't available", i - 1);
 		}
 	}
-	sensor_module_send(data);
+
+	int raw_adc_battery = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
+	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_adc_battery);
+	int adc_mv_battery = raw_adc_battery * (sFullOhms / sOutputOhms);
+	data->battery_mV = adc_mv_battery;
+	sensor_module_send_sensor(data);
 	sensor_is_processing = false;
 }
 

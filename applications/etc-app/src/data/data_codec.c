@@ -83,8 +83,7 @@ static cJSON *create_sensor_value_item(float temperature)
 	return item;
 }
 
-static cJSON *create_data_arr_logger(struct data_sensors *sens_data, 
-				struct data_battery *batt_data,
+static cJSON *create_data_arr_logger(struct data_sensors *sens_data,
 				struct data_modem_static *modem_data) 
 {
 	cJSON *data_arr;
@@ -95,9 +94,6 @@ static cJSON *create_data_arr_logger(struct data_sensors *sens_data,
 	if (modem_data != NULL) {
 		id = modem_data->imei;
 	}
-	if (batt_data != NULL) {
-		bat = batt_data->bat;
-	}
 
 	data_arr = cJSON_CreateArray();
 	/* sensor_id */
@@ -107,7 +103,9 @@ static cJSON *create_data_arr_logger(struct data_sensors *sens_data,
 	item = cJSON_CreateNumber(sens_data->data.timestamp);
 	cJSON_AddItemToArray(data_arr, item);
 	/* batt */
-	item = cJSON_CreateNumber(bat);
+	float battery_V = (float)sens_data->data.battery_mV / 1000.0;
+	snprintf(data_codec_temp_buffer, sizeof(data_codec_temp_buffer), "%1.2f", battery_V);
+	item = cJSON_CreateRaw(data_codec_temp_buffer);
 	cJSON_AddItemToArray(data_arr, item);
 	/* sig */
 	item = cJSON_CreateNumber(quectel_bg95_get_rssi());
@@ -214,7 +212,7 @@ static int create_packet_header(cJSON *root_obj,
 	}
 	cJSON_AddNumberToObject(root_obj, "time", date_time_now_second());
 	if (batt_data != NULL) {
-		cJSON_AddNumberToObject(root_obj, "batt", batt_data->bat);
+		cJSON_AddNumberToObject(root_obj, "batt", batt_data->data.battery_mV);
 	}
 	cJSON_AddNumberToObject(root_obj, "sig", quectel_bg95_get_rssi());
 	cJSON_AddStringToObject(root_obj, "fw", APP_VERSION_STR);
@@ -254,8 +252,7 @@ char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer,
 	cJSON_AddItemToObject(root_obj, "data", arr);
 	
 	for (int i = 0; i < sensor_buf_count; i++) {
-		data_arr = create_data_arr_logger(&sensor_buffer[i], batt_data,
-						modem_data);
+		data_arr = create_data_arr_logger(&sensor_buffer[i],  modem_data);
 		if (data_arr == NULL) {
 			goto exit;
 		}

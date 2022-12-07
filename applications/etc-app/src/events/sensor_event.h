@@ -19,7 +19,7 @@ extern "C" {
 enum sensor_event_type {
 	SENSOR_EVT_ENVIRONMENTAL_DATA_READY,
 	SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED,
-	SENSOR_EVT_HALL_DATA_READY,
+	SENSOR_EVT_BATTERY_DATA_READY,
 	SENSOR_EVT_SHUTDOWN_READY,
 	SENSOR_EVT_ERROR,
 };
@@ -41,6 +41,15 @@ struct sensor_data {
 	int64_t timestamp;
 	/** Temperature in Celsius degrees. */
 	float temperature[SENSOR_EVENT_NUM_DEV_MAX];
+	/** Voltage of battery in mV */
+	uint16_t battery_mV;
+};
+
+struct battery_data {
+	/** Uptime when the data was sampled. */
+	int64_t timestamp;
+	/** Temperature in Celsius degrees. */
+	uint16_t battery_mV;
 };
 
 struct sensor_event {
