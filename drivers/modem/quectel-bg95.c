@@ -7,6 +7,14 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #include "quectel-bg95.h"
 #include "certificates.h"
 
+#ifdef CONFIG_PM_DEVICE
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/uart.h>
+
+#include <pm/pm.h>
+#include <pm/device.h>
+#endif
+
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
@@ -1670,8 +1678,6 @@ static int modem_setup(void)
 	/* Setup the pins to ensure that Modem is enabled. */
 	pin_init();
 
-restart:
-
 	counter = 0;
 
 	/* stop RSSI delay work */
@@ -2050,11 +2056,74 @@ error:
 	return ret;
 }
 
+#ifdef CONFIG_PM_DEVICE
+static int quectel_bg95_pm_suspend(void)
+{
+	int ret;
+	LOG_DBG("PM_DEVICE_ACTION_SUSPEND");
+	uart_irq_rx_disable(mctx.iface.dev);
+	uart_irq_tx_disable(mctx.iface.dev);
+	// uart doesn't have a shutdown mode only suspend
+	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_SUSPEND);
+	if (ret)
+	{
+		LOG_ERR("Can't suspend device: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+static int quectel_bg95_pm_resume(void)
+{
+	int ret = 0;
+	LOG_DBG("PM_DEVICE_ACTION_RESUME");
+	uart_irq_rx_enable(mctx.iface.dev);
+	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_RESUME);
+	if (ret)
+	{
+		LOG_ERR("Can't resume device: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int quectel_bg95_pm_action(const struct device *dev,
+			       enum pm_device_action action)
+{
+	ARG_UNUSED(dev);
+	int ret;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* device must be uninitialized */
+		ret = quectel_bg95_pm_suspend();
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		/* device must be reinitialized */
+		ret = quectel_bg95_pm_resume();
+		break;
+	default:
+		return -ENOTSUP;
+	}
+
+	return ret;
+}
+
+PM_DEVICE_DT_INST_DEFINE(0, quectel_bg95_pm_action);
+
+/* Register the device with the Networking stack. */
+NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, PM_DEVICE_DT_INST_GET(0),
+				  &mdata, NULL,
+				  CONFIG_MODEM_QUECTEL_BG95_M3_INIT_PRIORITY,
+				  &api_funcs, MDM_MAX_DATA_LENGTH);
+#else
 /* Register the device with the Networking stack. */
 NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, NULL,
 				  &mdata, NULL,
 				  CONFIG_MODEM_QUECTEL_BG95_M3_INIT_PRIORITY,
 				  &api_funcs, MDM_MAX_DATA_LENGTH);
+#endif
 
 /* Register NET sockets. */
 NET_SOCKET_OFFLOAD_REGISTER(quectel_bg95, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY,
