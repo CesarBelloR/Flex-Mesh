@@ -971,6 +971,49 @@ MODEM_CMD_DEFINE(on_cmd_data_done)
 	return 0;
 }
 
+MODEM_CMD_DEFINE(on_cmd_power_down)
+{
+	k_sem_give(&mdata.sem_shutdown);
+	return 0;
+}
+
+static int quectel_bg95_power_down() {
+	const char *pw_dwn = "AT+QPOWD";
+	int ret;
+
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("POWERED DOWN", on_cmd_power_down, 0U, ""),
+	};
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
+			     NULL, 0U, pw_dwn, &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+	if (ret != 0) {
+		goto error;
+	}
+
+	mdata.is_connected = false;
+
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      cmd, 1U, true);
+
+	ret = k_sem_take(&mdata.sem_shutdown, MDM_SHUTDOWN_TIMEOUT);
+	if (ret != 0) {
+		goto error;
+	}
+
+	/* unset handler commands and ignore any errors */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      NULL, 0U, false);
+	LOG_INF("Modem powered down");
+
+	return 0;
+error:
+	LOG_ERR("Failed to shut down modem, %d", ret);
+	return ret;
+}
+
+
 int quectel_bg95_file_find(const char* file_name) {
 	char buf[sizeof("AT+QFLST=") + MDM_FILE_NAME_MAX_LENGTH] = {0};
 	snprintk(buf, sizeof(buf), "AT+QFLST=\"%s\"", file_name);
@@ -1948,6 +1991,7 @@ static int modem_init(const struct device *dev)
 	k_sem_init(&mdata.sem_sock_conn, 0, 1);
 	k_sem_init(&mdata.sem_dns_ready, 0, 1);
 	k_sem_init(&mdata.sem_data_ready, 0, 1);
+	k_sem_init(&mdata.sem_shutdown, 0, 1);
 
 	k_work_queue_start(&modem_workq, modem_workq_stack,
 			   K_KERNEL_STACK_SIZEOF(modem_workq_stack),
@@ -2060,7 +2104,17 @@ error:
 static int quectel_bg95_pm_suspend(void)
 {
 	int ret;
+	
 	LOG_DBG("PM_DEVICE_ACTION_SUSPEND");
+
+	/* stop RSSI delay work */
+	k_work_cancel_delayable(&mdata.rssi_query_work);
+
+	ret = quectel_bg95_power_down();
+	if (ret != 0) {
+		return -EAGAIN;
+	}
+
 	uart_irq_rx_disable(mctx.iface.dev);
 	uart_irq_tx_disable(mctx.iface.dev);
 	// uart doesn't have a shutdown mode only suspend
@@ -2073,6 +2127,7 @@ static int quectel_bg95_pm_suspend(void)
 
 	return 0;
 }
+
 static int quectel_bg95_pm_resume(void)
 {
 	int ret = 0;
@@ -2085,7 +2140,9 @@ static int quectel_bg95_pm_resume(void)
 		return ret;
 	}
 
-	return 0;
+	ret = modem_setup();
+
+	return ret;
 }
 
 static int quectel_bg95_pm_action(const struct device *dev,
