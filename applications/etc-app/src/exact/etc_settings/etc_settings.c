@@ -177,19 +177,33 @@ static int cmd_info(const struct shell *shell, size_t argc, char **argv)
 
 static int cmd_set_hardware_version(const struct shell *shell, size_t argc, char **argv)
 {
-	etc_set_hw_version(argv[1]);
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		etc_set_fw_version(argv[1]);
+	} else {
+		shell_error(shell, "Invalid input hardware version");
+	}
 	return 0;
 }
 
 static int cmd_set_firmware_version(const struct shell *shell, size_t argc, char **argv)
 {
-	etc_set_fw_version(argv[1]);
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		etc_set_fw_version(argv[1]);
+	} else {
+		shell_error(shell, "Invalid input firmware version");
+	}
+	
 	return 0;
 }
 
 static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv)
 {
-	etc_set_device_id(argv[1]);
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		etc_set_device_id(argv[1]);
+	} else {
+		shell_error(shell, "Invalid device id");
+	}
+	
 	return 0;
 }
 
