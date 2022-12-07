@@ -13,7 +13,7 @@
 
 	ntc {
 		compatible = "temp,ntc";
-		b-value-k = <3380>;
+		b-value-k = <3434>;
 		norminal-25c-ohms = <10000>;
 		reference-res-ohms = <10000>;
 	};

@@ -103,7 +103,9 @@ static cJSON *create_data_arr_logger(struct data_sensors *sens_data,
 	item = cJSON_CreateNumber(sens_data->data.timestamp);
 	cJSON_AddItemToArray(data_arr, item);
 	/* batt */
-	item = cJSON_CreateNumber(sens_data->data.battery_mV);
+	float battery_V = (float)sens_data->data.battery_mV / 1000.0;
+	snprintf(data_codec_temp_buffer, sizeof(data_codec_temp_buffer), "%1.2f", battery_V);
+	item = cJSON_CreateRaw(data_codec_temp_buffer);
 	cJSON_AddItemToArray(data_arr, item);
 	/* sig */
 	item = cJSON_CreateNumber(quectel_bg95_get_rssi());
