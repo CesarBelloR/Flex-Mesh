@@ -375,7 +375,7 @@ int pcf85263a_watchdog_init(void)
     /* Set watchdog configuration register */
     pcf85263a_watchdog_reg_t watchdog_reg = {0x00};
     /* Repeat mode */
-    watchdog_reg.wdm = 1UL;
+    watchdog_reg.wdm = 0UL;
     /* Maximum timeout of watchdog (124s) */
     watchdog_reg.wdr = 31UL;
     /* Configure for step 1s per tick */
@@ -576,7 +576,7 @@ int pcf85263a_alarm_disable_type_2(void) {
     return 0;
 }
 
-void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag) {
+void pcf85263a_interrupt_a_enable(pcf85263a_interrupt_flag_t flag) {
     pcf85263a_inta_reg_t reg = {0x00};
     int rc = 0;
 
@@ -602,7 +602,33 @@ void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag) {
     }
 }
 
-void pcf85263a_set_interrupt_io(bool enable) {
+void pcf85263a_interrupt_b_enable(pcf85263a_interrupt_flag_t flag) {
+    pcf85263a_intb_reg_t reg = {0x00};
+    int rc = 0;
+
+    rc = read_register(PCF85263A_INTB_ENABLE_REG, &reg.byte);
+    if (rc != 0) {
+        LOG_ERR("Failed to read register PCF85263A_INTB_ENABLE_REG error %d", rc);
+        return;
+    }
+
+    reg.wdieb = flag.enable_wdg;
+    reg.bsieb = flag.enable_battery_switch;
+    reg.tsrieb = flag.enable_timestamp;
+    reg.a2ieb = flag.enable_alarm_2;
+    reg.a1ieb = flag.enable_alarm_1;
+    reg.oieb = flag.enable_offset_correction;
+    reg.pieb = flag.enable_periodic;
+    reg.ilpb = flag.enable_level_pulse;
+    LOG_INF("Interrupt Register 0x%02x", reg.byte);
+    rc = write_register(PCF85263A_INTB_ENABLE_REG, reg.byte);
+    if (rc != 0) {
+        LOG_ERR("Failed to write register PCF85263A_INTB_ENABLE_REG error %d", rc);
+        return;
+    }
+}
+
+void pcf85263a_set_interrupt_a_io(bool enable) {
     pcf85263a_pin_io_reg_t reg = {0x00};
     int rc = 0;
 
@@ -621,8 +647,7 @@ void pcf85263a_set_interrupt_io(bool enable) {
     }
 }
 
-void pcf85263a_set_clkpin(bool enable)
-{
+void pcf85263a_set_interrupt_b_io(bool enable) {
     pcf85263a_pin_io_reg_t reg = {0x00};
     int rc = 0;
 
@@ -632,21 +657,11 @@ void pcf85263a_set_clkpin(bool enable)
         return;
     }
 
-    reg.cklpm = enable ? 0 : 1;
-    LOG_DBG("IO Register 0x%02x", reg.byte);
+    reg.tspm = enable ? 2 : 0;
+    LOG_INF("IO Register 0x%02x", reg.byte);
     rc = write_register(PCF85263A_PIN_IO_REG, reg.byte);
     if (rc != 0) {
         LOG_ERR("Failed to write register PCF85263A_PIN_IO_REG error %d", rc);
         return;
     }
-}
-
-uint8_t pcf85263a_get_alarm_min_type_1(void) {
-    uint8_t min_buf[1] = {0x00};
-    int rc = read_register(PCF85263A_RTC_MODE_MINUTES_ALARM1_REG, min_buf);
-    if (rc == 0) {
-        return bcd2bin(min_buf[0]);
-    }
-
-    return 0;
 }
