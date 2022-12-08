@@ -48,7 +48,6 @@ void ui_led_set_pattern(enum ui_led_pattern state)
 #ifdef CONFIG_UI_LED_USE_PWM
 	ui_led_set_effect(state);
 #endif /* CONFIG_UI_LED_USE_PWM */
-	LOG_INF("State %d", state);
 }
 
 enum ui_led_pattern ui_led_get_pattern(void)

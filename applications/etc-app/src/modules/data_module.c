@@ -260,6 +260,7 @@ static void data_encode(void)
 
 	head_lora_buf = 0;
 	head_sensor_buf = 0;
+	SEND_EVENT(data, DATA_EVT_DATA_SEND);
 }
 
 static void data_send_work_fn(struct k_work *work)
