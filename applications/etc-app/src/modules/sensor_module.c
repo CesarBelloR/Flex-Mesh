@@ -8,7 +8,7 @@
 #include "adc.h"
 #include "etc_date_time.h"
 #define MODULE sensor_module
-#define MODULE_SENSOR_THREAD_STACK_SIZE 512
+#define MODULE_SENSOR_THREAD_STACK_SIZE 1024
 
 #include "modules_common.h"
 #include "events/app_event.h"

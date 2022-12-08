@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <zephyr/device.h>
 #include <app_event_manager.h>
-
+#include <ui.h>
 #define MODULE ui_module
 
 #include "modules_common.h"
@@ -36,13 +36,6 @@ struct ui_msg_data {
 static enum state_type {
 	STATE_INIT,
 	STATE_RUNNING,
-	STATE_LTE_CONNECTING,
-	STATE_CLOUD_CONNECTING,
-	STATE_CLOUD_ASSOCIATING,
-	STATE_SENSOR_ACQUIRING,
-	STATE_LORA_TRANSMITTING,
-	STATE_LORA_RECEIVING,
-	STATE_FOTA_UPDATING,
 	STATE_SHUTDOWN
 } state;
 
@@ -57,7 +50,7 @@ static void led_pattern_update_work_fn(struct k_work *work);
 
 /* Definition used to specify LED patterns that should hold forever. */
 #define HOLD_FOREVER -1
-
+#define UI_LED_WAIT_TIME K_MSEC(500)
 /* List of LED patterns supported in the UI module. */
 static struct led_pattern {
 	/* Variable used to construct a linked list of led patterns. */
@@ -100,14 +93,6 @@ static char *state2str(enum state_type new_state)
 		return "STATE_INIT";
 	case STATE_RUNNING:
 		return "STATE_RUNNING";
-	case STATE_LTE_CONNECTING:
-		return "STATE_LTE_CONNECTING";
-	case STATE_CLOUD_CONNECTING:
-		return "STATE_CLOUD_CONNECTING";
-	case STATE_CLOUD_ASSOCIATING:
-		return "STATE_CLOUD_ASSOCIATING";
-	case STATE_FOTA_UPDATING:
-		return "STATE_FOTA_UPDATING";
 	case STATE_SHUTDOWN:
 		return "STATE_SHUTDOWN";
 	default:
@@ -204,13 +189,23 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		message_handler(&ui_msg);
 	}
 
+	if (is_sensor_event(aeh)) {
+		struct sensor_event *event = cast_sensor_event(aeh);
+		struct ui_msg_data ui_msg = {
+			.module.sensor = *event
+		};
+
+		message_handler(&ui_msg);
+	}
+
 	return false;
 }
 
 /* Static module functions. */
 static void update_led_pattern(enum led_state pattern)
 {
-	LOG_DBG("Update the LED pattern");
+	LOG_DBG("Update the LED pattern %d", pattern);
+	ui_led_set_pattern((enum ui_led_pattern)pattern);
 }
 
 static void led_pattern_update_work_fn(struct k_work *work)
@@ -220,7 +215,7 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	sys_snode_t *node = sys_slist_get(&pattern_transition_list);
 
 	if (node == NULL) {
-		LOG_ERR("Cannot find any more LED pattern transitions");
+		update_led_pattern(LED_STATE_TURN_OFF);
 		return;
 	}
 
@@ -301,29 +296,45 @@ static void on_state_init(struct ui_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct ui_msg_data *msg)
 {
-}
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_SENSOR_AQUIRING, 5);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
 
-/* Message handler for STATE_LTE_CONNECTING. */
-static void on_state_lte_connecting(struct ui_msg_data *msg)
-{
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_RUNNING);
+		transition_list_append(LED_STATE_LTE_CONNECTED, 5);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LTE_CONNECTED, 5);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_TX_READY)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_TRANSMITTING, 5);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_RECEIVING, 5);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) {
+		transition_list_append(LED_STATE_CLOUD_PUBLISHING, 5);
+		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 	}
 }
 
 /* Message handler for STATE_CLOUD_CONNECTING. */
 static void on_state_cloud_connecting(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_RUNNING);
-	}
-
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_CLOUD_ASSOCIATED, HOLD_FOREVER);
@@ -338,17 +349,6 @@ static void on_state_cloud_associating(struct ui_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_CLOUD_ASSOCIATED, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_RUNNING);
-	}
-}
-
-/* Message handler for STATE_SENSOR_ACQUIRING. */
-static void on_state_sensor_acquiring(struct ui_msg_data *msg)
-{
-	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_SENSOR_AQUIRING, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_RUNNING);
 	}
@@ -391,60 +391,6 @@ static void on_state_fota_update(struct ui_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTING)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_LTE_CONNECTING, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_LTE_CONNECTING);
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_CLOUD_CONNECTING, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_CLOUD_CONNECTING);
-	}
-
-	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
-
-		transition_list_clear();
-
-		switch (msg->module.util.reason) {
-		case REASON_FOTA_UPDATE:
-			transition_list_append(LED_STATE_FOTA_UPDATE_REBOOT, HOLD_FOREVER);
-			break;
-		case REASON_GENERIC:
-			transition_list_append(LED_STATE_ERROR_SYSTEM_FAULT, HOLD_FOREVER);
-			break;
-		default:
-			LOG_WRN("Unknown shutdown reason");
-			break;
-		}
-
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-
-		SEND_SHUTDOWN_ACK(ui, UI_EVT_SHUTDOWN_READY, self.id);
-		state_set(STATE_SHUTDOWN);
-	}
-
-	if ((IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) ||
-	    (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY))) {
-		LOG_DBG("Sub state");
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_FOTA_UPDATING, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_FOTA_UPDATING);
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATION_REQUEST)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_CLOUD_ASSOCIATING, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_CLOUD_ASSOCIATING);
-	}
 }
 
 static void message_handler(struct ui_msg_data *msg)
@@ -454,37 +400,7 @@ static void message_handler(struct ui_msg_data *msg)
 		on_state_init(msg);
 		break;
 	case STATE_RUNNING:
-		switch (sub_state) {
-		case SUB_STATE_ACTIVE:
-			break;
-		case SUB_STATE_PASSIVE:
-			break;
-		default:
-			LOG_WRN("Unknown ui module sub state.");
-			break;
-		}
 		on_state_running(msg);
-		break;
-	case STATE_LTE_CONNECTING:
-		on_state_lte_connecting(msg);
-		break;
-	case STATE_CLOUD_CONNECTING:
-		on_state_cloud_connecting(msg);
-		break;
-	case STATE_CLOUD_ASSOCIATING:
-		on_state_cloud_associating(msg);
-		break;
-	case STATE_SENSOR_ACQUIRING:
-		on_state_sensor_acquiring(msg);
-		break;
-	case STATE_LORA_TRANSMITTING:
-		on_state_lora_transmitting(msg);
-		break;
-	case STATE_LORA_RECEIVING:
-		on_state_lora_receiving(msg);
-		break;
-	case STATE_FOTA_UPDATING:
-		on_state_fota_update(msg);
 		break;
 	case STATE_SHUTDOWN:
 		/* The shutdown state has no transition. */
@@ -500,10 +416,10 @@ static void message_handler(struct ui_msg_data *msg)
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, app_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, data_event);
-APP_EVENT_SUBSCRIBE_EARLY(MODULE, gnss_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, util_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, lora_event);
+APP_EVENT_SUBSCRIBE_EARLY(MODULE, sensor_event);
 
 SYS_INIT(setup, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
