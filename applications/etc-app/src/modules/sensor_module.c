@@ -7,6 +7,7 @@
 #include "common.h"
 #include "adc.h"
 #include "etc_date_time.h"
+#include "etc_settings.h"
 #define MODULE sensor_module
 #define MODULE_SENSOR_THREAD_STACK_SIZE 1024
 
@@ -68,9 +69,12 @@ K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 
 /* Forward declarations */
 static void sensor_poll_work_fn(struct k_work *work);
-static void battery_poll_work_fn(struct k_work *work);
 
 static bool sensor_is_processing = false;
+
+/* Initialize poll timeout for sensor as forever */
+static k_timeout_t sensor_poll_timeout = K_FOREVER; 
+
 static struct module_data self = {
 	.name = "sensor",
 	.msg_q = &msgq_sensor,
@@ -188,6 +192,9 @@ static void sensor_module_send_sensor(struct sensor_data* sensor)
 
 static int setup(void)
 {
+	int measurement_in_seconds = etc_get_time_measurement_interval();
+	/* Update poll timeout */
+	sensor_poll_timeout = K_SECONDS(measurement_in_seconds);
 	adc_init();
 	sensor_adc_hw_init();
 	return 0;
@@ -236,7 +243,7 @@ static void sensor_poll_handler(void) {
 
 static void sensor_poll_work_fn(struct k_work *work) {
 	sensor_poll_handler();
-	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
+	k_work_reschedule(&sensor_poll_work, sensor_poll_timeout);
 }
 
 /* Message handler for STATE_INIT. */
@@ -302,7 +309,7 @@ static void module_thread_fn(void)
 	}
 
 	k_work_init_delayable(&sensor_poll_work, sensor_poll_work_fn);
-	k_work_reschedule(&sensor_poll_work, K_SECONDS(CONFIG_SENSOR_POLL_INTERVAL_SECONDS));
+	k_work_reschedule(&sensor_poll_work, sensor_poll_timeout);
 
 	while (true) {
 		module_get_next_msg(&self, &msg);
