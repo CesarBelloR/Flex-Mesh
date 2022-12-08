@@ -657,7 +657,7 @@ void pcf85263a_set_interrupt_b_io(bool enable) {
         return;
     }
 
-    reg.tspm = enable ? 2 : 0;
+    reg.tspm = enable ? 1 : 0;
     LOG_INF("IO Register 0x%02x", reg.byte);
     rc = write_register(PCF85263A_PIN_IO_REG, reg.byte);
     if (rc != 0) {
