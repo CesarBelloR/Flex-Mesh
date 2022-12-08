@@ -26,6 +26,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "events/modem_event.h"
 #include "modules_common.h"
 #include "app_version.h"
+#include "etc_settings.h"
 
 struct cloud_msg_data
 {
@@ -324,8 +325,18 @@ static int setup(void)
 	 */
 	boot_write_img_confirmed();
 #endif /* CONFIG_MCUBOOT_IMG_MANAGER */
+	struct aws_iot_config config;
+	int len;
+	char id[ETC_SETTINGS_DEVICE_ID_LEN + sizeof("urn:dev:mac:")] = "urn:dev:mac:";
 
-	int err = aws_iot_init(NULL, aws_iot_event_handler);
+	len = strlen(id);
+	etc_get_device_id(&id[len], sizeof(id) - len);
+	LOG_DBG("id: %s", id);
+
+	config.client_id = id;
+	config.client_id_len = strlen(config.client_id);
+
+	int err = aws_iot_init(&config, aws_iot_event_handler);
 	if (err)
 	{
 		LOG_ERR("AWS IoT library could not be initialized, error: %d", err);

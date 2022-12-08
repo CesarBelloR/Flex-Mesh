@@ -6,6 +6,7 @@
 #include "etc_date_time.h"
 #include "data_codec.h"
 #include "app_version.h"
+#include "etc_settings.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(data_codec, CONFIG_ETC_APP_LOG_LEVEL);
@@ -84,15 +85,16 @@ static cJSON *create_sensor_value_item(float temperature)
 }
 
 static cJSON *create_data_arr_logger(struct data_sensors *sens_data,
-				struct data_modem_static *modem_data) 
+				     struct data_modem_static *modem_data,
+				     char *device_id) 
 {
 	cJSON *data_arr;
 	cJSON *item;
 	char *id = "";
 	uint16_t bat = 0;
 
-	if (modem_data != NULL) {
-		id = modem_data->imei;
+	if (device_id != NULL) {
+		id = device_id;
 	}
 
 	data_arr = cJSON_CreateArray();
@@ -183,7 +185,7 @@ static cJSON *create_data_arr_lora(struct data_lora_sensors *sensor)
 }
 
 static int create_packet_header(cJSON *root_obj,
-				struct data_modem_static *modem_data,
+				char *device_id,
 				struct data_battery *batt_data) 
 {	
 	const char* struct_strings[] = {
@@ -207,8 +209,8 @@ static int create_packet_header(cJSON *root_obj,
 		return -EINVAL;
 	}
 
-	if (modem_data != NULL) {
-		cJSON_AddStringToObject(root_obj, "modem_id", modem_data->imei);
+	if (device_id != NULL) {
+		cJSON_AddStringToObject(root_obj, "modem_id", device_id);
 	}
 	cJSON_AddNumberToObject(root_obj, "time", date_time_now_second());
 	if (batt_data != NULL) {
@@ -240,19 +242,24 @@ char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer,
 	cJSON *data_arr;
 	cJSON *arr;
 	char *retval = NULL;
+	char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 	cJSON *root_obj = cJSON_CreateObject();
 	if (root_obj == NULL) {
 		goto exit;
 	}
 
-	create_packet_header(root_obj, modem_data, batt_data);
+	/* Retrieve device ID from settings */
+	etc_get_device_id(device_id, sizeof(device_id));
+
+	create_packet_header(root_obj, device_id, batt_data);
 
 	arr = cJSON_CreateArray();
 	cJSON_AddItemToObject(root_obj, "data", arr);
 	
 	for (int i = 0; i < sensor_buf_count; i++) {
-		data_arr = create_data_arr_logger(&sensor_buffer[i],  modem_data);
+		data_arr = create_data_arr_logger(&sensor_buffer[i],  modem_data,
+						  device_id);
 		if (data_arr == NULL) {
 			goto exit;
 		}

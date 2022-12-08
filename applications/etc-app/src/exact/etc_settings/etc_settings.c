@@ -6,10 +6,7 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include <zephyr/device.h>
 #include <zephyr/fs/fs.h>
 #include "app_version.h"
-
-#define ETC_SETTINGS_DEVICE_ID_LEN (32)
-#define ETC_SETTING_FW_VER_LEN (8)
-#define ETC_SETTING_HW_VER_LEN (8)
+#include "etc_settings.h"
 
 #define SETTINGS_HW_VERSION	"/lfs1/hw"
 #define SETTINGS_FW_VERSION	"/lfs1/fw"
@@ -66,7 +63,7 @@ static int read_file(char *fname, char *buf, off_t len)
 	fs_file_t_init(&file);
 	rc = fs_open(&file, fname, FS_O_READ);
 	if (rc < 0) {
-		LOG_WRN("No wifi credentials loaded");
+		LOG_WRN("File %s not found", fname);
 		memset(buf, 0, len);
 		return rc;
 	}
@@ -90,12 +87,16 @@ void etc_settings_refresh() {
 	k_mutex_lock(&hw_mutex, K_FOREVER);
 	k_mutex_lock(&fw_mutex, K_FOREVER);
 	k_mutex_lock(&device_mutex, K_FOREVER);
+	k_mutex_lock(&time_meas_mutex, K_FOREVER);
+	k_mutex_lock(&time_trans_mutex, K_FOREVER);
 	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
 	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
         memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
         read_file(SETTINGS_HW_VERSION, saved_hw_version, ETC_SETTING_HW_VER_LEN);
 	read_file(SETTINGS_FW_VERSION, saved_fw_version, ETC_SETTING_FW_VER_LEN);
 	read_file(SETTINGS_DEVICE_ID, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+	read_file(SETTINGS_TIME_MEASUREMENT, (char *)&saved_time_measurement, sizeof(int));\
+	read_file(SETTINGS_TIME_TRANSMISSION, (char *)&saved_time_transmission, sizeof(int));
 	k_mutex_unlock(&device_mutex);
 	k_mutex_unlock(&fw_mutex);
 	k_mutex_unlock(&hw_mutex);
@@ -132,32 +133,41 @@ void etc_set_time_measurement_interval(int time_in_sec) {
 void etc_set_time_transmission_interval(int time_in_sec) {
 	k_mutex_lock(&time_trans_mutex, K_FOREVER);
 	saved_time_transmission = time_in_sec;
-	write_file(SETTINGS_TIME_MEASUREMENT, (char *)&saved_time_transmission, sizeof(int));
+	write_file(SETTINGS_TIME_TRANSMISSION, (char *)&saved_time_transmission, sizeof(int));
 	k_mutex_unlock(&time_trans_mutex);
 }
 
-char* etc_get_hw_version(void) {
-	memset(tmp_saved_value, 0, sizeof(tmp_saved_value));
-	k_mutex_lock(&device_mutex, K_FOREVER);
-	memcpy(tmp_saved_value, saved_hw_version, ETC_SETTING_HW_VER_LEN);
-	k_mutex_unlock(&device_mutex);
-	return tmp_saved_value;
+int etc_get_hw_version(char *buf, int buf_len) {
+	int copy_size;
+
+	k_mutex_lock(&hw_mutex, K_FOREVER);
+  	copy_size = ETC_SETTING_HW_VER_LEN < buf_len ? 
+		    ETC_SETTING_HW_VER_LEN : buf_len;
+  	memcpy(buf, saved_hw_version, copy_size);
+	k_mutex_unlock(&hw_mutex);
+	return copy_size;
 }
 
-char* etc_get_fw_version(void) {
-	memset(tmp_saved_value, 0, sizeof(tmp_saved_value));
-	k_mutex_lock(&device_mutex, K_FOREVER);
-	memcpy(tmp_saved_value, saved_fw_version, ETC_SETTING_FW_VER_LEN);
-	k_mutex_unlock(&device_mutex);
-	return tmp_saved_value;
+int etc_get_fw_version(char *buf, int buf_len) {
+	int copy_size;
+
+	k_mutex_lock(&fw_mutex, K_FOREVER);
+  	copy_size = ETC_SETTING_FW_VER_LEN < buf_len ? 
+		    ETC_SETTING_FW_VER_LEN : buf_len;
+  	memcpy(buf, saved_fw_version, copy_size);
+	k_mutex_unlock(&fw_mutex);
+	return copy_size;
 }
 
-char* etc_get_device_id(void) {
-	memset(tmp_saved_value, 0, sizeof(tmp_saved_value));
+int etc_get_device_id(char *buf, int buf_len) {
+	int copy_size;
+
 	k_mutex_lock(&device_mutex, K_FOREVER);
-	memcpy(tmp_saved_value, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+  	copy_size = ETC_SETTINGS_DEVICE_ID_LEN < buf_len ? 
+		    ETC_SETTINGS_DEVICE_ID_LEN : buf_len;
+  	memcpy(buf, saved_device_id, copy_size);
 	k_mutex_unlock(&device_mutex);
-	return tmp_saved_value;
+	return copy_size;
 }
 
 int etc_get_time_measurement_interval(void) {
@@ -232,7 +242,7 @@ static int cmd_info(const struct shell *shell, size_t argc, char **argv)
 static int cmd_set_hardware_version(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		etc_set_fw_version(argv[1]);
+		etc_set_hw_version(argv[1]);
 	} else {
 		shell_error(shell, "Invalid input hardware version");
 	}

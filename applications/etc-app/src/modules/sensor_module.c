@@ -229,7 +229,7 @@ static void sensor_poll_handler(void) {
 		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
 		} else {
-			LOG_DBG("Channel %d doesn't available", i - 1);
+			LOG_DBG("Channel %d isn't available", i - 1);
 		}
 	}
 
