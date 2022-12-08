@@ -222,26 +222,14 @@ int pcf85263a_alarm_disable_type_2(void);
  * @param flag @ref pcf85263a_interrupt_flag_t
  * @retval None
  */
-void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag);
+void pcf85263a_interrupt_a_enable(pcf85263a_interrupt_flag_t flag);
+void pcf85263a_interrupt_b_enable(pcf85263a_interrupt_flag_t flag);
 
 /** @brief Enable/disable the IO for interrupt
  *
  * @param enable or disable the IO
  * @retval None
  */
-void pcf85263a_set_interrupt_io(bool enable);
-
-/** @brief Enable/disable CLK pin
- * 
- * @param enable true to enable, false to disable
- * 
-*/
-void pcf85263a_set_clkpin(bool enable);
-
-/**
- * @brief [MVP] This API will get the last wakeup minutes
- * 
- * @return uint8_t last minutes of alarm
- */
-uint8_t pcf85263a_get_alarm_min_type_1(void);
+void pcf85263a_set_interrupt_a_io(bool enable);
+void pcf85263a_set_interrupt_b_io(bool enable);
 #endif /* PCF85263A_H_ */

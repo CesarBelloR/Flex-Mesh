@@ -295,21 +295,26 @@ void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callbac
 }
 
 static int cmd_hw_wdt(const struct shell *shell, size_t argc, char **argv) {
-	pcf85263a_interrupt_flag_t flag = {0};
-	flag.enable_wdg = 1;
+	pcf85263a_interrupt_flag_t flag_a = {0};
+	pcf85263a_interrupt_flag_t flag_b = {0};
+	flag_b.enable_wdg = 1;
+	flag_a.enable_wdg = 1;
 	const struct device *dev = device_get_binding("GPIO_0");
 	if (dev == NULL) {
 		shell_print(shell, "Can't get GPIO_0 for button");
 		return 0;
 	} else {
-		
 		gpio_pin_configure(dev, GPIO_RTC_INT_PIN, GPIO_INPUT | GPIO_PULL_UP);
 		gpio_pin_interrupt_configure(dev, GPIO_RTC_INT_PIN, GPIO_INT_EDGE_FALLING);
 		gpio_init_callback(&watchdog_cb_data, gpio_watchdog_interrupt_event, BIT(GPIO_RTC_INT_PIN));
 		gpio_add_callback(dev, &watchdog_cb_data);
 	}
-	pcf85263a_set_interrupt_io(true);
-	pcf85263a_interrupt_enable(flag);
+	/* Interrupt channel A - INTA*/
+	pcf85263a_set_interrupt_a_io(true);
+	/* Interrupt channel B - TS */
+	pcf85263a_set_interrupt_b_io(true);
+	pcf85263a_interrupt_a_enable(flag_a);
+	pcf85263a_interrupt_b_enable(flag_b);
 	pcf85263a_watchdog_init();
 	return 0;
 }
