@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include <zephyr/kernel.h>
@@ -16,6 +17,7 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
+static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
 
 K_MUTEX_DEFINE(hw_mutex);
 K_MUTEX_DEFINE(fw_mutex);
@@ -114,27 +116,27 @@ void etc_set_device_id(const char* device_id) {
 }
 
 char* etc_get_hw_version(void) {
-	char* res = NULL;
+	memset(tmp_saved_value, 0, sizeof(tmp_saved_value));
 	k_mutex_lock(&device_mutex, K_FOREVER);
-	res = saved_hw_version;
+	memcpy(tmp_saved_value, saved_hw_version, ETC_SETTING_HW_VER_LEN);
 	k_mutex_unlock(&device_mutex);
-	return res;
+	return tmp_saved_value;
 }
 
 char* etc_get_fw_version(void) {
-	char* res = NULL;
+	memset(tmp_saved_value, 0, sizeof(tmp_saved_value));
 	k_mutex_lock(&device_mutex, K_FOREVER);
-	res = saved_fw_version;
+	memcpy(tmp_saved_value, saved_fw_version, ETC_SETTING_FW_VER_LEN);
 	k_mutex_unlock(&device_mutex);
-	return res;
+	return tmp_saved_value;
 }
 
 char* etc_get_device_id(void) {
-	char* res = NULL;
+	memset(tmp_saved_value, 0, sizeof(tmp_saved_value));
 	k_mutex_lock(&device_mutex, K_FOREVER);
-	res = saved_device_id;
+	memcpy(tmp_saved_value, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
 	k_mutex_unlock(&device_mutex);
-	return res;
+	return tmp_saved_value;
 }
 
 static int etc_settings_init(const struct device *unused)
@@ -156,7 +158,10 @@ static int etc_settings_init(const struct device *unused)
 
 	ret = read_file(SETTINGS_DEVICE_ID, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
 	if (ret) {
-		etc_set_device_id("N.A");
+		snprintf(tmp_saved_value, sizeof(tmp_saved_value), 
+			"%X%X", NRF_FICR->DEVICEID[0], NRF_FICR->DEVICEID[1]);
+		LOG_INF("Set default device ID %s", tmp_saved_value);
+		etc_set_device_id(tmp_saved_value);
 	}
 	
 	return 0;

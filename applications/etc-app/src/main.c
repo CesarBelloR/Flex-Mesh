@@ -83,10 +83,8 @@ int main_external_flash_erase(unsigned int id)
 		   id, (unsigned int)pfa->fa_off, (unsigned int)pfa->fa_size);
 
 	/* Optional wipe flash contents */
-	if (IS_ENABLED(CONFIG_APP_WIPE_STORAGE)) {
-		rc = flash_area_erase(pfa, 0, pfa->fa_size);
-		LOG_ERR("Erasing flash area ... %d", rc);
-	}
+	rc = flash_area_erase(pfa, 0, pfa->fa_size);
+	LOG_ERR("Erasing flash area ... %d", rc);
 
 	flash_area_close(pfa);
 	return rc;
