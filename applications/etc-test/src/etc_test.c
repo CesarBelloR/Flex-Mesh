@@ -274,12 +274,14 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 		if (ret < 0) {
 			continue;
 		} else {
-			char RXString[ACKUNCRYPT] = {0};
+			char RXString[128] = {0};
   			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
 			shell_print(shell, "Received data: RSSI:%ddBm, SNR:%ddBm", rssi, snr);
-			shell_hexdump_line(shell, 0, RXString, ACKUNCRYPT);
+			//shell_hexdump(shell, RXString, ret);
+			RXString[ret] = '\0';
+			shell_print(shell, "%s", RXString);
 		}
-		k_sleep(K_MSEC(500));
+		//k_sleep(K_MSEC(500));
 	}
 	return 0;
 }
