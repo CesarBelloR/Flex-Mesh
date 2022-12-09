@@ -152,9 +152,7 @@ void main(void)
 		    (unsigned int) img_hdr.h.v1.sem_ver.build_num);
 	}
 	ui_init();
-#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
-	date_time_start_work();
-#endif
+
 	if (app_event_manager_init()) {
 		/* Without the Application Event Manager, the application will not work
 		 * as intended. A reboot is required in an attempt to recover.
