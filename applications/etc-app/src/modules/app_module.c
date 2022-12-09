@@ -5,6 +5,10 @@
 #include <app_event_manager.h>
 #include <zephyr/sys/reboot.h>
 
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+#include "etc_date_time.h"
+#endif
+
 #define MODULE app
 #define MODULE_APP_THREAD_STACK_SIZE 1024
 
@@ -233,6 +237,11 @@ static void on_sub_state_active(struct app_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_events(struct app_msg_data *msg)
 {
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+	date_time_start_work();
+#endif
+	}
 }
 
 static void module_thread_fn(void)
