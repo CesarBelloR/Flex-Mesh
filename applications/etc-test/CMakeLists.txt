@@ -8,6 +8,8 @@ project(etc_test)
 target_sources(app PRIVATE src/main.c
     src/etc_test.c
     src/etc_cape.c
+    src/modem.c
+    src/gnss.c
 )
 zephyr_cc_option(-Wfatal-errors)
 
