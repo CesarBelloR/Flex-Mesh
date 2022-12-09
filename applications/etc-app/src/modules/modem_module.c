@@ -76,9 +76,6 @@ static struct module_data self = {
 };
 
 static int static_modem_data_get(void);
-extern char* quectel_bg95_get_imei(void);
-extern char* quectel_bg95_get_revision(void);
-extern char* quectel_bg95_get_sim_number(void);
 
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type state)
@@ -152,16 +149,20 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void modem_set_connected(void)
+{
+	static_modem_data_get();
+	state_set(STATE_CONNECTED);
+	SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
+}
+
 static void modem_evt_handler(const struct modem_api_evt *const evt)
 {
 	struct modem_event *modem_event = new_modem_event();
 
 	switch (evt->type) {
 	case MODEM_API_CONNECTED_EVT: {
-		static_modem_data_get();
-		state_set(STATE_CONNECTED);
-		modem_event->type = MODEM_EVT_LTE_CONNECTED;
-		APP_EVENT_SUBMIT(modem_event);
+		modem_set_connected();
 		break;
 	}
 	case MODEM_API_DISCONNECTED_EVT: {
@@ -251,6 +252,9 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
+	if (quectel_bg95_is_ready()) {
+		modem_set_connected();
+	}
 	modem_dev = device_get_binding("quectel-bg95");
 	if (modem_dev != NULL) {
 		modem_evt_handler_init(modem_dev, modem_evt_handler);

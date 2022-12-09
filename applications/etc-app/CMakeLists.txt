@@ -5,7 +5,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 if(DEFINED ENV{VERSION})
 project(app LANGUAGES C VERSION $ENV{VERSION})
 else()
-project(app LANGUAGES C VERSION 1.0.0)
+project(app LANGUAGES C VERSION 0.1.0)
 endif()
 
 configure_file(app_version.h.in ${CMAKE_BINARY_DIR}/app/include/app_version.h)
