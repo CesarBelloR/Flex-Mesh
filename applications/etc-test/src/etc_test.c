@@ -284,10 +284,9 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 	int16_t rssi;
 	int8_t snr;
 	uint8_t rx_buf[128] = {0x00};
-	while (k_uptime_get_32() - t0 < 10000) {
+	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 2UL)) {
 		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
 		if (ret < 0) {
-			shell_error(shell, "No data received");
 			continue;
 		} else {
 			char RXString[ACKUNCRYPT] = {0};
