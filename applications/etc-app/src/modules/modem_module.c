@@ -17,6 +17,11 @@
 #include "events/cloud_event.h"
 #include "events/util_event.h"
 
+#ifdef CONFIG_PM_DEVICE
+#include <pm/pm.h>
+#include <pm/device.h>
+#endif
+
 #ifdef CONFIG_LWM2M_CARRIER
 #include <lwm2m_carrier.h>
 #endif /* CONFIG_LWM2M_CARRIER */
@@ -69,6 +74,11 @@ static struct module_data self = {
 	.msg_q = &msgq_modem,
 	.supports_shutdown = true,
 };
+
+static int static_modem_data_get(void);
+extern char* quectel_bg95_get_imei(void);
+extern char* quectel_bg95_get_revision(void);
+extern char* quectel_bg95_get_sim_number(void);
 
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type state)
@@ -147,20 +157,21 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 	struct modem_event *modem_event = new_modem_event();
 
 	switch (evt->type) {
-	case MODEM_API_CONNECTED_EVT:
+	case MODEM_API_CONNECTED_EVT: {
+		static_modem_data_get();
+		state_set(STATE_CONNECTED);
 		modem_event->type = MODEM_EVT_LTE_CONNECTED;
 		APP_EVENT_SUBMIT(modem_event);
 		break;
-	case MODEM_API_DISCONNECTED_EVT:
+	}
+	case MODEM_API_DISCONNECTED_EVT: {
+		state_set(STATE_DISCONNECTED);
 		modem_event->type = MODEM_EVT_LTE_DISCONNECTED;
 		APP_EVENT_SUBMIT(modem_event);
 		break;
 	}
+	}
 }
-
-extern char* quectel_bg95_get_imei(void);
-extern char* quectel_bg95_get_revision(void);
-extern char* quectel_bg95_get_sim_number(void);
 
 static int static_modem_data_get(void)
 {	
@@ -216,9 +227,16 @@ static bool data_type_is_requested(enum app_data_type *data_list,
 	return false;
 }
 
-static int configure_low_power(void)
+static int modem_enter_sleep(void)
 {
-	return 0;
+	int rc = 0;
+#ifdef CONFIG_PM_DEVICE
+	rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_SUSPEND);
+	if (rc) {
+		LOG_ERR("Failed to suspend the modem %d", rc);
+	}
+#endif
+	return rc;
 }
 
 static int lte_connect(void)
@@ -233,15 +251,6 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
-	extern bool quectel_bg95_is_ready(void);
-	if (quectel_bg95_is_ready()) {
-		state_set(STATE_CONNECTED);
-		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
-		static_modem_data_get();
-	} else {
-		state_set(STATE_DISCONNECTED);
-	}
-
 	modem_dev = device_get_binding("quectel-bg95");
 	if (modem_dev != NULL) {
 		modem_evt_handler_init(modem_dev, modem_evt_handler);
@@ -362,6 +371,7 @@ static void module_thread_fn(void)
 			on_state_connected(&msg);
 			break;
 		case STATE_SHUTDOWN:
+			modem_enter_sleep();
 			/* The shutdown state has no transition. */
 			break;
 		default:

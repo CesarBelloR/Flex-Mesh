@@ -62,4 +62,11 @@ inline int modem_evt_handler_init(const struct device *dev,
 	return api->evt_handler_init(dev, evt_handler);
 }
 
+char* quectel_bg95_get_imei(void);
+char* quectel_bg95_get_revision(void);
+char* quectel_bg95_get_sim_number(void);
+bool quectel_bg95_is_ready(void);
+int quectel_bg95_get_time(char* time_buf);
+int quectel_bg95_get_rssi(void);
+
 #endif // MODEM_API_H

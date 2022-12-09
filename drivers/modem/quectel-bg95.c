@@ -7,6 +7,14 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #include "quectel-bg95.h"
 #include "certificates.h"
 
+#ifdef CONFIG_PM_DEVICE
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/uart.h>
+
+#include <pm/pm.h>
+#include <pm/device.h>
+#endif
+
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
@@ -963,6 +971,49 @@ MODEM_CMD_DEFINE(on_cmd_data_done)
 	return 0;
 }
 
+MODEM_CMD_DEFINE(on_cmd_power_down)
+{
+	k_sem_give(&mdata.sem_shutdown);
+	return 0;
+}
+
+static int quectel_bg95_power_down() {
+	const char *pw_dwn = "AT+QPOWD";
+	int ret;
+
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("POWERED DOWN", on_cmd_power_down, 0U, ""),
+	};
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
+			     NULL, 0U, pw_dwn, &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+	if (ret != 0) {
+		goto error;
+	}
+
+	mdata.is_connected = false;
+
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      cmd, 1U, true);
+
+	ret = k_sem_take(&mdata.sem_shutdown, MDM_SHUTDOWN_TIMEOUT);
+	if (ret != 0) {
+		goto error;
+	}
+
+	/* unset handler commands and ignore any errors */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      NULL, 0U, false);
+	LOG_INF("Modem powered down");
+
+	return 0;
+error:
+	LOG_ERR("Failed to shut down modem, %d", ret);
+	return ret;
+}
+
+
 int quectel_bg95_file_find(const char* file_name) {
 	char buf[sizeof("AT+QFLST=") + MDM_FILE_NAME_MAX_LENGTH] = {0};
 	snprintk(buf, sizeof(buf), "AT+QFLST=\"%s\"", file_name);
@@ -1670,8 +1721,6 @@ static int modem_setup(void)
 	/* Setup the pins to ensure that Modem is enabled. */
 	pin_init();
 
-restart:
-
 	counter = 0;
 
 	/* stop RSSI delay work */
@@ -1942,6 +1991,7 @@ static int modem_init(const struct device *dev)
 	k_sem_init(&mdata.sem_sock_conn, 0, 1);
 	k_sem_init(&mdata.sem_dns_ready, 0, 1);
 	k_sem_init(&mdata.sem_data_ready, 0, 1);
+	k_sem_init(&mdata.sem_shutdown, 0, 1);
 
 	k_work_queue_start(&modem_workq, modem_workq_stack,
 			   K_KERNEL_STACK_SIZEOF(modem_workq_stack),
@@ -2050,11 +2100,87 @@ error:
 	return ret;
 }
 
+#ifdef CONFIG_PM_DEVICE
+static int quectel_bg95_pm_suspend(void)
+{
+	int ret;
+	
+	LOG_DBG("PM_DEVICE_ACTION_SUSPEND");
+
+	/* stop RSSI delay work */
+	k_work_cancel_delayable(&mdata.rssi_query_work);
+
+	ret = quectel_bg95_power_down();
+	if (ret != 0) {
+		return -EAGAIN;
+	}
+
+	uart_irq_rx_disable(mctx.iface.dev);
+	uart_irq_tx_disable(mctx.iface.dev);
+	// uart doesn't have a shutdown mode only suspend
+	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_SUSPEND);
+	if (ret)
+	{
+		LOG_ERR("Can't suspend device: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int quectel_bg95_pm_resume(void)
+{
+	int ret = 0;
+	LOG_DBG("PM_DEVICE_ACTION_RESUME");
+	uart_irq_rx_enable(mctx.iface.dev);
+	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_RESUME);
+	if (ret)
+	{
+		LOG_ERR("Can't resume device: %d", ret);
+		return ret;
+	}
+
+	ret = modem_setup();
+
+	return ret;
+}
+
+static int quectel_bg95_pm_action(const struct device *dev,
+			       enum pm_device_action action)
+{
+	ARG_UNUSED(dev);
+	int ret;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* device must be uninitialized */
+		ret = quectel_bg95_pm_suspend();
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		/* device must be reinitialized */
+		ret = quectel_bg95_pm_resume();
+		break;
+	default:
+		return -ENOTSUP;
+	}
+
+	return ret;
+}
+
+PM_DEVICE_DT_INST_DEFINE(0, quectel_bg95_pm_action);
+
+/* Register the device with the Networking stack. */
+NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, PM_DEVICE_DT_INST_GET(0),
+				  &mdata, NULL,
+				  CONFIG_MODEM_QUECTEL_BG95_M3_INIT_PRIORITY,
+				  &api_funcs, MDM_MAX_DATA_LENGTH);
+#else
 /* Register the device with the Networking stack. */
 NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, NULL,
 				  &mdata, NULL,
 				  CONFIG_MODEM_QUECTEL_BG95_M3_INIT_PRIORITY,
 				  &api_funcs, MDM_MAX_DATA_LENGTH);
+#endif
 
 /* Register NET sockets. */
 NET_SOCKET_OFFLOAD_REGISTER(quectel_bg95, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY,
