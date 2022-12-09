@@ -11,6 +11,7 @@
 #include "data/data_codec.h"
 #include "etc_date_time.h"
 #include "etc_data_fs.h"
+#include "etc_settings.h"
 
 #define MODULE data_module
 #define MODULE_DATA_THREAD_STACK_SIZE 2048
@@ -70,6 +71,9 @@ static int head_lora_buf = 0;
 static int head_sensor_buf = 0;
 static int head_modem_dyn_buf = 0;
 static int head_bat_buf = 0;
+
+/* Initialize publish timeout for data publish as forever */
+static k_timeout_t data_publish_timeout = K_FOREVER; 
 
 static K_SEM_DEFINE(config_load_sem, 0, 1);
 
@@ -273,7 +277,7 @@ static void data_send_work_fn(struct k_work *work)
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 	
-	k_work_reschedule(&data_send_work, K_SECONDS(1 * 30));
+	k_work_reschedule(&data_send_work, data_publish_timeout);
 }
 
 /* Message handler for STATE_CLOUD_DISCONNECTED. */
@@ -392,9 +396,11 @@ static void module_thread_fn(void)
 	}
 
 	state_set(STATE_CLOUD_DISCONNECTED);
-
+	int transmission_in_seconds = etc_get_time_transmission_interval();
+	data_publish_timeout = K_SECONDS(transmission_in_seconds);
 	k_work_init_delayable(&data_send_work, data_send_work_fn);
-	k_work_reschedule(&data_send_work, K_SECONDS(1 * 30));
+	k_work_reschedule(&data_send_work, data_publish_timeout);
+
 	err = setup();
 	if (err) {
 		LOG_ERR("setup, error: %d", err);
