@@ -245,7 +245,7 @@ static void data_encode(void)
 		LOG_WRN("No message to publish");
 		return;
 	}
-	const char topic_lora_data[] = "exact/core/readings";
+	const char topic_lora_data[] = "exact/core/readings/old";
 
 	struct aws_iot_data tx_data = {
 		.qos = MQTT_QOS_0_AT_MOST_ONCE,
@@ -361,7 +361,7 @@ static void on_all_states(struct data_msg_data *msg)
 		};
 
 		memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
-		etc_data_fs_notify_data((uint8_t*)&new_sensor_data, sizeof(struct data_sensors));
+		//etc_data_fs_notify_data((uint8_t*)&new_sensor_data, sizeof(struct data_sensors));
 		data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
 		/* Send data to cloud right now after they were taken */
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
