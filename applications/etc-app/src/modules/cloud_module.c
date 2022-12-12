@@ -74,6 +74,9 @@ static K_WORK_DELAYABLE_DEFINE(shadow_work, shadow_work_fn);
  */
 static int connect_retries;
 
+/* Last publish message id */
+static uint32_t last_message_id = 0;
+
 /* Cloud module message queue. */
 #define CLOUD_QUEUE_ENTRY_COUNT 20
 #define CLOUD_QUEUE_BYTE_ALIGNMENT 4
@@ -306,6 +309,15 @@ void aws_iot_event_handler(const struct aws_iot_evt *const evt)
 		SEND_EVENT(cloud, CLOUD_EVT_FOTA_ERROR);
 		break;
 	}
+	case AWS_IOT_EVT_PUBACK:
+	{
+		LOG_DBG("AWS_IOT_EVT_PUBACK %d", evt->data.message_id);
+		if (evt->data.message_id == last_message_id) {
+			/* Cloud receives data, sleep modem */
+			SEND_EVENT(cloud, CLOUD_EVT_DISCONNECTED);
+		}
+		break;
+	}
 	case AWS_IOT_EVT_PINGRESP:
 	{
 		LOG_DBG("AWS_IOT_EVT_PINGRESP");
@@ -378,6 +390,10 @@ static void connect_cloud(void)
 static void disconnect_cloud(void)
 {
 	connect_retries = 0;
+	int err = aws_iot_disconnect();
+	if (err) {
+		LOG_ERR("aws_iot_disconnect, error: %d", err);
+	}
 	k_work_cancel_delayable(&connect_check_work);
 }
 
@@ -389,7 +405,7 @@ static void on_state_init(struct cloud_msg_data *msg)
 		int err;
 
 		state_set(STATE_LTE_DISCONNECTED);
-
+		sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
 		err = setup();
 		__ASSERT(err == 0, "setp() failed");
 	}
@@ -407,17 +423,6 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 		 * This is to clear up the cloud library state.
 		 */
 		disconnect_cloud();
-	}
-
-	if (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_FOTA_PENDING))
-	{
-		sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
-		disconnect_cloud();
-	}
-
-	if (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_FOTA_STOPPED))
-	{
-		connect_cloud();
 	}
 }
 
@@ -438,10 +443,17 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED))
 	{
+		state_set(STATE_SHUTDOWN);
 		sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
+		disconnect_cloud();
+		SEND_EVENT(cloud, CLOUD_EVT_REBOOT_REQUEST);
+		return;
+	}
 
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED))
+	{
+		sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
 		k_work_reschedule(&connect_check_work, K_SECONDS(1));
-
 		return;
 	}
 }
@@ -452,7 +464,6 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED))
 	{
 		sub_state_set(SUB_STATE_CLOUD_CONNECTED);
-
 		connect_retries = 0;
 		k_work_cancel_delayable(&connect_check_work);
 	}
@@ -466,17 +477,18 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct cloud_msg_data *msg)
 {
-	if (is_data_event(&msg->module.data.header))
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND))
 	{
-		switch (msg->module.data.type)
-		{
-		case DATA_EVT_CONFIG_INIT:
-			/* Fall through. */
-		case DATA_EVT_CONFIG_READY:
-			break;
-		default:
-			break;
-		}
+		last_message_id = msg->module.data.data.message_id;
+		LOG_INF("Last data send message id %d", last_message_id);
+	}
+
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		SEND_SHUTDOWN_ACK(cloud, CLOUD_EVT_SHUTDOWN_READY, self.id);
+		state_set(STATE_SHUTDOWN);
 	}
 }
 
@@ -630,4 +642,5 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, modem_event);
+APP_EVENT_SUBSCRIBE(MODULE, util_event);
 APP_EVENT_SUBSCRIBE_FIRST(MODULE, cloud_event);

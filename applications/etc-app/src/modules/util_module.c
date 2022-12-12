@@ -3,7 +3,13 @@
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
-
+#include <zephyr/init.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+#include <hal/nrf_gpio.h>
+#include "pcf85263a.h"
+#include "etc_settings.h"
 #define MODULE util_module
 #define MODULE_REBOOT_TIMEOUT 30
 
@@ -18,6 +24,7 @@
 #include "events/util_event.h"
 #include "events/modem_event.h"
 #include "events/ui_event.h"
+#include "events/lora_event.h"
 
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -29,6 +36,7 @@ struct util_msg_data {
 		struct data_event data;
 		struct app_event app;
 		struct modem_event modem;
+		struct lora_event lora;
 	} module;
 };
 
@@ -40,11 +48,16 @@ static enum state_type {
 
 /* Forward declarations. */
 static void reboot_work_fn(struct k_work *work);
+static void wakeup_work_fn(struct k_work *work);
 static void message_handler(struct util_msg_data *msg);
 static void send_reboot_request(enum shutdown_reason reason);
 
 /* Delayed work that is used to trigger a reboot. */
 static K_WORK_DELAYABLE_DEFINE(reboot_work, reboot_work_fn);
+
+
+/* Delayed work that is used to trigger a wakeup. */
+static K_WORK_DELAYABLE_DEFINE(wakeup_work, wakeup_work_fn);
 
 static struct module_data self = {
 	.name = "util",
@@ -158,9 +171,91 @@ static void reboot(void)
 #endif
 }
 
+static void util_set_wakeup_time(void) {
+	time_t now = 0;
+	pcf85263a_rtc_get_time(&now);
+	uint16_t sample_time_second = etc_get_time_measurement_interval();
+	uint8_t sample_time_min = sample_time_second / 60;
+	uint8_t alarm_min = (uint8_t)((int)(now / 60) % 100);
+	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
+	if (alarm_min >= 60) {
+		alarm_min = 0;
+	}
+	LOG_INF("Set last wakeup at minutes %d %d", alarm_min, (int)now);
+	pcf85263a_alarm_type_1_config_t config = {
+		.seconds = 0,
+		.minutes = alarm_min,
+		.hours = 0,
+		.days = 0,
+		.months = 0,
+	};
+
+	pcf85263a_alarm_type_1_flag_t flag = {
+		.enable_seconds = 0,
+		.enable_minutes = 1,
+		.enable_hours = 0,
+		.enable_days = 0,
+		.enable_months = 0,
+	};
+
+	pcf85263a_interrupt_flag_t interrupt_flag = {
+		.enable_level_pulse = 0,
+		.enable_periodic = 0,
+		.enable_offset_correction = 0,
+		.enable_alarm_1 = 1,
+		.enable_alarm_2 = 0,
+		.enable_timestamp = 0,
+		.enable_battery_switch = 0,
+		.enable_wdg = 0,
+	};
+
+	pcf85263a_interrupt_enable(interrupt_flag);
+	pcf85263a_set_interrupt_io(true);
+	pcf85263a_alarm_config_type_1(config);
+	pcf85263a_alarm_enable_type_1(flag);
+}
+
+static void util_system_off(void) 
+{
+	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+
+	if (!device_is_ready(cons)) {
+		LOG_ERR("%s: device not ready.", cons->name);
+		return;
+	}
+	LOG_INF("System is sleeping!!!");
+	k_sleep(K_SECONDS(1));
+	nrf_gpio_cfg_input(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0), NRF_GPIO_PIN_PULLUP);
+	nrf_gpio_cfg_sense_set(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0), NRF_GPIO_PIN_SENSE_LOW);
+	nrf_gpio_cfg_input(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(hall_int), control_gpios, 0), NRF_GPIO_PIN_PULLUP);
+	nrf_gpio_cfg_sense_set(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(hall_int), control_gpios, 0), NRF_GPIO_PIN_SENSE_LOW);
+	pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
+}
+
+static void wakeup_work_fn(struct k_work *work) {
+	reboot();
+}
+
 static void reboot_work_fn(struct k_work *work)
 {
-	reboot();
+	#if 0
+	util_set_wakeup_time();
+	util_system_off();
+	pm_state_force(0u, &(struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
+	k_sleep(K_SECONDS(5));
+
+	while (true) {
+		/* spin to avoid fall-off behavior */
+		k_cpu_idle();
+	}
+	#else
+	uint16_t sample_time_second = etc_get_time_measurement_interval();
+	k_work_schedule(&wakeup_work, K_SECONDS(sample_time_second));
+	// util_system_off();
+	while (true) {
+		k_sleep(K_SECONDS(1));
+	}
+	#endif
 }
 
 static void send_reboot_request(enum shutdown_reason reason)
@@ -226,7 +321,7 @@ static int setup(const struct device *dev)
 static void on_state_init(struct util_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DONE)) {
-		send_reboot_request(REASON_FOTA_UPDATE);
+		send_reboot_request(REASON_SLEEP);
 	}
 
 	if ((IS_EVENT(msg, cloud, CLOUD_EVT_ERROR))	||
@@ -272,6 +367,11 @@ static void on_state_reboot_pending(struct util_msg_data *msg)
 
 	if (IS_EVENT(msg, ui, UI_EVT_SHUTDOWN_READY)) {
 		reboot_ack_check(msg->module.ui.data.id);
+		return;
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_SHUTDOWN_READY)) {
+		reboot_ack_check(msg->module.lora.data.id);
 		return;
 	}
 }

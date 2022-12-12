@@ -613,3 +613,13 @@ void pcf85263a_set_interrupt_io(bool enable) {
         return;
     }
 }
+
+uint8_t pcf85263a_get_alarm_min_type_1(void) {
+    uint8_t min_buf[1] = {0x00};
+    int rc = read_register(PCF85263A_RTC_MODE_MINUTES_ALARM1_REG, min_buf);
+    if (rc == 0) {
+        return bcd2bin(min_buf[0]);
+    }
+
+    return 0;
+}

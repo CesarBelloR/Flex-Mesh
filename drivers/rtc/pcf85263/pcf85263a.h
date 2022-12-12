@@ -223,4 +223,11 @@ void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag);
  * @retval None
  */
 void pcf85263a_set_interrupt_io(bool enable);
+
+/**
+ * @brief [MVP] This API will get the last wakeup minutes
+ * 
+ * @return uint8_t last minutes of alarm
+ */
+uint8_t pcf85263a_get_alarm_min_type_1(void);
 #endif /* PCF85263A_H_ */

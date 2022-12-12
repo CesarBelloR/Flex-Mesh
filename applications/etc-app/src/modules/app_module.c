@@ -202,7 +202,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static int setup(void)
 {
-	// k_timer_start(&data_sample_timer, K_SECONDS(10), K_SECONDS(10));
 	return 0;
 }
 
@@ -241,6 +240,14 @@ static void on_all_events(struct app_msg_data *msg)
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 	date_time_start_work();
 #endif
+	}
+
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		SEND_SHUTDOWN_ACK(app, APP_EVT_SHUTDOWN_READY, self.id);
+		state_set(STATE_SHUTDOWN);
 	}
 }
 

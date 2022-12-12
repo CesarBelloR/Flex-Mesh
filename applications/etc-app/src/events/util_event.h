@@ -25,6 +25,8 @@ enum shutdown_reason {
 	REASON_GENERIC,
 	/** The application shuts down because a FOTA update finished. */
 	REASON_FOTA_UPDATE,
+	/** Sleep mode */
+	REASON_SLEEP,
 };
 
 /** @brief Utility module event. */

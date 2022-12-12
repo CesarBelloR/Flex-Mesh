@@ -267,6 +267,7 @@ static void on_all_states(struct sensor_msg_data *msg)
 		 * report back immediately.
 		 */
 		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
+		k_work_cancel_delayable(&sensor_poll_work);
 		state_set(STATE_SHUTDOWN);
 	}
 

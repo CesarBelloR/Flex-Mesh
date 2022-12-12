@@ -232,6 +232,14 @@ static void config_get(void)
 	SEND_EVENT(data, DATA_EVT_CONFIG_GET);
 }
 
+static void data_module_send_message_id(uint32_t message_id)
+{
+	struct data_event *data_event = new_data_event();
+	data_event->type = DATA_EVT_DATA_SEND;
+	data_event->data.message_id = message_id;
+	APP_EVENT_SUBMIT(data_event);
+}
+
 static void data_encode(void) 
 {
 	if (head_sensor_buf == 0) {
@@ -247,12 +255,14 @@ static void data_encode(void)
 	}
 	const char topic_lora_data[] = "exact/core/readings/old";
 
+	uint32_t message_id = k_uptime_get_32();
 	struct aws_iot_data tx_data = {
-		.qos = MQTT_QOS_0_AT_MOST_ONCE,
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
 		.topic.str = topic_lora_data,
 		.topic.len = strlen(topic_lora_data),
 		.ptr = data_msg,
-		.len = strlen(data_msg)
+		.len = strlen(data_msg),
+		.message_id = message_id,
 	};
 
 	LOG_INF("Publishing: %s", data_msg);
@@ -264,7 +274,7 @@ static void data_encode(void)
 
 	head_lora_buf = 0;
 	head_sensor_buf = 0;
-	SEND_EVENT(data, DATA_EVT_DATA_SEND);
+	data_module_send_message_id(message_id);
 }
 
 static void data_send_work_fn(struct k_work *work)
@@ -327,9 +337,6 @@ static void on_all_states(struct data_msg_data *msg)
 		return;
 	}
 
-	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_NOT_READY)) {
-	}
-
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_READY)) {
 		modem_stat.ts = msg->module.modem.data.modem_static.timestamp;
 		modem_stat.queued = true;
@@ -347,12 +354,6 @@ static void on_all_states(struct data_msg_data *msg)
 		strcpy(modem_stat.fw, msg->module.modem.data.modem_static.modem_fw);
 		strcpy(modem_stat.imei, msg->module.modem.data.modem_static.imei);
 
-	}
-
-	if (IS_EVENT(msg, modem, MODEM_EVT_BATTERY_DATA_NOT_READY)) {
-	}
-
-	if (IS_EVENT(msg, modem, MODEM_EVT_BATTERY_DATA_READY)) {
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {

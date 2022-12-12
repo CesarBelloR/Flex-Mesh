@@ -24,6 +24,7 @@ static struct fs_file_t file;
 static enum data_fs_state data_state = DATA_FS_NOT_INITIALIZED;
 static int file_ctr, newest, oldest;
 static char file_name[MAX_PATH_LEN];
+static char current_file_name[MAX_PATH_LEN];
 static int allocate_new_file(struct fs_file_t *file);
 static int del_oldest_log(void);
 static int get_log_file_id(struct fs_dirent *ent);
@@ -375,11 +376,11 @@ static int allocate_new_file(struct fs_file_t *file)
 	snprintf(file_name, sizeof(file_name), "%s/%s%04d",
 		CONFIG_DATA_FS_DIR,
 		CONFIG_DATA_FS_FILE_PREFIX, curr_file_num);
-
 	rc = fs_open(file, file_name, FS_O_CREATE | FS_O_WRITE);
 	if (rc < 0) {
 		goto out;
 	}
+	strcpy(current_file_name, file_name);
 	++file_ctr;
 	newest = curr_file_num;
 
@@ -460,18 +461,30 @@ static void etc_data_fs_write_file(const uint8_t* msg, size_t msg_len) {
 }
 
 void etc_data_fs_notify_data(uint8_t* data, uint8_t len) {
-	etc_data_fs_write_file(data, len);
+	etc_data_fs_write(data, len);
 }
 
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
+static char shell_file_name[256];
 
-static int cmd_data_fs_clean(const struct shell *shell, size_t argc, char **argv)
+static int del_log_by_name(const char* file_name)
 {
-	return 0;
+	int rc;
+	memset(shell_file_name, 0, sizeof(shell_file_name));
+	snprintf(shell_file_name, sizeof(shell_file_name), "%s/%s",
+		 CONFIG_DATA_FS_DIR, file_name);
+	rc = fs_unlink(shell_file_name);
+	if ((rc == 0) || (rc == -ENOENT)) {
+		LOG_DBG("Removed log file %s successful", shell_file_name);
+	} else {
+		LOG_ERR("Failed to remove file %s", shell_file_name);
+	}
+
+	return rc;
 }
 
-static int lsdir(const struct shell *shell, const char *path)
+static int lsdir(const struct shell *shell, const char *path, bool is_remove)
 {
 	int res;
 	struct fs_dir_t dirp;
@@ -482,10 +495,12 @@ static int lsdir(const struct shell *shell, const char *path)
 	/* Verify fs_opendir() */
 	res = fs_opendir(&dirp, path);
 	if (res) {
+		LOG_ERR("Error opening dir %s [%d]", path, res);
 		shell_print(shell, "Error opening dir %s [%d]", path, res);
 		return res;
 	}
 
+	LOG_DBG("\nListing dir %s ...", path);
 	shell_print(shell, "\nListing dir %s ...", path);
 	for (;;) {
 		/* Verify fs_readdir() */
@@ -495,15 +510,24 @@ static int lsdir(const struct shell *shell, const char *path)
 		if (res || entry.name[0] == 0) {
 			if (res < 0) {
 				shell_print(shell, "Error reading dir [%d]", res);
+				LOG_ERR("Error reading dir [%d]", res);
 			}
 			break;
 		}
 
 		if (entry.type == FS_DIR_ENTRY_DIR) {
+			LOG_DBG("[DIR ] %s", entry.name);
 			shell_print(shell, "[DIR ] %s", entry.name);
 		} else {
+			LOG_DBG("[FILE] %s (size = %zu)",
+				   entry.name, entry.size);
 			shell_print(shell, "[FILE] %s (size = %zu)",
 				   entry.name, entry.size);
+			if (is_remove) {
+				if (strstr(current_file_name, entry.name) == 0) {
+					del_log_by_name(entry.name);
+				}
+			}
 		}
 	}
 
@@ -513,9 +537,15 @@ static int lsdir(const struct shell *shell, const char *path)
 	return res;
 }
 
+static int cmd_data_fs_clean(const struct shell *shell, size_t argc, char **argv)
+{
+	lsdir(shell, CONFIG_DATA_FS_DIR, true);
+	return 0;
+}
+
 static int cmd_data_fs_list(const struct shell *shell, size_t argc, char **argv)
 {
-	lsdir(shell, CONFIG_DATA_FS_DIR);
+	lsdir(shell, CONFIG_DATA_FS_DIR, false);
 	return 0;
 }
 

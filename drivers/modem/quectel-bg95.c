@@ -2105,7 +2105,7 @@ static int quectel_bg95_pm_suspend(void)
 {
 	int ret;
 	
-	LOG_DBG("PM_DEVICE_ACTION_SUSPEND");
+	LOG_INF("PM_DEVICE_ACTION_SUSPEND");
 
 	/* stop RSSI delay work */
 	k_work_cancel_delayable(&mdata.rssi_query_work);
@@ -2131,7 +2131,7 @@ static int quectel_bg95_pm_suspend(void)
 static int quectel_bg95_pm_resume(void)
 {
 	int ret = 0;
-	LOG_DBG("PM_DEVICE_ACTION_RESUME");
+	LOG_INF("PM_DEVICE_ACTION_RESUME");
 	uart_irq_rx_enable(mctx.iface.dev);
 	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_RESUME);
 	if (ret)

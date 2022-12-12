@@ -137,6 +137,13 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
+	if (is_util_event(aeh)) {
+		struct util_event *evt = cast_util_event(aeh);
+
+		msg.module.util = *evt;
+		enqueue_msg = true;
+	}
+
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -325,20 +332,18 @@ static void on_state_connected(struct modem_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct modem_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATION_REQUEST)) {
-		LOG_DBG("CLOUD_EVT_USER_ASSOCIATION_REQUEST");
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_SHUTDOWN_READY)) {
+		LOG_DBG("CLOUD_EVT_SHUTDOWN_READY");
+		modem_enter_sleep();
+		state_set(STATE_SHUTDOWN);
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
-		LOG_DBG("CLOUD_EVT_USER_ASSOCIATED");
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_START)) {
-		LOG_DBG("APP_EVT_START");
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-		LOG_DBG("APP_EVT_DATA_GET");
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		SEND_SHUTDOWN_ACK(modem, MODEM_EVT_SHUTDOWN_READY, self.id);
+		state_set(STATE_SHUTDOWN);
 	}
 }
 
@@ -375,7 +380,6 @@ static void module_thread_fn(void)
 			on_state_connected(&msg);
 			break;
 		case STATE_SHUTDOWN:
-			modem_enter_sleep();
 			/* The shutdown state has no transition. */
 			break;
 		default:
