@@ -120,11 +120,10 @@ static int time_modem_get(void)
 		return -ENODATA;
 	}
 	date_time_print_datetime(&date_time);
-	time_aux.date_time_local_second = (int64_t)timeutil_timegm64(&date_time);
-	time_aux.date_time_utc = (time_aux.date_time_local_second - 
-				  time_aux.time_zone) * 1000;
+	time_aux.date_time_utc = (int64_t)timeutil_timegm64(&date_time) * 1000;
 	LOG_DBG("Time UTC %d - Time Zone %d - Local Time %d", (int)(time_aux.date_time_utc / 1000), time_aux.time_zone,
 		(int)(time_aux.date_time_utc / 1000 + time_aux.time_zone));
+	time_aux.date_time_local_second = (int)(time_aux.date_time_utc / 1000 + time_aux.time_zone);
 	time_aux.last_date_time_update = k_uptime_get();
 	return 0;
 }
