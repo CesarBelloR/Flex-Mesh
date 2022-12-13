@@ -2139,7 +2139,6 @@ static int quectel_bg95_pm_resume(void)
 		LOG_ERR("Can't resume device: %d", ret);
 		return ret;
 	}
-
 	ret = modem_setup();
 
 	return ret;

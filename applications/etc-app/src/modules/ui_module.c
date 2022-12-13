@@ -331,7 +331,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_SHUTDOWN_READY)) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
@@ -397,10 +397,6 @@ static void on_state_fota_update(struct ui_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
-		SEND_SHUTDOWN_ACK(ui, UI_EVT_SHUTDOWN_READY, self.id);
-		state_set(STATE_SHUTDOWN);
-	}
 }
 
 static void message_handler(struct ui_msg_data *msg)

@@ -279,14 +279,13 @@ static void data_encode(void)
 
 static void data_send_work_fn(struct k_work *work)
 {
-	if (head_lora_buf != 0) {
-		SEND_EVENT(data, DATA_EVT_DATA_READY);
-	}
+	// if (head_lora_buf != 0) {
+	// 	SEND_EVENT(data, DATA_EVT_DATA_READY);
+	// }
 
-	if (head_sensor_buf != 0) {
-		SEND_EVENT(data, DATA_EVT_DATA_READY);
-	}
-	
+	// if (head_sensor_buf != 0) {
+	// 	SEND_EVENT(data, DATA_EVT_DATA_READY);
+	// }
 	k_work_reschedule(&data_send_work, data_publish_timeout);
 }
 
@@ -440,7 +439,6 @@ APP_EVENT_SUBSCRIBE(MODULE, util_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, cloud_event);
-APP_EVENT_SUBSCRIBE_EARLY(MODULE, gnss_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, sensor_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, lora_event);

@@ -7,7 +7,6 @@
 LOG_MODULE_REGISTER(board, LOG_LEVEL_INF);
 
 #define VSENS_EN_PIN 23
-#define BQ24195_I2C_7BIT_ADDR (0x6B)
 
 static int init(const struct device *dev)
 {

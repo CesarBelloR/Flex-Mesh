@@ -192,6 +192,7 @@
 		power-amplifier-output = "pa-boost";
 	};
 };
+
 &spi2 {
 	compatible = "nordic,nrf-spim";
 	label = "SPI_2";

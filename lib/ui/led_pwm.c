@@ -166,10 +166,10 @@ int ui_leds_init(void)
 
 void ui_leds_start(void)
 {
-#ifdef CONFIG_PM_DEVICE
-	int err = pm_device_action_run(leds.pwm_dev, PM_DEVICE_STATE_ACTIVE);
+#if 0 // Need to check
+	int err = pm_device_action_run(pwm_led0.dev, PM_DEVICE_ACTION_RESUME);
 	if (err) {
-		LOG_ERR("PWM enable failed");
+		LOG_ERR("PWM enable failed %d", err);
 	}
 #endif
 	led_update(&leds);
@@ -178,10 +178,10 @@ void ui_leds_start(void)
 void ui_leds_stop(void)
 {
 	k_work_cancel_delayable_sync(&leds.work, &leds.work_sync);
-#ifdef CONFIG_PM_DEVICE
-	int err = pm_device_action_run(leds.pwm_dev, PM_DEVICE_STATE_SUSPENDED);
+#if 0 // Need to check
+	int err = pm_device_action_run(pwm_led0.dev, PM_DEVICE_ACTION_SUSPEND);
 	if (err) {
-		LOG_ERR("PWM disable failed");
+		LOG_ERR("PWM disable failed %d", err);
 	}
 #endif
 	pwm_off(&leds);

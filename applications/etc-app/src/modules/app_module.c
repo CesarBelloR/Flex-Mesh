@@ -5,12 +5,16 @@
 #include <app_event_manager.h>
 #include <zephyr/sys/reboot.h>
 
+#include "pcf85263a.h"
+#include "etc_settings.h"
+#include "etc_interface.h"
+
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
 
 #define MODULE app
-#define MODULE_APP_THREAD_STACK_SIZE 1024
+#define MODULE_APP_THREAD_STACK_SIZE 2048
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -54,14 +58,6 @@ static enum sub_state_type {
 /* Application module message queue. */
 #define APP_QUEUE_ENTRY_COUNT		10
 #define APP_QUEUE_BYTE_ALIGNMENT	4
-
-/* Timer callback used to signal when timeout has occurred both in active
- * and passive mode.
- */
-static void data_sample_timer_handler(struct k_timer *timer);
-
-/* Data sample timer used in active mode. */
-K_TIMER_DEFINE(data_sample_timer, data_sample_timer_handler, NULL);
 
 K_MSGQ_DEFINE(msgq_app, sizeof(struct app_msg_data), APP_QUEUE_ENTRY_COUNT,
 	      APP_QUEUE_BYTE_ALIGNMENT);
@@ -205,10 +201,55 @@ static int setup(void)
 	return 0;
 }
 
+static void app_set_wakeup_time(void) {
+	time_t now = 0;
+	pcf85263a_rtc_get_time(&now);
+	uint16_t sample_time_second = etc_get_time_measurement_interval();
+	uint8_t sample_time_min = 15;
+	uint8_t alarm_min = (uint8_t)((int)(now / 60) % 100);
+	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
+	if (alarm_min >= 60) {
+		alarm_min = 0;
+	}
+
+	alarm_min = 39;
+	LOG_INF("Set last wakeup at minutes %d %d", alarm_min, (int)now);
+	pcf85263a_alarm_type_1_config_t config = {
+		.seconds = 0,
+		.minutes = alarm_min,
+		.hours = 0,
+		.days = 0,
+		.months = 0,
+	};
+
+	pcf85263a_alarm_type_1_flag_t flag = {
+		.enable_seconds = 0,
+		.enable_minutes = 1,
+		.enable_hours = 0,
+		.enable_days = 0,
+		.enable_months = 0,
+	};
+
+	pcf85263a_interrupt_flag_t interrupt_flag = {
+		.enable_level_pulse = 0,
+		.enable_periodic = 0,
+		.enable_offset_correction = 0,
+		.enable_alarm_1 = 1,
+		.enable_alarm_2 = 0,
+		.enable_timestamp = 0,
+		.enable_battery_switch = 0,
+		.enable_wdg = 0,
+	};
+
+	pcf85263a_interrupt_enable(interrupt_flag);
+	pcf85263a_set_interrupt_io(true);
+	pcf85263a_alarm_config_type_1(config);
+	pcf85263a_alarm_enable_type_1(flag);
+}
+
 static void data_sample_timer_handler(struct k_timer *timer)
 {
 	ARG_UNUSED(timer);
-	LOG_DBG("Send request to get data");
 	SEND_EVENT(app, APP_EVT_DATA_GET);
 }
 
@@ -220,6 +261,7 @@ static void on_state_init(struct app_msg_data *msg)
 
 static void on_state_running(struct app_msg_data *msg)
 {
+
 }
 
 /* Message handler for SUB_STATE_PASSIVE_MODE. */
@@ -248,6 +290,10 @@ static void on_all_events(struct app_msg_data *msg)
 		 */
 		SEND_SHUTDOWN_ACK(app, APP_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_SLEEP_READY)) {
+		app_set_wakeup_time();
 	}
 }
 

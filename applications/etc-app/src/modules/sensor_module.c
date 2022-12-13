@@ -9,7 +9,7 @@
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #define MODULE sensor_module
-#define MODULE_SENSOR_THREAD_STACK_SIZE 1024
+#define MODULE_SENSOR_THREAD_STACK_SIZE 2048
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -39,7 +39,6 @@ static enum state_type {
 } state;
 
 static struct k_work_delayable sensor_poll_work;
-static struct k_work_delayable battery_poll_work;
 static struct sensor_data static_sensor_data;
 
 /* Sensor module message queue. */
@@ -68,12 +67,7 @@ K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
 
 /* Forward declarations */
-static void sensor_poll_work_fn(struct k_work *work);
-
 static bool sensor_is_processing = false;
-
-/* Initialize poll timeout for sensor as forever */
-static k_timeout_t sensor_poll_timeout = K_FOREVER; 
 
 static struct module_data self = {
 	.name = "sensor",
@@ -192,9 +186,6 @@ static void sensor_module_send_sensor(struct sensor_data* sensor)
 
 static int setup(void)
 {
-	int measurement_in_seconds = etc_get_time_measurement_interval();
-	/* Update poll timeout */
-	sensor_poll_timeout = K_SECONDS(measurement_in_seconds);
 	adc_init();
 	sensor_adc_hw_init();
 	return 0;
@@ -214,8 +205,10 @@ static float sensor_ntc_converter(int data) {
 }
 
 static void sensor_poll_handler(void) {
+	LOG_DBG("Go here");
 	if (sensor_is_processing) return;
 	sensor_is_processing = true;
+	LOG_DBG("Go here");
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
 	data->temperature[SENSOR_INPUT_AMBIENT] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB));
@@ -241,11 +234,6 @@ static void sensor_poll_handler(void) {
 	sensor_is_processing = false;
 }
 
-static void sensor_poll_work_fn(struct k_work *work) {
-	sensor_poll_handler();
-	k_work_reschedule(&sensor_poll_work, sensor_poll_timeout);
-}
-
 /* Message handler for STATE_INIT. */
 static void on_state_init(struct sensor_msg_data *msg)
 {
@@ -262,18 +250,26 @@ static void on_state_running(struct sensor_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct sensor_msg_data *msg)
 {
+	if (IS_EVENT(msg, app, APP_EVT_DATA_GET_ALL)) {
+		LOG_INF("APP_EVT_DATA_GET");
+		sensor_poll_handler();
+		return;
+	}
+
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
 		/* The module doesn't have anything to shut down and can
 		 * report back immediately.
 		 */
-		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
-		k_work_cancel_delayable(&sensor_poll_work);
 		state_set(STATE_SHUTDOWN);
+		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
+		return;
 	}
 
 	if (IS_EVENT(msg, ui, UI_EVT_INPUT_DATA_READY)) {
+		LOG_INF("UI_EVT_INPUT_DATA_READY");
 		/* The UI input (HALL Sensor or Button) is triggered */
 		sensor_poll_handler();
+		return;
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
@@ -309,9 +305,6 @@ static void module_thread_fn(void)
 		SEND_ERROR(sensor, SENSOR_EVT_ERROR, err);
 	}
 
-	k_work_init_delayable(&sensor_poll_work, sensor_poll_work_fn);
-	k_work_reschedule(&sensor_poll_work, sensor_poll_timeout);
-
 	while (true) {
 		module_get_next_msg(&self, &msg);
 
@@ -342,5 +335,5 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
-APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, ui_event);
+APP_EVENT_SUBSCRIBE(MODULE, cloud_event);

@@ -7,9 +7,11 @@
 #include <zephyr/pm/pm.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/policy.h>
+#include <drivers/gpio.h>
 #include <hal/nrf_gpio.h>
-#include "pcf85263a.h"
 #include "etc_settings.h"
+#include "etc_interface.h"
+
 #define MODULE util_module
 #define MODULE_REBOOT_TIMEOUT 30
 
@@ -171,75 +173,68 @@ static void reboot(void)
 #endif
 }
 
-static void util_set_wakeup_time(void) {
-	time_t now = 0;
-	pcf85263a_rtc_get_time(&now);
-	uint16_t sample_time_second = etc_get_time_measurement_interval();
-	uint8_t sample_time_min = sample_time_second / 60;
-	uint8_t alarm_min = (uint8_t)((int)(now / 60) % 100);
-	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
-	if (alarm_min >= 60) {
-		alarm_min = 0;
-	}
-	LOG_INF("Set last wakeup at minutes %d %d", alarm_min, (int)now);
-	pcf85263a_alarm_type_1_config_t config = {
-		.seconds = 0,
-		.minutes = alarm_min,
-		.hours = 0,
-		.days = 0,
-		.months = 0,
-	};
-
-	pcf85263a_alarm_type_1_flag_t flag = {
-		.enable_seconds = 0,
-		.enable_minutes = 1,
-		.enable_hours = 0,
-		.enable_days = 0,
-		.enable_months = 0,
-	};
-
-	pcf85263a_interrupt_flag_t interrupt_flag = {
-		.enable_level_pulse = 0,
-		.enable_periodic = 0,
-		.enable_offset_correction = 0,
-		.enable_alarm_1 = 1,
-		.enable_alarm_2 = 0,
-		.enable_timestamp = 0,
-		.enable_battery_switch = 0,
-		.enable_wdg = 0,
-	};
-
-	pcf85263a_interrupt_enable(interrupt_flag);
-	pcf85263a_set_interrupt_io(true);
-	pcf85263a_alarm_config_type_1(config);
-	pcf85263a_alarm_enable_type_1(flag);
-}
-
 static void util_system_off(void) 
 {
+	nrf_gpio_cfg_input(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0), NRF_GPIO_PIN_PULLUP);
+	nrf_gpio_cfg_sense_set(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0), NRF_GPIO_PIN_SENSE_LOW);
+	nrf_gpio_cfg_input(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(hall_int), control_gpios, 0), NRF_GPIO_PIN_PULLUP);
+	nrf_gpio_cfg_sense_set(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(hall_int), control_gpios, 0), NRF_GPIO_PIN_SENSE_LOW);
+}
+
+#define VSENS_EN_PIN 23
+
+static void util_peripheral_off(void) {
+	const struct device *gpio_0_dev = device_get_binding("GPIO_0");
+	if (gpio_0_dev == NULL) {
+		return;
+	}
+
+	gpio_pin_configure(gpio_0_dev, VSENS_EN_PIN, GPIO_INPUT);
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 	if (!device_is_ready(cons)) {
 		LOG_ERR("%s: device not ready.", cons->name);
 		return;
 	}
-	LOG_INF("System is sleeping!!!");
-	k_sleep(K_SECONDS(1));
-	nrf_gpio_cfg_input(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0), NRF_GPIO_PIN_PULLUP);
-	nrf_gpio_cfg_sense_set(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0), NRF_GPIO_PIN_SENSE_LOW);
-	nrf_gpio_cfg_input(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(hall_int), control_gpios, 0), NRF_GPIO_PIN_PULLUP);
-	nrf_gpio_cfg_sense_set(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(hall_int), control_gpios, 0), NRF_GPIO_PIN_SENSE_LOW);
-	pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
+#ifdef CONFIG_PM_DEVICE
+	// pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
+#endif
+	extern void ui_leds_stop(void);
+	ui_leds_stop();
 }
 
 static void wakeup_work_fn(struct k_work *work) {
-	reboot();
+	LOG_DBG("Wakeup please");
+	const struct device *gpio_0_dev = device_get_binding("GPIO_0");
+	if (gpio_0_dev == NULL) {
+		return;
+	}
+
+	gpio_pin_configure(gpio_0_dev, VSENS_EN_PIN, GPIO_OUTPUT_ACTIVE);
+	
+	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+
+	if (!device_is_ready(cons)) {
+		LOG_ERR("%s: device not ready.", cons->name);
+		return;
+	}
+#ifdef CONFIG_PM_DEVICE
+	//pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
+#endif	
+	k_sleep(K_SECONDS(1));
+	LOG_INF("Wakeup from sleeping");
+	extern void ui_leds_start(void);
+	ui_leds_start();
+	SEND_EVENT(util, UTIL_EVT_WAKEUP_REQUEST);
 }
 
 static void reboot_work_fn(struct k_work *work)
 {
+	LOG_INF("System is sleeping!!!");
+	// k_sleep(K_SECONDS(5));
 	#if 0
 	util_set_wakeup_time();
+	util_peripheral_off();
 	util_system_off();
 	pm_state_force(0u, &(struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
 	k_sleep(K_SECONDS(5));
@@ -249,12 +244,9 @@ static void reboot_work_fn(struct k_work *work)
 		k_cpu_idle();
 	}
 	#else
-	uint16_t sample_time_second = etc_get_time_measurement_interval();
-	k_work_schedule(&wakeup_work, K_SECONDS(sample_time_second));
-	// util_system_off();
-	while (true) {
-		k_sleep(K_SECONDS(1));
-	}
+	// util_set_wakeup_time();
+	// k_sleep(K_SECONDS(5));
+	// util_peripheral_off();
 	#endif
 }
 

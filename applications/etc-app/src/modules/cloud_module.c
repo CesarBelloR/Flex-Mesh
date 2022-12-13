@@ -314,7 +314,7 @@ void aws_iot_event_handler(const struct aws_iot_evt *const evt)
 		LOG_DBG("AWS_IOT_EVT_PUBACK %d", evt->data.message_id);
 		if (evt->data.message_id == last_message_id) {
 			/* Cloud receives data, sleep modem */
-			SEND_EVENT(cloud, CLOUD_EVT_DISCONNECTED);
+			SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
 		}
 		break;
 	}
@@ -436,25 +436,23 @@ static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 		/* LTE is now connected, cloud connection can be attempted */
 		connect_cloud();
 	}
+
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		SEND_SHUTDOWN_ACK(cloud, CLOUD_EVT_SHUTDOWN_READY, self.id);
+		state_set(STATE_SHUTDOWN);
+	}
 }
 
 /* Message handler for SUB_STATE_CLOUD_CONNECTED. */
 static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED))
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED))
 	{
-		state_set(STATE_SHUTDOWN);
-		sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
 		disconnect_cloud();
-		SEND_EVENT(cloud, CLOUD_EVT_REBOOT_REQUEST);
-		return;
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED))
-	{
-		sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
-		k_work_reschedule(&connect_check_work, K_SECONDS(1));
-		return;
+		state_set(STATE_LTE_DISCONNECTED);
 	}
 }
 
@@ -474,6 +472,14 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 	}
 }
 
+static void on_state_shutdown(struct cloud_msg_data *msg)
+{
+	if ((IS_EVENT(msg, util, UTIL_EVT_WAKEUP_REQUEST)))
+	{
+		LOG_INF("Wakeup");
+	}
+}
+
 /* Message handler for all states. */
 static void on_all_states(struct cloud_msg_data *msg)
 {
@@ -481,14 +487,6 @@ static void on_all_states(struct cloud_msg_data *msg)
 	{
 		last_message_id = msg->module.data.data.message_id;
 		LOG_INF("Last data send message id %d", last_message_id);
-	}
-
-	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
-		/* The module doesn't have anything to shut down and can
-		 * report back immediately.
-		 */
-		SEND_SHUTDOWN_ACK(cloud, CLOUD_EVT_SHUTDOWN_READY, self.id);
-		state_set(STATE_SHUTDOWN);
 	}
 }
 
@@ -623,7 +621,7 @@ static void module_thread_fn(void)
 			on_state_lte_disconnected(&msg);
 			break;
 		case STATE_SHUTDOWN:
-			/* The shutdown state has no transition. */
+			on_state_shutdown(&msg);
 			break;
 		default:
 			LOG_ERR("Unknown Cloud module state.");

@@ -112,7 +112,7 @@ enum modem_event_type {
 	 *  The event has associated payload of type `uint32_t` in the `data.id` member.
 	 */
 	MODEM_EVT_SHUTDOWN_READY,
-
+	MODEM_EVT_SLEEP_READY,
 	/** A critical error has occurred, and the application should reboot to recover as
 	 *  the module may enter an undefined state.
 	 *  The event has associated payload of the type `int` in the `data.err` member.

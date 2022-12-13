@@ -11,12 +11,8 @@ extern "C" {
 
 /** @brief Event types submitted by the utility module. */
 enum util_module_event_type {
-	/** Shutdown request sent to all modules in the system upon an irrecoverable error or
-	 *  finished FOTA update.
-	 *  It is expected that each module performs the necessary shutdown routines and reports
-	 *  back upon this event.
-	 */
-	UTIL_EVT_SHUTDOWN_REQUEST
+	UTIL_EVT_SHUTDOWN_REQUEST,
+	UTIL_EVT_WAKEUP_REQUEST,
 };
 
 /** @brief Shutdown reason included in shutdown requests from the utility module. */
