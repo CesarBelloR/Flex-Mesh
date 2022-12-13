@@ -293,7 +293,11 @@ static void data_send_work_fn(struct k_work *work)
 static void on_cloud_state_disconnected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
-		state_set(STATE_CLOUD_CONNECTED);
+		state_set(STATE_CLOUD_CONNECTED);	
+		if ((head_sensor_buf != 0) ||
+		    (head_lora_buf != 0)) {
+			SEND_EVENT(data, DATA_EVT_DATA_READY);
+		}
 		return;
 	}
 

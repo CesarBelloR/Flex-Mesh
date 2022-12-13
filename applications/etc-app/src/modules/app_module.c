@@ -205,8 +205,8 @@ static void app_set_wakeup_time(void) {
 	time_t now = 0;
 	pcf85263a_rtc_get_time(&now);
 	uint16_t sample_time_second = etc_get_time_measurement_interval();
-	uint8_t sample_time_min = 15;
-	uint8_t alarm_min = (uint8_t)((int)(now / 60) % 100);
+	uint8_t sample_time_min = sample_time_second / 60;
+	uint8_t alarm_min = (uint8_t)((int)(now / 60) % 60);
 	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
 	if (alarm_min >= 60) {
 		alarm_min = 0;
