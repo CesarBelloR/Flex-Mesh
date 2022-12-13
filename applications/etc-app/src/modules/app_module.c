@@ -212,7 +212,7 @@ static void app_set_wakeup_time(void) {
 		alarm_min = 0;
 	}
 
-	alarm_min = 39;
+	// alarm_min = 39;
 	LOG_INF("Set last wakeup at minutes %d %d", alarm_min, (int)now);
 	pcf85263a_alarm_type_1_config_t config = {
 		.seconds = 0,
