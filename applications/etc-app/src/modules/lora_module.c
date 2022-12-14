@@ -226,6 +226,8 @@ static void on_all_states(struct lora_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) {
 		lora_module_on_stop();
 	}
+
+	
 }
 
 /* Message handler for SUB_STATE_TRANSMIT_MODE. */

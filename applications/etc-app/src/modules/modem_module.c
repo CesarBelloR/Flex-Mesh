@@ -305,13 +305,6 @@ static void on_state_init(struct modem_msg_data *msg)
 /* Message handler for STATE_DISCONNECTED. */
 static void on_state_disconnected(struct modem_msg_data *msg)
 {
-	// if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-	// 	LOG_INF("Go here %d", modem_module_is_sleep);
-	// 	if (modem_module_is_sleep) {
-	// 		modem_enter_wakeup();
-	// 		state_set(STATE_CONNECTING);
-	// 	}
-	// }
 }
 
 /* Message handler for STATE_CONNECTING. */
@@ -363,7 +356,6 @@ static void on_all_states(struct modem_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-		LOG_INF("Go here %d", modem_module_is_sleep);
 		if (modem_module_is_sleep) {
 			modem_enter_wakeup();
 			state_set(STATE_CONNECTING);

@@ -173,81 +173,9 @@ static void reboot(void)
 #endif
 }
 
-static void util_system_off(void) 
-{
-	nrf_gpio_cfg_input(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0), NRF_GPIO_PIN_PULLUP);
-	nrf_gpio_cfg_sense_set(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0), NRF_GPIO_PIN_SENSE_LOW);
-	nrf_gpio_cfg_input(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(hall_int), control_gpios, 0), NRF_GPIO_PIN_PULLUP);
-	nrf_gpio_cfg_sense_set(DT_GPIO_PIN_BY_IDX(DT_NODELABEL(hall_int), control_gpios, 0), NRF_GPIO_PIN_SENSE_LOW);
-}
-
-#define VSENS_EN_PIN 23
-
-static void util_peripheral_off(void) {
-	const struct device *gpio_0_dev = device_get_binding("GPIO_0");
-	if (gpio_0_dev == NULL) {
-		return;
-	}
-
-	gpio_pin_configure(gpio_0_dev, VSENS_EN_PIN, GPIO_INPUT);
-	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
-
-	if (!device_is_ready(cons)) {
-		LOG_ERR("%s: device not ready.", cons->name);
-		return;
-	}
-#ifdef CONFIG_PM_DEVICE
-	// pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
-#endif
-	extern void ui_leds_stop(void);
-	ui_leds_stop();
-}
-
-static void wakeup_work_fn(struct k_work *work) {
-	LOG_DBG("Wakeup please");
-	const struct device *gpio_0_dev = device_get_binding("GPIO_0");
-	if (gpio_0_dev == NULL) {
-		return;
-	}
-
-	gpio_pin_configure(gpio_0_dev, VSENS_EN_PIN, GPIO_OUTPUT_ACTIVE);
-	
-	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
-
-	if (!device_is_ready(cons)) {
-		LOG_ERR("%s: device not ready.", cons->name);
-		return;
-	}
-#ifdef CONFIG_PM_DEVICE
-	//pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
-#endif	
-	k_sleep(K_SECONDS(1));
-	LOG_INF("Wakeup from sleeping");
-	extern void ui_leds_start(void);
-	ui_leds_start();
-	SEND_EVENT(util, UTIL_EVT_WAKEUP_REQUEST);
-}
-
 static void reboot_work_fn(struct k_work *work)
 {
 	LOG_INF("System is sleeping!!!");
-	// k_sleep(K_SECONDS(5));
-	#if 0
-	util_set_wakeup_time();
-	util_peripheral_off();
-	util_system_off();
-	pm_state_force(0u, &(struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
-	k_sleep(K_SECONDS(5));
-
-	while (true) {
-		/* spin to avoid fall-off behavior */
-		k_cpu_idle();
-	}
-	#else
-	// util_set_wakeup_time();
-	// k_sleep(K_SECONDS(5));
-	// util_peripheral_off();
-	#endif
 }
 
 static void send_reboot_request(enum shutdown_reason reason)

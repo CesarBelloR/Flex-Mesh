@@ -75,7 +75,7 @@ static K_WORK_DELAYABLE_DEFINE(shadow_work, shadow_work_fn);
 static int connect_retries;
 
 /* Last publish message id */
-static uint32_t last_message_id = 0;
+static uint16_t last_message_id = 0;
 
 /* Cloud module message queue. */
 #define CLOUD_QUEUE_ENTRY_COUNT 20

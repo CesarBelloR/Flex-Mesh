@@ -4,7 +4,10 @@
 #include <stdlib.h>
 #include <app_event_manager.h>
 #include <zephyr/sys/reboot.h>
-
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+#include <drivers/gpio.h>
 #include "pcf85263a.h"
 #include "etc_settings.h"
 #include "etc_interface.h"
@@ -196,23 +199,65 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static const struct gpio_dt_spec vsen_en_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+
+static void app_peripheral_off(void) {
+	if (!device_is_ready(vsen_en_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&vsen_en_dt, GPIO_INPUT);
+	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	if (!device_is_ready(cons)) {
+		LOG_ERR("%s: device not ready.", cons->name);
+		return;
+	}
+#ifdef CONFIG_PM_DEVICE
+	pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
+#endif
+}
+
+static void app_peripheral_on(void) {
+	if (!device_is_ready(vsen_en_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_ACTIVE);
+	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	if (!device_is_ready(cons)) {
+		LOG_ERR("%s: device not ready.", cons->name);
+		return;
+	}
+#ifdef CONFIG_PM_DEVICE
+	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
+#endif
+}
+
+static void app_input_handler(void) {
+	app_peripheral_on();
+}
+
 static int setup(void)
 {
+	etc_interface_register_event_handler(app_input_handler);
 	return 0;
 }
 
 static void app_set_wakeup_time(void) {
 	time_t now = 0;
+	struct tm tm_time = { 0 };
 	pcf85263a_rtc_get_time(&now);
 	uint16_t sample_time_second = etc_get_time_measurement_interval();
 	uint8_t sample_time_min = sample_time_second / 60;
-	uint8_t alarm_min = (uint8_t)((int)(now / 60) % 60);
+	if (sample_time_min == 0) {
+		sample_time_min = 1;
+	}
+
+	gmtime_r(&now, &tm_time);
+	uint8_t alarm_min = (uint8_t)tm_time.tm_min;
 	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
 	if (alarm_min >= 60) {
 		alarm_min = 0;
 	}
 
-	// alarm_min = 39;
 	LOG_INF("Set last wakeup at minutes %d %d", alarm_min, (int)now);
 	pcf85263a_alarm_type_1_config_t config = {
 		.seconds = 0,
@@ -245,12 +290,8 @@ static void app_set_wakeup_time(void) {
 	pcf85263a_set_interrupt_io(true);
 	pcf85263a_alarm_config_type_1(config);
 	pcf85263a_alarm_enable_type_1(flag);
-}
-
-static void data_sample_timer_handler(struct k_timer *timer)
-{
-	ARG_UNUSED(timer);
-	SEND_EVENT(app, APP_EVT_DATA_GET);
+	k_sleep(K_SECONDS(1)); // Wait for print out LOG
+	app_peripheral_off();
 }
 
 /* Message handler for STATE_INIT. */

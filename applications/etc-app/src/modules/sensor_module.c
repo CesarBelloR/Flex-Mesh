@@ -75,23 +75,29 @@ static struct module_data self = {
 	.supports_shutdown = true,
 };
 
-const struct device* dev_gpio = NULL;
+static const struct gpio_dt_spec sense_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+static const struct gpio_dt_spec s0_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 
 static void sensor_adc_switch_channel(int8_t channel) {
-	gpio_pin_set(dev_gpio, SENSOR_GPIO_SENSE_ENABLE_PIN, 0U);
-	gpio_pin_set(dev_gpio, SENSOR_GPIO_S0_PIN, channel & 0x01);
-	gpio_pin_set(dev_gpio, SENSOR_GPIO_S1_PIN, (channel >> 1) & 0x01);
+	gpio_pin_set_dt(&sense_dt, 0U);
+	gpio_pin_set_dt(&s0_dt, channel & 0x01);
+	gpio_pin_set_dt(&s1_dt, (channel >> 1) & 0x01);
 }
 
 static void sensor_adc_hw_init(void) {
-	dev_gpio = device_get_binding("GPIO_0");
-	if (dev_gpio == NULL) {
+	if (!device_is_ready(sense_dt.port)) {
 		return;
 	}
-
-	gpio_pin_configure(dev_gpio, SENSOR_GPIO_SENSE_ENABLE_PIN, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure(dev_gpio, SENSOR_GPIO_S0_PIN, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure(dev_gpio, SENSOR_GPIO_S1_PIN, GPIO_OUTPUT_INACTIVE);
+	if (!device_is_ready(s0_dt.port)) {
+		return;
+	}
+	if (!device_is_ready(s1_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 }
 
 /* Convenience functions used in internal state handling. */
@@ -205,10 +211,8 @@ static float sensor_ntc_converter(int data) {
 }
 
 static void sensor_poll_handler(void) {
-	LOG_DBG("Go here");
 	if (sensor_is_processing) return;
 	sensor_is_processing = true;
-	LOG_DBG("Go here");
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
 	data->temperature[SENSOR_INPUT_AMBIENT] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB));

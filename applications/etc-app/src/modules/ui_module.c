@@ -215,7 +215,6 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	sys_snode_t *node = sys_slist_get(&pattern_transition_list);
 
 	if (node == NULL) {
-		update_led_pattern(LED_STATE_TURN_OFF);
 		return;
 	}
 
@@ -244,6 +243,9 @@ static void ui_module_send(void)
 }
 
 static void ui_input_handler(void) {
+	extern void ui_leds_start(void);	
+	ui_leds_start();
+	k_msleep(100);	
 	ui_module_send();
 }
 
@@ -397,6 +399,10 @@ static void on_state_fota_update(struct ui_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct ui_msg_data *msg)
 {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
+		extern void ui_leds_stop(void);	
+		ui_leds_stop();	
+	}
 }
 
 static void message_handler(struct ui_msg_data *msg)

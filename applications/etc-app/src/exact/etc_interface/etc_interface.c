@@ -7,12 +7,8 @@ LOG_MODULE_REGISTER(etc_interface, CONFIG_ETC_INTERFACE_LOG_LEVEL);
 
 #include "etc_interface.h"
 
-#define ETC_INTERFACE_USER_BUTTON_PIN (5)
-#define ETC_INTERFACE_HALL_SENSOR_PIN (28)
-#define ETC_INTERFACE_RTC_PIN (DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rtc_int), control_gpios, 0))
 #define ETC_INTERFACE_STACK_SIZE 512
-static const struct device* user_btn_dev = NULL;
-static const struct device* hall_sensor_dev = NULL;
+
 static const struct gpio_dt_spec rtc_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
 static const struct gpio_dt_spec user_btn_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(user_btn), control_gpios, 0);
 static const struct gpio_dt_spec hall_sensor_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
@@ -47,35 +43,32 @@ static void rtc_int_callback_handler(const struct device *port, struct gpio_call
 static int etc_interface_init(const struct device *unused)
 {
 	ARG_UNUSED(unused);
-	user_btn_dev = device_get_binding("GPIO_1");
-	
-	if (!device_is_ready(user_btn_dev)) {
+	if (!device_is_ready(user_btn_dt.port)) {
 		LOG_ERR("User button device not ready");
-		return -EINVAL;;
+		return -EINVAL;
 	}
 
-	hall_sensor_dev = device_get_binding("GPIO_0");
-	if (!device_is_ready(hall_sensor_dev)) {
+	if (!device_is_ready(hall_sensor_dt.port)) {
 		LOG_ERR("HALL sensor device not ready");
-		return -EINVAL;;
+		return -EINVAL;
 	}
 
 	if (!device_is_ready(rtc_dt.port)) {
 		LOG_ERR("The RTC interrupt not ready");
-		return -EINVAL;;
+		return -EINVAL;
 	}
 
 	LOG_INF("Initialized the ETC Interface successfully");
 
-	gpio_pin_configure(user_btn_dev, ETC_INTERFACE_USER_BUTTON_PIN, GPIO_INPUT | GPIO_PULL_UP);
-    	gpio_pin_interrupt_configure(user_btn_dev, ETC_INTERFACE_USER_BUTTON_PIN, GPIO_INT_LEVEL_LOW);
-	gpio_init_callback(&user_btn_callback, user_btn_callback_handler, BIT(ETC_INTERFACE_USER_BUTTON_PIN));
-	gpio_add_callback(user_btn_dev, &user_btn_callback);
+	gpio_pin_configure_dt(&user_btn_dt, GPIO_INPUT | GPIO_PULL_UP);
+    	gpio_pin_interrupt_configure_dt(&user_btn_dt, GPIO_INT_LEVEL_LOW);
+	gpio_init_callback(&user_btn_callback, user_btn_callback_handler, BIT(user_btn_dt.pin));
+	gpio_add_callback(user_btn_dt.port, &user_btn_callback);
 
-	gpio_pin_configure(hall_sensor_dev, ETC_INTERFACE_HALL_SENSOR_PIN, GPIO_INPUT | GPIO_PULL_UP);
-    	gpio_pin_interrupt_configure(hall_sensor_dev, ETC_INTERFACE_HALL_SENSOR_PIN, GPIO_INT_LEVEL_LOW);
-	gpio_init_callback(&hall_sensor_callback, hall_sensor_callback_handler, BIT(ETC_INTERFACE_HALL_SENSOR_PIN));
-	gpio_add_callback(hall_sensor_dev, &hall_sensor_callback);
+	gpio_pin_configure_dt(&hall_sensor_dt, GPIO_INPUT | GPIO_PULL_UP);
+    	gpio_pin_interrupt_configure_dt(&hall_sensor_dt, GPIO_INT_LEVEL_LOW);
+	gpio_init_callback(&hall_sensor_callback, hall_sensor_callback_handler, BIT(hall_sensor_dt.pin));
+	gpio_add_callback(hall_sensor_dt.port, &hall_sensor_callback);
 
 	gpio_pin_configure_dt(&rtc_dt, GPIO_INPUT | GPIO_PULL_UP);
     	gpio_pin_interrupt_configure_dt(&rtc_dt, GPIO_INT_EDGE_FALLING);

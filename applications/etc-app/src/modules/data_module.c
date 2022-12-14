@@ -255,7 +255,7 @@ static void data_encode(void)
 	}
 	const char topic_lora_data[] = "exact/core/readings/old";
 
-	uint32_t message_id = k_uptime_get_32();
+	uint16_t message_id = (uint16_t)k_uptime_get_32();
 	struct aws_iot_data tx_data = {
 		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
 		.topic.str = topic_lora_data,
@@ -279,13 +279,6 @@ static void data_encode(void)
 
 static void data_send_work_fn(struct k_work *work)
 {
-	// if (head_lora_buf != 0) {
-	// 	SEND_EVENT(data, DATA_EVT_DATA_READY);
-	// }
-
-	// if (head_sensor_buf != 0) {
-	// 	SEND_EVENT(data, DATA_EVT_DATA_READY);
-	// }
 	k_work_reschedule(&data_send_work, data_publish_timeout);
 }
 
