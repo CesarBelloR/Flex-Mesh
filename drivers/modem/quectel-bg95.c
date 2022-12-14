@@ -2042,11 +2042,13 @@ static int modem_init(const struct device *dev)
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
 	mctx.data_rssi		   = &mdata.mdm_rssi;
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 	ret = gpio_pin_configure_dt(&on_off_gpio, GPIO_OUTPUT_LOW);
 	if (ret < 0) {
 		LOG_ERR("Failed to configure %s pin", "on_off");
 		goto error;
 	}
+#endif
 
 	ret = gpio_pin_configure_dt(&power_gpio, GPIO_OUTPUT_LOW);
 	if (ret < 0) {
