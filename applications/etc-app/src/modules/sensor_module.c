@@ -272,6 +272,7 @@ static void on_all_states(struct sensor_msg_data *msg)
 	if (IS_EVENT(msg, ui, UI_EVT_INPUT_DATA_READY)) {
 		LOG_INF("UI_EVT_INPUT_DATA_READY");
 		/* The UI input (HALL Sensor or Button) is triggered */
+		adc_init();
 		sensor_poll_handler();
 		return;
 	}
