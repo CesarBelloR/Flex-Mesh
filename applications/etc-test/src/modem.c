@@ -20,7 +20,7 @@ const struct device * gpio_0 = NULL;
 const struct device * gpio_1 = NULL;
 
 #define LTE_PSM_IND_PIN 2
-K_MSGQ_DEFINE(uart_msgq, 64, 10, 4);
+K_MSGQ_DEFINE(uart_msgq, 32, 10, 4);
 
 static const char at_cmd_usage_str[] =
     "Usage: at <sub-command>\n"
@@ -29,7 +29,7 @@ static const char at_cmd_usage_str[] =
     "  help:   Show this message\n"
     "  send:   Send AT command\n";
 
-static char rx_buf[64];
+static char rx_buf[32];
 static int rx_buf_pos;
 
 static void at_send_uart(char *buf) {
@@ -137,7 +137,7 @@ void modem_init() {
   uart_irq_callback_user_data_set(uart_dev, serial_cb, NULL);
   uart_irq_rx_enable(uart_dev);
 
-  char tx_buf[64];
+  char tx_buf[32];
 
   while (k_msgq_get(&uart_msgq, &tx_buf, K_FOREVER) == 0) {
     shell_print(shell, "%s", tx_buf);

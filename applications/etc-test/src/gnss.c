@@ -8,7 +8,7 @@
 
 static const struct device *uart_dev = NULL;
 
-K_MSGQ_DEFINE(uart0_msgq, 64, 10, 4);
+K_MSGQ_DEFINE(uart0_msgq, 128, 10, 4);
 
 static const char at_cmd_usage_str[] =
     "Usage: gnss <sub-command>\n"
@@ -17,7 +17,7 @@ static const char at_cmd_usage_str[] =
     "  help:   Show this message\n"
     "  send:   Send GNSS command\n";
 
-static char rx_buf[64];
+static char rx_buf[128];
 static int rx_buf_pos;
 
 static void at_send_uart(char *buf) {
@@ -96,11 +96,11 @@ void gnss_init() {
   uart_irq_callback_user_data_set(uart_dev, serial_cb, NULL);
   uart_irq_rx_enable(uart_dev);
 
-  char tx_buf[64];
+  char tx_buf[128];
 
   while (k_msgq_get(&uart0_msgq, &tx_buf, K_FOREVER) == 0) {
     shell_fprintf(shell, SHELL_NORMAL, "%s", tx_buf);
   }
 }
 
-K_THREAD_DEFINE(gnss, 512, gnss_init, NULL, NULL, NULL, 6, 0, 0);
+K_THREAD_DEFINE(gnss, 2048, gnss_init, NULL, NULL, NULL, 6, 0, 0);
