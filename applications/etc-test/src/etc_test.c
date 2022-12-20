@@ -14,6 +14,7 @@
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"
+#include "ds2484.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
@@ -31,7 +32,8 @@ static void adc_switch_channel(uint8_t channel) {
 	gpio_pin_set(dev_gpio, GPIO_S1_PIN, 0U);
 }
 
-void etc_test_init(void) {
+void etc_test_init(void) 
+{
 	dev_gpio = device_get_binding("GPIO_0");
 	if (dev_gpio == NULL) {
 		return;
@@ -114,6 +116,8 @@ float reMap(const float pts[34], float input) { //maps resistance to temperature
 static int cmd_adc_request(const struct shell *shell, size_t argc, char **argv)
 {
 	int channel = atoi(argv[1]);
+	gpio_pin_set(dev_gpio, GPIO_SENSE_ENABLE_PIN, 0U);
+	k_sleep(K_SECONDS(1));
 	uint16_t adc_raw = adc_get_channel(channel);
 	shell_print(shell, "ADC Channel %d - Value %d", channel, adc_raw);
 	return 0;
@@ -136,6 +140,188 @@ static int cmd_ds18b20_request(const struct shell *shell, size_t argc, char **ar
 }
 
 SHELL_CMD_ARG_REGISTER(etc_ds18b20, NULL, "Get DS18B20 temperature sensor", cmd_ds18b20_request, 1, 0);
+
+static int cmd_ds2484_write(const struct shell *shell, size_t argc, char **argv)
+{
+	const char *usage =
+		"Usage: write <byte>\n"
+		"Hex and decimal format is accepted, e.g. 0x10 or 16";
+	int ret = -EINVAL;
+	uint8_t byte;
+	char *p_end;
+
+	if (argc != 2) {
+		goto error;
+	}
+
+	byte = (uint8_t)strtol(argv[1], &p_end, 0);
+	if (p_end == argv[1]) {
+		goto error;
+	}
+	ret = ds2484_write_byte(byte);
+
+	return ret;
+error:
+	shell_print(shell, "%s", usage);
+	return ret;
+}
+
+static int cmd_ds2484_read(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	uint8_t byte;
+
+	ret = ds2484_read_byte(&byte);
+	if (ret == 0) {
+		shell_print(shell, "Read: %X", byte);
+	} else {
+		shell_print(shell, "Error %d", ret);
+	}
+
+	return ret;
+}
+
+static int cmd_ds2484_req_reset(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = ds2484_request_reset();
+	if (ret != 0) {
+		shell_print(shell, "Error %d", ret);
+	}
+
+	return ret;
+}
+
+static int cmd_ds2484_req_select(const struct shell *shell, size_t argc, char **argv)
+{
+	const char *usage =
+		"Usage: select <rom>\n"
+		"rom: Unique device address in hex or decimal\n"
+		"     e.g. 0x31 or 231";
+	int ret = -EINVAL;
+	uint8_t rom;
+	char *p_end;
+
+	if (argc != 2) {
+		goto error;
+	}
+
+	rom = (uint8_t)strtol(argv[1], &p_end, 0);
+	if (p_end == argv[1]) {
+		goto error;
+	}
+
+	ret = ds2484_request_select(&rom);
+
+	return ret;
+error:
+	shell_print(shell, "%s", usage);
+	return ret;
+}
+
+static int cmd_ds2484_search(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	char rom;
+
+	ret = ds2484_request_search(&rom);
+
+	if (ret == 0) {
+		shell_print(shell, "Found %X", rom);
+	} else {
+		shell_print(shell, "Error %d", ret);
+	}
+
+	return ret;
+}
+
+static int cmd_ds2484_status(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	uint8_t status;
+
+	ret = ds2484_read_status(&status);
+	if (ret == 0) {
+		shell_print(shell, "Status %X", status);
+	} else {
+		shell_print(shell, "Error %d", ret);
+	}
+
+	return ret;
+}
+
+static int cmd_ds2484_reset(const struct shell *shell, size_t argc, char **argv)
+{
+	bool ret;
+	ret = ds2484_device_reset();
+
+	if (ret != 0) {
+		shell_print(shell, "Error %d", ret);
+	}
+	return ret;
+}
+
+static int cmd_ds2484_config(const struct shell *shell, size_t argc, char **argv)
+{
+	const char *usage =
+		"Usage: config <bit> <1/0>\n"
+		"Bit values from 0 to 3 are valid.";
+	int ret = -EINVAL;
+	int bit, enable;
+
+	if (argc != 3) {
+		goto error;
+	}
+
+	bit = atoi(argv[1]);
+	enable = atoi(argv[2]);
+
+	if ((bit > 3) || (bit < 0)) {
+		goto error;
+	}
+
+	if (enable) {
+		ds2484_set_config((ds248x_config_t)bit);
+	} else {
+		ds2484_clear_config((ds248x_config_t)bit);
+	}
+error:
+	shell_print(shell, "%s", usage);
+	return ret;
+}
+
+static int cmd_ds2484_enable(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	gpio_pin_set(dev_gpio, GPIO_SENSE_ENABLE_PIN, 1U);
+	k_sleep(K_SECONDS(1));
+
+	ret = ds2484_init();
+	shell_print(shell, "DS2484 enabled");
+	if (ret == 0) {
+		shell_print(shell, "Initialized");
+	} else {
+		shell_print(shell, "Initialization failed");
+	}
+
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(ds2484_sub,
+	SHELL_CMD(enable, NULL, "Enable DS2484", cmd_ds2484_enable),
+	SHELL_CMD(status, NULL, "Get status register", cmd_ds2484_status),
+	SHELL_CMD(search, NULL, "Start/continue search for devices", cmd_ds2484_search),
+	SHELL_CMD_ARG(select, NULL, "Set the 1-wire address", cmd_ds2484_req_select, 1, 1),
+	SHELL_CMD_ARG(write, NULL, "Write byte to 1-wire device", cmd_ds2484_write, 1, 1),
+	SHELL_CMD(read, NULL, "Read byte from 1-wire device", cmd_ds2484_read),
+	SHELL_CMD_ARG(config, NULL, "Set the config register", cmd_ds2484_config, 1, 2),
+	SHELL_CMD(reset, NULL, "Reset DS2484", cmd_ds2484_reset),
+	SHELL_CMD(req_reset, NULL, "Request a 1-wire reset", cmd_ds2484_req_reset),
+	SHELL_SUBCMD_SET_END
+);
+SHELL_CMD_REGISTER(ds2484, &ds2484_sub, "DS2484 1-wire commands", NULL);
 
 static int cmd_ui_request(const struct shell *shell, size_t argc, char **argv)
 {
