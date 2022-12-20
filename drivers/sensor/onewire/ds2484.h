@@ -54,6 +54,14 @@ typedef enum
  */
 int ds2484_init(void);
 
+/** @brief Read the DS2484's status register
+ * 
+ * @param status Pointer to where the retrieved status will be stored.
+ * 
+ * @retval 0 on success. 
+*/
+int ds2484_read_status(uint8_t *status);
+
 /** @brief Set configuration
  *
  * @param config configuration type @ref ds248x_config_t

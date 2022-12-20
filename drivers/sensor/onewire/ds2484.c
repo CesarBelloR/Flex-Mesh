@@ -48,7 +48,11 @@ typedef enum {
 	CMD_DRST = 0xF0, // device reset
 } ds248x_cmd_t;
 
-typedef enum { POINTER_CONFIG = 0xC3, POINTER_DATA = 0xE1, POINTER_STATUS = 0xF0 } ds248x_pointer_t;
+typedef enum { 
+	POINTER_CONFIG = 0xC3, 
+	POINTER_DATA = 0xE1, 
+	POINTER_STATUS = 0xF0
+} ds248x_pointer_t;
 
 typedef enum {
 	WIRE_COMMAND_SELECT = 0x55,
@@ -172,6 +176,24 @@ int ds2484_init(void)
 		return -EINVAL;
 	}
 	return 0;
+}
+
+int ds2484_read_status(uint8_t *status)
+{
+	int ret;
+
+	if (status == NULL) {
+		return -EINVAL;
+	}
+
+	ret = ds2484_set_read_pointer(POINTER_STATUS);
+	if (ret != 0) {
+		goto exit;
+	}
+	ret = read_register(status);
+
+exit:
+	return ret;
 }
 
 int ds2484_set_config(ds248x_config_t config)
