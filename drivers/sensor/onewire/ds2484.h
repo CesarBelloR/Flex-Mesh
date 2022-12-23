@@ -84,6 +84,13 @@ int ds2484_clear_config(ds248x_config_t config);
  */
 int ds2484_load_config(void);
 
+/** @brief Get the value of the configuration register
+ * 
+ * @param config Pointer to buffer that the config value is stored in.
+ * @retval return 0 on success.
+*/
+int ds2484_get_config(uint8_t *config);
+
 /** @brief Reset the device
  *
  * @retval return 0 on success.

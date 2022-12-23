@@ -155,7 +155,7 @@ static int cmd_ds2484_read(const struct shell *shell, size_t argc, char **argv)
 
 	ret = ds2484_read_byte(&byte);
 	if (ret == 0) {
-		shell_print(shell, "Read: %X", byte);
+		shell_print(shell, "Read: 0x%02X", byte);
 	} else {
 		shell_print(shell, "Error %d", ret);
 	}
@@ -210,7 +210,7 @@ static int cmd_ds2484_search(const struct shell *shell, size_t argc, char **argv
 	ret = ds2484_request_search(&rom);
 
 	if (ret == 0) {
-		shell_print(shell, "Found %X", rom);
+		shell_print(shell, "Found 0x%02X", rom);
 	} else {
 		shell_print(shell, "Error %d", ret);
 	}
@@ -225,7 +225,7 @@ static int cmd_ds2484_status(const struct shell *shell, size_t argc, char **argv
 
 	ret = ds2484_read_status(&status);
 	if (ret == 0) {
-		shell_print(shell, "Status %X", status);
+		shell_print(shell, "Status 0x%02X", status);
 	} else {
 		shell_print(shell, "Error %d", ret);
 	}
@@ -247,10 +247,24 @@ static int cmd_ds2484_reset(const struct shell *shell, size_t argc, char **argv)
 static int cmd_ds2484_config(const struct shell *shell, size_t argc, char **argv)
 {
 	const char *usage =
-		"Usage: config <bit> <1/0>\n"
-		"Bit values from 0 to 3 are valid.";
+		"Usage: config [<bit> <1/0>]\n"
+		"Bit values from 0 to 3 are valid.\n"
+		"If used with bit and value, configuration is set.\n"
+		"Otherwise, configuration is read and printed.";
 	int ret = -EINVAL;
 	int bit, enable;
+
+	/* Read and print configuration register if only one argument given */
+	if (argc == 1) {
+		uint8_t config;
+		ret = ds2484_get_config(&config);
+		if (ret != 0) {
+			shell_print(shell, "Error retrieving config");
+			return ret;
+		}
+		shell_print(shell, "Config 0x%02X", config);
+		return 0;
+	}
 
 	if (argc != 3) {
 		goto error;
@@ -264,10 +278,12 @@ static int cmd_ds2484_config(const struct shell *shell, size_t argc, char **argv
 	}
 
 	if (enable) {
-		ds2484_set_config((ds248x_config_t)bit);
+		ds2484_set_config((ds248x_config_t)(1 << bit));
 	} else {
-		ds2484_clear_config((ds248x_config_t)bit);
+		ds2484_clear_config((ds248x_config_t)(1 << bit));
 	}
+
+	return 0;
 error:
 	shell_print(shell, "%s", usage);
 	return ret;
@@ -298,7 +314,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(ds2484_sub,
 	SHELL_CMD_ARG(select, NULL, "Set the 1-wire address", cmd_ds2484_req_select, 1, 1),
 	SHELL_CMD_ARG(write, NULL, "Write byte to 1-wire device", cmd_ds2484_write, 1, 1),
 	SHELL_CMD(read, NULL, "Read byte from 1-wire device", cmd_ds2484_read),
-	SHELL_CMD_ARG(config, NULL, "Set the config register", cmd_ds2484_config, 1, 2),
+	SHELL_CMD_ARG(config, NULL, "Get/set the config register", cmd_ds2484_config, 1, 2),
 	SHELL_CMD(reset, NULL, "Reset DS2484", cmd_ds2484_reset),
 	SHELL_CMD(req_reset, NULL, "Request a 1-wire reset", cmd_ds2484_req_reset),
 	SHELL_SUBCMD_SET_END
