@@ -226,6 +226,18 @@ int ds2484_load_config(void)
 	return ret;
 }
 
+int ds2484_get_config(uint8_t *config)
+{
+	struct ds2484_data *data = &m_ds2484_data;
+	int ret;
+
+	ret = ds2484_load_config();
+
+	*config = data->_config;
+
+	return ret;
+}
+
 int ds2484_device_reset(void)
 {
 	uint8_t buf[1] = { 0x00 };
