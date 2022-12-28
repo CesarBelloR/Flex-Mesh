@@ -224,6 +224,7 @@
 		status     = "okay";
 		mdm-power-gpios = <&gpio1 1 0>;
 		mdm-on-off-gpios = <&gpio1 4 0>;
+		//mdm-pon-trig-gpios = <&gpio0 29 0>;
 	};
 };
 

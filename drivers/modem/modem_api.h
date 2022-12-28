@@ -112,4 +112,8 @@ bool quectel_bg95_is_ready(void);
 int quectel_bg95_get_time(char* time_buf);
 int quectel_bg95_get_rssi(void);
 
+int quectel_bg95_get_psm_timers(void);
+int quectel_bg95_psm_wakeup(void);
+int quectel_bg95_psm(bool enable);
+
 #endif // MODEM_API_H

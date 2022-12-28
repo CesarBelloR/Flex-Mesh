@@ -15,6 +15,10 @@ properties:
     mdm-power-gpios:
       type: phandle-array
       required: false
+    
+    mdm-pon-trig-gpios:
+      type: phandle-array
+      required: false
 
     mdm-reset-gpios:
       type: phandle-array

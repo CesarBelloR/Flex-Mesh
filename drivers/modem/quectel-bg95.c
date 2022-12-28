@@ -38,6 +38,9 @@ static const struct gpio_dt_spec power_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_power
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 static const struct gpio_dt_spec on_off_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_on_off_gpios);
 #endif
+#if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
+static const struct gpio_dt_spec pon_trig_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_pon_trig_gpios);
+#endif
 #if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
 static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
 #endif
@@ -2291,6 +2294,14 @@ static int modem_init(const struct device *dev)
 		goto error;
 	}
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
+	ret = gpio_pin_configure_dt(&pon_trig_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "pon_trig");
+		goto error;
+	}
+#endif
+
 #if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
 	ret = gpio_pin_configure_dt(&reset_gpio, GPIO_OUTPUT_LOW);
 	if (ret < 0) {
@@ -2335,6 +2346,86 @@ static int modem_init(const struct device *dev)
 
 error:
 	return ret;
+}
+
+static int modem_set_psm_indication(bool enable)
+{
+	char sendbuf[sizeof("AT+QCFG=#psm/urc#,##")];
+	uint8_t en_val;
+	int ret;
+
+	if (enable) {
+		en_val = 1;
+	} else {
+		en_val = 0;
+	}
+
+	snprintk(sendbuf, sizeof(sendbuf), "AT+QCFG=\"psm/urc\",%u", en_val);
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_WRN("Error setting PSM indication");
+	}
+
+	return ret;
+}
+
+int quectel_bg95_get_psm_timers(void)
+{
+	char *sendcmd = "AT+QPSMS?";
+	int ret;
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendcmd,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);	
+	if (ret < 0) {
+		LOG_WRN("Error getting PSM parameters");
+	}
+	
+	return ret;
+}
+
+int quectel_bg95_psm(bool enable)
+{
+	char sendbuf[sizeof("AT+QPSMS=#,,,##########,###########")];
+	int ret;
+
+	modem_set_psm_indication(true);
+
+	if (enable) {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QPSMS=1,,,\"%s\",\"%s\"", 
+			CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU,
+			CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT);
+	} else {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QPSMS=0");
+	}
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Error requesting PSM");
+	}
+
+	return ret;
+}
+
+int quectel_bg95_psm_wakeup(void)
+{
+	int ret = -1;
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
+	ret = gpio_pin_set_dt(&pon_trig_gpio, 1);
+	k_sleep(K_MSEC(40));
+	ret = gpio_pin_set_dt(&pon_trig_gpio, 0);
+
+	return ret;
+#else
+	ret = gpio_pin_set_dt(&power_gpio, 1);
+	k_sleep(K_MSEC(1000));
+	ret = gpio_pin_set_dt(&power_gpio, 0);
+	
+	return ret;
+#endif
 }
 
 #ifdef CONFIG_PM_DEVICE
