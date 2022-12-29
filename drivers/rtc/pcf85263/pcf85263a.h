@@ -224,6 +224,13 @@ void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag);
  */
 void pcf85263a_set_interrupt_io(bool enable);
 
+/** @brief Enable/disable CLK pin
+ * 
+ * @param enable true to enable, false to disable
+ * 
+*/
+void pcf85263a_set_clkpin(bool enable);
+
 /**
  * @brief [MVP] This API will get the last wakeup minutes
  * 

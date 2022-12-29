@@ -10,6 +10,11 @@ config MODEM_QUECTEL_BG95_M3
 	  Choose this setting to enable quectel BG95-M3 customized LTE-CatM1/NB-IoT modem
 	  driver.
 
+config MODEM_QUECTEL_BG95_M3_MOCK
+	bool "Enable mocking of Quectel BG95 M3"
+	help
+	  Choose this to enable BG95M3 mocking.
+
 if MODEM_QUECTEL_BG95_M3
 
 config MODEM_QUECTEL_BG95_M3_RX_STACK_SIZE

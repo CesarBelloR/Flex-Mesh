@@ -128,7 +128,8 @@ void main(void)
 	struct mcuboot_img_header img_hdr;
 	etc_cape_init(key, 10, 0);
 	etc_cape_set_key(key, 10); 
-	
+
+#ifdef CONFIG_MCUMGR
 	rc = boot_write_img_confirmed();
 	if(rc) {
 		LOG_ERR("Img confirmed failed");
@@ -151,6 +152,8 @@ void main(void)
 		    (unsigned int) img_hdr.h.v1.sem_ver.revision,
 		    (unsigned int) img_hdr.h.v1.sem_ver.build_num);
 	}
+#endif
+
 	ui_init();
 
 	if (app_event_manager_init()) {
