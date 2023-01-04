@@ -384,10 +384,16 @@ int ds2484_request_reset(void)
 
 	if (spu & (ds2484_set_config(strong_pull_up) != 0)) {
 		return -EINVAL;
-		;
 	}
 
-	return (buf[0] & DS248X_STATUS_PPD);
+	/* Check PPD register to see if a device was detected */
+	if (buf[0] & DS248X_STATUS_PPD) {
+		ret = 0;
+	} else {
+		ret = -EIO;
+	}
+
+	return ret;
 }
 
 int ds2484_request_skip(void)
