@@ -205,12 +205,16 @@ error:
 static int cmd_ds2484_search(const struct shell *shell, size_t argc, char **argv)
 {
 	int ret;
-	char rom;
+	char rom[DS2484_ROM_MAX_SIZE];
 
-	ret = ds2484_request_search(&rom);
+	ret = ds2484_request_search(rom);
 
 	if (ret == 0) {
-		shell_print(shell, "Found 0x%02X", rom);
+		shell_fprintf(shell, SHELL_NORMAL, "Found 0x");
+		for (int i = DS2484_ROM_MAX_SIZE - 1; i >= 0; i--) {
+			shell_fprintf(shell, SHELL_NORMAL, "%02X", rom[i]);
+		}
+		shell_print(shell, "");
 	} else {
 		shell_print(shell, "Error %d", ret);
 	}

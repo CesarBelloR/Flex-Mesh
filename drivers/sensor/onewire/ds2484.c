@@ -21,7 +21,6 @@
 LOG_MODULE_REGISTER(DS2484, CONFIG_DS2484_LOG_LEVEL);
 
 #define DS2484_DEFAULT_7BIT_ADDR (0x18)
-#define DS2844_ROM_MAX_SIZE (8)
 
 struct ds2484_config {
 	const struct device *bus;
@@ -29,7 +28,7 @@ struct ds2484_config {
 };
 
 struct ds2484_data {
-	uint8_t _rom[DS2844_ROM_MAX_SIZE];
+	uint8_t _rom[DS2484_ROM_MAX_SIZE];
 	uint8_t _last_discrepancy;
 	bool _last_device_flag;
 	uint8_t _last_family_discrepancy;
@@ -410,7 +409,7 @@ int ds2484_request_select(const char *rom)
 		return ret;
 	}
 
-	return ds2484_write_bytes(data->_rom, DS2844_ROM_MAX_SIZE);
+	return ds2484_write_bytes(data->_rom, DS2484_ROM_MAX_SIZE);
 }
 
 int ds2484_request_search(char *rom)
