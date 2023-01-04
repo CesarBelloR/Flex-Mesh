@@ -980,19 +980,21 @@ MODEM_CMD_DEFINE(on_cmd_power_down)
 static int quectel_bg95_power_down() {
 	const char *pw_dwn = "AT+QPOWD";
 	int ret;
+	int retries = 0;
 
 	struct modem_cmd cmd[] = {
 		MODEM_CMD("POWERED DOWN", on_cmd_power_down, 0U, ""),
 	};
 
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
-			     NULL, 0U, pw_dwn, &mdata.sem_response,
-			     MDM_CMD_TIMEOUT);
+	do {
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
+				NULL, 0U, pw_dwn, &mdata.sem_response,
+				MDM_CMD_TIMEOUT);
+		retries++;
+	} while((ret != 0) && (retries < MDM_POWER_DOWN_RETRY_COUNT));
 	if (ret != 0) {
 		goto error;
 	}
-
-	mdata.is_connected = false;
 
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
 				      cmd, 1U, true);
@@ -1001,6 +1003,8 @@ static int quectel_bg95_power_down() {
 	if (ret != 0) {
 		goto error;
 	}
+	// Set modem as disconnected after power down.
+	mdata.is_connected = false;
 
 	/* unset handler commands and ignore any errors */
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
