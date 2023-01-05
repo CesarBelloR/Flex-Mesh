@@ -171,6 +171,14 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void lora_module_on_stop(void) {
+	k_thread_suspend(lora_rx_thread);
+}
+
+static void lora_module_on_start(void) {
+	k_thread_resume(lora_rx_thread);
+}
+
 static int setup(void)
 {
 	if (!device_is_ready(lora_dev))
@@ -209,12 +217,17 @@ static void on_state_running(struct lora_msg_data *msg)
 static void on_all_states(struct lora_msg_data *msg)
 {
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
-		/* The module doesn't have anything to shut down and can
-		 * report back immediately.
-		 */
+		LOG_INF("Request to shutdown from util");
 		SEND_SHUTDOWN_ACK(lora, LORA_EVT_SHUTDOWN_READY, self.id);
+		lora_module_on_stop();
 		state_set(STATE_SHUTDOWN);
 	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) {
+		lora_module_on_stop();
+	}
+
+	
 }
 
 /* Message handler for SUB_STATE_TRANSMIT_MODE. */
@@ -278,7 +291,7 @@ static void rx_thread_fn(void) {
 			}
 			memset(rx_buf, 0, sizeof(rx_buf));
 		}
-		k_sleep(K_MSEC(100));
+		k_sleep(K_MSEC(500));
 	}
 }
 

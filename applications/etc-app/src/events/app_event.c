@@ -1,5 +1,8 @@
 #include <stdio.h>
 #include "app_event.h"
+#include <zephyr/logging/log.h>
+#include <zephyr/logging/log_ctrl.h>
+LOG_MODULE_REGISTER(APP_EVENT, CONFIG_ETC_APP_LOG_LEVEL);
 
 static char *type2str(enum app_data_type type)
 {
@@ -34,8 +37,10 @@ static char *get_evt_type_str(enum app_event_type type)
 		return "APP_EVT_SHUTDOWN_READY";
 	case APP_EVT_ERROR:
 		return "APP_EVT_ERROR";
-	default:
+	default: {
+		LOG_WRN("Unknown event type %d", (int)type);
 		return "Unknown event";
+	}
 	}
 }
 

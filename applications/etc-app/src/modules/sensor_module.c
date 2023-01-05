@@ -9,7 +9,7 @@
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #define MODULE sensor_module
-#define MODULE_SENSOR_THREAD_STACK_SIZE 1024
+#define MODULE_SENSOR_THREAD_STACK_SIZE 2048
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -39,7 +39,6 @@ static enum state_type {
 } state;
 
 static struct k_work_delayable sensor_poll_work;
-static struct k_work_delayable battery_poll_work;
 static struct sensor_data static_sensor_data;
 
 /* Sensor module message queue. */
@@ -68,12 +67,7 @@ K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
 
 /* Forward declarations */
-static void sensor_poll_work_fn(struct k_work *work);
-
 static bool sensor_is_processing = false;
-
-/* Initialize poll timeout for sensor as forever */
-static k_timeout_t sensor_poll_timeout = K_FOREVER; 
 
 static struct module_data self = {
 	.name = "sensor",
@@ -81,23 +75,29 @@ static struct module_data self = {
 	.supports_shutdown = true,
 };
 
-const struct device* dev_gpio = NULL;
+static const struct gpio_dt_spec sense_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+static const struct gpio_dt_spec s0_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 
 static void sensor_adc_switch_channel(int8_t channel) {
-	gpio_pin_set(dev_gpio, SENSOR_GPIO_SENSE_ENABLE_PIN, 0U);
-	gpio_pin_set(dev_gpio, SENSOR_GPIO_S0_PIN, channel & 0x01);
-	gpio_pin_set(dev_gpio, SENSOR_GPIO_S1_PIN, (channel >> 1) & 0x01);
+	gpio_pin_set_dt(&sense_dt, 0U);
+	gpio_pin_set_dt(&s0_dt, channel & 0x01);
+	gpio_pin_set_dt(&s1_dt, (channel >> 1) & 0x01);
 }
 
 static void sensor_adc_hw_init(void) {
-	dev_gpio = device_get_binding("GPIO_0");
-	if (dev_gpio == NULL) {
+	if (!device_is_ready(sense_dt.port)) {
 		return;
 	}
-
-	gpio_pin_configure(dev_gpio, SENSOR_GPIO_SENSE_ENABLE_PIN, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure(dev_gpio, SENSOR_GPIO_S0_PIN, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure(dev_gpio, SENSOR_GPIO_S1_PIN, GPIO_OUTPUT_INACTIVE);
+	if (!device_is_ready(s0_dt.port)) {
+		return;
+	}
+	if (!device_is_ready(s1_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 }
 
 /* Convenience functions used in internal state handling. */
@@ -192,9 +192,6 @@ static void sensor_module_send_sensor(struct sensor_data* sensor)
 
 static int setup(void)
 {
-	int measurement_in_seconds = etc_get_time_measurement_interval();
-	/* Update poll timeout */
-	sensor_poll_timeout = K_SECONDS(measurement_in_seconds);
 	adc_init();
 	sensor_adc_hw_init();
 	return 0;
@@ -241,11 +238,6 @@ static void sensor_poll_handler(void) {
 	sensor_is_processing = false;
 }
 
-static void sensor_poll_work_fn(struct k_work *work) {
-	sensor_poll_handler();
-	k_work_reschedule(&sensor_poll_work, sensor_poll_timeout);
-}
-
 /* Message handler for STATE_INIT. */
 static void on_state_init(struct sensor_msg_data *msg)
 {
@@ -262,17 +254,27 @@ static void on_state_running(struct sensor_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct sensor_msg_data *msg)
 {
+	if (IS_EVENT(msg, app, APP_EVT_DATA_GET_ALL)) {
+		LOG_INF("APP_EVT_DATA_GET");
+		sensor_poll_handler();
+		return;
+	}
+
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
 		/* The module doesn't have anything to shut down and can
 		 * report back immediately.
 		 */
-		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
+		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
+		return;
 	}
 
 	if (IS_EVENT(msg, ui, UI_EVT_INPUT_DATA_READY)) {
+		LOG_INF("UI_EVT_INPUT_DATA_READY");
 		/* The UI input (HALL Sensor or Button) is triggered */
+		adc_init();
 		sensor_poll_handler();
+		return;
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
@@ -308,9 +310,6 @@ static void module_thread_fn(void)
 		SEND_ERROR(sensor, SENSOR_EVT_ERROR, err);
 	}
 
-	k_work_init_delayable(&sensor_poll_work, sensor_poll_work_fn);
-	k_work_reschedule(&sensor_poll_work, sensor_poll_timeout);
-
 	while (true) {
 		module_get_next_msg(&self, &msg);
 
@@ -341,5 +340,5 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
-APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, ui_event);
+APP_EVENT_SUBSCRIBE(MODULE, cloud_event);

@@ -4,13 +4,20 @@
 #include <stdlib.h>
 #include <app_event_manager.h>
 #include <zephyr/sys/reboot.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+#include <drivers/gpio.h>
+#include "pcf85263a.h"
+#include "etc_settings.h"
+#include "etc_interface.h"
 
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
 
 #define MODULE app
-#define MODULE_APP_THREAD_STACK_SIZE 1024
+#define MODULE_APP_THREAD_STACK_SIZE 2048
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -54,14 +61,6 @@ static enum sub_state_type {
 /* Application module message queue. */
 #define APP_QUEUE_ENTRY_COUNT		10
 #define APP_QUEUE_BYTE_ALIGNMENT	4
-
-/* Timer callback used to signal when timeout has occurred both in active
- * and passive mode.
- */
-static void data_sample_timer_handler(struct k_timer *timer);
-
-/* Data sample timer used in active mode. */
-K_TIMER_DEFINE(data_sample_timer, data_sample_timer_handler, NULL);
 
 K_MSGQ_DEFINE(msgq_app, sizeof(struct app_msg_data), APP_QUEUE_ENTRY_COUNT,
 	      APP_QUEUE_BYTE_ALIGNMENT);
@@ -200,17 +199,112 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void app_peripheral_off(void) {
+	const struct gpio_dt_spec vsen_en_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+	if (!device_is_ready(vsen_en_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&vsen_en_dt, GPIO_DISCONNECTED);
+
+	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	if (!device_is_ready(cons)) {
+		LOG_ERR("%s: device not ready.", cons->name);
+		return;
+	}
+
+#ifdef CONFIG_PM_DEVICE
+	pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
+#endif
+
+	/* Disconnect all ADC pin */
+	const struct device* gpio_0 = device_get_binding("GPIO_0");
+	if (!device_is_ready(gpio_0)) {
+		LOG_ERR("%s: device not ready.", gpio_0->name);
+		return;
+	}
+
+	gpio_pin_configure(gpio_0, 31, GPIO_DISCONNECTED);
+	gpio_pin_configure(gpio_0, 5, GPIO_DISCONNECTED);
+	gpio_pin_configure(gpio_0, 4, GPIO_DISCONNECTED);
+}
+
+static void app_peripheral_on(void) {
+	const struct gpio_dt_spec vsen_en_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+	if (!device_is_ready(vsen_en_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_ACTIVE);
+	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	if (!device_is_ready(cons)) {
+		LOG_ERR("%s: device not ready.", cons->name);
+		return;
+	}
+#ifdef CONFIG_PM_DEVICE
+	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
+#endif
+}
+
+static void app_input_handler(void) {
+	app_peripheral_on();
+}
+
 static int setup(void)
 {
-	// k_timer_start(&data_sample_timer, K_SECONDS(10), K_SECONDS(10));
+	etc_interface_register_event_handler(app_input_handler);
 	return 0;
 }
 
-static void data_sample_timer_handler(struct k_timer *timer)
-{
-	ARG_UNUSED(timer);
-	LOG_DBG("Send request to get data");
-	SEND_EVENT(app, APP_EVT_DATA_GET);
+static void app_set_wakeup_time(void) {
+	time_t now = 0;
+	struct tm tm_time = { 0 };
+	pcf85263a_rtc_get_time(&now);
+	uint16_t sample_time_second = etc_get_time_measurement_interval();
+	uint8_t sample_time_min = sample_time_second / 60;
+	if (sample_time_min == 0) {
+		sample_time_min = 3;
+	}
+
+	gmtime_r(&now, &tm_time);
+	uint8_t alarm_min = (uint8_t)tm_time.tm_min;
+	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
+	if (alarm_min >= 60) {
+		alarm_min = 0;
+	}
+
+	LOG_INF("Set last wakeup at minutes %d %d", alarm_min, (int)now);
+	pcf85263a_alarm_type_1_config_t config = {
+		.seconds = 0,
+		.minutes = alarm_min,
+		.hours = 0,
+		.days = 0,
+		.months = 0,
+	};
+
+	pcf85263a_alarm_type_1_flag_t flag = {
+		.enable_seconds = 0,
+		.enable_minutes = 1,
+		.enable_hours = 0,
+		.enable_days = 0,
+		.enable_months = 0,
+	};
+
+	pcf85263a_interrupt_flag_t interrupt_flag = {
+		.enable_level_pulse = 0,
+		.enable_periodic = 0,
+		.enable_offset_correction = 0,
+		.enable_alarm_1 = 1,
+		.enable_alarm_2 = 0,
+		.enable_timestamp = 0,
+		.enable_battery_switch = 0,
+		.enable_wdg = 0,
+	};
+
+	pcf85263a_interrupt_enable(interrupt_flag);
+	pcf85263a_set_interrupt_io(true);
+	pcf85263a_alarm_config_type_1(config);
+	pcf85263a_alarm_enable_type_1(flag);
+	k_sleep(K_SECONDS(1)); // Wait for print out LOG
+	app_peripheral_off();
 }
 
 /* Message handler for STATE_INIT. */
@@ -221,6 +315,7 @@ static void on_state_init(struct app_msg_data *msg)
 
 static void on_state_running(struct app_msg_data *msg)
 {
+
 }
 
 /* Message handler for SUB_STATE_PASSIVE_MODE. */
@@ -241,6 +336,18 @@ static void on_all_events(struct app_msg_data *msg)
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 	date_time_start_work();
 #endif
+	}
+
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		SEND_SHUTDOWN_ACK(app, APP_EVT_SHUTDOWN_READY, self.id);
+		state_set(STATE_SHUTDOWN);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_SLEEP_READY)) {
+		app_set_wakeup_time();
 	}
 }
 

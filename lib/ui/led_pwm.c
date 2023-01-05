@@ -54,6 +54,7 @@ static struct led_effect custom_effect =
 		LED_NOCOLOR());
 
 static struct led leds;
+static bool led_is_ready = false;
 static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
@@ -160,31 +161,35 @@ int ui_leds_init(void)
 
 	k_work_init_delayable(&leds.work, work_handler);
 	led_update(&leds);
-
+	led_is_ready = true;
 	return err;
 }
 
 void ui_leds_start(void)
 {
-#ifdef CONFIG_PM_DEVICE
-	int err = pm_device_action_run(leds.pwm_dev, PM_DEVICE_STATE_ACTIVE);
+	if (led_is_ready) return;
+#if defined(CONFIG_PM_DEVICE)
+	int err = pm_device_action_run(pwm_led0.dev, PM_DEVICE_ACTION_RESUME);
 	if (err) {
-		LOG_ERR("PWM enable failed");
+		LOG_ERR("PWM enable failed %d", err);
 	}
 #endif
 	led_update(&leds);
+	led_is_ready = true;
 }
 
 void ui_leds_stop(void)
 {
+	if (!led_is_ready) return;
+	pwm_off(&leds);
 	k_work_cancel_delayable_sync(&leds.work, &leds.work_sync);
-#ifdef CONFIG_PM_DEVICE
-	int err = pm_device_action_run(leds.pwm_dev, PM_DEVICE_STATE_SUSPENDED);
+#if defined(CONFIG_PM_DEVICE)
+	int err = pm_device_action_run(pwm_led0.dev, PM_DEVICE_ACTION_SUSPEND);
 	if (err) {
-		LOG_ERR("PWM disable failed");
+		LOG_ERR("PWM disable failed %d", err);
 	}
 #endif
-	pwm_off(&leds);
+	led_is_ready = false;
 }
 
 void ui_led_set_effect(enum ui_led_pattern state)
