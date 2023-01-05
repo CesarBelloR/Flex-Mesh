@@ -1000,13 +1000,17 @@ static int quectel_bg95_power_down() {
 #if 1
 	do {
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
-				cmd, ARRAY_SIZE(cmd), pw_dwn, &mdata.sem_response,
+				NULL, 0U, pw_dwn, &mdata.sem_response,
 				MDM_CMD_TIMEOUT);
 		retries++;
 	} while((ret != 0) && (retries < MDM_POWER_DOWN_RETRY_COUNT));
 	if (ret != 0) {
 		goto error;
 	}
+	
+	/* set modem handler commands */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      cmd, ARRAY_SIZE(cmd), false);
 #else
 	modem_pin_on_off();
 #endif
