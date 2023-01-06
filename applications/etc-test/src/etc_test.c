@@ -1,5 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
+#include <zephyr/shell/shell_uart.h>
 #include <version.h>
 #include <zephyr/logging/log.h>
 #include <stdlib.h>
@@ -16,16 +17,43 @@
 #include "ds18b20.h"
 #include "sensor.h"
 #include "ds2484.h"
+#include "etc_cape.h"
+#include <stdio.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
 #define DEFAULT_RADIO_NODE DT_ALIAS(lora0)
+#define GPIO_HALL_PIN (28)
 
 const struct device* dev_gpio = NULL;
 const struct device* dev_lora = DEVICE_DT_GET(DEFAULT_RADIO_NODE);
+static struct k_mutex lora_mutex;
+static struct gpio_callback hall_cb;
+static struct k_sem lora_sem;
 
-void etc_test_init(void) {
+static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) ;
+
+void lora_tx_rx_fn() {
+	k_sem_init(&lora_sem, 0, 1);
+
+	while (k_sem_take(&lora_sem, K_FOREVER) == 0) {
+		shell_execute_cmd(shell_backend_uart_get_ptr(), "etc_lora_tx_rx");
+		//cmd_lora_tx_rx(shell_backend_uart_get_ptr(), 0, NULL);
+	}
+}
+
+K_THREAD_DEFINE(lora_tx_rx, 2048, lora_tx_rx_fn, NULL, NULL, NULL, 5, 0, 0);
+
+static void hall_cb_fn(const struct device *dev,
+		struct gpio_callback *cb, uint32_t pins)
+{
+	k_sem_give(&lora_sem);
+}
+
+void etc_test_init(void) 
+{
+	int ret;
 	dev_gpio = device_get_binding("GPIO_0");
 	if (dev_gpio == NULL) {
 		return;
@@ -36,6 +64,15 @@ void etc_test_init(void) {
 	}
 
 	sensor_init();
+	k_mutex_init(&lora_mutex);
+	// Configure hall interrupt
+	gpio_pin_configure(dev_gpio, GPIO_HALL_PIN, GPIO_INPUT | GPIO_ACTIVE_LOW);
+	gpio_init_callback(&hall_cb, hall_cb_fn, BIT(GPIO_HALL_PIN));
+	ret = gpio_add_callback(dev_gpio, &hall_cb);
+	if (ret < 0) {
+		LOG_ERR("Failed to set gpio callback!");
+	}
+	gpio_pin_interrupt_configure(dev_gpio, GPIO_HALL_PIN, GPIO_INT_EDGE_TO_ACTIVE);
 
 	sensor_adc_switch_channel(SENSOR_INPUT_AMBIENT);
 }
@@ -512,6 +549,39 @@ static struct lora_modem_config etc_lora_tx_config  = {
 	.tx = true,
 };
 
+static int send_lora_message(void)
+{
+	int ret;
+	char msg_buf[sizeof("S,#####,MT1,21831,3.70,###,*,*,19.8,*,*,21.8,*,")];
+	char encr_buf[sizeof(msg_buf) + 1];
+	uint8_t msg_len;
+	static uint8_t count = 0;
+
+	ret = lora_config(dev_lora, &etc_lora_tx_config);
+	if (ret < 0) {
+		LOG_ERR("lora_config failed error %d", ret);
+		return -1;
+	}
+
+	ret = snprintf(msg_buf, sizeof(msg_buf),
+		       "S,9970,MT1,21831,3.70,%u,*,*,19.8,*,*,21.8,*,", count);
+	msg_len = ret > sizeof(msg_buf) ? sizeof(msg_buf) : ret;
+	etc_cape_encrypt(msg_buf, encr_buf, msg_len, 21);
+
+	ret = lora_send(dev_lora, (uint8_t *)encr_buf, msg_len + 1);
+	if (ret < 0) {
+		LOG_ERR("lora_send failed error %d", ret);
+	} else {
+		LOG_DBG("Transmit data success, count %u", count);
+	}
+
+	count++;
+	if (count >= 100) {
+		count = 0;
+	}
+	return 0;
+}
+
 static int cmd_lora_tx(const struct shell *shell, size_t argc, char **argv) {
 	uint32_t t0 = k_uptime_get_32();
 	uint8_t tx_buf[] = "Hello World";
@@ -553,16 +623,58 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 		} else {
 			char RXString[128] = {0};
   			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
-			shell_print(shell, "Received data: RSSI:%ddBm, SNR:%ddBm", rssi, snr);
-			//shell_hexdump(shell, RXString, ret);
 			RXString[ret] = '\0';
 			shell_print(shell, "%s", RXString);
 		}
-		//k_sleep(K_MSEC(500));
+		k_sleep(K_SECONDS(2));
 	}
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_lora_rx, NULL, "Receive message over Lora", cmd_lora_rx, 1, 0);
+
+static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
+	uint32_t t0 = k_uptime_get_32();
+	int ret;
+
+	ret = k_mutex_lock(&lora_mutex, K_SECONDS(1));
+	if (ret != 0) {
+		return -1;
+	}
+
+	int16_t rssi;
+	int8_t snr;
+	uint8_t rx_buf[128] = {0x00};
+
+	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 2UL)) {
+		ret = send_lora_message();
+		if (ret != 0) {
+			continue;
+		}
+		ret = lora_config(dev_lora, &etc_lora_rx_config);
+		if (ret < 0) {
+			shell_error(shell, "lora_config failed error %d", ret);
+			goto exit;
+		}
+		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(5), &rssi, &snr);
+		if (ret < 0) {
+			continue;
+		} else {
+			char RXString[128] = {0};
+  			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
+			RXString[ret] = '\0';
+			if (strstr(RXString, "21831")) {
+				shell_print(shell, "%s,%d,%d", RXString, rssi, snr);
+			}
+		}
+		k_sleep(K_SECONDS(2));
+	}
+	k_mutex_unlock(&lora_mutex);
+	return 0;
+exit:
+	k_mutex_unlock(&lora_mutex);
+	return ret;
+}
+SHELL_CMD_ARG_REGISTER(etc_lora_tx_rx, NULL, "Receive message over Lora", cmd_lora_tx_rx, 1, 0);
 
 #define GPIO_RTC_INT_PIN 3
 static struct gpio_callback watchdog_cb_data;

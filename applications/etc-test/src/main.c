@@ -13,6 +13,7 @@
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"
+#include "etc_cape.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
