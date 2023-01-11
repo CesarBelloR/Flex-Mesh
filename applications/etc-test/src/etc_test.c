@@ -350,75 +350,114 @@ static int cmd_ds2484_enable(const struct shell *shell, size_t argc, char **argv
 
 static int cmd_ds2484_convert_temp(const struct shell *shell, size_t argc, char **argv)
 {
-	char data[9];
+	uint8_t data[9];
+	const uint8_t MAX_ATTEMPTS = 10;
+	uint8_t attempt = 0;
+	bool success = false;
 	uint16_t temperature;
 	int8_t resolution, digit, minus = 0;
 	float decimal;
 
-	if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
-	if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}		//Send command to all devices
-	if (ds2484_write_byte(0x44) != 0) {shell_print(shell, "Error requesting temperature measurement");}
-	if (ds2484_set_config((ds248x_config_t)(1 << 2)) != 0) {shell_print(shell, "Error setting strong pullup");}
-	k_sleep(K_MSEC(800));
-	if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
-	if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}		//Send command to all devices
-	if (ds2484_write_byte(0xBE) != 0) {shell_print(shell, "Error requesting data from scratch pad");}		//read scratch pad *this will not work if there is more than one device on the bus
-	if (ds2484_read_bytes(data, 9) != 0) {shell_print(shell, "Error reading data from scratch pad");}
-	if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
-
-	/* First two bytes of scratchpad are temperature values */
-	temperature = data[0] | data[1] << 8;
-
-	/* Check if temperature is negative */
-	if (temperature & 0x8000)
-	{
-		/* Two's complement, temperature is negative */
-		temperature = ~temperature + 1;
-		minus = 1;
+	while (attempt < MAX_ATTEMPTS && !success) {
+		if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
+		if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}		//Send command to all devices
+		if (ds2484_write_byte(0x44) != 0) {shell_print(shell, "Error requesting temperature measurement");}
+		if (ds2484_set_config((ds248x_config_t)(1 << 2)) != 0) {shell_print(shell, "Error setting strong pullup");}
+		k_sleep(K_MSEC(800));
+		if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
+		if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}		//Send command to all devices
+		if (ds2484_write_byte(0xBE) != 0) {shell_print(shell, "Error requesting data from scratch pad");}		//read scratch pad *this will not work if there is more than one device on the bus
+		if (ds2484_read_bytes(data, 9) != 0) {shell_print(shell, "Error reading data from scratch pad");}
+		
+		//check CRC to ensure reading was valid
+		uint8_t crc = 0;
+		uint8_t len = 8;
+		uint8_t *addr = data;
+	
+		while (len--) {
+			uint8_t inbyte = *addr++;
+			for (uint8_t i = 8; i; i--) {
+				uint8_t mix = (crc ^ inbyte) & 0x01;
+				crc >>= 1;
+				if (mix) crc ^= 0x8C;
+				inbyte >>= 1;
+			}
+		}
+		
+		if (crc != data[8]) {
+			shell_print(shell, "Invalid CRC value returned: %u", crc);
+			attempt++;
+			k_sleep(K_MSEC(10));
+		} else {
+			success = true;
+		}
+		//if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
 	}
 
-	/* Get sensor resolution */
-	resolution = ((data[4] & 0x60) >> 5) + 9;
+	//if (success) {
+		/* First two bytes of scratchpad are temperature values */
+		temperature = data[0] | data[1] << 8;
+
+		/* Check if temperature is negative */
+		if (temperature & 0x8000)
+		{
+			/* Two's complement, temperature is negative */
+			temperature = ~temperature + 1;
+			minus = 1;
+		}
+
+		/* Get sensor resolution */
+		resolution = ((data[4] & 0x60) >> 5) + 9;
 
 
-	/* Store temperature integer digits and decimal digits */
-	digit = temperature >> 4;
-	digit |= ((temperature >> 8) & 0x7) << 4;
+		/* Store temperature integer digits and decimal digits */
+		digit = temperature >> 4;
+		digit |= ((temperature >> 8) & 0x7) << 4;
 
-	/* Store decimal digits */
-	switch (resolution)
-	{
-	case 9:
-		decimal = (temperature >> 3) & 0x01;
-		decimal *= (float)DS18B20_DECIMAL_STEPS_9BIT;
-		break;
-	case 10:
-		decimal = (temperature >> 2) & 0x03;
-		decimal *= (float)DS18B20_DECIMAL_STEPS_10BIT;
-		break;
-	case 11:
-		decimal = (temperature >> 1) & 0x07;
-		decimal *= (float)DS18B20_DECIMAL_STEPS_11BIT;
-		break;
-	case 12:
-		decimal = temperature & 0x0F;
-		decimal *= (float)DS18B20_DECIMAL_STEPS_12BIT;
-		break;
-	default:
-		decimal = 0xFF;
-		digit = 0;
+		/* Store decimal digits */
+		switch (resolution)
+		{
+		case 9:
+			decimal = (temperature >> 3) & 0x01;
+			decimal *= (float)DS18B20_DECIMAL_STEPS_9BIT;
+			break;
+		case 10:
+			decimal = (temperature >> 2) & 0x03;
+			decimal *= (float)DS18B20_DECIMAL_STEPS_10BIT;
+			break;
+		case 11:
+			decimal = (temperature >> 1) & 0x07;
+			decimal *= (float)DS18B20_DECIMAL_STEPS_11BIT;
+			break;
+		case 12:
+			decimal = temperature & 0x0F;
+			decimal *= (float)DS18B20_DECIMAL_STEPS_12BIT;
+			break;
+		default:
+			decimal = 0xFF;
+			digit = 0;
+		}
+
+		/* Check for negative part */
+		decimal = digit + decimal;
+		if (minus)
+			decimal = 0 - decimal;
+
+		shell_print(shell, "Temperature: %02f°C --> %u attempts", decimal, attempt + 1);
+	
+	if (success) {
+		
+		return 0;
+
+	} else {
+		shell_print(shell, "ERROR: Invalid temperature conversion");
+
+		for (u_int8_t i = 0; i < 9; i++) {
+			shell_print(shell, "data[%u]: %u", i, data[i]);
+		}
+		
+		return -1;
 	}
-
-	/* Check for negative part */
-	decimal = digit + decimal;
-	if (minus)
-		decimal = 0 - decimal;
-
-	shell_fprintf(shell, SHELL_NORMAL, "Temperature: %02f", decimal);
-	//shell_fprintf(shell, SHELL_NORMAL, "%02f", decimal);
-	shell_print(shell, "°C");
-
-	return 0;
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(ds2484_sub,
