@@ -50,3 +50,22 @@
 		zephyr,oversampling = <8>;
 	};
 };
+
+&uart1 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+	label = "UART_1";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart1_default>;
+	pinctrl-1 = <&uart1_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	quectel_bg95 {
+		compatible = "quectel,bg95";
+		label      = "quectel-bg95";
+		status     = "okay";
+		mdm-power-gpios = <&gpio1 1 0>;
+		mdm-on-off-gpios = <&gpio1 4 0>;
+		mdm-pon-trig-gpios = <&gpio0 29 0>;
+	};
+};

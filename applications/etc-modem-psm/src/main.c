@@ -56,7 +56,7 @@ static void app_modem_init(void) {
 		return;
 	}
 	
-	gpio_pin_configure(gpio_0, LTE_PSM_IND_PIN, GPIO_INPUT);
+	gpio_pin_configure(gpio_0, LTE_PSM_IND_PIN, GPIO_INPUT | GPIO_ACTIVE_LOW);
 	gpio_init_callback(&psm_ind_gpio_callback, psm_ind_callback,
 			   BIT(LTE_PSM_IND_PIN));
 	ret = gpio_add_callback(gpio_0, &psm_ind_gpio_callback);
