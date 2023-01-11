@@ -552,7 +552,7 @@ static struct lora_modem_config etc_lora_tx_config  = {
 static int send_lora_message(void)
 {
 	int ret;
-	char msg_buf[sizeof("S,#####,MT1,21831,3.70,###,*,*,19.8,*,*,21.8,*,")];
+	char msg_buf[sizeof("S,#####,MT1,99999,3.70,###,*,*,19.8,*,*,21.8,*,")];
 	char encr_buf[sizeof(msg_buf) + 1];
 	uint8_t msg_len;
 	static uint8_t count = 0;
@@ -564,7 +564,7 @@ static int send_lora_message(void)
 	}
 
 	ret = snprintf(msg_buf, sizeof(msg_buf),
-		       "S,9970,MT1,21831,3.70,%u,*,*,19.8,*,*,21.8,*,", count);
+		       "S,9970,MT1,99999,3.70,%u,*,*,19.8,*,*,21.8,*,", count);			//placeholder device ID 99999
 	msg_len = ret > sizeof(msg_buf) ? sizeof(msg_buf) : ret;
 	etc_cape_encrypt(msg_buf, encr_buf, msg_len, 21);
 
@@ -662,7 +662,7 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 			char RXString[128] = {0};
   			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
 			RXString[ret] = '\0';
-			if (strstr(RXString, "21831")) {
+			if (strstr(RXString, "99999")) {									//placeholder device ID 99999
 				shell_print(shell, "%s,%d,%d", RXString, rssi, snr);
 			}
 		}
