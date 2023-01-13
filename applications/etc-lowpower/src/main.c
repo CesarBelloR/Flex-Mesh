@@ -15,10 +15,12 @@
 #include "pcf85263a.h"
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   1000
+#define SLEEP_TIME_MS   5000
 
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
+
+#define LTE_LOGIC_TRANSLATOR_OE 30
 
 /*
  * A build error on this line means your board is unsupported.
@@ -28,6 +30,7 @@ static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 PINCTRL_DT_DEFINE(DT_NODELABEL(spi1));
 static const struct pinctrl_dev_config *spi1_pinctrl = 
 			PINCTRL_DT_DEV_CONFIG_GET(DT_NODELABEL(spi1));
+static const struct device *gpio0 = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 
 static const struct device *pm_devs[] = {
 	DEVICE_DT_GET(DT_NODELABEL(spi1)),
@@ -54,6 +57,8 @@ static void gpio_init(void)
 	gpio_pin_configure_dt(&sens_sel1, GPIO_OUTPUT_INACTIVE);
 
 	gpio_pin_configure_dt(&rtc_int, GPIO_INPUT);
+
+	gpio_pin_configure(gpio0, LTE_LOGIC_TRANSLATOR_OE, GPIO_ACTIVE_LOW | GPIO_OUTPUT_ACTIVE);
 }
 
 static void peripheral_init(void) {
@@ -80,7 +85,7 @@ void main(void)
 		return;
 	}
 
-	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_INACTIVE);
 	if (ret < 0) {
 		return;
 	}
@@ -89,13 +94,14 @@ void main(void)
 	gpio_init();
 	peripheral_lp();
 
-	//gpio_pin_set_dt(&led, 0);
+	gpio_pin_set_dt(&led, 0);
 
 	while (1) {
-		ret = gpio_pin_toggle_dt(&led);
-		if (ret < 0) {
-			return;
-		}
+		// ret = gpio_pin_toggle_dt(&led);
+		// if (ret < 0) {
+		// 	return;
+		// }
+		ret = gpio_pin_toggle(gpio0, LTE_LOGIC_TRANSLATOR_OE);
 		k_msleep(SLEEP_TIME_MS);
 	}
 }
