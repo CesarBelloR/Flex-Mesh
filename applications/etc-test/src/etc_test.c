@@ -148,7 +148,7 @@ static int cmd_set_etc_gpio(const struct shell *sh,
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_etc_gpio,
-			       SHELL_CMD_ARG(set, NULL, "Set GPIO", cmd_set_etc_gpio, 4, 0),
+			       SHELL_CMD_ARG(set, NULL, "Set GPIO: 1 disconnect, 0 drive low", cmd_set_etc_gpio, 4, 0),
 			       SHELL_SUBCMD_SET_END /* Array terminated. */
 			       );
 SHELL_CMD_REGISTER(etc_gpio, &sub_etc_gpio, "ETC GPIO commands", NULL);			       
