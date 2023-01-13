@@ -99,6 +99,60 @@ static int cmd_version(const struct shell *shell, size_t argc, char **argv)
 
 SHELL_CMD_ARG_REGISTER(etc_version, NULL, "Show kernel version", cmd_version, 1, 0);
 
+struct args_index {
+	uint8_t port;
+	uint8_t index;
+	uint8_t mode;
+	uint8_t value;
+};
+
+static const struct args_index args_indx = {
+	.port = 1,
+	.index = 2,
+	.mode = 3,
+	.value = 3,
+};
+
+static int cmd_set_etc_gpio(const struct shell *sh,
+			    size_t argc, char **argv)
+{
+	const struct device *dev;
+	uint8_t index = 0U;
+	uint8_t value = 0U;
+
+	if (isdigit((unsigned char)argv[args_indx.index][0]) &&
+	    isdigit((unsigned char)argv[args_indx.value][0])) {
+		index = (uint8_t)atoi(argv[args_indx.index]);
+		value = (uint8_t)atoi(argv[args_indx.value]);
+	} else {
+		shell_print(sh, "Wrong parameters for set");
+		return -EINVAL;
+	}
+	dev = device_get_binding(argv[args_indx.port]);
+
+	if (dev != NULL) {
+		index = (uint8_t)atoi(argv[2]);
+		if (value) {
+			gpio_pin_configure(dev, index, GPIO_DISCONNECTED);
+			shell_print(sh, "Disconnecting %s pin %d",
+				    argv[args_indx.port], index);
+		} else {
+			gpio_pin_configure(dev, index, GPIO_OUTPUT);
+			gpio_pin_set(dev, index, value);
+			shell_print(sh, "Writing to %s pin %d",
+				    argv[args_indx.port], index);
+		}
+	}
+
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_etc_gpio,
+			       SHELL_CMD_ARG(set, NULL, "Set GPIO", cmd_set_etc_gpio, 4, 0),
+			       SHELL_SUBCMD_SET_END /* Array terminated. */
+			       );
+SHELL_CMD_REGISTER(etc_gpio, &sub_etc_gpio, "ETC GPIO commands", NULL);			       
+
 const float nodepoints[34] = {
   195.652,
   148.171,
