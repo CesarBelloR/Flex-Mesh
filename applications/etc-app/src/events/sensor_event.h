@@ -9,21 +9,47 @@
 extern "C" {
 #endif
 
+#define SENSOR_NTC_NO_CONNECTED -273.150
+/* Minimum sensor temperature that is a valid reading. */
+#define SENSOR_TEMP_C_MIN	-40.0f
+/* Maximum sensor temperature that is a valid reading. */
+#define SENSOR_TEMP_C_MAX	120.0f
+
 /** @brief Sensor event types submitted by the Sensor module. */
 enum sensor_event_type {
 	SENSOR_EVT_ENVIRONMENTAL_DATA_READY,
 	SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED,
-	SENSOR_EVT_HALL_DATA_READY,
+	SENSOR_EVT_BATTERY_DATA_READY,
 	SENSOR_EVT_SHUTDOWN_READY,
 	SENSOR_EVT_ERROR,
 };
+
+enum sensor_input {
+	SENSOR_INPUT_AMBIENT = 0,
+	SENSOR_INPUT_IN1,
+	SENSOR_INPUT_IN2,
+	SENSOR_INPUT_IN3,
+	SENSOR_INPUT_IN4,
+	SENSOR_INPUT_MAX
+};
+
+#define SENSOR_EVENT_NUM_DEV_MAX SENSOR_INPUT_MAX
 
 /** @brief Structure used to provide environmental data. */
 struct sensor_data {
 	/** Uptime when the data was sampled. */
 	int64_t timestamp;
 	/** Temperature in Celsius degrees. */
-	double temperature;
+	float temperature[SENSOR_EVENT_NUM_DEV_MAX];
+	/** Voltage of battery in mV */
+	uint16_t battery_mV;
+};
+
+struct battery_data {
+	/** Uptime when the data was sampled. */
+	int64_t timestamp;
+	/** Temperature in Celsius degrees. */
+	uint16_t battery_mV;
 };
 
 struct sensor_event {
@@ -35,7 +61,7 @@ struct sensor_event {
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
-		struct sensor_data sensors;
+		struct sensor_data* sensors;
 	} data;
 };
 

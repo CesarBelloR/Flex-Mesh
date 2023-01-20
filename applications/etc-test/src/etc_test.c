@@ -11,10 +11,12 @@
 #include <drivers/flash.h>
 #include <drivers/gpio.h>
 #include "pcf85263a.h"
-#include "bq24195.h"
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
 #define DEFAULT_RADIO_NODE DT_ALIAS(lora0)
 #define GPIO_SENSE_ENABLE_PIN (13)
@@ -58,11 +60,62 @@ static int cmd_version(const struct shell *shell, size_t argc, char **argv)
 
 SHELL_CMD_ARG_REGISTER(etc_version, NULL, "Show kernel version", cmd_version, 1, 0);
 
+const float nodepoints[34] = {
+  195.652,
+  148.171,
+  113.347,
+  87.559,
+  68.237,
+  53.650,
+  42.506,
+  33.892,
+  27.219,
+  22.021,
+  17.926,
+  14.674,
+  12.081,
+  10.000,
+  8.315,
+  6.948,
+  5.834,
+  4.917,
+  4.161,
+  3.535,
+  3.014,
+  2.586,
+  2.228,
+  1.925,
+  1.669,
+  1.452,
+  1.268,
+  1.110,
+  0.974,
+  0.858,
+  0.758,
+  0.672,
+  0.596,
+  0.531,
+};
+
+#define SERIESRESISTOR 10000 //on board series resistor - 10kohm
+
+float reMap(const float pts[34], float input) { //maps resistance to temperature lookup table. 
+  float mm = 0;
+  for (unsigned char nn = 0; nn < 33; nn++) {
+    if (input <= pts[nn] && input >= pts[nn + 1]) {
+      mm = ( (-40 + (nn * 5)) - (-40 + ((nn + 1) * 5)) ) / ( pts[nn] - pts[nn + 1] );
+      mm = mm * (input - pts[nn]);
+      mm = mm +  (-40 + (nn * 5));
+    }
+  }
+  return (mm);
+}
+
 static int cmd_adc_request(const struct shell *shell, size_t argc, char **argv)
 {
 	int channel = atoi(argv[1]);
-	shell_print(shell, "ADC Channel %d - Value %d", channel, adc_get_channel(channel));
-
+	uint16_t adc_raw = adc_get_channel(channel);
+	shell_print(shell, "ADC Channel %d - Value %d", channel, adc_raw);
 	return 0;
 }
 
@@ -150,21 +203,6 @@ static int cmd_external_flash_get_info(const struct shell *shell, size_t argc, c
 
 SHELL_CMD_ARG_REGISTER(etc_flash_info, NULL, "Get information of external flash", cmd_external_flash_get_info, 1, 0);
 
-static int cmd_charge_module(const struct shell *shell, size_t argc, char **argv)
-{
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-	int ret = bq24195_init();
-	if (ret) {
-		shell_print(shell, "BQ24195 error");
-	} else {
-		shell_print(shell, "BQ24195 passed");
-	}
-	return 0;
-}
-
-SHELL_CMD_ARG_REGISTER(etc_charge, NULL, "Check BQ24195 IC", cmd_charge_module, 1, 0);
-
 #define GPIO_USER_BUTTON_PIN 5
 static int cmd_button_pull_module(const struct shell *shell, size_t argc, char **argv)
 {
@@ -195,7 +233,7 @@ const struct device *lora_dev = NULL;
 static struct lora_modem_config etc_lora_rx_config = {
 	.frequency = 915000000,
 	.bandwidth = BW_125_KHZ,
-	.datarate = SF_10,
+	.datarate = SF_7,
 	.preamble_len = 8,
 	.coding_rate = CR_4_5,
 	.tx_power = 14,
@@ -205,7 +243,7 @@ static struct lora_modem_config etc_lora_rx_config = {
 static struct lora_modem_config etc_lora_tx_config  = {
 	.frequency = 915000000,
 	.bandwidth = BW_125_KHZ,
-	.datarate = SF_10,
+	.datarate = SF_7,
 	.preamble_len = 8,
 	.coding_rate = CR_4_5,
 	.tx_power = 14,
@@ -234,6 +272,8 @@ static int cmd_lora_tx(const struct shell *shell, size_t argc, char **argv) {
 }
 SHELL_CMD_ARG_REGISTER(etc_lora_tx, NULL, "Transmit a message over Lora", cmd_lora_tx, 1, 0);
 
+#define ACKUNCRYPT 49 
+
 static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 	uint32_t t0 = k_uptime_get_32();
 	int ret = lora_config(dev_lora, &etc_lora_rx_config);
@@ -250,6 +290,9 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 			shell_error(shell, "No data received");
 			continue;
 		} else {
+			char RXString[ACKUNCRYPT] = {0};
+  			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
+			LOG_HEXDUMP_INF(RXString, ACKUNCRYPT, "RECV");
 			shell_print(shell, "Received data: %s (RSSI:%ddBm, SNR:%ddBm)", rx_buf, rssi, snr);
 		}
 		k_sleep(K_MSEC(500));

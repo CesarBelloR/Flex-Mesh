@@ -1,9 +1,14 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
 #include <app_event_manager.h>
+#include <drivers/lora.h>
+#include <zephyr.h>
+#include "etc_date_time.h"
+#include "data/etc_cape.h"
+#include "data/data_codec.h"
 
 #define MODULE lora_module
-#define MODULE_LORA_THREAD_STACK_SIZE 2048
+#define MODULE_LORA_THREAD_STACK_SIZE 1024
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -14,6 +19,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
+#define LORA_ACKUNCRYPT_LEN 69
 struct lora_msg_data {
 	union {
 		struct app_event app;
@@ -41,6 +47,30 @@ static enum sub_state_type {
 K_MSGQ_DEFINE(msgq_lora, sizeof(struct lora_msg_data),
 	      LORA_QUEUE_ENTRY_COUNT, LORA_QUEUE_BYTE_ALIGNMENT);
 
+static void rx_thread_fn(void);
+static K_KERNEL_STACK_DEFINE(lora_rx_stack, 1024);
+
+static struct lora_modem_config etc_lora_rx_config = {
+	.frequency = 915000000,
+	.bandwidth = BW_125_KHZ,
+	.datarate = SF_7,
+	.preamble_len = 8,
+	.coding_rate = CR_4_5,
+	.tx_power = 14,
+	.tx = false,
+};
+static struct lora_modem_config etc_lora_tx_config  = {
+	.frequency = 915000000,
+	.bandwidth = BW_125_KHZ,
+	.datarate = SF_7,
+	.preamble_len = 8,
+	.coding_rate = CR_4_5,
+	.tx_power = 14,
+	.tx = true,
+};
+
+const struct device* lora_dev = DEVICE_DT_GET(DT_ALIAS(lora0));
+static struct k_thread	       lora_rx_thread;
 static struct module_data self = {
 	.name = "lora",
 	.msg_q = &msgq_lora,
@@ -141,16 +171,34 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void lora_module_on_stop(void) {
+	k_thread_suspend(lora_rx_thread);
+}
+
+static void lora_module_on_start(void) {
+	k_thread_resume(lora_rx_thread);
+}
+
 static int setup(void)
 {
+	if (!device_is_ready(lora_dev))
+	{
+		return -1;
+	}
+
+	k_thread_create(&lora_rx_thread, lora_rx_stack,
+			K_KERNEL_STACK_SIZEOF(lora_rx_stack),
+			(k_thread_entry_t) rx_thread_fn,
+			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 	return 0;
 }
 
 /* Message handler for STATE_INIT. */
 static void on_state_init(struct lora_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
+	if (IS_EVENT(msg, app, APP_EVT_START)) {
 		state_set(STATE_RUNNING);
+		sub_state_set(SUB_STATE_RECEIVE_MODE);
 	}
 }
 
@@ -169,12 +217,17 @@ static void on_state_running(struct lora_msg_data *msg)
 static void on_all_states(struct lora_msg_data *msg)
 {
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
-		/* The module doesn't have anything to shut down and can
-		 * report back immediately.
-		 */
+		LOG_INF("Request to shutdown from util");
 		SEND_SHUTDOWN_ACK(lora, LORA_EVT_SHUTDOWN_READY, self.id);
+		lora_module_on_stop();
 		state_set(STATE_SHUTDOWN);
 	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) {
+		lora_module_on_stop();
+	}
+
+	
 }
 
 /* Message handler for SUB_STATE_TRANSMIT_MODE. */
@@ -185,6 +238,61 @@ static void on_sub_state_transmit(struct lora_msg_data *msg)
 /* Message handler for SUB_STATE_RECEIVE_MODE. */
 static void on_sub_state_receive(struct lora_msg_data *msg)
 {
+
+}
+
+static void lora_data_send(const char* msg, int msg_len)
+{
+	struct lora_event *lora_module_event = new_lora_event();
+
+	memcpy(lora_module_event->data.sensor_msg, msg, msg_len);
+	lora_module_event->data.sensor_msg[msg_len] = '\0';
+	lora_module_event->data.timestamp = date_time_now_second();
+	lora_module_event->type = LORA_EVT_RX_DATA_READY;
+
+	APP_EVENT_SUBMIT(lora_module_event);
+}
+
+static void lora_module_report_data(const uint8_t* package) {
+	char *token = strchr((const char*)package, ',');
+	int count = 0;
+	while (token != NULL) {
+		count += 1;
+		if (count == 7) {
+			LOG_DBG("Token %s", token);
+			token += 1;
+			lora_data_send(token, strlen(token));
+		};
+		token = strchr(token + 1, ',');
+	}
+}
+
+static void rx_thread_fn(void) {
+	uint32_t t0 = k_uptime_get_32();
+	int ret = lora_config(lora_dev, &etc_lora_rx_config);
+	if (ret < 0) {
+		LOG_ERR("Lora_config failed error %d", ret);
+	}
+	ret = 0;
+	uint8_t rx_buf[128] = {0x00};
+	int16_t rssi;
+	int8_t snr;
+	while (1) {
+		ret = lora_recv(lora_dev, rx_buf, sizeof(rx_buf), K_FOREVER, &rssi, &snr);
+		if (ret < 0) {
+			continue;
+		} else {
+			char decoded_buffer[LORA_ACKUNCRYPT_LEN] = {0};
+  			etc_cape_decrypt((char *)rx_buf, decoded_buffer, ret); 
+			if (decoded_buffer[0] == 'S') {
+				LOG_INF("Received data: RSSI:%ddBm, SNR:%ddBm", rssi, snr);
+				LOG_INF("%.*s", LORA_ACKUNCRYPT_LEN, decoded_buffer);
+				lora_module_report_data((const uint8_t* )decoded_buffer);
+			}
+			memset(rx_buf, 0, sizeof(rx_buf));
+		}
+		k_sleep(K_MSEC(500));
+	}
 }
 
 static void module_thread_fn(void)

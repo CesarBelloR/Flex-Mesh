@@ -29,17 +29,23 @@ struct led {
 };
 
 static const struct led_effect effect[] = {
-	[UI_LTE_DISCONNECTED] = LED_EFFECT_LED_ON(UI_LTE_DISCONNECTED_COLOR),
-	[UI_LTE_CONNECTING] = LED_EFFECT_LED_ON(UI_LTE_CONNECTING_COLOR),
-	[UI_LTE_CONNECTED] = LED_EFFECT_LED_ON(UI_LTE_CONNECTED_COLOR),
-	[UI_CLOUD_CONNECTING] = LED_EFFECT_LED_ON(UI_CLOUD_CONNECTING_COLOR),
-	[UI_CLOUD_CONNECTED] = LED_EFFECT_LED_ON(UI_CLOUD_CONNECTED_COLOR),
-	[UI_CLOUD_PAIRING] = LED_EFFECT_LED_ON(UI_CLOUD_PAIRING_COLOR),
-	[UI_LED_ERROR_CLOUD] = LED_EFFECT_LED_ON(UI_LED_ERROR_CLOUD_COLOR),
-	[UI_LED_ERROR_MODEM_REC] = LED_EFFECT_LED_ON(UI_LED_ERROR_MODEM_REC_COLOR),
-	[UI_LED_ERROR_MODEM_IRREC] = LED_EFFECT_LED_ON(UI_LED_ERROR_MODEM_IRREC_COLOR),
-	[UI_LED_ERROR_LTE_LC] = LED_EFFECT_LED_ON(UI_LED_ERROR_LTE_LC_COLOR),
-	[UI_LED_ERROR_UNKNOWN] = LED_EFFECT_LED_ON(UI_LED_ERROR_UNKNOWN_COLOR),
+	[UI_LTE_DISCONNECTED] = LED_EFFECT_LED_BLINK(1000, UI_LTE_DISCONNECTED_COLOR),
+	[UI_LTE_CONNECTING] = LED_EFFECT_LED_BLINK(500, UI_LTE_CONNECTING_COLOR),
+	[UI_LTE_CONNECTED] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL, UI_LED_OFF_PERIOD_NORMAL, UI_LTE_CONNECTED_COLOR),
+	[UI_CLOUD_PUBLISHING] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL, UI_LED_OFF_PERIOD_NORMAL, UI_CLOUD_PUBLISHING_COLOR),
+	[UI_CLOUD_CONNECTING] = LED_EFFECT_LED_OFF(),
+	[UI_CLOUD_ASSOCIATING] = LED_EFFECT_LED_OFF(),
+	[UI_CLOUD_ASSOCIATED] = LED_EFFECT_LED_OFF(),
+	[UI_ERROR_CLOUD] = LED_EFFECT_LED_OFF(),
+	[UI_SENSOR_AQUIRING] = LED_EFFECT_LED_BLINK(500, UI_LED_AQUIRING_SENSOR_COLOR),
+	[UI_LORA_TRANSMITTING] = LED_EFFECT_LED_OFF(),
+	[UI_LORA_RECEIVING] = LED_EFFECT_LED_OFF(),
+	[UI_ACTIVE_MODE] = LED_EFFECT_LED_OFF(),
+	[UI_PASSIVE_MODE] = LED_EFFECT_LED_OFF(),
+	[UI_ERROR_SYSTEM_FAULT] = LED_EFFECT_LED_OFF(),
+	[UI_FOTA_UPDATING] = LED_EFFECT_LED_OFF(),
+	[UI_FOTA_UPDATE_REBOOT] = LED_EFFECT_LED_OFF(),
+	[UI_TURN_OFF] = LED_EFFECT_LED_OFF(),
 };
 
 static struct led_effect custom_effect =
@@ -48,6 +54,7 @@ static struct led_effect custom_effect =
 		LED_NOCOLOR());
 
 static struct led leds;
+static bool led_is_ready = false;
 static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
@@ -150,35 +157,39 @@ int ui_leds_init(void)
 	}
 
 	leds.id = 0;
-	leds.effect = &effect[UI_LTE_DISCONNECTED];
+	leds.effect = &effect[UI_LTE_CONNECTING];
 
 	k_work_init_delayable(&leds.work, work_handler);
 	led_update(&leds);
-
+	led_is_ready = true;
 	return err;
 }
 
 void ui_leds_start(void)
 {
-#ifdef CONFIG_PM_DEVICE
-	int err = pm_device_action_run(leds.pwm_dev, PM_DEVICE_STATE_ACTIVE);
+	if (led_is_ready) return;
+#if defined(CONFIG_PM_DEVICE)
+	int err = pm_device_action_run(pwm_led0.dev, PM_DEVICE_ACTION_RESUME);
 	if (err) {
-		LOG_ERR("PWM enable failed");
+		LOG_ERR("PWM enable failed %d", err);
 	}
 #endif
 	led_update(&leds);
+	led_is_ready = true;
 }
 
 void ui_leds_stop(void)
 {
+	if (!led_is_ready) return;
+	pwm_off(&leds);
 	k_work_cancel_delayable_sync(&leds.work, &leds.work_sync);
-#ifdef CONFIG_PM_DEVICE
-	int err = pm_device_action_run(leds.pwm_dev, PM_DEVICE_STATE_SUSPENDED);
+#if defined(CONFIG_PM_DEVICE)
+	int err = pm_device_action_run(pwm_led0.dev, PM_DEVICE_ACTION_SUSPEND);
 	if (err) {
-		LOG_ERR("PWM disable failed");
+		LOG_ERR("PWM disable failed %d", err);
 	}
 #endif
-	pwm_off(&leds);
+	led_is_ready = false;
 }
 
 void ui_led_set_effect(enum ui_led_pattern state)

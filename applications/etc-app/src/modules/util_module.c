@@ -3,6 +3,14 @@
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
+#include <zephyr/init.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+#include <drivers/gpio.h>
+#include <hal/nrf_gpio.h>
+#include "etc_settings.h"
+#include "etc_interface.h"
 
 #define MODULE util_module
 #define MODULE_REBOOT_TIMEOUT 30
@@ -18,6 +26,7 @@
 #include "events/util_event.h"
 #include "events/modem_event.h"
 #include "events/ui_event.h"
+#include "events/lora_event.h"
 
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -29,6 +38,7 @@ struct util_msg_data {
 		struct data_event data;
 		struct app_event app;
 		struct modem_event modem;
+		struct lora_event lora;
 	} module;
 };
 
@@ -40,11 +50,16 @@ static enum state_type {
 
 /* Forward declarations. */
 static void reboot_work_fn(struct k_work *work);
+static void wakeup_work_fn(struct k_work *work);
 static void message_handler(struct util_msg_data *msg);
 static void send_reboot_request(enum shutdown_reason reason);
 
 /* Delayed work that is used to trigger a reboot. */
 static K_WORK_DELAYABLE_DEFINE(reboot_work, reboot_work_fn);
+
+
+/* Delayed work that is used to trigger a wakeup. */
+static K_WORK_DELAYABLE_DEFINE(wakeup_work, wakeup_work_fn);
 
 static struct module_data self = {
 	.name = "util",
@@ -160,7 +175,7 @@ static void reboot(void)
 
 static void reboot_work_fn(struct k_work *work)
 {
-	reboot();
+	LOG_INF("System is sleeping!!!");
 }
 
 static void send_reboot_request(enum shutdown_reason reason)
@@ -226,7 +241,7 @@ static int setup(const struct device *dev)
 static void on_state_init(struct util_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DONE)) {
-		send_reboot_request(REASON_FOTA_UPDATE);
+		send_reboot_request(REASON_SLEEP);
 	}
 
 	if ((IS_EVENT(msg, cloud, CLOUD_EVT_ERROR))	||
@@ -272,6 +287,11 @@ static void on_state_reboot_pending(struct util_msg_data *msg)
 
 	if (IS_EVENT(msg, ui, UI_EVT_SHUTDOWN_READY)) {
 		reboot_ack_check(msg->module.ui.data.id);
+		return;
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_SHUTDOWN_READY)) {
+		reboot_ack_check(msg->module.lora.data.id);
 		return;
 	}
 }

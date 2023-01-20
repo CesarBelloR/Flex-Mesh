@@ -11,10 +11,10 @@ extern "C" {
 
 /** @brief UI event types submitted by the UI module. */
 enum ui_event_type {
-	/** Button has been pressed.
+	/** Button/Hall Sensor has been pressed.
 	 *  Payload is of type @ref ui_module_data (ui).
 	 */
-	UI_EVT_BUTTON_DATA_READY,
+	UI_EVT_INPUT_DATA_READY,
 
 	/** The UI module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
@@ -27,14 +27,6 @@ enum ui_event_type {
 	UI_EVT_ERROR
 };
 
-/** @brief Structure used to provide button data. */
-struct ui_module_data {
-	/** Button number of the board that was pressed. */
-	int button_number;
-	/** Uptime when the button was pressed. */
-	int64_t timestamp;
-};
-
 struct ui_event {
 	struct app_event_header header;
 
@@ -42,8 +34,6 @@ struct ui_event {
 	enum ui_event_type type;
 
 	union {
-		/** Variable that carries button press information. */
-		struct ui_module_data ui;
 		/** Code signifying the cause of error. */
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */

@@ -1,0 +1,25 @@
+menuconfig ETC_SETTINGS
+	bool "ETC Settings Library"
+	depends on FILE_SYSTEM
+	help
+	  Settings subsystem for ETC
+
+if ETC_SETTINGS
+
+config INTERVAL_TIME_MEASUREMENT_IN_SECONDS
+	int "Interval time of measurement in seconds"
+	default 900
+	help
+		Setting the interval time for measurement in default
+
+config INTERVAL_TIME_TRANSMISSION_IN_SECONDS
+	int "Interval time of transmission in seconds"
+	default 900
+	help
+		Setting the interval time for transmission in default
+
+module = ETC_SETTINGS
+module-str = etc settings
+source "subsys/logging/Kconfig.template.log_config"
+
+endif

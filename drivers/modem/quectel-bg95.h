@@ -23,6 +23,7 @@
 #include "modem_socket.h"
 #include "modem_cmd_handler.h"
 #include "modem_iface_uart.h"
+#include "modem_api.h"
 
 #define MDM_UART_DEV			  DEVICE_DT_GET(DT_INST_BUS(0))
 #define MDM_UART_NODE			  DT_INST_BUS(0)
@@ -31,19 +32,21 @@
 #define MDM_RECV_TIMEOUT          K_SECONDS(10)
 #define MDM_CMD_CONN_TIMEOUT		  K_SECONDS(120)
 #define MDM_REGISTRATION_TIMEOUT	  K_SECONDS(180)
+#define MDM_SHUTDOWN_TIMEOUT		  K_SECONDS(60)
 #define MDM_SENDMSG_SLEEP		  K_MSEC(1)
 #define MDM_MAX_DATA_LENGTH		  1024
 #define MDM_RECV_MAX_BUF		  16
-#define MDM_RECV_BUF_SIZE		  1024
+#define MDM_RECV_BUF_SIZE		  256
 #define MDM_MAX_SOCKETS			  5
 #define MDM_BASE_SOCKET_NUM		  0
 #define MDM_NETWORK_RETRY_COUNT		  10
 #define MDM_INIT_RETRY_COUNT		  10
 #define MDM_PDP_ACT_RETRY_COUNT		  10
 #define MDM_WAIT_FOR_RSSI_COUNT		  10
-#define MDM_WAIT_FOR_RSSI_DELAY		  K_SECONDS(2)
+#define MDM_POWER_DOWN_RETRY_COUNT	  10
 #define BUF_ALLOC_TIMEOUT		  K_SECONDS(1)
 #define MDM_MAX_BOOT_TIME		  K_SECONDS(50)
+#define MDM_RSSI_INVALID		  -1000
 
 #define MDM_FILE_NAME_MAX_LENGTH (80)
 
@@ -61,6 +64,7 @@
 #define MDM_TIME_LENGTH           32
 #define MDM_APN_LENGTH			  32
 #define RSSI_TIMEOUT_SECS		  30
+#define MDM_WAIT_FOR_RSSI_TIMEOUT	  K_SECONDS(2)
 
 #define MDM_APN				      CONFIG_MODEM_QUECTEL_BG95_M3_APN
 #define MDM_USERNAME			  CONFIG_MODEM_QUECTEL_BG95_M3_USERNAME
@@ -125,12 +129,22 @@ struct modem_data {
 	char file_name[MDM_FILE_NAME_MAX_LENGTH];
 	int file_size;
 
+	/* Unread data status */
+	int unread_size;
+
+	/* Modem status */
+	bool is_connected;
+
+	/* Modem API */
+	modem_api_evt_handler_t evt_callback;
+
 	/* Semaphore(s) */
 	struct k_sem sem_response;
 	struct k_sem sem_tx_ready;
 	struct k_sem sem_sock_conn;
 	struct k_sem sem_dns_ready;
 	struct k_sem sem_data_ready;
+	struct k_sem sem_shutdown;
 };
 
 /* Socket read callback data */
@@ -141,8 +155,5 @@ struct socket_read_data {
 	uint16_t	 recv_read_len;
 };
 
-char* quectel_bg95_get_imei(void);
-char* quectel_bg95_get_revision(void);
-char* quectel_bg95_get_sim_number(void);
 
 #endif /* QUECTEL_BG95_H */

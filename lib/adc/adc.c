@@ -57,12 +57,12 @@ int adc_init(void)
 
 int adc_get_channel(int channel)
 {
-	int16_t buf;
+	int16_t sample_buffer[1];
 	int err = 0;
 	struct adc_sequence sequence = {
-		.buffer = &buf,
+		.buffer      = sample_buffer,
 		/* buffer size in bytes, not number of samples */
-		.buffer_size = sizeof(buf),
+		.buffer_size = sizeof(sample_buffer),
 	};
 
 	if (channel >= 0 && channel < ADC_NUM_CHANNELS) {
@@ -73,8 +73,12 @@ int adc_get_channel(int channel)
 			LOG_ERR("Could not read (%d)", err);
 			return -1;
 		} else {
-			return buf;
+			return sample_buffer[0];
 		}
 	}
 	return -1;
+}
+
+int adc_get_raw_to_millivolts(int channel, int* raw) {
+	return adc_raw_to_millivolts_dt(&adc_channels[channel], raw);
 }

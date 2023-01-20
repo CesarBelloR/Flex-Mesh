@@ -1,8 +1,13 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
+#include <math.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/gpio.h>
 #include <app_event_manager.h>
-
+#include "common.h"
+#include "adc.h"
+#include "etc_date_time.h"
+#include "etc_settings.h"
 #define MODULE sensor_module
 #define MODULE_SENSOR_THREAD_STACK_SIZE 2048
 
@@ -11,7 +16,8 @@
 #include "events/data_event.h"
 #include "events/sensor_event.h"
 #include "events/util_event.h"
-
+#include "events/ui_event.h"
+#include "events/cloud_event.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(sensor_module, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -20,6 +26,8 @@ struct sensor_msg_data {
 		struct app_event app;
 		struct data_event data;
 		struct util_event util;
+		struct ui_event ui;
+		struct cloud_event cloud;
 	} module;
 };
 
@@ -30,18 +38,67 @@ static enum state_type {
 	STATE_SHUTDOWN
 } state;
 
+static struct k_work_delayable sensor_poll_work;
+static struct sensor_data static_sensor_data;
+
 /* Sensor module message queue. */
 #define SENSOR_QUEUE_ENTRY_COUNT	10
 #define SENSOR_QUEUE_BYTE_ALIGNMENT	4
 
+#define SENSOR_GPIO_SENSE_ENABLE_PIN (13)
+#define SENSOR_GPIO_S0_PIN (9)
+#define SENSOR_GPIO_S1_PIN (10)
+
+/* Sensor Analog constant information */
+#define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
+#define SENSOR_NTC_NOMINAL_TEMP 25.0
+#define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
+#define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
+#define SENSOR_RAW_ADC_MAX 4095
+
+#define SENSOR_BATTERY_ADC_MAX SENSOR_RAW_ADC_MAX
+#define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
+
+/* Battery constant information */
+const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
+const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
+
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
+
+/* Forward declarations */
+static bool sensor_is_processing = false;
 
 static struct module_data self = {
 	.name = "sensor",
 	.msg_q = &msgq_sensor,
 	.supports_shutdown = true,
 };
+
+static const struct gpio_dt_spec sense_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+static const struct gpio_dt_spec s0_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
+
+static void sensor_adc_switch_channel(int8_t channel) {
+	gpio_pin_set_dt(&sense_dt, 0U);
+	gpio_pin_set_dt(&s0_dt, channel & 0x01);
+	gpio_pin_set_dt(&s1_dt, (channel >> 1) & 0x01);
+}
+
+static void sensor_adc_hw_init(void) {
+	if (!device_is_ready(sense_dt.port)) {
+		return;
+	}
+	if (!device_is_ready(s0_dt.port)) {
+		return;
+	}
+	if (!device_is_ready(s1_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+}
 
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type new_state)
@@ -99,6 +156,20 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
+	if (is_ui_event(aeh)) {
+		struct ui_event *event = cast_ui_event(aeh);
+
+		msg.module.ui = *event;
+		enqueue_msg = true;
+	}
+
+	if (is_cloud_event(aeh)) {
+		struct cloud_event *event = cast_cloud_event(aeh);
+
+		msg.module.cloud = *event;
+		enqueue_msg = true;
+	}
+
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -111,41 +182,66 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void apply_config(struct sensor_msg_data *msg)
+static void sensor_module_send_sensor(struct sensor_data* sensor)
 {
-}
-
-static void environmental_data_get(void)
-{
-	struct sensor_event *sensor_event;
-	LOG_DBG("No external sensors, submitting dummy sensor data");
-	sensor_event = new_sensor_event();
-	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED;
+	struct sensor_event *sensor_event = new_sensor_event();
+	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
+	sensor_event->data.sensors = sensor;
 	APP_EVENT_SUBMIT(sensor_event);
 }
 
 static int setup(void)
 {
+	adc_init();
+	sensor_adc_hw_init();
 	return 0;
 }
 
-static bool environmental_data_requested(enum app_data_type *data_list,
-					 size_t count)
-{
-	for (size_t i = 0; i < count; i++) {
-		if (data_list[i] == APP_DATA_ENVIRONMENTAL) {
-			return true;
+static float sensor_ntc_converter(int data) {
+	float raw_data = ((float)(data) * 3.6 / 3.3);
+	float tmp_value = (float)SENSOR_RAW_ADC_MAX / (float)raw_data - 1.0;
+	tmp_value = SENSOR_NTC_RESISTOR_REF / tmp_value;
+	tmp_value = tmp_value / SENSOR_NTC_NOMINAL_RESISTANCE;
+	tmp_value = logf(tmp_value);
+	tmp_value = tmp_value / SENSOR_NTC_BETA;
+	tmp_value += 1.0 / (SENSOR_NTC_NOMINAL_TEMP + 273.15);
+	tmp_value = 1.0 / tmp_value;
+	tmp_value -= 273.15;
+	return tmp_value;
+}
+
+static void sensor_poll_handler(void) {
+	if (sensor_is_processing) return;
+	sensor_is_processing = true;
+	struct sensor_data* data = &static_sensor_data;
+	data->timestamp = date_time_now_second();
+	data->temperature[SENSOR_INPUT_AMBIENT] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB));
+	if (fabs(data->temperature[SENSOR_INPUT_AMBIENT] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+		LOG_DBG("Ambient temp %2.2f", data->temperature[0]);
+	}
+	for (int8_t i = SENSOR_INPUT_IN1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+		sensor_adc_switch_channel(i - 1);
+		k_msleep(50);
+		data->temperature[i] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR));
+		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
+		} else {
+			LOG_DBG("Channel %d isn't available", i - 1);
 		}
 	}
 
-	return false;
+	int raw_adc_battery = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
+	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_adc_battery);
+	int adc_mv_battery = raw_adc_battery * (sFullOhms / sOutputOhms);
+	data->battery_mV = adc_mv_battery;
+	sensor_module_send_sensor(data);
+	sensor_is_processing = false;
 }
 
 /* Message handler for STATE_INIT. */
 static void on_state_init(struct sensor_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
-		apply_config(msg);
 		state_set(STATE_RUNNING);
 	}
 }
@@ -153,30 +249,43 @@ static void on_state_init(struct sensor_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct sensor_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
-		apply_config(msg);
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-		if (!environmental_data_requested(
-			msg->module.app.data_list,
-			msg->module.app.count)) {
-			return;
-		}
-
-		environmental_data_get();
-	}
 }
 
 /* Message handler for all states. */
 static void on_all_states(struct sensor_msg_data *msg)
 {
+	if (IS_EVENT(msg, app, APP_EVT_DATA_GET_ALL)) {
+		LOG_INF("APP_EVT_DATA_GET");
+		sensor_poll_handler();
+		return;
+	}
+
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
 		/* The module doesn't have anything to shut down and can
 		 * report back immediately.
 		 */
-		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
+		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
+		return;
+	}
+
+	if (IS_EVENT(msg, ui, UI_EVT_INPUT_DATA_READY)) {
+		LOG_INF("UI_EVT_INPUT_DATA_READY");
+		/* The UI input (HALL Sensor or Button) is triggered */
+		adc_init();
+		sensor_poll_handler();
+		return;
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		/* In boot-up, device connected to cloud, start a sensor poll to get data */
+		static bool is_send = false;
+		if (!is_send) {
+			LOG_DBG("Device is online. Collecting and sending first sensor data");
+			is_send = true;
+			sensor_poll_handler();
+		}
+		return;
 	}
 }
 
@@ -231,3 +340,5 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
+APP_EVENT_SUBSCRIBE(MODULE, ui_event);
+APP_EVENT_SUBSCRIBE(MODULE, cloud_event);

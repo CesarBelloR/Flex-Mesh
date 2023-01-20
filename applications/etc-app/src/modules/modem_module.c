@@ -3,9 +3,11 @@
 #include <stdio.h>
 #include <app_event_manager.h>
 #include <math.h>
+#include <devicetree.h>
+#include <modem_api.h>
 
 #define MODULE modem_module
-#define MODULE_MODEM_THREAD_STACK_SIZE 2048
+#define MODULE_MODEM_THREAD_STACK_SIZE 1024
 
 
 #include "modules_common.h"
@@ -14,6 +16,12 @@
 #include "events/modem_event.h"
 #include "events/cloud_event.h"
 #include "events/util_event.h"
+#include "events/sensor_event.h"
+
+#ifdef CONFIG_PM_DEVICE
+#include <pm/pm.h>
+#include <pm/device.h>
+#endif
 
 #ifdef CONFIG_LWM2M_CARRIER
 #include <lwm2m_carrier.h>
@@ -28,6 +36,7 @@ struct modem_msg_data {
 		struct cloud_event cloud;
 		struct util_event util;
 		struct modem_event modem;
+		struct data_event data;
 	} module;
 };
 
@@ -53,6 +62,9 @@ static int16_t rsrp_value_latest;
 
 const k_tid_t module_thread;
 
+const struct device *modem_dev;
+
+static bool modem_module_is_sleep = false;
 /* Modem module message queue. */
 #define MODEM_QUEUE_ENTRY_COUNT		10
 #define MODEM_QUEUE_BYTE_ALIGNMENT	4
@@ -65,6 +77,8 @@ static struct module_data self = {
 	.msg_q = &msgq_modem,
 	.supports_shutdown = true,
 };
+
+static int static_modem_data_get(void);
 
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type state)
@@ -126,6 +140,20 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
+	if (is_util_event(aeh)) {
+		struct util_event *evt = cast_util_event(aeh);
+
+		msg.module.util = *evt;
+		enqueue_msg = true;
+	}
+
+	if (is_data_event(aeh)) {
+		struct data_event *evt = cast_data_event(aeh);
+
+		msg.module.data = *evt;
+		enqueue_msg = true;
+	}
+
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -138,8 +166,67 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static int static_modem_data_get(void)
+static void modem_set_connected(void)
 {
+	static_modem_data_get();
+	state_set(STATE_CONNECTED);
+	SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
+}
+
+static void modem_evt_handler(const struct modem_api_evt *const evt)
+{
+	switch (evt->type) {
+	case MODEM_API_CONNECTED_EVT: {
+		modem_module_is_sleep = false;
+		modem_set_connected();
+		break;
+	}
+	case MODEM_API_DISCONNECTED_EVT: {
+		state_set(STATE_DISCONNECTED);
+		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
+		break;
+	}
+	}
+}
+
+static int static_modem_data_get(void)
+{	
+	int err;
+
+	struct modem_event *modem_event = new_modem_event();
+
+	strncpy(modem_event->data.modem_static.board_version,
+		quectel_bg95_get_revision(),
+		sizeof(modem_event->data.modem_static.board_version) - 1);
+
+	strncpy(modem_event->data.modem_static.modem_fw,
+		quectel_bg95_get_revision(),
+		sizeof(modem_event->data.modem_static.modem_fw) - 1);
+
+	strncpy(modem_event->data.modem_static.iccid,
+		quectel_bg95_get_sim_number(),
+		sizeof(modem_event->data.modem_static.iccid) - 1);
+
+	strncpy(modem_event->data.modem_static.imei,
+		quectel_bg95_get_imei(),
+		sizeof(modem_event->data.modem_static.imei) - 1);
+
+	modem_event->data.modem_static.board_version
+		[sizeof(modem_event->data.modem_static.board_version) - 1] = '\0';
+
+	modem_event->data.modem_static.modem_fw
+		[sizeof(modem_event->data.modem_static.modem_fw) - 1] = '\0';
+
+	modem_event->data.modem_static.iccid
+		[sizeof(modem_event->data.modem_static.iccid) - 1] = '\0';
+
+	modem_event->data.modem_static.imei
+		[sizeof(modem_event->data.modem_static.imei) - 1] = '\0';
+
+	modem_event->data.modem_static.timestamp = k_uptime_get();
+	modem_event->type = MODEM_EVT_MODEM_STATIC_DATA_READY;
+
+	APP_EVENT_SUBMIT(modem_event);
 	return 0;
 }
 
@@ -156,11 +243,31 @@ static bool data_type_is_requested(enum app_data_type *data_list,
 	return false;
 }
 
-static int configure_low_power(void)
+static int modem_enter_sleep(void)
 {
-	return 0;
+	int rc = 0;
+#ifdef CONFIG_PM_DEVICE
+	rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_SUSPEND);
+	if (rc) {
+		LOG_ERR("Failed to suspend the modem %d", rc);
+	}
+#endif
+	modem_module_is_sleep = true;
+	return rc;
 }
 
+static int modem_enter_wakeup(void) 
+{
+	int rc = 0;
+#ifdef CONFIG_PM_DEVICE
+	rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_RESUME);
+	if (rc) {
+		LOG_ERR("Failed to suspend the modem %d", rc);
+	}
+#endif
+	modem_module_is_sleep = false;
+	return rc;
+}
 static int lte_connect(void)
 {
 	return 0;
@@ -173,45 +280,28 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
+	if (quectel_bg95_is_ready()) {
+		modem_set_connected();
+	}
+	modem_dev = device_get_binding("quectel-bg95");
+	if (modem_dev != NULL) {
+		modem_evt_handler_init(modem_dev, modem_evt_handler);
+	}
 	return 0;
 }
 
 /* Message handler for STATE_INIT */
 static void on_state_init(struct modem_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_INITIALIZED)) {
-		int err;
-
-		state_set(STATE_DISCONNECTED);
-
-		err = setup();
-		__ASSERT(err == 0, "Failed running setup()");
-		SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
-
-		err = lte_connect();
-		if (err) {
-			LOG_ERR("Failed connecting to LTE, error: %d", err);
-			SEND_ERROR(modem, MODEM_EVT_ERROR, err);
-		}
-	}
+	LOG_DBG("");
+	int err = setup();
+	__ASSERT(err == 0, "Failed running setup()");
+	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
 }
 
 /* Message handler for STATE_DISCONNECTED. */
 static void on_state_disconnected(struct modem_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
-		state_set(STATE_CONNECTED);
-	}
-
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTING)) {
-		state_set(STATE_CONNECTING);
-	}
-
-	if ((IS_EVENT(msg, app, APP_EVT_LTE_DISCONNECT)) ||
-	    (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_EVENT_LTE_LINK_UP_REQUEST)) ||
-	    (IS_EVENT(msg, cloud, CLOUD_EVT_LTE_CONNECT))) {
-		LOG_DBG("Connect to LTE");
-	}
 }
 
 /* Message handler for STATE_CONNECTING. */
@@ -231,39 +321,42 @@ static void on_state_connecting(struct modem_msg_data *msg)
 /* Message handler for STATE_CONNECTED. */
 static void on_state_connected(struct modem_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED)) {
-		state_set(STATE_DISCONNECTED);
-	}
+}
 
-	if (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_EVENT_LTE_LINK_DOWN_REQUEST)) {
-		LOG_DBG("MODEM_EVT_CARRIER_EVENT_LTE_LINK_DOWN_REQUEST");
-	}
-
-	if ((IS_EVENT(msg, app, APP_EVT_LTE_DISCONNECT)) ||
-	    (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_EVENT_LTE_LINK_DOWN_REQUEST)) ||
-	    (IS_EVENT(msg, cloud, CLOUD_EVT_LTE_DISCONNECT))) {
-		state_set(STATE_DISCONNECTED);
-		LOG_DBG("Disconnect to LTE");
+/* Message handler for STATE_SHUTDOWN. */
+static void on_state_shutdown(struct modem_msg_data *msg)
+{
+	if (IS_EVENT(msg, util, UTIL_EVT_WAKEUP_REQUEST)) {
+		LOG_INF("Wakeup");
+		state_set(STATE_CONNECTING);
+		modem_enter_wakeup();
 	}
 }
+
 
 /* Message handler for all states. */
 static void on_all_states(struct modem_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATION_REQUEST)) {
-		LOG_DBG("CLOUD_EVT_USER_ASSOCIATION_REQUEST");
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		modem_enter_sleep();
+		SEND_SHUTDOWN_ACK(modem, MODEM_EVT_SHUTDOWN_READY, self.id);
+		state_set(STATE_SHUTDOWN);
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
-		LOG_DBG("CLOUD_EVT_USER_ASSOCIATED");
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
+		modem_enter_sleep();
+		state_set(STATE_DISCONNECTED);
+		SEND_EVENT(modem, MODEM_EVT_SLEEP_READY);
 	}
 
-	if (IS_EVENT(msg, app, APP_EVT_START)) {
-		LOG_DBG("APP_EVT_START");
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-		LOG_DBG("APP_EVT_DATA_GET");
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+		if (modem_module_is_sleep) {
+			modem_enter_wakeup();
+			state_set(STATE_CONNECTING);
+		}
 	}
 }
 
@@ -300,7 +393,7 @@ static void module_thread_fn(void)
 			on_state_connected(&msg);
 			break;
 		case STATE_SHUTDOWN:
-			/* The shutdown state has no transition. */
+			on_state_shutdown(&msg);
 			break;
 		default:
 			LOG_WRN("Invalid state: %d", state);
@@ -319,4 +412,5 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
+APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, util_event);

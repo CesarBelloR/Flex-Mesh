@@ -187,7 +187,7 @@ int watchdog_init_and_start(void)
 	}
 
 	watchdog_notify_event(&evt);
-
+	LOG_INF("Initialized and start WDT with period %d (ms)", WATCHDOG_TIMEOUT_MSEC);
 	init_and_start = true;
 	return 0;
 }

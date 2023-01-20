@@ -11,7 +11,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
-#define ALARM_PIN (4)
+#define ALARM_PIN (3)
 
 void main(void)
 {
@@ -20,21 +20,22 @@ void main(void)
 		LOG_ERR("Can't get GPIO_0");
 	}
 
-	gpio_pin_configure(gpio, ALARM_PIN, GPIO_INPUT);
-	pcf85263a_init("I2C_1");
+	gpio_pin_configure(gpio, ALARM_PIN, GPIO_INPUT | GPIO_PULL_UP);
+	pcf85263a_init("I2C_0");
 	time_t unix_time = 0;
-	pcf85263a_rtc_set_time(1655343273);
+	pcf85263a_rtc_set_time(1670831414);
+	LOG_INF("Min %d\n", pcf85263a_get_alarm_min_type_1());
 	pcf85263a_alarm_type_1_config_t config = {
-		.seconds = 45,
-		.minutes = 0,
+		.seconds = 0,
+		.minutes = 51,
 		.hours = 0,
 		.days = 0,
 		.months = 0,
 	};
 
 	pcf85263a_alarm_type_1_flag_t flag = {
-		.enable_seconds = 1,
-		.enable_minutes = 0,
+		.enable_seconds = 0,
+		.enable_minutes = 1,
 		.enable_hours = 0,
 		.enable_days = 0,
 		.enable_months = 0,
@@ -61,7 +62,7 @@ void main(void)
 		int level = gpio_pin_get(gpio, ALARM_PIN);
 		if (level == 0) {
 			pcf85263a_rtc_get_time(&unix_time);
-			LOG_DBG("Alarm %d", unix_time);
+			LOG_DBG("Alarm %d", (int)unix_time);
 			k_sleep(K_SECONDS(1));
 		}
 		k_usleep(100);

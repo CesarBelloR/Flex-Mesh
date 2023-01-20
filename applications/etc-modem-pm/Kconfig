@@ -1,0 +1,7 @@
+menu "Zephyr Kernel"
+source "$ZEPHYR_BASE/Kconfig.zephyr"
+endmenu
+
+module = ETC_APP
+module-str = ETC App
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

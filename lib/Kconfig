@@ -1,5 +1,6 @@
+menu "Libraries"
 rsource "adc/Kconfig"
-rsource "datetime/Kconfig"
 rsource "power/Kconfig"
 rsource "sensor/ds18b20/Kconfig"
 rsource "ui/Kconfig"
+endmenu

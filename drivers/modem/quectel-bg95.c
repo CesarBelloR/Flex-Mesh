@@ -7,12 +7,19 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #include "quectel-bg95.h"
 #include "certificates.h"
 
+#ifdef CONFIG_PM_DEVICE
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/uart.h>
+
+#include <pm/pm.h>
+#include <pm/device.h>
+#endif
+
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
 static struct modem_context    mctx;
 static const struct socket_op_vtable offload_socket_fd_op_vtable;
-static bool volatile modem_is_ready = false;
 
 #if defined(CONFIG_DNS_RESOLVER)
 static struct zsock_addrinfo result;
@@ -103,82 +110,6 @@ static int modem_atoi(const char *s, const int err_value,
 	return ret;
 }
 
-/**
- * @brief Convert IPv6 address to string form without using short form (::)
- * Use net_addr_ntop() from net_ip.h for IPv4 addresses and 
- * IPv6 addresses with short form.
- * 
- * @param family IP address family (AF_INET6 supported only)
- * @param src Pointer to struct in_addr if family is AF_INET or
- *        pointer to struct in6_addr if family is AF_INET6
- * @param dst Buffer for IP address as a null terminated string
- * @param size Number of bytes available in the buffer
- *
- * @return dst pointer if ok, NULL if error
-*/
-static int modem_net_addr_ntop_ip6 (sa_family_t family, const void *src,
-			   char *dst, size_t size)
-{
-	struct in6_addr *addr6;
-	uint16_t *w;
-	uint8_t i, bl, bh;;
-	char *ptr = dst;
-	int len = -1;
-	uint16_t value;
-	bool needcolon = false;
-
-	if (family != AF_INET6) {
-		return -EINVAL;
-	}
-
-	addr6 = (struct in6_addr *)src;
-	w = (uint16_t *)addr6->s6_addr16;
-	len = 8;
-
-	for (i = 0U; i < len; i++) {
-		/* IPv6 address */
-		if (needcolon) {
-			*ptr++ = ':';
-		}
-
-		value = (uint32_t)sys_be16_to_cpu(UNALIGNED_GET(&w[i]));
-		bh = value >> 8;
-		bl = value & 0xff;
-
-		if (bh) {
-			if (bh > 0x0f) {
-				ptr = net_byte_to_hex(ptr, bh, 'a', false);
-			} else {
-				if (bh < 10) {
-					*ptr++ = (char)(bh + '0');
-				} else {
-					*ptr++ = (char) (bh - 10 + 'a');
-				}
-			}
-
-			ptr = net_byte_to_hex(ptr, bl, 'a', true);
-		} else if (bl > 0x0f) {
-			ptr = net_byte_to_hex(ptr, bl, 'a', false);
-		} else {
-			if (bl < 10) {
-				*ptr++ = (char)(bl + '0');
-			} else {
-				*ptr++ = (char) (bl - 10 + 'a');
-			}
-		}
-
-		needcolon = true;
-	}
-
-	if (!(ptr - dst)) {
-		return -ENOMEM;
-	}
-
-	*ptr = '\0';
-
-	return 0;
-}
-
 static inline int find_len(char *data)
 {
 	char buf[10] = {0};
@@ -206,6 +137,7 @@ static int on_cmd_sockread_common(int socket_fd,
 	struct socket_read_data	 *sock_data;
 	int ret, i;
 	int bytes_to_skip;
+	char *skipto;
 
 	if (!len) {
 		LOG_ERR("Invalid length, Aborting!");
@@ -230,8 +162,13 @@ static int on_cmd_sockread_common(int socket_fd,
 		return -EAGAIN;
 	}
 
-	/* Skip CRLF */
-	bytes_to_skip = 4;
+	/* See how many characters we need to skip.
+	*  Modem sends: +####: <length>\r\n<data>
+	*  We need to skip <length>\r\n
+	*/
+	skipto = memchr((void *)data->rx_buf->data, (int)'\n',
+			data->rx_buf->len);
+	bytes_to_skip = (skipto - (char *)data->rx_buf->data) + 1;
 	for (i = 0; i < bytes_to_skip; i++) {
 		net_buf_pull_u8(data->rx_buf);
 	}
@@ -333,7 +270,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 	} else if (rssi >= 0 && rssi <= 31) {
 		mdata.mdm_rssi = -114 + ((rssi * 2) + 1);
 	} else {
-		mdata.mdm_rssi = -1000;
+		mdata.mdm_rssi = MDM_RSSI_INVALID;
 	}
 
 	LOG_INF("RSSI: %d", mdata.mdm_rssi);
@@ -483,6 +420,64 @@ MODEM_CMD_DEFINE(on_cmd_sock_readdata)
 {
 	return on_cmd_sockread_common(mdata.sock_fd, data, 
 						ATOI(argv[0], 0, "length"), len);
+}
+
+/* Handler: Read data size +QIRD: <length>[0] OR +QSSLRECV: <length>[0] */
+MODEM_CMD_DEFINE(on_cmd_sock_getdatasize)
+{
+	int received, read, unread;
+
+	received = ATOI(argv[0], 0, "recvd");
+	read = ATOI(argv[1], 0, "read");
+	unread = ATOI(argv[2], 0, "unread");
+	LOG_DBG("recvd %d, read %d, unread %d", received, read, unread);
+	mdata.unread_size = unread;
+
+	return 0;
+}
+
+/* Func: get_data_size
+ * Desc: This function will retrieve the size of the
+ * data available on the socket object.
+ */
+static ssize_t get_data_size(struct modem_socket *sock)
+{
+	char   sendbuf[sizeof("AT+Q###RECV=##,####")] = {0};
+	int    ret;
+	struct socket_read_data sock_data;
+	/* Modem command to read the data. */
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("+QIRD: ", on_cmd_sock_getdatasize, 3U, ","),
+		MODEM_CMD("+QSSLRECV: ", on_cmd_sock_getdatasize, 3U, ",") };
+
+	if ((sock->ip_proto == IPPROTO_TLS_1_2) || 
+		(sock->ip_proto == IPPROTO_DTLS_1_2)) {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", 
+				sock->sock_fd, 0);
+	} else {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", 
+				sock->sock_fd, 0);
+	}
+
+	/* Socket read settings */
+	(void) memset(&sock_data, 0, sizeof(sock_data));
+	// sock->data	       = &sock_data;
+	// mdata.sock_fd	   = sock->sock_fd;
+	/* Tell the modem to give us the available data's length */
+	/* (AT+QIRD=sock_fd,0). */
+	k_sem_reset(&mdata.sem_response);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     cmd, ARRAY_SIZE(cmd), sendbuf, &mdata.sem_response,
+			     MDM_RECV_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Could not retrieve recv buffer size");
+		errno = -ret;
+		ret = -1;
+	} else {
+		ret = mdata.unread_size;
+	}
+
+	return ret;
 }
 
 /* Handler: Data receive indication. */
@@ -817,6 +812,21 @@ retry:
 		memcpy(from, &sock->dst, *fromlen);
 	}
 
+	LOG_HEXDUMP_DBG(sock_data.recv_buf, sock_data.recv_read_len, "RECV");
+
+
+	/* Update data on socket with current size. */
+	int new_size = get_data_size(sock);
+	ret = modem_socket_packet_size_update(&mdata.socket_config, sock, new_size);
+	if (ret < 0) {
+		LOG_ERR("socket_id:%d err: %d", sock->sock_fd, ret);
+	}
+	if (new_size > 0) {
+		/* Data ready indication. */
+		LOG_DBG("Data Receive Indication for socket: %d", sock->sock_fd);
+		modem_socket_data_ready(&mdata.socket_config, sock);
+	}
+
 	/* return length of received data */
 	errno = 0;
 	ret = sock_data.recv_read_len;
@@ -960,6 +970,72 @@ MODEM_CMD_DEFINE(on_cmd_data_done)
 	k_sem_give(&mdata.sem_response);
 	return 0;
 }
+
+MODEM_CMD_DEFINE(on_cmd_power_down)
+{
+	k_sem_give(&mdata.sem_shutdown);
+	return 0;
+}
+
+/** @brief Turn the modem on/off using PWRKEY.
+ * 
+*/
+static void modem_pin_on_off(void)
+{
+	gpio_pin_set_dt(&power_gpio, 1);
+	k_sleep(K_MSEC(1000));
+	gpio_pin_set_dt(&power_gpio, 0);
+}
+
+static int quectel_bg95_power_down() {
+	const char *pw_dwn = "AT+QPOWD";
+	int ret;
+	int retries = 0;
+
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("POWERED DOWN", on_cmd_power_down, 0U, ""),
+	};
+
+	k_sem_reset(&mdata.sem_shutdown);
+#if 1
+	do {
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
+				NULL, 0U, pw_dwn, &mdata.sem_response,
+				MDM_CMD_TIMEOUT);
+		retries++;
+	} while((ret != 0) && (retries < MDM_POWER_DOWN_RETRY_COUNT));
+	if (ret != 0) {
+		goto error;
+	}
+	
+	/* set modem handler commands */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      cmd, ARRAY_SIZE(cmd), false);
+#else
+	modem_pin_on_off();
+#endif
+
+	ret = k_sem_take(&mdata.sem_shutdown, MDM_SHUTDOWN_TIMEOUT);
+	if (ret != 0) {
+		goto error;
+	}
+	// Set modem as disconnected after power down.
+	mdata.is_connected = false;
+
+	/* unset handler commands and ignore any errors */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      NULL, 0U, false);
+	LOG_INF("Modem powered down");
+
+	return 0;
+error:
+	LOG_ERR("Failed to shut down modem, %d", ret);
+	/* unset handler commands */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      NULL, 0U, false);
+	return ret;
+}
+
 
 int quectel_bg95_file_find(const char* file_name) {
 	char buf[sizeof("AT+QFLST=") + MDM_FILE_NAME_MAX_LENGTH] = {0};
@@ -1480,83 +1556,6 @@ static void modem_rx(void)
 	}
 }
 
-/* Func: modem_rssi_query_work
- * Desc: Routine to get Modem RSSI.
- */
-static void modem_rssi_query_work(struct k_work *work)
-{
-	struct modem_cmd cmd  = MODEM_CMD("+CSQ: ", on_cmd_atcmdinfo_rssi_csq, 2U, ",");
-	static char *send_cmd = "AT+CSQ";
-	int ret;
-
-	/* query modem RSSI */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     &cmd, 1U, send_cmd, &mdata.sem_response,
-			     MDM_CMD_TIMEOUT);
-	if (ret < 0) {
-		LOG_ERR("AT+CSQ ret:%d", ret);
-	}
-
-	/* Re-start RSSI query work */
-	if (work) {
-		k_work_reschedule_for_queue(&modem_workq,
-					    &mdata.rssi_query_work,
-					    K_SECONDS(RSSI_TIMEOUT_SECS));
-	}
-}
-
-/* Func: pin_init
- * Desc: Boot up the Modem.
- */
-static void pin_init(void)
-{
-	LOG_INF("Setting Modem Pins");
-
-#if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
-	gpio_pin_set_dt(&on_off_gpio, 1);
-	k_sleep(K_MSEC(500));
-#endif
-
-	gpio_pin_set_dt(&power_gpio, 1);
-	k_sleep(K_MSEC(1000));
-	gpio_pin_set_dt(&power_gpio, 0);
-
-	LOG_INF("... Done!");
-}
-
-static const struct modem_cmd response_cmds[] = {
-	MODEM_CMD("OK", on_cmd_ok, 0U, ""),
-	MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
-	MODEM_CMD("+CME ERROR: ", on_cmd_exterror, 1U, ""),
-};
-
-static const struct modem_cmd unsol_cmds[] = {
-	MODEM_CMD("+QIURC: \"recv\",",	   on_cmd_unsol_recv,  1U, ""),
-	MODEM_CMD("+QIURC: \"closed\",",   on_cmd_unsol_close, 1U, ""),
-	MODEM_CMD("+QSSLURC: \"recv\",",   on_cmd_unsol_recv,  1U, ""),
-	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
-	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
-	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
-};
-
-/* Commands sent to the modem to set it up at boot time. */
-static const struct setup_cmd setup_cmds[] = {
-	SETUP_CMD_NOHANDLE("ATE0"),
-	SETUP_CMD_NOHANDLE("ATH"),
-	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
-
-	/* Commands to read info from the modem (things like IMEI, Model etc). */
-	SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
-	SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
-	SETUP_CMD("AT+CGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
-	SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
-#if defined(CONFIG_MODEM_SIM_NUMBERS)
-	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
-	SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
-#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
-	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
-};
-
 /* Func: modem_pdp_context_active
  * Desc: This helper function is called from modem_setup, and is
  * used to open the PDP context. If there is trouble activating the
@@ -1597,6 +1596,141 @@ static int modem_pdp_context_activate(void)
 	return ret;
 }
 
+/**
+ * @brief Call the set event callback with the specified event.
+ * 
+ * @param evt_type Event type to be forwarded to callback.
+ * @return 0 on success, negative on error.
+*/
+static int modem_event_callback(enum modem_api_evt_type evt_type)
+{
+	const struct modem_api_evt evt = {
+		.type = evt_type,
+	};
+
+	if (mdata.evt_callback == NULL) {
+		return -ENOSYS;
+	}
+
+	mdata.evt_callback(&evt);
+
+	return 0;
+}
+
+/**
+ * @brief Activate pdp context and call event handler when device disconnects/
+ * 	  connects.
+*/
+static void modem_connect_work(void) 
+{
+	int ret;
+
+	if (mdata.mdm_rssi == MDM_RSSI_INVALID) {
+		if (mdata.is_connected) {
+			modem_event_callback(MODEM_API_DISCONNECTED_EVT);
+		}
+		mdata.is_connected = false;
+		return;
+	}
+	if (mdata.is_connected) {
+		return;
+	}
+
+	/* If the RSSI is valid, which means that the network is ready, 
+	 * and the modem is not connected, we try to activate the PDP context. */
+	ret = modem_pdp_context_activate();
+	if (ret < 0) {
+		LOG_ERR("Error activating modem with pdp context");
+	} else if (ret == 0) {
+		modem_event_callback(MODEM_API_CONNECTED_EVT);
+		LOG_INF("Network connected.");
+		mdata.is_connected = true;
+	}
+}
+
+/* Func: modem_rssi_query_work
+ * Desc: Routine to get Modem RSSI.
+ */
+static void modem_rssi_query_work(struct k_work *work)
+{
+	struct modem_cmd cmd  = MODEM_CMD("+CSQ: ", on_cmd_atcmdinfo_rssi_csq, 2U, ",");
+	static char *send_cmd = "AT+CSQ";
+	int ret;
+	k_timeout_t timeout = K_SECONDS(RSSI_TIMEOUT_SECS);
+
+	/* query modem RSSI */
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     &cmd, 1U, send_cmd, &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+CSQ ret:%d", ret);
+	}
+
+	modem_connect_work();
+
+	if (!mdata.is_connected) {
+		timeout = MDM_WAIT_FOR_RSSI_TIMEOUT;
+	}
+
+	/* Re-start RSSI query work */
+	if (work) {
+		k_work_reschedule_for_queue(&modem_workq,
+					    &mdata.rssi_query_work,
+					    timeout);
+	}
+}
+
+/* Func: pin_init
+ * Desc: Boot up the Modem.
+ */
+static void pin_init(void)
+{
+	LOG_INF("Setting Modem Pins");
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
+	gpio_pin_set_dt(&on_off_gpio, 1);
+	k_sleep(K_MSEC(500));
+#endif
+
+	modem_pin_on_off();
+
+	LOG_INF("... Done!");
+}
+
+static const struct modem_cmd response_cmds[] = {
+	MODEM_CMD("OK", on_cmd_ok, 0U, ""),
+	MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+	MODEM_CMD("+CME ERROR: ", on_cmd_exterror, 1U, ""),
+};
+
+static const struct modem_cmd unsol_cmds[] = {
+	MODEM_CMD("+QIURC: \"recv\",",	   on_cmd_unsol_recv,  1U, ""),
+	MODEM_CMD("+QIURC: \"closed\",",   on_cmd_unsol_close, 1U, ""),
+	MODEM_CMD("+QSSLURC: \"recv\",",   on_cmd_unsol_recv,  1U, ""),
+	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
+	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
+	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
+	MODEM_CMD("NORMAL POWER DOWN", on_cmd_power_down, 0U, ""),
+};
+
+/* Commands sent to the modem to set it up at boot time. */
+static const struct setup_cmd setup_cmds[] = {
+	SETUP_CMD_NOHANDLE("ATE0"),
+	SETUP_CMD_NOHANDLE("ATH"),
+	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
+
+	/* Commands to read info from the modem (things like IMEI, Model etc). */
+	SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
+	SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
+	SETUP_CMD("AT+CGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
+	SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
+#if defined(CONFIG_MODEM_SIM_NUMBERS)
+	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
+	SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
+#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
+	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
+};
+
 /* Func: modem_setup
  * Desc: This function is used to setup the modem from zero. The idea
  * is that this function will be called right after the modem is
@@ -1605,12 +1739,9 @@ static int modem_pdp_context_activate(void)
 static int modem_setup(void)
 {
 	int ret = 0, counter;
-	int rssi_retry_count = 0, init_retry_count = 0;
 
 	/* Setup the pins to ensure that Modem is enabled. */
 	pin_init();
-
-restart:
 
 	counter = 0;
 
@@ -1619,22 +1750,9 @@ restart:
 
 	/* Let the modem respond. */
 	LOG_INF("Waiting for modem to respond");
-	/* Give the modem a while to start responding to simple 'AT' commands.
-	 * Also wait for CSPS=1 or RRCSTATE=1 notification
-	 */
-	ret = -1;
-	while (counter++ < 50 && ret < 0) {
-		k_sleep(K_SECONDS(2));
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				     NULL, 0, "AT", &mdata.sem_response,
-				     MDM_CMD_TIMEOUT);
-		if (ret < 0 && ret != -ETIMEDOUT) {
-			break;
-		}
-	}
-
+	ret = k_sem_take(&mdata.sem_response, MDM_MAX_BOOT_TIME);
 	if (ret < 0) {
-		LOG_ERR("MODEM WAIT LOOP ERROR: %d", ret);
+		LOG_ERR("Timeout waiting for RDY");
 		goto error;
 	}
 
@@ -1646,48 +1764,11 @@ restart:
 		goto error;
 	}
 
-restart_rssi:
-
-	/* query modem RSSI */
-	modem_rssi_query_work(NULL);
-	k_sleep(MDM_WAIT_FOR_RSSI_DELAY);
-
-	/* Keep trying to read RSSI until we get a valid value - Eventually, exit. */
-	while (counter++ < MDM_WAIT_FOR_RSSI_COUNT &&
-	      (mdata.mdm_rssi >= 0 || mdata.mdm_rssi <= -1000)) {
-		modem_rssi_query_work(NULL);
-		k_sleep(MDM_WAIT_FOR_RSSI_DELAY);
-	}
-
-	/* Is the RSSI invalid ? */
-	if (mdata.mdm_rssi >= 0 || mdata.mdm_rssi <= -1000) {
-		rssi_retry_count++;
-
-		if (rssi_retry_count >= MDM_NETWORK_RETRY_COUNT) {
-			LOG_ERR("Failed network init. Too many attempts!");
-			ret = -ENETUNREACH;
-			goto error;
-		}
-
-		/* Try again! */
-		LOG_ERR("Failed network init. Restarting process.");
-		counter = 0;
-		goto restart_rssi;
-	}
-
-	/* Network is ready - Start RSSI work in the background. */
-	LOG_INF("Network is ready.");
+	/* Modem is ready - Start RSSI work in the background. */
+	LOG_INF("Modem is initialized.");
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
-				    K_SECONDS(RSSI_TIMEOUT_SECS));
+				    MDM_WAIT_FOR_RSSI_TIMEOUT);
 
-	/* Once the network is ready, we try to activate the PDP context. */
-	ret = modem_pdp_context_activate();
-	if (ret < 0 && init_retry_count++ < MDM_INIT_RETRY_COUNT) {
-		LOG_ERR("Error activating modem with pdp context");
-		goto restart;
-	}
-
-	modem_is_ready = true;
 error:
 	return ret;
 }
@@ -1700,7 +1781,7 @@ static int map_credentials(struct modem_socket *sock, const void *optval, sockle
 #else
 static int map_credentials(struct modem_socket *sock, const void *optval, socklen_t optlen)
 {
-	return 0;
+	return -EINVAL;
 }
 #endif
 
@@ -1751,7 +1832,7 @@ static int offload_setsockopt(void *obj, int level, int optname,
 			break;
 	}
 	} else {
-		return 0;
+		return -EINVAL;
 	}
 
 	return ret;
@@ -1879,8 +1960,27 @@ static void modem_net_iface_init(struct net_if *iface)
 #endif
 }
 
-static struct net_if_api api_funcs = {
-	.init = modem_net_iface_init,
+/**
+ * @brief Initialize the event handler callback.
+ * 
+ * @param dev Pointer to the device
+ * @param evt_handler Event handler callback function
+ * @return 0 on success, negative on error
+*/
+static int quectel_bg95_evt_handler_init(const struct device *dev, 
+					 modem_api_evt_handler_t evt_handler)
+{
+	struct modem_data *data = dev->data;
+
+	data->evt_callback = evt_handler;
+
+	return 0;
+}
+
+static struct modem_api api_funcs = {
+	.iface_api.init = modem_net_iface_init,
+
+	.evt_handler_init = quectel_bg95_evt_handler_init,
 };
 
 static bool offload_is_supported(int family, int type, int proto)
@@ -1913,6 +2013,7 @@ static int modem_init(const struct device *dev)
 	k_sem_init(&mdata.sem_sock_conn, 0, 1);
 	k_sem_init(&mdata.sem_dns_ready, 0, 1);
 	k_sem_init(&mdata.sem_data_ready, 0, 1);
+	k_sem_init(&mdata.sem_shutdown, 0, 1);
 
 	k_work_queue_start(&modem_workq, modem_workq_stack,
 			   K_KERNEL_STACK_SIZEOF(modem_workq_stack),
@@ -1963,11 +2064,13 @@ static int modem_init(const struct device *dev)
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
 	mctx.data_rssi		   = &mdata.mdm_rssi;
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 	ret = gpio_pin_configure_dt(&on_off_gpio, GPIO_OUTPUT_LOW);
 	if (ret < 0) {
 		LOG_ERR("Failed to configure %s pin", "on_off");
 		goto error;
 	}
+#endif
 
 	ret = gpio_pin_configure_dt(&power_gpio, GPIO_OUTPUT_LOW);
 	if (ret < 0) {
@@ -2021,14 +2124,89 @@ error:
 	return ret;
 }
 
+#ifdef CONFIG_PM_DEVICE
+static int quectel_bg95_pm_suspend(void)
+{
+	int ret;
+	
+	LOG_INF("PM_DEVICE_ACTION_SUSPEND");
+
+	/* stop RSSI delay work */
+	k_work_cancel_delayable(&mdata.rssi_query_work);
+
+	ret = quectel_bg95_power_down();
+	if (ret != 0) {
+		return -EAGAIN;
+	}
+
+	uart_irq_rx_disable(mctx.iface.dev);
+	uart_irq_tx_disable(mctx.iface.dev);
+	// uart doesn't have a shutdown mode only suspend
+	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_SUSPEND);
+	if (ret)
+	{
+		LOG_ERR("Can't suspend device: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int quectel_bg95_pm_resume(void)
+{
+	int ret = 0;
+	LOG_INF("PM_DEVICE_ACTION_RESUME");
+	uart_irq_rx_enable(mctx.iface.dev);
+	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_RESUME);
+	if (ret)
+	{
+		LOG_ERR("Can't resume device: %d", ret);
+		return ret;
+	}
+	ret = modem_setup();
+
+	return ret;
+}
+
+static int quectel_bg95_pm_action(const struct device *dev,
+			       enum pm_device_action action)
+{
+	ARG_UNUSED(dev);
+	int ret;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* device must be uninitialized */
+		ret = quectel_bg95_pm_suspend();
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		/* device must be reinitialized */
+		ret = quectel_bg95_pm_resume();
+		break;
+	default:
+		return -ENOTSUP;
+	}
+
+	return ret;
+}
+
+PM_DEVICE_DT_INST_DEFINE(0, quectel_bg95_pm_action);
+
+/* Register the device with the Networking stack. */
+NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, PM_DEVICE_DT_INST_GET(0),
+				  &mdata, NULL,
+				  CONFIG_MODEM_QUECTEL_BG95_M3_INIT_PRIORITY,
+				  &api_funcs, MDM_MAX_DATA_LENGTH);
+#else
 /* Register the device with the Networking stack. */
 NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, NULL,
 				  &mdata, NULL,
 				  CONFIG_MODEM_QUECTEL_BG95_M3_INIT_PRIORITY,
 				  &api_funcs, MDM_MAX_DATA_LENGTH);
+#endif
 
 /* Register NET sockets. */
-NET_SOCKET_OFFLOAD_REGISTER(quectel_bg9x, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY,
+NET_SOCKET_OFFLOAD_REGISTER(quectel_bg95, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY,
 			    AF_UNSPEC, offload_is_supported, offload_socket);
 
 
@@ -2055,7 +2233,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_clock)
 }
 
 int quectel_bg95_get_time(char* time_buf) {
-	if (!modem_is_ready) {
+	if (!mdata.is_connected) {
 		return -1;
 	}
 
@@ -2073,4 +2251,13 @@ int quectel_bg95_get_time(char* time_buf) {
 
 	memcpy(time_buf, mdata.mdm_time, sizeof(mdata.mdm_time));
 	return 0;
+}
+
+bool quectel_bg95_is_ready(void) {
+	return mdata.is_connected;
+}
+
+int quectel_bg95_get_rssi(void)
+{
+	return mdata.mdm_rssi;
 }

@@ -15,4 +15,8 @@ config DATE_TIME_THREAD_SIZE
 	int "Stack size of the thread maintaining date time"
 	default 1024
 
+module = DATE_TIME
+module-str = Date Time
+source "subsys/logging/Kconfig.template.log_config"
+
 endif # ETC_DATE_TIME

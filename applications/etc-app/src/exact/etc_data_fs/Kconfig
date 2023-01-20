@@ -1,0 +1,49 @@
+# Copyright (c) 2021 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig ETC_DATA_FS
+	bool "Service to store data to flash"
+	select FILE_SYSTEM
+	select FILE_SYSTEM_LITTLEFS
+	help
+	  Enable data sensor file system logging
+
+if ETC_DATA_FS
+
+config DATA_FS_FILE_PREFIX
+	string "Data Logging File Prefix"
+	default "data."
+	help
+	  File name for saving data sensor events
+
+config DATA_FS_DIR
+	string "Data Logging Path"
+	default "/lfs1/etc"
+	help
+	  Path name for saving data sensor events
+
+config DATA_FS_FILE_SIZE
+	int "Number of bytes for each file sensor"
+	default 4096
+	help
+	  File sensor size
+
+config DATA_FS_FILES_LIMIT
+	int "Max number of files containing logs"
+	default 10
+	help
+	  Limit of number of files with logs. It is also limited by
+	  size of file system partition.
+
+config DATA_FS_OVERWRITE
+	bool "Old data sensor files overwrite"
+	default y
+	help
+	  When enabled backend overwrites oldest log files.
+	  In other case, when memory is full, new messages are dropped.
+
+module = DATA_FS
+module-str = data fs
+source "subsys/logging/Kconfig.template.log_config"
+
+endif

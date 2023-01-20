@@ -98,6 +98,8 @@ struct data_event {
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
+		/* Publish messag id */
+		uint32_t message_id;
 	} data;
 };
 

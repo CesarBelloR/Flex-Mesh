@@ -8,11 +8,11 @@
 	compatible = "nordic,nrf52833-dk-nrf52833";
 
 	chosen {
-		zephyr,console = &cdc_acm_uart0;
-		zephyr,shell-uart = &cdc_acm_uart0;
-		zephyr,uart-mcumgr = &cdc_acm_uart0;
-		zephyr,bt-mon-uart = &cdc_acm_uart0;
-		zephyr,bt-c2h-uart = &cdc_acm_uart0;
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+		zephyr,uart-mcumgr = &uart0;
+		zephyr,bt-mon-uart = &uart0;
+		zephyr,bt-c2h-uart = &uart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
@@ -81,6 +81,16 @@
 			control-gpios = <&gpio0 3 GPIO_ACTIVE_LOW>;
 			status = "okay";
 		};
+		user_btn: user-btn {
+			compatible = "etc,input";
+			control-gpios = <&gpio1 5 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
+		hall_int: hall-int {
+			compatible = "etc,input";
+			control-gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
 		batt_int: batt-int {
 			compatible = "etc,input";
 			control-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
@@ -142,10 +152,11 @@
 		compatible = "ti,bq24195";
 		label = "BQ24195";
 		reg = <0x6b>;
-		design-voltage = <3700>;
-		design-capacity = <1800>;
-		taper-current = <45>;
-		terminate-voltage = <3000>;
+		min-voltage = <4360>;
+		max-current = <2000>;
+		charge-current = <2048>;
+		charge-voltage = <4208>;
+		int-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
 	};
 };
 
@@ -181,6 +192,7 @@
 		power-amplifier-output = "pa-boost";
 	};
 };
+
 &spi2 {
 	compatible = "nordic,nrf-spim";
 	label = "SPI_2";

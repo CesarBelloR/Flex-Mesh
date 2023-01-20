@@ -1,0 +1,12 @@
+menuconfig ETC_INTERFACE
+	bool "HALL sensor or User button interface"
+	select GPIO
+	default y
+	
+if ETC_INTERFACE
+
+module = ETC_INTERFACE
+module-str = etc interface
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # ETC_INTERFACE
