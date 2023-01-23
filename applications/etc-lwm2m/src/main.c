@@ -19,11 +19,13 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/sys/util.h>
 #include <stdio.h>
 
+#include "modem_api.h"
+
 #define APP_BANNER "Run LWM2M client"
 
 
-#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
-//#define SERVER_ADDR "eu.iot.avsystem.cloud"
+//#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
+#define SERVER_ADDR "eu.iot.avsystem.cloud"
 // From Google DNS through native_posix
 //#define SERVER_ADDR "13.53.112.42"
 #define SERVER_PORT CONFIG_LWM2M_PEER_PORT
@@ -483,7 +485,7 @@ static void rd_client_event(struct lwm2m_ctx *client,
 static void observe_cb(enum lwm2m_observe_event event,
 		       struct lwm2m_obj_path *path, void *user_data)
 {
-	char buf[LWM2M_MAX_PATH_STR_LEN];
+	char buf[LWM2M_MAX_PATH_STR_SIZE];
 
 	switch (event) {
 
@@ -529,32 +531,11 @@ void main(void)
 	client.tls_tag = TLS_TAG;
 #endif
 
-#if 0
-	uint8_t dev_id[16];
-	char dev_str[33];
-	ssize_t length;
-	int i;
-
-	(void)memset(dev_id, 0x0, sizeof(dev_id));
-
-	/* Obtain the device id */
-	length = hwinfo_get_device_id(dev_id, sizeof(dev_id));
-
-	/* If this fails for some reason, use all zeros instead */
-	if (length <= 0) {
-		length = sizeof(dev_id);
+	while(!quectel_bg95_is_ready()) {
+		k_sleep(K_MSEC(500));
 	}
-
-	/* Render the obtained serial number in hexadecimal representation */
-	for (i = 0 ; i < length ; i++) {
-		sprintf(&dev_str[i*2], "%02x", dev_id[i]);
-	}
-
-	lwm2m_rd_client_start(&client, dev_str, flags, rd_client_event, observe_cb);
-#else
 	/* client.sec_obj_inst is 0 as a starting point */
 	lwm2m_rd_client_start(&client, EP_NAME, flags, rd_client_event, observe_cb);
-#endif
 
 	k_sem_take(&quit_lock, K_FOREVER);
 }
