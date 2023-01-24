@@ -7,11 +7,11 @@
 #include <zephyr/kernel.h>
 #include <app_event_manager.h>
 #include <zephyr/settings/settings.h>
-#include <net/aws_iot.h>
 #include "data/data_codec.h"
 #include "etc_date_time.h"
 #include "etc_data_fs.h"
 #include "etc_settings.h"
+#include "cloud/cloud_wrapper.h"
 
 #define MODULE data_module
 #define MODULE_DATA_THREAD_STACK_SIZE 2048
@@ -252,25 +252,14 @@ static void data_encode(void)
 	if (data_msg == NULL) {
 		LOG_WRN("No message to publish");
 		return;
-	}
-	const char topic_lora_data[] = "exact/core/readings/old";
-
+	}	
+	
 	uint16_t message_id = (uint16_t)k_uptime_get_32();
-	struct aws_iot_data tx_data = {
-		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.topic.str = topic_lora_data,
-		.topic.len = strlen(topic_lora_data),
-		.ptr = data_msg,
-		.len = strlen(data_msg),
-		.message_id = message_id,
-	};
 
 	LOG_INF("Publishing: %s", data_msg);
 
-	int err = aws_iot_send(&tx_data);
-	if (err) {
-		LOG_ERR("aws_iot_send, error: %d", err);
-	}
+	cloud_wrap_data_send(data_msg, strlen(data_msg), true,
+			     message_id, NULL);
 
 	head_lora_buf = 0;
 	head_sensor_buf = 0;

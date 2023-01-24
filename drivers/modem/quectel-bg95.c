@@ -1,7 +1,7 @@
 #define DT_DRV_COMPAT quectel_bg95
 
 #include <fcntl.h>
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
 #include "quectel-bg95.h"
@@ -11,8 +11,8 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/uart.h>
 
-#include <pm/pm.h>
-#include <pm/device.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
 #endif
 
 static struct k_thread	       modem_rx_thread;
@@ -1157,6 +1157,8 @@ int quectel_bg95_file_download(const char* file_name, const uint8_t* data, const
 		goto exit;
 	}
 
+	LOG_HEXDUMP_DBG(data, data_length, "QFUPL");
+
 	/* Write all data on the console */
 	mctx.iface.write(&mctx.iface, data, data_length);
 
@@ -1773,17 +1775,10 @@ error:
 	return ret;
 }
 
-#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 static int map_credentials(struct modem_socket *sock, const void *optval, socklen_t optlen)
 {
 	return 0;
 }
-#else
-static int map_credentials(struct modem_socket *sock, const void *optval, socklen_t optlen)
-{
-	return -EINVAL;
-}
-#endif
 
 static int modem_set_socket_timeout(struct modem_socket *sock, int timeout) {
 	char buf[sizeof("AT+QSSLCFG=#negotiatetime#,##,####")] = {0};
@@ -1808,7 +1803,7 @@ static int offload_setsockopt(void *obj, int level, int optname,
 
 	int ret;
 
-	if (IS_ENABLED(CONFIG_NET_SOCKETS_SOCKOPT_TLS) && level == SOL_TLS) {
+	if (level == SOL_TLS) {
 		switch (optname) {
 		case TLS_SEC_TAG_LIST:
 			ret = map_credentials(sock, optval, optlen);

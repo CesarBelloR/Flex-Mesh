@@ -10,10 +10,10 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#include <kernel.h>
-#include <logging/log.h>
-#include <sys/util.h>
-#include <drivers/sensor.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/drivers/sensor.h>
 #include <zephyr/init.h>
 #include "bq24195.h"
 

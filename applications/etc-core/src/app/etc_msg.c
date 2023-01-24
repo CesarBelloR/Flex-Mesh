@@ -10,19 +10,19 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#include <zephyr.h>
-#include <sys/reboot.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/device.h>
 #include <string.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/storage/flash_map.h>
-#include <fs/nvs.h>
+#include <zephyr/fs/nvs.h>
 #include <cJSON.h>
 #include <cJSON_os.h>
 
 #include "etc_msg.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_msg, CONFIG_ETC_APP_LOG_LEVEL);
 
 enum {

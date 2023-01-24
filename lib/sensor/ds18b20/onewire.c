@@ -1,11 +1,11 @@
 #include <stdio.h>
-#include <zephyr.h>
-#include <device.h>
-#include <init.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
 #include <hal/nrf_gpio.h>
 #include "onewire.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(onewire, LOG_LEVEL_DBG);
 
 void onewire_delay(uint16_t time_us)

@@ -21,5 +21,6 @@ add_subdirectory(src/exact)
 add_subdirectory(src/events)
 add_subdirectory(src/modules)
 add_subdirectory(src/data)
+add_subdirectory(src/cloud)
 
 zephyr_include_directories_ifdef(CONFIG_AWS_IOT_PROVISION_CERTIFICATES certs)

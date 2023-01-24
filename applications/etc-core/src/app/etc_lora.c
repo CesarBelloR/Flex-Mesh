@@ -10,13 +10,13 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#include <device.h>
-#include <drivers/lora.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/lora.h>
 #include <errno.h>
-#include <sys/util.h>
-#include <zephyr.h>
-#include <kernel.h>
-#include <logging/log.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/kernel.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ETC_LORA, CONFIG_ETC_APP_LOG_LEVEL);
 
 #include "etc_lora.h"

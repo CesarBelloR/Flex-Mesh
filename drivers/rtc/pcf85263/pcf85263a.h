@@ -15,7 +15,7 @@
 #define PCF85263A_H_
 
 #include <stdint.h>
-#include <sys/timeutil.h>
+#include <zephyr/sys/timeutil.h>
 #include <time.h>
 #include "pcf85263a_registers.h"
 

@@ -1,8 +1,8 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
 #include <app_event_manager.h>
-#include <drivers/lora.h>
-#include <zephyr.h>
+#include <zephyr/drivers/lora.h>
+#include <zephyr/kernel.h>
 #include "etc_date_time.h"
 #include "data/etc_cape.h"
 #include "data/data_codec.h"

@@ -10,18 +10,18 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#include <zephyr.h>
-#include <sys/reboot.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/device.h>
 #include <string.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/fs/nvs.h>
-#include <fs/nvs.h>
+#include <zephyr/fs/nvs.h>
 
 #include "etc_setting.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_setting, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define STORAGE_NODE_LABEL storage

@@ -13,6 +13,8 @@ config ETC_LORA_MODULE
 	default y
 
 rsource "src/exact/Kconfig"
+rsource "src/cloud/Kconfig"
+
 endmenu
 
 menu "Zephyr Kernel"

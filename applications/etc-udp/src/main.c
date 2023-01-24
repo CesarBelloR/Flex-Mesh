@@ -1,16 +1,16 @@
-#include <zephyr.h>
+#include <zephyr/kernel.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <drivers/gpio.h>
-#include <usb/usb_device.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/usb/usb_device.h>
 #include <app_version.h>
-#include <drivers/hwinfo.h>
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/net/socket.h>
 #include <errno.h>
 #include <zephyr/net/tls_credentials.h>
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define NET_CONFIG_PEER_IPV4_ADDR "142.93.158.106"

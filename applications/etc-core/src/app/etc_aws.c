@@ -10,12 +10,12 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#include <zephyr.h>
+#include <zephyr/kernel.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <net/aws_iot.h>
-#include <sys/reboot.h>
-#include <dfu/mcuboot.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/dfu/mcuboot.h>
 #include <cJSON.h>
 #include <cJSON_os.h>
 #include "pcf85263a.h"
@@ -23,7 +23,7 @@
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(ETC_AWS, CONFIG_ETC_APP_LOG_LEVEL);
 

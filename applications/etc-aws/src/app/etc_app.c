@@ -13,7 +13,7 @@
 #include <zephyr/device.h>
 #include <errno.h>
 #include <zephyr/sys/util.h>
-#include <zephyr.h>
+#include <zephyr/kernel.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ETC_APP, CONFIG_ETC_APP_LOG_LEVEL);

@@ -1,4 +1,4 @@
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 #include <stdlib.h>
 #include "ui.h"
 #include "led_pwm.h"
