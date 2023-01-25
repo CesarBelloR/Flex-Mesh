@@ -337,6 +337,7 @@ static int setup(void)
 	 */
 	boot_write_img_confirmed();
 #endif /* CONFIG_MCUBOOT_IMG_MANAGER */
+#ifdef CONFIG_APP_AWS_IOT
 	struct aws_iot_config config;
 	int len;
 	char id[ETC_SETTINGS_DEVICE_ID_LEN + sizeof("urn:dev:mac:")] = "urn:dev:mac:";
@@ -354,6 +355,7 @@ static int setup(void)
 		LOG_ERR("AWS IoT library could not be initialized, error: %d", err);
 		return err;
 	}
+#endif
 	LOG_DBG("Setup the AWS IoT successful");
 	return 0;
 }
@@ -361,7 +363,7 @@ static int setup(void)
 static void connect_cloud(void)
 {
 	int backoff_sec = backoff_delay[connect_retries].delay;
-	int err;
+	int err = 0;
 	LOG_DBG("Connecting to cloud");
 
 	if (connect_retries > MODULE_CLOUD_CONNECT_RETRIES)
@@ -370,8 +372,11 @@ static void connect_cloud(void)
 		SEND_ERROR(cloud, CLOUD_EVT_ERROR, -ENETUNREACH);
 		return;
 	}
-
+#ifdef CONFIG_APP_AWS_IOT
 	err = aws_iot_connect(NULL);
+#else
+	SEND_EVENT(cloud, CLOUD_EVT_CONNECTED);
+#endif
 	if (err)
 	{
 		LOG_ERR("aws_iot_connect, error: %d", err);
@@ -390,10 +395,14 @@ static void connect_cloud(void)
 static void disconnect_cloud(void)
 {
 	connect_retries = 0;
+#ifdef CONFIG_APP_AWS_IOT
 	int err = aws_iot_disconnect();
 	if (err) {
 		LOG_ERR("aws_iot_disconnect, error: %d", err);
 	}
+#else
+	SEND_EVENT(cloud, CLOUD_EVT_DISCONNECTED);
+#endif
 	k_work_cancel_delayable(&connect_check_work);
 }
 
@@ -487,6 +496,9 @@ static void on_all_states(struct cloud_msg_data *msg)
 	{
 		last_message_id = msg->module.data.data.message_id;
 		LOG_INF("Last data send message id %d", last_message_id);
+#if !defined(CONFIG_APP_AWS_IOT)
+		SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
+#endif
 	}
 }
 
@@ -559,10 +571,12 @@ static int shadow_update(bool version_number_include)
 
 	LOG_INF("Publishing: %s to AWS IoT broker", shadow_msg);
 
+#ifdef CONFIG_APP_AWS_IOT
 	err = aws_iot_send(&tx_data);
 	if (err) {
 		LOG_ERR("aws_iot_send, error: %d", err);
 	}
+#endif
 
 cleanup:
 	cJSON_Delete(root_obj);

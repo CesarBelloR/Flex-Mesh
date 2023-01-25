@@ -257,6 +257,7 @@ static int setup(void)
 static void app_set_wakeup_time(void) {
 	time_t now = 0;
 	struct tm tm_time = { 0 };
+#if defined(CONFIG_PCF85263)
 	pcf85263a_rtc_get_time(&now);
 	uint16_t sample_time_second = etc_get_time_measurement_interval();
 	uint8_t sample_time_min = sample_time_second / 60;
@@ -303,6 +304,7 @@ static void app_set_wakeup_time(void) {
 	pcf85263a_set_interrupt_io(true);
 	pcf85263a_alarm_config_type_1(config);
 	pcf85263a_alarm_enable_type_1(flag);
+#endif
 	k_sleep(K_SECONDS(1)); // Wait for print out LOG
 	app_peripheral_off();
 }
