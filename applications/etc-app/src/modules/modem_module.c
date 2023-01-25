@@ -175,8 +175,6 @@ static void modem_set_connected(void)
 
 static void modem_evt_handler(const struct modem_api_evt *const evt)
 {
-	struct modem_event *modem_event = new_modem_event();
-
 	switch (evt->type) {
 	case MODEM_API_CONNECTED_EVT: {
 		modem_module_is_sleep = false;
@@ -185,8 +183,7 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 	}
 	case MODEM_API_DISCONNECTED_EVT: {
 		state_set(STATE_DISCONNECTED);
-		modem_event->type = MODEM_EVT_LTE_DISCONNECTED;
-		APP_EVENT_SUBMIT(modem_event);
+		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
 		break;
 	}
 	}

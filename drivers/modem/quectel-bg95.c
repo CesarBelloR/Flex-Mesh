@@ -977,30 +977,50 @@ MODEM_CMD_DEFINE(on_cmd_power_down)
 	return 0;
 }
 
+/** @brief Turn the modem on/off using PWRKEY.
+ * 
+*/
+static void modem_pin_on_off(void)
+{
+	gpio_pin_set_dt(&power_gpio, 1);
+	k_sleep(K_MSEC(1000));
+	gpio_pin_set_dt(&power_gpio, 0);
+}
+
 static int quectel_bg95_power_down() {
 	const char *pw_dwn = "AT+QPOWD";
 	int ret;
+	int retries = 0;
 
 	struct modem_cmd cmd[] = {
 		MODEM_CMD("POWERED DOWN", on_cmd_power_down, 0U, ""),
 	};
 
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
-			     NULL, 0U, pw_dwn, &mdata.sem_response,
-			     MDM_CMD_TIMEOUT);
+	k_sem_reset(&mdata.sem_shutdown);
+#if 1
+	do {
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
+				NULL, 0U, pw_dwn, &mdata.sem_response,
+				MDM_CMD_TIMEOUT);
+		retries++;
+	} while((ret != 0) && (retries < MDM_POWER_DOWN_RETRY_COUNT));
 	if (ret != 0) {
 		goto error;
 	}
-
-	mdata.is_connected = false;
-
+	
+	/* set modem handler commands */
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
-				      cmd, 1U, true);
+				      cmd, ARRAY_SIZE(cmd), false);
+#else
+	modem_pin_on_off();
+#endif
 
 	ret = k_sem_take(&mdata.sem_shutdown, MDM_SHUTDOWN_TIMEOUT);
 	if (ret != 0) {
 		goto error;
 	}
+	// Set modem as disconnected after power down.
+	mdata.is_connected = false;
 
 	/* unset handler commands and ignore any errors */
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
@@ -1010,6 +1030,9 @@ static int quectel_bg95_power_down() {
 	return 0;
 error:
 	LOG_ERR("Failed to shut down modem, %d", ret);
+	/* unset handler commands */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      NULL, 0U, false);
 	return ret;
 }
 
@@ -1669,9 +1692,7 @@ static void pin_init(void)
 	k_sleep(K_MSEC(500));
 #endif
 
-	gpio_pin_set_dt(&power_gpio, 1);
-	k_sleep(K_MSEC(1000));
-	gpio_pin_set_dt(&power_gpio, 0);
+	modem_pin_on_off();
 
 	LOG_INF("... Done!");
 }
@@ -1689,6 +1710,7 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
 	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
 	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
+	MODEM_CMD("NORMAL POWER DOWN", on_cmd_power_down, 0U, ""),
 };
 
 /* Commands sent to the modem to set it up at boot time. */
