@@ -298,6 +298,11 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		}
 		break;
 	}
+	case CLOUD_WRAP_EVT_REBOOT_REQUEST:
+	{
+		// FIXME: Implement
+		break;
+	}
 	default:
 		LOG_DBG("Unknown Cloud Wrap event type: %d", evt->type);
 		break;

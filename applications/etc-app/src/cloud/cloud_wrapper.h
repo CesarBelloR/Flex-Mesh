@@ -15,6 +15,8 @@
 #include <stdbool.h>
 #include "etc_settings.h"
 
+#include "cloud_codec/data_codec.h"
+
 /**
  * @defgroup cloud_wrapper Cloud wrapper library
  * @{
@@ -163,7 +165,8 @@ int cloud_wrap_state_send(char *buf, size_t len, bool ack, uint32_t id);
  *
  * @return 0 on success, or a negative error code on failure.
  */
-int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[]);
+int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id, 
+			 struct lwm2m_obj_path path_list[]);
 
 /**
  * @brief Send batched data to cloud.
@@ -176,69 +179,6 @@ int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id, char *pat
  * @return 0 on success, or a negative error code on failure.
  */
 int cloud_wrap_batch_send(char *buf, size_t len, bool ack, uint32_t id);
-
-/**
- * @brief Send UI data to cloud.
- *
- * @param[in] buf Pointer to buffer containing data to be sent.
- * @param[in] len Length of buffer.
- * @param[in] ack Flag signifying if the message should be acknowledged or not.
- * @param[in] id Message ID.
- * @param[in] path_list Pointer to list of LwM2M objects to be sent.
- *
- * @return 0 on success, or a negative error code on failure.
- */
-int cloud_wrap_ui_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[]);
-
-/**
- * @brief Send neighbor cell data to cloud.
- *
- * @param[in] buf Pointer to buffer containing data to be sent.
- * @param[in] len Length of buffer.
- * @param[in] ack Flag signifying if the message should be acknowledged or not.
- * @param[in] id Message ID.
- * @param[in] path_list Pointer to list of LwM2M objects to be sent.
- *
- * @return 0 on success, or a negative error code on failure.
- */
-int cloud_wrap_neighbor_cells_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[]);
-
-/**
- * @brief Send A-GPS request to cloud.
- *
- * @param[in] buf Pointer to buffer containing data to be sent.
- * @param[in] len Length of buffer.
- * @param[in] ack Flag signifying if the message should be acknowledged or not.
- * @param[in] id Message ID.
- * @param[in] path_list Pointer to list of LwM2M objects to be sent.
- *
- * @return 0 on success, or a negative error code on failure.
- */
-int cloud_wrap_agps_request_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[]);
-
-/**
- * @brief Send P-GPS request to cloud.
- *
- * @param[in] buf Pointer to buffer containing data to be sent.
- * @param[in] len Length of buffer.
- * @param[in] ack Flag signifying if the message should be acknowledged or not.
- * @param[in] id Message ID.
- *
- * @return 0 on success, or a negative error code on failure.
- */
-int cloud_wrap_pgps_request_send(char *buf, size_t len, bool ack, uint32_t id);
-
-/**
- * @brief Send Memfault data to cloud.
- *
- * @param[in] buf Pointer to buffer containing data to be sent.
- * @param[in] len Length of buffer.
- * @param[in] ack Flag signifying if the message should be acknowledged or not.
- * @param[in] id Message ID.
- *
- * @return 0 on success, or a negative error code on failure.
- */
-int cloud_wrap_memfault_data_send(char *buf, size_t len, bool ack, uint32_t id);
 
 #ifdef __cplusplus
 }

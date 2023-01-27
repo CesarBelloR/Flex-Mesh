@@ -2,12 +2,14 @@
  * Copyright (c) 2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ * 
+ * Copyright (c) 2023 EXACT Technology Corporation
  */
 
 #include <zephyr/kernel.h>
 #include <app_event_manager.h>
 #include <zephyr/settings/settings.h>
-#include "data/data_codec.h"
+#include "cloud/cloud_codec/data_codec.h"
 #include "etc_date_time.h"
 #include "etc_data_fs.h"
 #include "etc_settings.h"
@@ -76,6 +78,10 @@ static int head_bat_buf = 0;
 static k_timeout_t data_publish_timeout = K_FOREVER; 
 
 static K_SEM_DEFINE(config_load_sem, 0, 1);
+
+/* Default device configuration. */
+static struct cloud_data_cfg current_cfg = {
+};
 
 static struct k_work_delayable data_send_work;
 
@@ -222,8 +228,20 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void cloud_codec_event_handler(const struct cloud_codec_evt *evt)
+{
+}
+
 static int setup(void)
 {
+	int err;
+	
+	err = data_codec_init(&current_cfg, cloud_codec_event_handler);
+	if (err) {
+		LOG_ERR("cloud_codec_init, error: %d", err);
+		return err;
+	}
+
 	return 0;
 }
 
@@ -242,24 +260,33 @@ static void data_module_send_message_id(uint32_t message_id)
 
 static void data_encode(void) 
 {
+	struct cloud_codec_data codec = { 0 };
+	int ret;
+
 	if (head_sensor_buf == 0) {
 		return;
 	}
 
 	LOG_INF("Head sensor buf %d", head_sensor_buf);
-	char* data_msg = data_codec_prepare_cloud_packet(NULL, 0, sensors_buf, head_sensor_buf,
-		&modem_stat, NULL);
-	if (data_msg == NULL) {
+	ret = data_codec_prepare_cloud_packet(&codec, NULL, 0, 
+					sensors_buf, head_sensor_buf,
+					&modem_stat, NULL);
+	if (ret != 0) {
 		LOG_WRN("No message to publish");
 		return;
 	}	
 	
 	uint16_t message_id = (uint16_t)k_uptime_get_32();
 
-	LOG_INF("Publishing: %s", data_msg);
+	if (codec.buf != NULL) {
+		LOG_INF("Publishing: %s", codec.buf);
+	}
+	if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
+		codec.len = codec.valid_object_paths;
+	}
 
-	cloud_wrap_data_send(data_msg, strlen(data_msg), true,
-			     message_id, NULL);
+	cloud_wrap_data_send(codec.buf, codec.len, true,
+			     message_id, codec.paths);
 
 	head_lora_buf = 0;
 	head_sensor_buf = 0;

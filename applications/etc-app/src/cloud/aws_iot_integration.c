@@ -14,7 +14,6 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_CLOUD_INTEGRATION_LOG_LEVEL);
 
 #define REQUEST_SHADOW_DOCUMENT_STRING ""
 
-static char client_id_buf[AWS_CLOUD_CLIENT_ID_LEN + 1];
 static char messages_topic[MESSAGES_TOPIC_LEN + 1];
 
 static struct aws_iot_config config;
@@ -252,7 +251,8 @@ int cloud_wrap_state_send(char *buf, size_t len, bool ack, uint32_t id)
 	return 0;
 }
 
-int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[])
+int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id, 
+			 const struct lwm2m_obj_path path_list[])
 {
 	ARG_UNUSED(path_list);
 
@@ -277,6 +277,7 @@ int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id, char *pat
 
 int cloud_wrap_batch_send(char *buf, size_t len, bool ack, uint32_t id)
 {
+	return -ENOTSUP;
 }
 
 int cloud_wrap_ui_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[])

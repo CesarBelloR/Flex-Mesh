@@ -10,6 +10,6 @@ manifest:
     - name: nrf
       remote: sdk-nrf
       repo-path: sdk-nrf
-      revision: aea0b4b73d4153a7dc47db73f59de7d9653885ff
+      revision: 20c4fb32b5efcabd0303c3bd9d9783985d050068
       import: true
     
