@@ -265,5 +265,5 @@ int etc_device_write_setting(int setting_id, void* setting, int setting_size) {
 }
 
 int etc_device_read_setting(int setting_id, void* setting, int setting_size) {
-    return etc_nvs_write(setting_id, setting, setting_size);
+    return etc_nvs_read(setting_id, setting, setting_size);
 }

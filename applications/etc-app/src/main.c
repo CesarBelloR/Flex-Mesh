@@ -18,7 +18,8 @@
 #include "ui.h"
 #include "data/etc_cape.h"
 #include "events/app_event.h"
-#include "exact/etc_devices/etc_device.h"
+#include "etc_device.h"
+#include "etc_settings.h"
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -111,6 +112,7 @@ void main(void)
 #endif
 
 	etc_device_init();
+	etc_settings_init();
 	ui_init();
 
 	if (app_event_manager_init()) {

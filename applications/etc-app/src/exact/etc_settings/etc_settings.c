@@ -140,10 +140,9 @@ int etc_get_time_transmission_interval(void)
 	return interval;
 }
 
-static int etc_settings_init(const struct device *unused)
+int etc_settings_init(void)
 {
 	int ret;
-	ARG_UNUSED(unused);
 	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
 	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
 	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
@@ -182,8 +181,6 @@ static int etc_settings_init(const struct device *unused)
 
 	return 0;
 }
-
-SYS_INIT(etc_settings_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
