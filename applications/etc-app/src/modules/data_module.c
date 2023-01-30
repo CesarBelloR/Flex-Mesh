@@ -10,9 +10,8 @@
 #include <net/aws_iot.h>
 #include "data/data_codec.h"
 #include "etc_date_time.h"
-#include "etc_data_fs.h"
 #include "etc_settings.h"
-
+#include "etc_device.h"
 #define MODULE data_module
 #define MODULE_DATA_THREAD_STACK_SIZE 2048
 #define MODULE_DATA_SENSOR_BUFFER_COUNT 8
@@ -353,12 +352,19 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
+		etc_device_record_t record;
+		record.battery = (float)msg->module.sensor.data.sensors->battery_mV / 1000.0;
+		record.flag = 0;
+		record.timestamp = (uint32_t)msg->module.sensor.data.sensors->timestamp;
+		memcpy(record.sensor, msg->module.sensor.data.sensors->temperature, SENSOR_EVENT_NUM_DEV_MAX);
+		record.sensor[5] = 0.0;
+		etc_device_write_record(&record);
+		
 		struct data_sensors new_sensor_data = {
 			.queued = true
 		};
 
 		memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
-		//etc_data_fs_notify_data((uint8_t*)&new_sensor_data, sizeof(struct data_sensors));
 		data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
 		/* Send data to cloud right now after they were taken */
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
