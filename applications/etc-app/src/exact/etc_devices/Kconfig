@@ -1,0 +1,25 @@
+menuconfig ETC_DEVICE
+	bool "Mode for ETC Monitor Device"
+	default y
+	help
+	  Selection for ETC Monitor Device Mode (Relay or Logger)
+
+if ETC_DEVICE
+
+config ETC_DEVICE_MODE_RELAY
+	int "Relay mode"
+	default 1
+
+config ETC_DEVICE_MODE_LOGGER
+	int "Logger mode"
+	default 2
+
+config ETC_DEVICE_MODE
+	int "ETC Device Mode Relay (1) or Logger (2)"
+	default ETC_DEVICE_MODE_LOGGER
+
+module = ETC_DEVICE
+module-str = device
+source "subsys/logging/Kconfig.template.log_config"
+
+endif

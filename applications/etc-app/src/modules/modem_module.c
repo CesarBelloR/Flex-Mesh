@@ -17,6 +17,7 @@
 #include "events/cloud_event.h"
 #include "events/util_event.h"
 #include "events/sensor_event.h"
+#include "events/lora_event.h"
 
 #ifdef CONFIG_PM_DEVICE
 #include <pm/pm.h>
@@ -37,6 +38,7 @@ struct modem_msg_data {
 		struct util_event util;
 		struct modem_event modem;
 		struct data_event data;
+		struct lora_event lora;
 	} module;
 };
 
@@ -151,6 +153,13 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct data_event *evt = cast_data_event(aeh);
 
 		msg.module.data = *evt;
+		enqueue_msg = true;
+	}
+
+	if (is_lora_event(aeh)) {
+		struct lora_event *evt = cast_lora_event(aeh);
+
+		msg.module.lora = *evt;
 		enqueue_msg = true;
 	}
 
@@ -352,6 +361,12 @@ static void on_all_states(struct modem_msg_data *msg)
 		SEND_EVENT(modem, MODEM_EVT_SLEEP_READY);
 	}
 
+	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+		modem_enter_sleep();
+		state_set(STATE_DISCONNECTED);
+		SEND_EVENT(modem, MODEM_EVT_SLEEP_READY);
+	}
+
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
 		if (modem_module_is_sleep) {
 			modem_enter_wakeup();
@@ -413,4 +428,5 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
+APP_EVENT_SUBSCRIBE(MODULE, lora_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, util_event);

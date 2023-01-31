@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include "events/sensor_event.h"
 
 #define ETC_CONFIG_TYPE_SIZE (32)
 
@@ -64,7 +65,7 @@ typedef enum {
 enum {
     ETC_CONFIG_ID = 0x01,
     ETC_RECORD_STAT = 0x02,
-    ETC_RECORD_HEADER = 0x03,
+    ETC_RECORD_HEADER = 0x1000,
     ETC_SETTING_HW_VERSION_ID = 0x100,
     ETC_SETTING_FW_VERSION_ID,
     ETC_SETTING_DEVICE_ID,
@@ -94,9 +95,9 @@ typedef union {
     uint8_t data[ETC_DEVICE_RECORD_SIZE];
     struct {
         float battery;
-        uint8_t flag; // Counter or PCB Fault
-        uint32_t timestamp;
         float sensor[ETC_DEVICE_NUM_SENSOR];
+        uint32_t timestamp;
+        uint32_t flag; // Counter or PCB Fault
     };
 } etc_device_record_t;
 
@@ -104,7 +105,10 @@ void etc_device_init(void);
 
 int etc_device_write_setting(int setting_id, void* setting, int setting_size);
 int etc_device_read_setting(int setting_id, void* setting, int setting_size);
+int etc_device_write_record_sensor(struct sensor_data* sensor);
 int etc_device_write_record(etc_device_record_t* record);
-int etc_device_read_record(etc_device_record_t* record, int index);
-
+int etc_device_read_record(etc_device_record_t* record);
+int etc_device_set_ack_record(int record_id);
+etc_device_mode_e etc_device_get_mode(void);
+int etc_device_get_rx_timeout(void);
 #endif /* ETC_DEVICE_H_ */

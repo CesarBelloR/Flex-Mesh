@@ -115,10 +115,8 @@ int etc_get_device_id(char *buf, int buf_len)
 {
 	int copy_size;
 
-	k_mutex_lock(&device_mutex, K_FOREVER);
 	copy_size = ETC_SETTINGS_DEVICE_ID_LEN < buf_len ? ETC_SETTINGS_DEVICE_ID_LEN : buf_len;
 	memcpy(buf, saved_device_id, copy_size);
-	k_mutex_unlock(&device_mutex);
 	return copy_size;
 }
 

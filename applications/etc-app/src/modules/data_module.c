@@ -302,7 +302,9 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-		data_encode();
+		if (etc_device_get_mode() != ETC_DEVICE_MODE_LOGGER) {
+			data_encode();
+		}
 		return;
 	}
 
@@ -352,21 +354,22 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		etc_device_record_t record;
-		record.battery = (float)msg->module.sensor.data.sensors->battery_mV / 1000.0;
-		record.flag = 0;
-		record.timestamp = (uint32_t)msg->module.sensor.data.sensors->timestamp;
-		memcpy(record.sensor, msg->module.sensor.data.sensors->temperature, SENSOR_EVENT_NUM_DEV_MAX);
-		record.sensor[5] = 0.0;
-		etc_device_write_record(&record);
-		
-		struct data_sensors new_sensor_data = {
-			.queued = true
-		};
+		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
+		etc_device_mode_e mode = etc_device_get_mode();
+		if (mode == ETC_DEVICE_MODE_LOGGER) {
+			/* Update logger function */
+		} else if (mode == ETC_DEVICE_MODE_RELAY) {
+			/* Update relay function */
+			struct data_sensors new_sensor_data = {
+				.queued = true
+			};
 
-		memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
-		data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
-		/* Send data to cloud right now after they were taken */
+			memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
+			data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
+			/* Send data to cloud right now after they were taken */
+		} else {
+			/* Unknown mode ? */
+		}
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 
