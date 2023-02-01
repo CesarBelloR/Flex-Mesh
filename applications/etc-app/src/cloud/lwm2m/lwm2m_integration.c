@@ -222,6 +222,27 @@ static int device_reboot_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_l
 	return 0;
 }
 
+static void send_cb (enum lwm2m_send_status status)
+{
+	struct cloud_wrap_event cloud_wrap_evt = { 0 };
+	bool notify = false;
+
+	switch (status) {
+		case LWM2M_SEND_STATUS_SUCCESS:
+		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_ACK;
+		notify = true;
+		break;
+
+		case LWM2M_SEND_STATUS_FAILURE:
+		case LWM2M_SEND_STATUS_TIMEOUT:
+		break;
+	}
+
+	if (notify) {
+		cloud_wrapper_notify_event(&cloud_wrap_evt);
+	}
+}
+
 #if 0
 /* Callback handler triggered when the modem should be put in a certain functional mode.
  * Handler is called pre provisioning of DTLS credentials when the modem should be put in
@@ -427,6 +448,7 @@ int cloud_wrap_connect(void)
 int cloud_wrap_disconnect(void)
 {
 	int err;
+	struct cloud_wrap_event event = { 0 };
 
 	if (state != CONNECTED) {
 		return -ENOTSUP;
@@ -438,6 +460,9 @@ int cloud_wrap_disconnect(void)
 		return err;
 	}
 
+	event.type = CLOUD_WRAP_EVT_DISCONNECTED;
+	cloud_wrapper_notify_event(&event);
+	
 	state = DISCONNECTED;
 	return 0;
 }
@@ -460,7 +485,7 @@ int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id,
 
 	int err;
 
-	err = lwm2m_send(&client, path_list, len, ack);
+	err = lwm2m_send_cb(&client, path_list, len, send_cb);
 	if (err) {
 		LOG_ERR("lwm2m_send, error: %d", err);
 		return err;

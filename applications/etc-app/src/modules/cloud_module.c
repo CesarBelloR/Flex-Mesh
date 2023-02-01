@@ -292,7 +292,8 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	case CLOUD_WRAP_EVT_DATA_ACK:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_PUBACK %d", evt->message_id);
-		if (evt->message_id == last_message_id) {
+		if ((evt->message_id == last_message_id) ||
+		    (evt->message_id == 0)) {
 			/* Cloud receives data, sleep modem */
 			SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
 		}
