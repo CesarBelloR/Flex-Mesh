@@ -11,7 +11,7 @@
 #include "data/data_codec.h"
 
 #define MODULE lora_module
-#define MODULE_LORA_THREAD_STACK_SIZE 1024
+#define MODULE_LORA_THREAD_STACK_SIZE 2048
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -309,40 +309,34 @@ static int module_lora_wait_packet(void) {
 
 	return 0;
 }
+#if 0
+char decr_buf[LORA_ACKUNCRYPT_LEN + 1];
+#endif
 
 static int module_lora_process_packet(etc_device_record_t record)
 {
 	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
-	strcpy(decoded_buf, "S,OPEN,");
-	strcat(decoded_buf, APP_VERSION_STR);
-	strcat(decoded_buf, ",");
-	strcat(decoded_buf, buf_tmp); // add device unique ID
-	strcat(decoded_buf, ",");
-	snprintf(buf_tmp, sizeof(buf_tmp), "%1.2f", record.battery);
-	strcat(decoded_buf, buf_tmp);
-	strcat(decoded_buf, ",0,");
-	snprintf(buf_tmp, sizeof(buf_tmp), "%u", record.timestamp);
-	strcat(decoded_buf, buf_tmp);
-	strcat(decoded_buf, ",");
+	int decoded_buf_len = snprintf(decoded_buf, sizeof(decoded_buf), "S,OPEN,%s,%s,%1.2f,0,%u,", APP_VERSION_STR, buf_tmp, record.battery, record.timestamp); 
 	for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++)
 	{
 		if (data_codec_compare_temperature_is_valid(record.sensor[i]))
 		{
-			snprintf(buf_tmp, sizeof(buf_tmp), "%2.2f", record.sensor[i]);
-			strcat(decoded_buf, buf_tmp);
-			strcat(decoded_buf, ",");
+			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len, sizeof(decoded_buf) - decoded_buf_len, "%2.2f,", record.sensor[i]);
 		}
 		else
 		{
-			strcat(decoded_buf, "*,");
+			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len, sizeof(decoded_buf) - decoded_buf_len, "*,");
 		}
 	}
-
-	strcat(decoded_buf, "*,");
-	LOG_DBG("Decoded length %d", strlen(decoded_buf));
-	decoded_buf[strlen(decoded_buf)] = '\0';
+	decoded_buf_len += snprintf(decoded_buf + decoded_buf_len, sizeof(decoded_buf) - decoded_buf_len, "*,");
+	LOG_DBG("Decoded length %d", decoded_buf_len);
 	LOG_DBG("Msg %s", decoded_buf);
-	etc_cape_encrypt((char *)decoded_buf, encoded_buffer, strlen(decoded_buf), 21);
+	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, 21);
+	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
+	#if 0 // Test decrypt the message encoded
+	etc_cape_decrypt(encoded_buffer, decr_buf, decoded_buf_len + 1);
+	LOG_HEXDUMP_INF(decr_buf, sizeof(decr_buf), "DECRYPTED");
+	#endif
 	int rc = module_lora_transmit_packet(encoded_buffer, strlen(encoded_buffer));
 	if (rc == 0) {
 		uint8_t cnt = 0;
