@@ -325,7 +325,7 @@ static int setup(void)
 static void connect_cloud(void)
 {
 	int backoff_sec = backoff_delay[connect_retries].delay;
-	int err;
+	int err = 0;
 	LOG_DBG("Connecting to cloud");
 
 	if (connect_retries > MODULE_CLOUD_CONNECT_RETRIES)
@@ -350,6 +350,7 @@ static void connect_cloud(void)
 static void disconnect_cloud(void)
 {
 	connect_retries = 0;
+	
 	cloud_wrap_disconnect();
 
 	k_work_cancel_delayable(&connect_check_work);
@@ -445,6 +446,9 @@ static void on_all_states(struct cloud_msg_data *msg)
 	{
 		last_message_id = msg->module.data.data.message_id;
 		LOG_INF("Last data send message id %d", last_message_id);
+#if !defined(CONFIG_APP_AWS_IOT)
+		SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
+#endif
 	}
 }
 

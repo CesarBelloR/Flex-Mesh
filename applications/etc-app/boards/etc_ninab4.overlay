@@ -1,0 +1,33 @@
+/ {
+	chosen {
+		// nordic,pm-ext-flash = &mx25l6433;
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+	};
+
+	vbatt {
+		compatible = "voltage-divider";
+		output-ohms = <2000000>;
+		full-ohms = <(2000000 + 2000000)>;
+		io-channels = <&adc 3>;
+	};
+
+	ntc {
+		compatible = "temp,ntc";
+		b-value-k = <3434>;
+		norminal-25c-ohms = <10000>;
+		reference-res-ohms = <10000>;
+	};
+};
+
+/* A0 = P0.04 = AIN2 */
+/* A1 = P0.30 = AIN6 */
+/* A2 = P0.5  = AIN3 */
+/* A3 = P0.2  = AIN0 */
+/* A4 = P0.28 = AIN4 */
+/ {
+	zephyr,user {
+		/* adjust channel number according to pinmux in board.dts */
+		io-channels = <&adc 2>, <&adc 6>, <&adc 3>;
+	};
+};

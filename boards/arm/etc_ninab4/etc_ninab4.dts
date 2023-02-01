@@ -1,28 +1,49 @@
 /dts-v1/;
 #include <nordic/nrf52833_qiaa.dtsi>
+#include <dt-bindings/gpio/gpio.h>
+#include "etc_ninab4_pinctrl.dtsi"
 
 / {
 	model = "ETC Nina B406";
 	compatible = "etc,ninab4";
 
 	chosen {
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
 	};
 
-	pwmleds {
-		compatible = "pwm-leds";
-		red_pwm_led: red_pwm_led {
-			pwms = <&pwm0 13>;
+	leds {
+		compatible = "gpio-leds";
+		led0: led_0 {
+			gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
+			label = "Red LED";
 		};
-		green_pwm_led: green_pwm_led {
-			pwms = <&pwm0 33>;
+		led1: led_1 {
+			gpios = <&gpio1 1 GPIO_ACTIVE_LOW>;
+			label = "Green LED";
 		};
-		blue_pwm_led: blue_pwm_led {
-			pwms = <&pwm0 32>;
+		led2: led_2 {
+			gpios = <&gpio1 0 GPIO_ACTIVE_LOW>;
+			label = "Blue LED";
 		};
 	};
+
+	pwmleds {
+		compatible = "pwm-leds";
+		pwm_led0: pwm_led_0 {
+			pwms = <&pwm0 0 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+		};
+		pwm_led1: pwm_led_1 {
+			pwms = <&pwm0 1 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+		};
+		pwm_led2: pwm_led_2 {
+			pwms = <&pwm0 2 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+		};
+	};
+
 	buttons {
 		compatible = "gpio-keys";
 		button0: button_0 {
@@ -36,10 +57,75 @@
 			label = "Push button switch 1";
 		};
 	};
+
+	board-control {
+		sense_enable: sense-enable {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		vsens_enable: vsens-enable {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 23 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		sens_sel0: sens-sel0 {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		sens_sel1: sens-sel1 {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		rtc_int: rtc-int {
+			compatible = "etc,input";
+			control-gpios = <&gpio0 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			status = "okay";
+		};
+		user_btn: user-btn {
+			compatible = "etc,input";
+			control-gpios = <&gpio1 5 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			status = "okay";
+		};
+		hall_int: hall-int {
+			compatible = "etc,input";
+			control-gpios = <&gpio0 28 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			status = "okay";
+		};
+		batt_int: batt-int {
+			compatible = "etc,input";
+			control-gpios = <&gpio0 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			status = "okay";
+		};
+	};
+
+	fstab {
+		compatible = "zephyr,fstab";
+		lfs1: lfs1 {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs1";
+			partition = <&lfs1_part>;
+			automount;
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <64>;
+			lookahead-size = <32>;
+			block-cycles = <512>;
+		};
+	};
+
 	aliases {
+		led0 = &led0;
+		led1 = &led1;
+		led2 = &led2;
 		lora0 = &lora;
 		sw0 = &button0;
 		sw1 = &button1;
+		pwm-led0 = &pwm_led0;
+		pwm-led1 = &pwm_led1;
+		pwm-led2 = &pwm_led2;
 	};
 };
 
@@ -53,48 +139,57 @@
 
 &gpio0 {
 	status = "okay";
+	label = "GPIO_0";
 };
 
 &gpio1 {
 	status = "okay";
+	label = "GPIO_1";
 };
 
 &uart0 {
 	compatible = "nordic,nrf-uarte";
 	status = "okay";
+	label = "UART_0";
 	current-speed = <115200>;
-	tx-pin = <37>;     /* P1.05 */
-	rx-pin = <29>;
+	pinctrl-0 = <&uart0_default>;
+	pinctrl-1 = <&uart0_sleep>;
+	pinctrl-names = "default", "sleep";
 };
 
 &uart1 {
 	compatible = "nordic,nrf-uarte";
 	status = "okay";
+	label = "UART_1";
 	current-speed = <115200>;
-	tx-pin = <41>;    /* D8 */
-	rx-pin = <12>;    /* D9 */
+	pinctrl-0 = <&uart1_default>;
+	pinctrl-1 = <&uart1_sleep>;
+	pinctrl-names = "default", "sleep";
 
 	quectel_bg95 {
 		compatible = "quectel,bg95";
 		label      = "quectel-bg95";
 		status     = "okay";
-		mdm-power-gpios = <&gpio0 3 GPIO_ACTIVE_LOW>; /* A5 */
+		mdm-power-gpios = <&gpio1 2 GPIO_ACTIVE_LOW>; /* A5 */
 	};
 };
 
 &i2c0 {
 	compatible = "nordic,nrf-twim";
 	status = "okay";
-	sda-pin = <16>;
-	scl-pin = <17>;
+	label = "I2C_0";
+	pinctrl-0 = <&i2c0_default>;
+	pinctrl-1 = <&i2c0_sleep>;
+	pinctrl-names = "default", "sleep";
 };
 
 &spi1 {
 	compatible = "nordic,nrf-spi";
 	status = "okay";
-	sck-pin = <26>;
-	mosi-pin = <15>;
-	miso-pin = <27>;
+	label = "SPI_1";
+	pinctrl-0 = <&spi1_default>;
+	pinctrl-1 = <&spi1_sleep>;
+	pinctrl-names = "default", "sleep";
 
 	status = "okay";
 	cs-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
@@ -114,31 +209,28 @@
 &spi2 {
 	compatible = "nordic,nrf-spi";
 	status = "okay";
-	sck-pin = <31>;  /* D3 */
-	mosi-pin = <7>;  /* D13 */
-	miso-pin = <11>; /* D5 */
+	label = "SPI_2";
+	pinctrl-0 = <&spi2_default>;
+	pinctrl-1 = <&spi2_sleep>;
+	pinctrl-names = "default", "sleep";
 
 	cs-gpios = <&gpio0 23 GPIO_ACTIVE_LOW>; /* D2 */
-	mx25l6433: mx25l6433@0 {
-		compatible = "jedec,spi-nor";
-		reg = <0>;
-		spi-max-frequency = <80000000>;
-		label = "MX25L6433";
-		jedec-id = [c2 20 17];
-		size = <0x800000>;
-	};
+	// mx25l6433: mx25l6433@0 {
+	// 	compatible = "jedec,spi-nor";
+	// 	reg = <0>;
+	// 	spi-max-frequency = <80000000>;
+	// 	label = "MX25L6433";
+	// 	jedec-id = [c2 20 17];
+	// 	size = <0x800000>;
+	// };
 };
 
 &pwm0 {
 	status = "okay";
-	ch0-pin = <13>;
-	ch0-inverted;
-	status = "okay";
-	ch1-pin = <33>;
-	ch1-inverted;
-	status = "okay";
-	ch2-pin = <32>;
-	ch2-inverted;
+	label = "PWM_0";
+	pinctrl-0 = <&pwm0_default>;
+	pinctrl-1 = <&pwm0_sleep>;
+	pinctrl-names = "default", "sleep";
 };
 
 &flash0 {
@@ -149,23 +241,23 @@
 
 		boot_partition: partition@0 {
 			label = "mcuboot";
-			reg = <0x00000000 0xC000>;
+			reg = <0x00000000 0x00010000>;
 		};
-		slot0_partition: partition@c000 {
+		slot0_partition: partition@10000 {
 			label = "image-0";
-			reg = <0x0000C000 0x32000>;
+			reg = <0x00010000 0x00060000>;
 		};
-		slot1_partition: partition@3e000 {
+		slot1_partition: partition@70000 {
 			label = "image-1";
-			reg = <0x0003E000 0x32000>;
+			reg = <0x00070000 0x1000>;
 		};
-		scratch_partition: partition@70000 {
-			label = "image-scratch";
-			reg = <0x00070000 0xA000>;
+		lfs1_part: partition@71000 {
+			label = "littlefs-storage";
+			reg = <0x00071000 0x00006000>;
 		};
-		storage_partition: partition@7a000 {
+		storage_partition: partition@77000 {
 			label = "storage";
-			reg = <0x0007A000 0x00006000>;
+			reg = <0x00077000 0x00007000>;
 		};
 	};
 };
@@ -173,4 +265,9 @@
 zephyr_udc0: &usbd {
 	compatible = "nordic,nrf-usbd";
 	status = "okay";
+
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_0";
+	};
 };

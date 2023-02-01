@@ -614,6 +614,26 @@ void pcf85263a_set_interrupt_io(bool enable) {
     }
 }
 
+void pcf85263a_set_clkpin(bool enable)
+{
+    pcf85263a_pin_io_reg_t reg = {0x00};
+    int rc = 0;
+
+    rc = read_register(PCF85263A_PIN_IO_REG, &reg.byte);
+    if (rc != 0) {
+        LOG_ERR("Failed to read register PCF85263A_PIN_IO_REG error %d", rc);
+        return;
+    }
+
+    reg.cklpm = enable ? 0 : 1;
+    LOG_DBG("IO Register 0x%02x", reg.byte);
+    rc = write_register(PCF85263A_PIN_IO_REG, reg.byte);
+    if (rc != 0) {
+        LOG_ERR("Failed to write register PCF85263A_PIN_IO_REG error %d", rc);
+        return;
+    }
+}
+
 uint8_t pcf85263a_get_alarm_min_type_1(void) {
     uint8_t min_buf[1] = {0x00};
     int rc = read_register(PCF85263A_RTC_MODE_MINUTES_ALARM1_REG, min_buf);

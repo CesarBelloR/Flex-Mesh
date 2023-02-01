@@ -12,6 +12,10 @@ config ETC_LORA_MODULE
 	bool "Enable/disable LoRa module"
 	default y
 
+config APP_AWS_IOT
+	bool "Enable/disable use of AWS IoT to connect to cloud"
+	default y
+
 rsource "src/exact/Kconfig"
 rsource "src/cloud/Kconfig"
 rsource "src/cloud/Kconfig.lwm2m"
