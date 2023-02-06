@@ -352,7 +352,7 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		etc_device_record_t record;
+		union etc_device_record_t record;
 		record.battery = (float)msg->module.sensor.data.sensors->battery_mV / 1000.0;
 		record.flag = 0;
 		record.timestamp = (uint32_t)msg->module.sensor.data.sensors->timestamp;
