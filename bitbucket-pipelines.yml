@@ -1,0 +1,48 @@
+# Additional resources for Zephyr CI:
+## https://gitlab.com/zygoon/zephyr-ci-pipelines
+## https://github.com/circuitdojo/nrf9160-feather-examples-and-drivers/blob/v1.7.x/.github/workflows/build.yml
+## https://github.com/zephyrproject-rtos/zephyr/tree/main/.github/workflows
+
+image: ghcr.io/zephyrproject-rtos/ci:v0.24.6
+
+clone:
+  depth: 1
+
+# definitions:
+#   caches:
+#     zephyr: ../monitor/
+
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: 'Setup'
+          # ToDo: add caching for Zephyr modules, so they don't need
+          # to be downloaded every time.
+          # caches:
+          #   - zephyr
+          script:
+            - git config --global user.email "you@example.com"
+            - git config --global user.name "Your Name"
+            - west init -l .
+            - west update
+            # Apply patches
+            - ./scripts/apply_patches.sh
+            - west build -b etc -s applications/etc-app -p
+            - mkdir -p .out
+            - cp build/zephyr/zephyr.hex .out/etc-app.hex
+          artifacts:
+            - .out/**
+
+  custom:
+    clear-cache:
+      - step:
+          image: atlassian/default-image:latest
+          script:
+            - pipe: atlassian/bitbucket-clear-cache:3.2.0
+              variables:
+                BITBUCKET_USERNAME: $BITBUCKET_USERNAME
+                BITBUCKET_APP_PASSWORD: $BITBUCKET_APP_PASSWORD
+
+
+
