@@ -10,11 +10,11 @@ config LWM2M_USE_BOOTSTRAP
 
 config NET_DTLS_PSKID
 	string "PSK ID in string format"
-	default ""
+	default "EXACT"
 
 config NET_DTLS_PSK
 	string "PSK Key"
-	default ""
+	default "875ba79f213ecd8c"
 
 endmenu
 
