@@ -10,13 +10,13 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#include <device.h>
-#include <kernel.h>
-#include <logging/log.h>
-#include <sys/util.h>
+#include <zephyr/device.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/util.h>
 #include <hal/nrf_saadc.h>
-#include <drivers/adc.h>
-#include <drivers/gpio.h>
+#include <zephyr/drivers/adc.h>
+#include <zephyr/drivers/gpio.h>
 
 LOG_MODULE_REGISTER(ETC_ADC, CONFIG_ADC_MODULES_LOG_LEVEL);
 

@@ -66,14 +66,14 @@ config MODEM_QUECTEL_BG95_M3_INIT_PRIORITY
 
 config MODEM_QUECTEL_BG95_M3_PSK_ID
 	string "PSK ID when using DTLS"
-	default ""
+	default "EXACT"
 	help
 	  When using DTLS over UDP, the modem uses the PSK method to encrypt the
 	  data. This option specifies the PSK ID to use.
 
 config MODEM_QUECTEL_BG95_M3_PSK_KEY
 	string "PSK Key in hex format when using DTLS"
-	default ""
+	default "875ba79f213ecd8c"
 	help
 	  When using DTLS over UDP, the modem uses the PSK method to encrypt the
 	  data. This option specifies the PSK key to use.

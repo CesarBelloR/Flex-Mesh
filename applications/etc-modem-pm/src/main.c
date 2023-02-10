@@ -1,24 +1,24 @@
-#include <zephyr.h>
+#include <zephyr/kernel.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <drivers/gpio.h>
-#include <usb/usb_device.h>
-#include <dfu/mcuboot.h>
-#include <pm/pm.h>
-#include <pm/device.h>
-#include <device.h>
-#include <pm/device_runtime.h>
-#include <drivers/hwinfo.h>
-#include <stats/stats.h>
-#include <storage/flash_map.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/usb/usb_device.h>
+#include <zephyr/dfu/mcuboot.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/device.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/drivers/hwinfo.h>
+#include <zephyr/stats/stats.h>
+#include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/reboot.h>
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 #include <modem_api.h>
 
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
 #ifdef CONFIG_MCUMGR_CMD_FS_MGMT
-#include <device.h>
+#include <zephyr/device.h>
 #endif
 #ifdef CONFIG_MCUMGR_CMD_OS_MGMT
 #include "os_mgmt/os_mgmt.h"

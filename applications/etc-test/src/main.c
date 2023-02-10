@@ -1,11 +1,11 @@
-#include <zephyr.h>
-#include <shell/shell.h>
+#include <zephyr/kernel.h>
+#include <zephyr/shell/shell.h>
 #include <version.h>
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 #include <stdlib.h>
-#include <drivers/uart.h>
-#include <drivers/gpio.h>
-#include <usb/usb_device.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/usb/usb_device.h>
 #include <ctype.h>
 
 #include "pcf85263a.h"
@@ -14,7 +14,7 @@
 #include "ui.h"
 #include "ds18b20.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
 
 BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),

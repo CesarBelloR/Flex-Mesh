@@ -14,7 +14,7 @@
 #define	_DS18B20_H
 
 #include <stdbool.h>
-#include <zephyr.h>
+#include <zephyr/kernel.h>
 #include "onewire.h"
 
 /***************************************************************************/

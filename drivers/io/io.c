@@ -11,12 +11,12 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#include <zephyr.h>
-#include <device.h>
-#include <kernel.h>
-#include <logging/log.h>
-#include <sys/util.h>
-#include <drivers/gpio.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/drivers/gpio.h>
 #include "io.h"
 LOG_MODULE_REGISTER(ETC_IO, CONFIG_ETC_IO_LOG_LEVEL);
 

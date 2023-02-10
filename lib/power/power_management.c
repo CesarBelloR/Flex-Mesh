@@ -1,10 +1,10 @@
-#include <zephyr.h>
-#include <device.h>
-#include <drivers/counter.h>
-#include <sys/printk.h>
-#include <pm/pm.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/counter.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/pm/pm.h>
 #include "power_management.h"
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(power_management, CONFIG_POWER_LOG_LEVEL);
 
 #define ALARM_CHANNEL_ID 0

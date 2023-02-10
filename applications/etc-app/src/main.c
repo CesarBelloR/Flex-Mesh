@@ -1,17 +1,17 @@
-#include <zephyr.h>
+#include <zephyr/kernel.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <drivers/gpio.h>
-#include <usb/usb_device.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/usb/usb_device.h>
 #include <app_version.h>
-#include <dfu/mcuboot.h>
-#include <pm/pm.h>
-#include <pm/device.h>
-#include <drivers/hwinfo.h>
-#include <stats/stats.h>
-#include <fs/fs.h>
-#include <fs/littlefs.h>
-#include <storage/flash_map.h>
+#include <zephyr/dfu/mcuboot.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/drivers/hwinfo.h>
+#include <zephyr/stats/stats.h>
+#include <zephyr/fs/fs.h>
+#include <zephyr/fs/littlefs.h>
+#include <zephyr/storage/flash_map.h>
 #include <app_event_manager.h>
 #include <zephyr/sys/reboot.h>
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
@@ -21,26 +21,26 @@
 #include "data/etc_cape.h"
 #include "events/app_event.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
 #ifdef CONFIG_MCUMGR_CMD_FS_MGMT
-#include <device.h>
+#include <zephyr/device.h>
 #endif
 #ifdef CONFIG_MCUMGR_CMD_OS_MGMT
-#include "os_mgmt/os_mgmt.h"
+#include <zephyr/mgmt/mcumgr/grp/os_mgmt/os_mgmt.h>
 #endif
 #ifdef CONFIG_MCUMGR_CMD_IMG_MGMT
-#include "img_mgmt/img_mgmt.h"
+#include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt.h>
 #endif
 #ifdef CONFIG_MCUMGR_CMD_STAT_MGMT
-#include "stat_mgmt/stat_mgmt.h"
+#include <zephyr/mgmt/mcumgr/grp/stat_mgmt/stat_mgmt.h>
 #endif
 #ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
-#include "shell_mgmt/shell_mgmt.h"
+#include <zephyr/mgmt/mcumgr/grp/shell_mgmt/shell_mgmt.h>
 #endif
 #ifdef CONFIG_MCUMGR_CMD_FS_MGMT
-#include "fs_mgmt/fs_mgmt.h"
+#include <zephyr/mgmt/mcumgr/grp/fs_mgmt/fs_mgmt.h>
 #endif
 
 #define PARTITION_NODE DT_NODELABEL(lfs1)

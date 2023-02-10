@@ -1,21 +1,21 @@
-#include <zephyr.h>
-#include <shell/shell.h>
+#include <zephyr/kernel.h>
+#include <zephyr/shell/shell.h>
 #include <version.h>
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 #include <stdlib.h>
-#include <drivers/uart.h>
-#include <drivers/lora.h>
-#include <usb/usb_device.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/lora.h>
+#include <zephyr/usb/usb_device.h>
 #include <ctype.h>
-#include <device.h>
-#include <drivers/flash.h>
-#include <drivers/gpio.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/drivers/gpio.h>
 #include "pcf85263a.h"
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
 #define DEFAULT_RADIO_NODE DT_ALIAS(lora0)
