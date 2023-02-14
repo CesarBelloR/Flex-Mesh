@@ -1,38 +1,53 @@
 #include "etc_device.h"
-#include <fs/nvs.h>
-#include <logging/log.h>
+
 #include <string.h>
-#include <sys/reboot.h>
-#include <zephyr.h>
+
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/fs/nvs.h>
 #include <zephyr/storage/flash_map.h>
 
+#include <fs/nvs.h>
+#include <logging/log.h>
+#include <sys/reboot.h>
+#include <zephyr.h>
+
 LOG_MODULE_REGISTER(etc_setting, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define STORAGE_NODE_LABEL storage
-#define RECORD_NODE_LABEL record_storage
+#define RECORD_NODE_LABEL  record_storage
 
 #if TEST
-#define ETC_RECORD_MAX_SECTOR (8)
+#define ETC_RECORD_MAX_SECTOR	  (8)
 #define ETC_RECORD_MAX_PER_SECTOR (7)
-#define ETC_RECORD_MAX_RECORD 38
+#define ETC_RECORD_MAX_RECORD	  38
 #else
-// Sector size / Element size (4096 / 36)
-#define ETC_RECORD_MAX_PER_SECTOR (113)
-// Maximum record in requirement
-#define ETC_RECORD_MAX_RECORD (90 * 24 * 4)
-// Max sector = round(fit sector + 1 free sector for swap) (ETC_RECORD_MAX_RECORD / ETC_RECORD_MAX_PER_SECTOR) + 1
-#define ETC_RECORD_MAX_SECTOR (78)
+/**
+ * @brief Define a flash sector size based on HW
+ *
+ */
+#define ETC_FLASH_SECTOR_SIZE	  (4096)
+/**
+ * @brief Define maximum record per sector
+ */
+#define ETC_RECORD_MAX_PER_SECTOR ((int)(ETC_FLASH_SECTOR_SIZE) / (ETC_DEVICE_RECORD_SIZE))
+/**
+ * @brief Maximum record in requirement
+ */
+#define ETC_RECORD_MAX_RECORD	  (90 * 24 * 4)
+/**
+ * @brief Max sector = round(fit sector + 1 free sector for swap) (ETC_RECORD_MAX_RECORD /
+ * ETC_RECORD_MAX_PER_SECTOR) + 1
+ */
+#define ETC_RECORD_MAX_SECTOR	  ((int)((ETC_RECORD_MAX_RECORD) / (ETC_RECORD_MAX_PER_SECTOR)) + 1)
 #endif
 
-struct config_t  {
-	union etc_config_t etc_config;
+struct config {
+	union etc_config etc_config;
 	bool is_loaded;
 };
 
-union etc_device_record_header_t {
+union etc_device_record_header {
 	uint8_t header;
 	struct {
 		uint8_t ready : 1;
@@ -41,29 +56,30 @@ union etc_device_record_header_t {
 	};
 };
 
-struct etc_device_record_index_t {
+struct etc_device_record_index {
 	int8_t sector_idx;
 	int8_t element_idx;
 };
 
-struct etc_device_record_table_t {
-	struct etc_device_record_index_t oldest;
-	struct etc_device_record_index_t newest;
+struct etc_device_record_table {
+	struct etc_device_record_index oldest;
+	struct etc_device_record_index newest;
 	int16_t total;
 };
 
-static union etc_device_record_header_t etc_device_record_header;
-static struct etc_device_record_table_t etc_device_record_table;
-static int etc_nvs_write(int element_id, const void *data, size_t len);
-static int etc_nvs_read(int element_id, void *data, size_t len);
-static struct etc_device_record_index_t etc_device_get_next_index(void);
-static struct config_t etc_config;
+static union etc_device_record_header etc_device_record_header;
+static struct etc_device_record_table etc_device_record_table;
+static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
+static int etc_nvs_read(uint16_t element_id, void *data, size_t len);
+static struct etc_device_record_index etc_device_get_next_index(void);
+static struct config etc_config;
 static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
 
-union etc_config_t *p_etc_config = &etc_config.etc_config;
+union etc_config *p_etc_config = &etc_config.etc_config;
 
-static void etc_nvs_init(void) {
+static void etc_nvs_init(void)
+{
 	int rc = 0;
 	struct flash_pages_info info;
 	etc_fs.flash_device = FLASH_AREA_DEVICE(STORAGE_NODE_LABEL);
@@ -90,12 +106,10 @@ static void etc_nvs_init(void) {
 
 	etc_fs.sector_count = (FLASH_AREA_SIZE(STORAGE_NODE_LABEL) / info.size);
 	record_fs.sector_count = (FLASH_AREA_SIZE(RECORD_NODE_LABEL) / info.size);
-	LOG_INF("Offset %d - Size %d - Sector Size %d - Sector Cnt %d",
-					(int)etc_fs.offset, FLASH_AREA_SIZE(STORAGE_NODE_LABEL), info.size,
-					etc_fs.sector_count);
-	LOG_INF("Offset %d - Size %d - Sector Size %d - Sector Cnt %d",
-					(int)record_fs.offset, FLASH_AREA_SIZE(RECORD_NODE_LABEL), info.size,
-					record_fs.sector_count);
+	LOG_INF("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
+		FLASH_AREA_SIZE(STORAGE_NODE_LABEL), info.size, etc_fs.sector_count);
+	LOG_INF("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)record_fs.offset,
+		FLASH_AREA_SIZE(RECORD_NODE_LABEL), info.size, record_fs.sector_count);
 	rc = nvs_mount(&etc_fs);
 	if (rc) {
 		LOG_ERR("Flash Init failed");
@@ -104,14 +118,16 @@ static void etc_nvs_init(void) {
 
 	LOG_INF("Initialised etc setting successfully");
 
-	rc = etc_nvs_read(ETC_RECORD_STAT, &etc_device_record_table,sizeof(etc_device_record_table));
+	rc = etc_nvs_read(ETC_RECORD_STAT, &etc_device_record_table,
+			  sizeof(etc_device_record_table));
 	if (rc != 0) {
 		etc_device_record_table.newest.sector_idx = 0;
 		etc_device_record_table.oldest.sector_idx = 0;
 		etc_device_record_table.newest.element_idx = 0;
 		etc_device_record_table.oldest.element_idx = 0;
 		etc_device_record_table.total = 0;
-		rc = etc_nvs_write(ETC_RECORD_STAT, &etc_device_record_table, sizeof(etc_device_record_table));
+		rc = etc_nvs_write(ETC_RECORD_STAT, &etc_device_record_table,
+				   sizeof(etc_device_record_table));
 		if (rc != 0) {
 			LOG_ERR("Failed to write record stat");
 		} else {
@@ -121,13 +137,14 @@ static void etc_nvs_init(void) {
 
 	LOG_INF("Last record stat as below: ");
 	LOG_INF("\tNewest record (%d,%d)", etc_device_record_table.newest.sector_idx,
-					etc_device_record_table.newest.element_idx);
+		etc_device_record_table.newest.element_idx);
 	LOG_INF("\tOldest record (%d,%d)", etc_device_record_table.oldest.sector_idx,
-					etc_device_record_table.oldest.element_idx);
+		etc_device_record_table.oldest.element_idx);
 	LOG_INF("\tTotal record %d", etc_device_record_table.total);
 }
 
-static int etc_nvs_write(int element_id, const void *data, size_t len) {
+static int etc_nvs_write(uint16_t element_id, const void *data, size_t len)
+{
 	size_t write_len = 0;
 	write_len = nvs_write(&etc_fs, element_id, data, len);
 	if (write_len != len && write_len != 0) {
@@ -137,7 +154,8 @@ static int etc_nvs_write(int element_id, const void *data, size_t len) {
 	return 0;
 }
 
-static int etc_nvs_read(int element_id, void *data, size_t len) {
+static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
+{
 	size_t read_len = 0;
 	read_len = nvs_read(&etc_fs, element_id, data, len);
 	if (read_len < 0) {
@@ -157,13 +175,21 @@ static int etc_nvs_read(int element_id, void *data, size_t len) {
 	return -EINVAL;
 }
 
-void etc_device_init(void) {
-	p_etc_config->device_mode = (enum etc_device_mode_e) CONFIG_ETC_DEVICE_MODE;
-	LOG_INF("Device is %s", p_etc_config->device_mode == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger");
+void etc_device_init(void)
+{
+	/* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
+	assert(ETC_DEVICE_RECORD_SIZE <= sizeof(union etc_device_record));
+	/* Assert to verify the configuration size must fit the macro ETC_CONFIG_TYPE_SIZE */
+	assert(ETC_CONFIG_TYPE_SIZE <= sizeof(union etc_config));
+
+	p_etc_config->device_mode = (enum etc_device_mode)CONFIG_ETC_DEVICE_MODE;
+	LOG_INF("Device is %s",
+		p_etc_config->device_mode == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger");
 	etc_nvs_init();
 }
 
-int etc_device_get_config(union etc_config_t *config) {
+int etc_device_get_config(union etc_config *config)
+{
 	if (etc_config.is_loaded) {
 		memcpy(config, &etc_config.etc_config, sizeof(etc_config.etc_config));
 		return 0;
@@ -171,7 +197,7 @@ int etc_device_get_config(union etc_config_t *config) {
 
 	memset(&etc_config.etc_config, 0, sizeof(etc_config.etc_config));
 	int read_len =
-			etc_nvs_read(ETC_CONFIG_ID, &etc_config.etc_config, sizeof(etc_config.etc_config));
+		etc_nvs_read(ETC_CONFIG_ID, &etc_config.etc_config, sizeof(etc_config.etc_config));
 	if (read_len < 0) {
 		LOG_ERR("Failed to read ETC Config");
 		return -EINVAL;
@@ -181,10 +207,12 @@ int etc_device_get_config(union etc_config_t *config) {
 	return 0;
 }
 
-int etc_device_set_config(union etc_config_t *config) {
+int etc_device_set_config(union etc_config *config)
+{
 	etc_config.is_loaded = true;
 	memcpy(&etc_config.etc_config, config, sizeof(etc_config.etc_config));
-	int rc = etc_nvs_write(ETC_CONFIG_ID, &etc_config.etc_config, sizeof(etc_config.etc_config));
+	int rc =
+		etc_nvs_write(ETC_CONFIG_ID, &etc_config.etc_config, sizeof(etc_config.etc_config));
 	if (rc != 0) {
 		LOG_ERR("Failed to write ETC Config");
 		return -EINVAL;
@@ -195,7 +223,8 @@ int etc_device_set_config(union etc_config_t *config) {
 	return 0;
 }
 
-bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length) {
+bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length)
+{
 	for (int i = 0; i < length; i++) {
 		if (buf[i] != 0xFF) {
 			return false;
@@ -205,8 +234,9 @@ bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length) {
 	return true;
 }
 
-int etc_device_write_record_sensor(struct sensor_data *sensor) {
-	union etc_device_record_t record;
+int etc_device_write_record_sensor(struct sensor_data *sensor)
+{
+	union etc_device_record record;
 	record.battery = (float)sensor->battery_mV / 1000.0;
 	record.flag = 0;
 	record.timestamp = (uint32_t)sensor->timestamp;
@@ -218,9 +248,10 @@ int etc_device_write_record_sensor(struct sensor_data *sensor) {
 	return etc_device_write_record(&record);
 }
 
-int etc_device_write_record(union etc_device_record_t *record) {
+int etc_device_write_record(union etc_device_record *record)
+{
 	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
-	struct etc_device_record_index_t record_index;
+	struct etc_device_record_index record_index;
 	if (etc_device_record_table.total == 0) {
 		record_index = etc_device_record_table.newest;
 		etc_device_record_table.total += 1;
@@ -228,10 +259,12 @@ int etc_device_write_record(union etc_device_record_t *record) {
 		record_index = etc_device_get_next_index();
 	}
 
-	LOG_DBG("Record to write data (%d,%d)", record_index.sector_idx,
-					record_index.element_idx);
-	uint32_t record_addr = (record_fs.offset) + record_index.sector_idx * record_fs.sector_size + record_index.element_idx * ETC_DEVICE_RECORD_SIZE;
-	uint16_t record_id = record_index.sector_idx * ETC_RECORD_MAX_PER_SECTOR + record_index.element_idx + ETC_RECORD_HEADER;
+	LOG_DBG("Record to write data (%d,%d)", record_index.sector_idx, record_index.element_idx);
+	uint32_t record_addr = (record_fs.offset) +
+			       record_index.sector_idx * record_fs.sector_size +
+			       record_index.element_idx * ETC_DEVICE_RECORD_SIZE;
+	uint16_t record_id = record_index.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
+			     record_index.element_idx + ETC_RECORD_HEADER;
 	int rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
 	if (rc != 0) {
 		LOG_ERR("Error in reading flash err %d", rc);
@@ -265,7 +298,8 @@ int etc_device_write_record(union etc_device_record_t *record) {
 		return rc;
 	}
 
-	rc = etc_nvs_write(ETC_RECORD_STAT, &etc_device_record_table, sizeof(etc_device_record_table));
+	rc = etc_nvs_write(ETC_RECORD_STAT, &etc_device_record_table,
+			   sizeof(etc_device_record_table));
 	if (rc != 0) {
 		LOG_ERR("Failed to write record stat");
 	} else {
@@ -275,42 +309,58 @@ int etc_device_write_record(union etc_device_record_t *record) {
 	return 0;
 }
 
-static int etc_device_find_nack(struct etc_device_record_index_t *index) {
+static int etc_device_find_nack(struct etc_device_record_index *index)
+{
 	int rc = 0;
-	int oldest_id = etc_device_record_table.oldest.sector_idx * ETC_RECORD_MAX_PER_SECTOR + etc_device_record_table.oldest.element_idx + ETC_RECORD_HEADER;
-	int newest_id = etc_device_record_table.newest.sector_idx * ETC_RECORD_MAX_PER_SECTOR + etc_device_record_table.newest.element_idx + ETC_RECORD_HEADER;
-	int max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
+	int oldest_id = etc_device_record_table.oldest.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
+			etc_device_record_table.oldest.element_idx + ETC_RECORD_HEADER;
+	int newest_id = etc_device_record_table.newest.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
+			etc_device_record_table.newest.element_idx + ETC_RECORD_HEADER;
+	int max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_MAX_PER_SECTOR +
+		     ETC_RECORD_HEADER;
 	int min_id = ETC_RECORD_HEADER;
 	/* Sector newest is higher than oldest */
 	if (oldest_id < newest_id) {
 		for (int id = oldest_id; id < newest_id; id++) {
-			rc = etc_nvs_read(id, &etc_device_record_header, sizeof(etc_device_record_header));
+			rc = etc_nvs_read(id, &etc_device_record_header,
+					  sizeof(etc_device_record_header));
 			if (rc == 0) {
 				if (etc_device_record_header.ack == 0) {
-					index->sector_idx = (id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
-					index->element_idx = (id - ETC_RECORD_HEADER) - index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
+					index->sector_idx =
+						(id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
+					index->element_idx =
+						(id - ETC_RECORD_HEADER) -
+						index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
 					return 0;
 				}
 			}
 		}
 	} else {
 		for (int id = oldest_id; id < max_id; id++) {
-			rc = etc_nvs_read(id, &etc_device_record_header, sizeof(etc_device_record_header));
+			rc = etc_nvs_read(id, &etc_device_record_header,
+					  sizeof(etc_device_record_header));
 			if (rc == 0) {
 				if (etc_device_record_header.ack == 0) {
-					index->sector_idx = (id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
-					index->element_idx = (id - ETC_RECORD_HEADER) - index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
+					index->sector_idx =
+						(id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
+					index->element_idx =
+						(id - ETC_RECORD_HEADER) -
+						index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
 					return 0;
 				}
 			}
 		}
 
 		for (int id = min_id; id < newest_id; id++) {
-			rc = etc_nvs_read(id, &etc_device_record_header, sizeof(etc_device_record_header));
+			rc = etc_nvs_read(id, &etc_device_record_header,
+					  sizeof(etc_device_record_header));
 			if (rc == 0) {
 				if (etc_device_record_header.ack == 0) {
-					index->sector_idx = (id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
-					index->element_idx = (id - ETC_RECORD_HEADER) - index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
+					index->sector_idx =
+						(id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
+					index->element_idx =
+						(id - ETC_RECORD_HEADER) -
+						index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
 					return 0;
 				}
 			}
@@ -319,17 +369,20 @@ static int etc_device_find_nack(struct etc_device_record_index_t *index) {
 	return -ENOENT;
 }
 
-int etc_device_read_record(union etc_device_record_t *record) {
+int etc_device_read_record(union etc_device_record *record)
+{
 	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
-	struct etc_device_record_index_t index;
+	struct etc_device_record_index index;
 	int rc = etc_device_find_nack(&index);
 	if (rc != 0) {
 		LOG_WRN("Don't have NACK record");
 		return 0;
 	}
 
-	uint32_t record_addr = (record_fs.offset) + index.sector_idx * record_fs.sector_size + index.element_idx * ETC_DEVICE_RECORD_SIZE;
-	uint16_t record_id = index.sector_idx * ETC_RECORD_MAX_PER_SECTOR + index.element_idx + ETC_RECORD_HEADER;
+	uint32_t record_addr = (record_fs.offset) + index.sector_idx * record_fs.sector_size +
+			       index.element_idx * ETC_DEVICE_RECORD_SIZE;
+	uint16_t record_id = index.sector_idx * ETC_RECORD_MAX_PER_SECTOR + index.element_idx +
+			     ETC_RECORD_HEADER;
 	LOG_DBG("Record ID %d", record_id);
 	rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
 	if (rc != 0) {
@@ -341,8 +394,10 @@ int etc_device_read_record(union etc_device_record_t *record) {
 	return record_id;
 }
 
-int etc_device_set_ack_record(int record_id) {
-	int rc = etc_nvs_read(record_id, &etc_device_record_header, sizeof(etc_device_record_header));
+int etc_device_set_ack_record(int record_id)
+{
+	int rc = etc_nvs_read(record_id, &etc_device_record_header,
+			      sizeof(etc_device_record_header));
 	if (rc != 0) {
 		LOG_ERR("Failed to read record id %d error %d", record_id, rc);
 		return rc;
@@ -363,9 +418,9 @@ int etc_device_set_ack_record(int record_id) {
 	return rc;
 }
 
-static struct etc_device_record_index_t etc_device_get_next_index(void) {
-	if (etc_device_record_table.newest.element_idx <
-			ETC_RECORD_MAX_PER_SECTOR - 1) {
+static struct etc_device_record_index etc_device_get_next_index(void)
+{
+	if (etc_device_record_table.newest.element_idx < ETC_RECORD_MAX_PER_SECTOR - 1) {
 		etc_device_record_table.newest.element_idx += 1;
 	} else {
 		etc_device_record_table.newest.element_idx = 0;
@@ -381,13 +436,11 @@ static struct etc_device_record_index_t etc_device_get_next_index(void) {
 		etc_device_record_table.oldest.sector_idx = 0;
 		etc_device_record_table.total += 1;
 	} else {
-		if (etc_device_record_table.oldest.element_idx <
-				ETC_RECORD_MAX_PER_SECTOR - 1) {
+		if (etc_device_record_table.oldest.element_idx < ETC_RECORD_MAX_PER_SECTOR - 1) {
 			etc_device_record_table.oldest.element_idx += 1;
 		} else {
 			etc_device_record_table.oldest.element_idx = 0;
-			if (etc_device_record_table.oldest.sector_idx <
-					ETC_RECORD_MAX_SECTOR - 1) {
+			if (etc_device_record_table.oldest.sector_idx < ETC_RECORD_MAX_SECTOR - 1) {
 				etc_device_record_table.oldest.sector_idx += 1;
 			} else {
 				etc_device_record_table.oldest.sector_idx = 0;
@@ -398,17 +451,23 @@ static struct etc_device_record_index_t etc_device_get_next_index(void) {
 	return etc_device_record_table.newest;
 }
 
-int etc_device_write_setting(int setting_id, void *setting, int setting_size) {
+int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size)
+{
 	LOG_DBG("Write setting ID %d", setting_id);
 	return etc_nvs_write(setting_id, setting, setting_size);
 }
 
-int etc_device_read_setting(int setting_id, void *setting, int setting_size) {
+int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size)
+{
 	LOG_DBG("Read setting ID %d", setting_id);
 	return etc_nvs_read(setting_id, setting, setting_size);
 }
 
-enum etc_device_mode_e etc_device_get_mode(void) {
+enum etc_device_mode etc_device_get_mode(void)
+{
 	return p_etc_config->device_mode;
 }
-int etc_device_get_rx_timeout(void) { return p_etc_config->rx_duration_secs; }
+int etc_device_get_rx_timeout(void)
+{
+	return p_etc_config->rx_duration_secs;
+}
