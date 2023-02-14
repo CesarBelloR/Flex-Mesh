@@ -40,6 +40,12 @@ enum etc_alarm_direction {
 	ETC_ALARM_DIR_LESS = 0x01,
 };
 
+/**
+ * @brief Define a callback function for record reading
+ * 
+ */
+typedef int (*etc_device_record_reading_callback)(uint16_t record_id, void* user_data);
+
 enum {
 	ETC_CONFIG_ID = 0x01,
 	ETC_RECORD_STAT = 0x02,
@@ -73,9 +79,9 @@ union etc_device_record {
 	uint8_t data[ETC_DEVICE_RECORD_SIZE];
 	struct {
 		float battery;
-		uint32_t flag; // Counter or PCB Fault
-		uint32_t timestamp;
 		float sensor[ETC_DEVICE_NUM_SENSOR];
+		uint32_t timestamp;
+		uint32_t flag; // Counter or PCB Fault
 	};
 };
 
@@ -89,5 +95,6 @@ int etc_device_read_record(union etc_device_record *record);
 int etc_device_set_ack_record(int record_id);
 enum etc_device_mode etc_device_get_mode(void);
 int etc_device_get_rx_timeout(void);
+int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data);
 
 #endif /* ETC_DEVICE_H_ */

@@ -352,14 +352,7 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		union etc_device_record record;
-		record.battery = (float)msg->module.sensor.data.sensors->battery_mV / 1000.0;
-		record.flag = 0;
-		record.timestamp = (uint32_t)msg->module.sensor.data.sensors->timestamp;
-		memcpy(record.sensor, msg->module.sensor.data.sensors->temperature, SENSOR_EVENT_NUM_DEV_MAX);
-		record.sensor[5] = 0.0;
-		etc_device_write_record(&record);
-		
+		etc_device_write_record_sensor(msg->module.sensor.data.sensors);		
 		struct data_sensors new_sensor_data = {
 			.queued = true
 		};

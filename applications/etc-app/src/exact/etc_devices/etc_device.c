@@ -12,7 +12,8 @@
 #include <sys/reboot.h>
 #include <zephyr.h>
 
-LOG_MODULE_REGISTER(etc_setting, CONFIG_ETC_APP_LOG_LEVEL);
+#include "data/data_codec.h"
+LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define STORAGE_NODE_LABEL storage
 #define RECORD_NODE_LABEL  record_storage
@@ -52,7 +53,8 @@ union etc_device_record_header {
 	struct {
 		uint8_t ready : 1;
 		uint8_t ack : 1;
-		uint8_t unused : 6;
+		uint8_t wait : 1;
+		uint8_t unused : 3;
 	};
 };
 
@@ -64,7 +66,7 @@ struct etc_device_record_index {
 struct etc_device_record_table {
 	struct etc_device_record_index oldest;
 	struct etc_device_record_index newest;
-	int16_t total;
+	uint16_t total;
 };
 
 static union etc_device_record_header etc_device_record_header;
@@ -291,6 +293,7 @@ int etc_device_write_record(union etc_device_record *record)
 
 	etc_device_record_header.ack = 0;
 	etc_device_record_header.ready = 1;
+	etc_device_record_header.wait = 0;
 	etc_device_record_header.unused = 0;
 	rc = etc_nvs_write(record_id, &etc_device_record_header, sizeof(etc_device_record_header));
 	if (rc != 0) {
@@ -309,7 +312,7 @@ int etc_device_write_record(union etc_device_record *record)
 	return 0;
 }
 
-static int etc_device_find_nack(struct etc_device_record_index *index)
+int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data)
 {
 	int rc = 0;
 	int oldest_id = etc_device_record_table.oldest.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
@@ -319,72 +322,99 @@ static int etc_device_find_nack(struct etc_device_record_index *index)
 	int max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_MAX_PER_SECTOR +
 		     ETC_RECORD_HEADER;
 	int min_id = ETC_RECORD_HEADER;
+	if (oldest_id == newest_id) {
+		if (etc_device_record_table.total == 1) {
+			if (reading_callback) {
+				rc = reading_callback(min_id, data);
+				if (rc > 0) {// Return record_id;
+					return rc;
+				} else if (rc == 0) {
+					/* Continue reading*/
+				} else {
+					/* No action required */
+				}
+			}
+			return 0;
+		}
+		return -ENOENT;
+	}
 	/* Sector newest is higher than oldest */
 	if (oldest_id < newest_id) {
-		for (int id = oldest_id; id < newest_id; id++) {
+		for (int id = oldest_id; id <= newest_id; id++) {
 			rc = etc_nvs_read(id, &etc_device_record_header,
 					  sizeof(etc_device_record_header));
 			if (rc == 0) {
 				if (etc_device_record_header.ack == 0) {
-					index->sector_idx =
-						(id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
-					index->element_idx =
-						(id - ETC_RECORD_HEADER) -
-						index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
-					return 0;
+					if (reading_callback) {
+						rc = reading_callback(id, data);
+						if (rc > 0) {// Return record_id;
+							return rc;
+						} else if (rc == 0) {
+							/* Continue reading*/
+						} else {
+							/* No action required */
+						}
+					}
 				}
+			} else {
+				LOG_WRN("Error id %d - error %d", id, rc);
 			}
 		}
 	} else {
-		for (int id = oldest_id; id < max_id; id++) {
+		for (int id = oldest_id; id <= max_id; id++) {
 			rc = etc_nvs_read(id, &etc_device_record_header,
 					  sizeof(etc_device_record_header));
 			if (rc == 0) {
 				if (etc_device_record_header.ack == 0) {
-					index->sector_idx =
-						(id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
-					index->element_idx =
-						(id - ETC_RECORD_HEADER) -
-						index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
-					return 0;
+					if (reading_callback) {
+						rc = reading_callback(id, data);
+						if (rc > 0) {// Return record_id;
+							return rc;
+						} else if (rc == 0) {
+							/* Continue reading*/
+						} else {
+							/* No action required */
+						}
+					}
 				}
 			}
 		}
 
-		for (int id = min_id; id < newest_id; id++) {
+		for (int id = min_id; id <= newest_id; id++) {
 			rc = etc_nvs_read(id, &etc_device_record_header,
 					  sizeof(etc_device_record_header));
 			if (rc == 0) {
 				if (etc_device_record_header.ack == 0) {
-					index->sector_idx =
-						(id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
-					index->element_idx =
-						(id - ETC_RECORD_HEADER) -
-						index->sector_idx * ETC_RECORD_MAX_PER_SECTOR;
-					return 0;
+					if (reading_callback) {
+						rc = reading_callback(id, data);
+						if (rc > 0) {// Return record_id;
+							return rc;
+						} else if (rc == 0) {
+							/* Continue reading*/
+						} else {
+							/* No action required */
+						}
+					}
 				}
 			}
 		}
+	}
+
+	if (rc == 0) {
+		return rc;
 	}
 	return -ENOENT;
 }
 
-int etc_device_read_record(union etc_device_record *record)
-{
+static int etc_device_record_reading(uint16_t record_id, void* data) {
 	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
+	union etc_device_record *record = (union etc_device_record *)data;
 	struct etc_device_record_index index;
-	int rc = etc_device_find_nack(&index);
-	if (rc != 0) {
-		LOG_WRN("Don't have NACK record");
-		return 0;
-	}
-
+	index.sector_idx = (record_id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
+	index.element_idx = (record_id - ETC_RECORD_HEADER) - index.sector_idx * ETC_RECORD_MAX_PER_SECTOR;
 	uint32_t record_addr = (record_fs.offset) + index.sector_idx * record_fs.sector_size +
 			       index.element_idx * ETC_DEVICE_RECORD_SIZE;
-	uint16_t record_id = index.sector_idx * ETC_RECORD_MAX_PER_SECTOR + index.element_idx +
-			     ETC_RECORD_HEADER;
-	LOG_DBG("Record ID %d", record_id);
-	rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
+	int rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
 	if (rc != 0) {
 		LOG_ERR("Error in reading flash err %d", rc);
 		return rc;
@@ -392,6 +422,18 @@ int etc_device_read_record(union etc_device_record *record)
 
 	memcpy(record->data, buf, ETC_DEVICE_RECORD_SIZE);
 	return record_id;
+}
+
+int etc_device_read_record(union etc_device_record *record)
+{
+	int rc = etc_device_find_nack(etc_device_record_reading, record);
+	if (rc < 0) {
+		LOG_WRN("Don't have NACK record");
+		return 0;
+	}
+
+	LOG_DBG("Record ID %d", rc);
+	return rc;
 }
 
 int etc_device_set_ack_record(int record_id)
@@ -414,10 +456,8 @@ int etc_device_set_ack_record(int record_id)
 		LOG_ERR("Failed to write record id %d error %d", record_id, rc);
 		return rc;
 	}
-
 	return rc;
 }
-
 static struct etc_device_record_index etc_device_get_next_index(void)
 {
 	if (etc_device_record_table.newest.element_idx < ETC_RECORD_MAX_PER_SECTOR - 1) {
@@ -471,3 +511,129 @@ int etc_device_get_rx_timeout(void)
 {
 	return p_etc_config->rx_duration_secs;
 }
+
+#ifdef CONFIG_SHELL
+#include <zephyr/shell/shell.h>
+
+static int cmd_get_record_reading(uint16_t record_id, void* data) {
+	uint16_t *nack_counter = (uint16_t*)data;
+	*nack_counter += 1;
+	return 0;
+}
+
+static int cmd_num_report_record(const struct shell *shell, size_t argc, char **argv)
+{
+	uint16_t total = etc_device_record_table.total;
+	uint16_t nack = 0;
+	int rc = etc_device_find_nack(cmd_get_record_reading, &nack);
+	if (rc != 0) {
+		shell_error(shell, "Can't query NACK record");
+		return 0;
+	}
+
+	shell_print(shell, "Number of total records: %d", total);
+	shell_print(shell, "Number of ack records: %d", total - nack);
+	shell_print(shell, "Number of nack records: %d", nack);
+	return 0;
+}
+
+static int cmd_get_nack_reading(const struct shell *shell, uint16_t record_id) {
+	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
+	uint8_t msg[ETC_DEVICE_RECORD_SIZE * 2 + 1] = {0x00};
+	struct etc_device_record_index index;
+	index.sector_idx = (record_id - ETC_RECORD_HEADER) / ETC_RECORD_MAX_SECTOR;
+	index.element_idx = (record_id - ETC_RECORD_HEADER) - index.sector_idx * ETC_RECORD_MAX_PER_SECTOR;
+	uint32_t record_addr = (record_fs.offset) + index.sector_idx * record_fs.sector_size +
+			       index.element_idx * ETC_DEVICE_RECORD_SIZE;
+	int rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
+	if (rc != 0) {
+		shell_error(shell, "Error in reading flash err %d", rc);
+		return rc;
+	}
+	size_t length = bin2hex(buf, ETC_DEVICE_RECORD_SIZE, msg, sizeof(msg));
+	shell_print(shell, "%s", msg);
+	return 0;
+}
+
+static int cmd_get_nack_id(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		uint16_t record_id = (uint16_t)strtol(argv[1], NULL, 10);
+		return cmd_get_nack_reading(shell, record_id + ETC_RECORD_HEADER);
+	} 
+	shell_error(shell, "Invalid input record id");
+	return 0;
+}
+
+static int cmd_get_nack_id_list_reading(uint16_t record_id, void* data) {
+	const struct shell *shell = (void*)data;
+	shell_print(shell, "%d", record_id - ETC_RECORD_HEADER);
+	return 0;
+}
+
+static int cmd_get_nack_id_list(const struct shell *shell, size_t argc, char **argv)
+{
+	int rc = etc_device_find_nack(cmd_get_nack_id_list_reading, (void*)shell);
+	if (rc < 0) {
+		shell_error(shell, "Don't have NACK record");
+		return 0;
+	}
+	return 0;
+}
+
+static int cmd_clean_records(const struct shell *shell, size_t argc, char **argv)
+{
+	etc_device_record_table.newest.sector_idx = 0;
+	etc_device_record_table.oldest.sector_idx = 0;
+	etc_device_record_table.newest.element_idx = 0;
+	etc_device_record_table.oldest.element_idx = 0;
+	etc_device_record_table.total = 0;
+	int rc = etc_nvs_write(ETC_RECORD_STAT, &etc_device_record_table,
+			   sizeof(etc_device_record_table));
+	if (rc != 0) {
+		shell_error(shell, "Failed to write reset record %d", rc);
+	} else {
+		shell_print(shell, "Reset the record successfully");
+	}
+	return 0;
+}
+
+static int cmd_parser_hex_record(const struct shell *shell, size_t argc, char **argv)
+{
+	uint8_t msg[ETC_DEVICE_RECORD_SIZE] = {0x00};
+	if ((argc == 2) && (strlen(argv[1]) == (ETC_DEVICE_RECORD_SIZE * 2))) {
+		hex2bin(argv[1], strlen(argv[1]), msg, sizeof(msg));
+		union etc_device_record record;
+		memcpy(record.data, msg, ETC_DEVICE_RECORD_SIZE);
+		char buf[128] = {0x00};
+		int buf_len = snprintf(buf, sizeof(buf), "%u,%1.2f,", record.timestamp, record.battery); 
+		for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++)
+		{
+			if (data_codec_compare_temperature_is_valid(record.sensor[i]))
+			{
+				buf_len += snprintf(buf + buf_len, sizeof(buf) - buf_len, "%2.2f,", record.sensor[i]);
+			}
+			else
+			{
+				buf_len += snprintf(buf + buf_len, sizeof(buf) - buf_len, "*,");
+			}
+		}
+		buf_len += snprintf(buf + buf_len, sizeof(buf) - buf_len, "*");
+		shell_print(shell, "Record: %s", buf);
+	} else {
+		shell_print(shell, "Invalid input record");
+	} 
+	
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_record, 
+	SHELL_CMD(report, NULL, "Report number record (total/ack/nack)", cmd_num_report_record),
+	SHELL_CMD(nack_list, NULL, "Get nack list record", cmd_get_nack_id_list),
+	SHELL_CMD(nack_id, NULL, "Get nack record by id", cmd_get_nack_id),
+	SHELL_CMD(clean, NULL, "Clean the records", cmd_clean_records),
+	SHELL_CMD(parser, NULL, "Parser the hex record", cmd_parser_hex_record),
+	SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(record, &sub_record, "ETC Record Management", NULL);
+#endif
