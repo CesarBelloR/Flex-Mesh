@@ -85,6 +85,11 @@ union etc_device_record {
 	};
 };
 
+/* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
+BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
+/* Assert to verify the configuration size must fit the macro ETC_CONFIG_TYPE_SIZE */
+BUILD_ASSERT(ETC_CONFIG_TYPE_SIZE >= sizeof(union etc_config));
+
 void etc_device_init(void);
 
 int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size);

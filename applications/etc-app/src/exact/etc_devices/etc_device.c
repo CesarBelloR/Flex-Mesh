@@ -48,7 +48,7 @@ struct config {
 	bool is_loaded;
 };
 
-union etc_device_record_header {
+union etc_device_record_header { // It will always change  NVS
 	uint8_t header;
 	struct {
 		uint8_t ready : 1;
@@ -58,7 +58,7 @@ union etc_device_record_header {
 	};
 };
 
-struct etc_device_record_index {
+struct etc_device_record_index { // Constant in flash until the index is override (exflash)
 	int8_t sector_idx;
 	int8_t element_idx;
 };
@@ -179,11 +179,6 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 
 void etc_device_init(void)
 {
-	/* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
-	assert(ETC_DEVICE_RECORD_SIZE <= sizeof(union etc_device_record));
-	/* Assert to verify the configuration size must fit the macro ETC_CONFIG_TYPE_SIZE */
-	assert(ETC_CONFIG_TYPE_SIZE <= sizeof(union etc_config));
-
 	p_etc_config->device_mode = (enum etc_device_mode)CONFIG_ETC_DEVICE_MODE;
 	LOG_INF("Device is %s",
 		p_etc_config->device_mode == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger");
