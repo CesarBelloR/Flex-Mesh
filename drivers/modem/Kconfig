@@ -64,6 +64,18 @@ config MODEM_QUECTEL_BG95_M3_INIT_PRIORITY
 	  Note that the priority needs to be lower than the net stack
 	  so that it can start before the networking sub-system.
 
+config MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK
+	bool "Allow the use of non-static PSK credentials"
+	default y
+
+config MODEM_QUECTEL_BG95_M3_PSK_ID_MAX_SIZE
+	int "Maximum size of the PSK identity"
+	default 64
+
+config MODEM_QUECTEL_BG95_M3_PSK_MAX_SIZE
+	int "Maximum size of the PSK"
+	default 64
+
 config MODEM_QUECTEL_BG95_M3_PSK_ID
 	string "PSK ID when using DTLS"
 	default "EXACT"
