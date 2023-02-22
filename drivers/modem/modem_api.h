@@ -48,6 +48,8 @@ struct modem_api {
 	 * modem event handler.
 	 */
 	modem_api_evt_handler_init_t evt_handler_init;
+	/* Set the modem's DTLS credentials.
+	*/
 	modem_api_set_credentials_t set_credentials;
 };
 
@@ -80,14 +82,15 @@ inline int modem_evt_handler_init(const struct device *dev,
 }
 
 /**
- * @brief Register an event handler callback for the modem
- * 	  device specified.
+ * @brief Set the modem security credentials
  * 
- * @param dev Pointer to the device
- * @param evt_handler Event handler callback function
+ * @param dev Pointer to the modem device
+ * @param type Type of the credential to set
+ * @param cred_buf Credential buffer
+ * @param cred_len Length of the credential buffer
  * @return 0 on success, negative on error
 */
-inline int modem_set_credentials(const struct device *dev,
+inline static int modem_set_credentials(const struct device *dev,
 				 enum modem_api_cred_type type,
 				 uint8_t *cred_buf, uint8_t cred_len)
 {

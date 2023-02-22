@@ -1188,13 +1188,8 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 
 #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK)
 	// Use dynamic psk data if not empty.
-	if (mdata.psk.id_len > 0 && mdata.psk.psk_len > 0 && 
-	    mdata.psk.id_len + mdata.psk.psk_len + 1 <= sizeof(buf)) {
-		// Modem expects file content in format <PSK_ID>&<PSK_KEY>
-		ret = bin2hex(mdata.psk.id, mdata.psk.id_len,
-			      buf, sizeof(buf));
-		buf[ret] = '&';
-		ret++;		      
+	if (mdata.psk.id_len > 0 && mdata.psk.psk_len > 0) {
+		ret = snprintk(buf, sizeof(buf), "%s&", mdata.psk.id);
 		ret += bin2hex(mdata.psk.psk, mdata.psk.psk_len,
 			       buf + ret, sizeof(buf) - ret);
 	} else

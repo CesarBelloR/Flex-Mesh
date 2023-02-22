@@ -5,10 +5,11 @@
 #include <lwm2m_util.h>
 #include <zephyr/settings/settings.h>
 
+#include "etc_lwm2m_client_utils.h"
 #include "modem_api.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(lwm2m_security, CONFIG_LWM2M_CLIENT_UTILS_LOG_LEVEL);
+LOG_MODULE_REGISTER(lwm2m_security, CONFIG_EXACT_LWM2M_CLIENT_UTILS_LOG_LEVEL);
 
 /* LWM2M_OBJECT_SECURITY_ID */
 #define SECURITY_SERVER_URI_ID 0
@@ -34,7 +35,6 @@ static int write_credential_type(int sec_obj_inst, int sec_tag, int res_id,
 	int ret;
 	void *cred = NULL;
 	uint16_t cred_len;
-	char psk_hex[65];
 
 	ret = lwm2m_get_res_buf(&LWM2M_OBJ(0, sec_obj_inst, res_id), &cred, NULL, &cred_len,  NULL);
 	if (ret < 0) {
@@ -46,8 +46,8 @@ static int write_credential_type(int sec_obj_inst, int sec_tag, int res_id,
 		return -ENOENT;
 	}
 
-	ret = modem_set_credentials(DT_NODELABEL(quectel_bg95), type,
-                                    cred, cred_len);
+	ret = modem_set_credentials(DEVICE_DT_GET(DT_NODELABEL(quectel_bg95)),
+				    type, cred, cred_len);
 	if (ret < 0) {
 		LOG_ERR("Unable to write credentials to modem (%d)", ret);
 		return ret;
@@ -134,14 +134,13 @@ fail:
 int lwm2m_load_credentials_to_modem(struct lwm2m_ctx *ctx)
 {
 	int ret;
-	bool exist;
 	bool has_credentials;
 	int mode;
 
 	if (ctx->bootstrap_mode) {
-		ctx->tls_tag = CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG;
+		ctx->tls_tag = 1;
 	} else {
-		ctx->tls_tag = CONFIG_LWM2M_CLIENT_UTILS_SERVER_TLS_TAG;
+		ctx->tls_tag = 1;
 	}
 
 	mode = sec_mode(ctx->sec_obj_inst);
