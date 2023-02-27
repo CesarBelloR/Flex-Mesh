@@ -4,4 +4,5 @@ rsource "etc_date_time/Kconfig"
 rsource "etc_interface/Kconfig"
 rsource "etc_settings/Kconfig"
 rsource "watchdog/Kconfig"
+rsource "etc_devices/Kconfig"
 endmenu

@@ -166,7 +166,7 @@ int cloud_wrap_state_send(char *buf, size_t len, bool ack, uint32_t id);
  * @return 0 on success, or a negative error code on failure.
  */
 int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id, 
-			 struct lwm2m_obj_path path_list[]);
+			 const struct lwm2m_obj_path path_list[]);
 
 /**
  * @brief Send batched data to cloud.
