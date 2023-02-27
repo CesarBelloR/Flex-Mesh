@@ -368,6 +368,9 @@ static int lwm2m_init_security(struct lwm2m_ctx *client, const char *ep_name)
 	psk_len = hex2bin(CONFIG_LWM2M_INTEGRATION_PSK, 
 			  sizeof(CONFIG_LWM2M_INTEGRATION_PSK) - 1,
 			  client_psk, sizeof(client_psk));
+	if (psk_len == 0) {
+		LOG_WRN("Error converting DTLS PSK to binary. Is it too long?");
+	}
 	lwm2m_set_string(&LWM2M_OBJ(0, 0, 3), ep_name);
 	lwm2m_set_opaque(&LWM2M_OBJ(0, 0, 5),
 			 (void *)client_psk, psk_len);
