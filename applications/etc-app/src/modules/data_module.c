@@ -79,10 +79,6 @@ static k_timeout_t data_publish_timeout = K_FOREVER;
 
 static K_SEM_DEFINE(config_load_sem, 0, 1);
 
-/* Default device configuration. */
-static struct cloud_data_cfg current_cfg = {
-};
-
 static struct k_work_delayable data_send_work;
 
 /* List used to keep track of responses from other modules with data that is
@@ -235,8 +231,11 @@ static void cloud_codec_event_handler(const struct cloud_codec_evt *evt)
 static int setup(void)
 {
 	int err;
+	union etc_config cfg;
+
+	etc_device_get_config(&cfg);
 	
-	err = data_codec_init(&current_cfg, cloud_codec_event_handler);
+	err = data_codec_init(&cfg, cloud_codec_event_handler);
 	if (err) {
 		LOG_ERR("cloud_codec_init, error: %d", err);
 		return err;

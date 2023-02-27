@@ -49,7 +49,7 @@ int lwm2m_codec_helpers_setup_resources(void);
  *
  *  @retval 0 If successful, otherwise a negative value indicating the reason of failure.
  */
-int lwm2m_codec_helpers_setup_configuration_object(struct cloud_data_cfg *cfg,
+int lwm2m_codec_helpers_setup_configuration_object(union etc_config *cfg,
 						   lwm2m_engine_set_data_cb_t callback);
 
 /** @brief Get the current values of the application's configuration object.
@@ -59,7 +59,7 @@ int lwm2m_codec_helpers_setup_configuration_object(struct cloud_data_cfg *cfg,
  *
  *  @retval 0 If successful, otherwise a negative value indicating the reason of failure.
  */
-int lwm2m_codec_helpers_get_configuration_object(struct cloud_data_cfg *cfg);
+int lwm2m_codec_helpers_get_configuration_object(union etc_config *cfg);
 
 
 /** @brief Set environmental sensor data.

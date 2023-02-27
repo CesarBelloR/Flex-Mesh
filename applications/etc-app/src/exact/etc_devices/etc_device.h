@@ -15,8 +15,9 @@
 
 /* Define a enum to describe about device mode */
 enum etc_device_mode {
-	ETC_DEVICE_MODE_RELAY = 0x01,
-	ETC_DEVICE_MODE_LOGGER = 0x02,
+	ETC_DEVICE_MODE_RELAY = 0x00,
+	ETC_DEVICE_MODE_LORA_LOGGER = 0x01,
+	ETC_DEVICE_MODE_LTE_LOGGER = 0x02,
 };
 
 /* Define a enum to describe about radio mode */
@@ -29,8 +30,8 @@ enum etc_radio_mode {
 
 /* Define a enum to describe about power mode */
 enum etc_power_mode_e {
-	ETC_POWER_MODE_POWER_SAVER = 0x00,
-	ETC_POWER_MODE_AWLAYS_ON = 0x01,
+	ETC_POWER_MODE_AWLAYS_ON = 0x00,
+	ETC_POWER_MODE_POWER_SAVER = 0x01,
 	ETC_POWER_MODE_HIBERNATE = 0x02,
 };
 
@@ -65,9 +66,9 @@ union etc_config {
 		enum etc_power_mode_e power_mode;
 		enum etc_alarm_direction alarm_direction;
 		uint32_t log_interval_secs;
-		uint16_t log_interval_alarm_secs;
-		uint16_t tx_interval_secs;
-		uint16_t tx_interval_alarm_secs;
+		uint32_t log_interval_alarm_secs;
+		uint32_t tx_interval_secs;
+		uint32_t tx_interval_alarm_secs;
 		uint16_t wake_early_secs;
 		uint16_t tx_delay_msec;
 		uint16_t rx_duration_secs;
@@ -91,6 +92,15 @@ BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
 BUILD_ASSERT(ETC_CONFIG_TYPE_SIZE >= sizeof(union etc_config));
 
 void etc_device_init(void);
+
+/**
+ * @brief Copy the current configuration into config.
+ * Load the configuration values from flash if called for the first time.
+ * 
+ * @param config Pointer to buffer that the current configuration is copied to.
+ * @return 0 on success, <0 on error.
+*/
+int etc_device_get_config(union etc_config *config);
 
 int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size);
 int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size);
