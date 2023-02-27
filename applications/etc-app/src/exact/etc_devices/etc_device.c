@@ -7,12 +7,12 @@
 #include <zephyr/fs/nvs.h>
 #include <zephyr/storage/flash_map.h>
 
-#include <fs/nvs.h>
-#include <logging/log.h>
-#include <sys/reboot.h>
-#include <zephyr.h>
+#include <zephyr/fs/nvs.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/kernel.h>
 
-#include "data/data_codec.h"
+#include "cloud/cloud_codec/data_codec.h"
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define STORAGE_NODE_LABEL storage

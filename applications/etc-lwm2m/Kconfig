@@ -1,0 +1,27 @@
+menu "EXACT Core 2.0 LwM2M Application"
+
+config TEST_VERSION
+	string "LwM2M version"
+	default "v1.0.0"
+
+config LWM2M_USE_BOOTSTRAP
+	bool "Set to true if client should use bootstrap"
+	default false
+
+config NET_DTLS_PSKID
+	string "PSK ID in string format"
+	default "EXACT"
+
+config NET_DTLS_PSK
+	string "PSK Key"
+	default "875ba79f213ecd8c"
+
+endmenu
+
+menu "Zephyr Kernel"
+source "$ZEPHYR_BASE/Kconfig.zephyr"
+endmenu
+
+module = ETC_LWM2M
+module-str = ETC LwM2M
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

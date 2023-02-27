@@ -5,10 +5,10 @@
 #include <app_event_manager.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/dfu/mcuboot.h>
-#include <net/aws_iot.h>
 #include <cJSON.h>
 #include <cJSON_os.h>
 #include "data/etc_json.h"
+#include "cloud/cloud_wrapper.h"
 
 #define MODULE cloud
 #define MODULE_CLOUD_CONNECT_RETRIES 5
@@ -228,103 +228,84 @@ static void cloud_module_on_subscribed(const char *buf, const char *topic,
 {
 }
 
-void aws_iot_event_handler(const struct aws_iot_evt *const evt)
+void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 {
 	switch (evt->type)
 	{
-	case AWS_IOT_EVT_CONNECTING:
+	case CLOUD_WRAP_EVT_CONNECTING:
 	{
-		LOG_DBG("AWS_IOT_EVT_CONNECTING");
+		LOG_DBG("CLOUD_WRAP_EVT_CONNECTING");
 		SEND_EVENT(cloud, CLOUD_EVT_CONNECTING);
 		break;
 	}
-	case AWS_IOT_EVT_CONNECTED:
+	case CLOUD_WRAP_EVT_CONNECTED:
 	{
-		LOG_DBG("AWS_IOT_EVT_CONNECTED");
-		if (evt->data.persistent_session)
-		{
-			LOG_DBG("Persistent session enabled");
-		}
+		LOG_DBG("CLOUD_WRAP_EVT_CONNECTED");
 		SEND_EVENT(cloud, CLOUD_EVT_CONNECTED);
 		break;
 	}
-	case AWS_IOT_EVT_READY:
+	case CLOUD_WRAP_EVT_READY:
 	{
-		LOG_DBG("AWS_IOT_EVT_READY");
+		LOG_DBG("CLOUD_WRAP_EVT_READY");
 		k_work_schedule(&shadow_work, K_NO_WAIT);
 		break;
 	}
 
-	case AWS_IOT_EVT_DISCONNECTED:
+	case CLOUD_WRAP_EVT_DISCONNECTED:
 	{
-		LOG_DBG("AWS_IOT_EVT_DISCONNECTED");
+		LOG_DBG("CLOUD_WRAP_EVT_DISCONNECTED");
 		SEND_EVENT(cloud, CLOUD_EVT_DISCONNECTED);
 		break;
 	}
-	case AWS_IOT_EVT_DATA_RECEIVED:
+	case CLOUD_WRAP_EVT_DATA_RECEIVED:
 	{
-		LOG_DBG("AWS_IOT_EVT_DATA_RECEIVED");
-		cloud_module_on_subscribed(evt->data.msg.ptr, evt->data.msg.topic.str,
-					   evt->data.msg.topic.len);
+		LOG_DBG("CLOUD_WRAP_EVT_DATA_RECEIVED");
+		cloud_module_on_subscribed(evt->data.buf, NULL,
+					   0);
 		break;
 	}
-	case AWS_IOT_EVT_FOTA_START:
+	case CLOUD_WRAP_EVT_FOTA_START:
 	{
-		LOG_DBG("AWS_IOT_EVT_FOTA_START");
+		LOG_DBG("CLOUD_WRAP_EVT_FOTA_START");
 		SEND_EVENT(cloud, CLOUD_EVT_FOTA_START);
 		break;
 	}
-	case AWS_IOT_EVT_FOTA_ERASE_PENDING:
+	case CLOUD_WRAP_EVT_FOTA_DONE:
 	{
-		LOG_DBG("AWS_IOT_EVT_FOTA_ERASE_PENDING");
-		break;
-	}
-
-	case AWS_IOT_EVT_FOTA_ERASE_DONE:
-	{
-		LOG_DBG("AWS_FOTA_EVT_ERASE_DONE");
-		break;
-	}
-
-	case AWS_IOT_EVT_FOTA_DONE:
-	{
-		LOG_DBG("AWS_IOT_EVT_FOTA_DONE");
+		LOG_DBG("CLOUD_WRAP_EVT_FOTA_DONE");
 		k_sleep(K_SECONDS(10));
 		SEND_EVENT(cloud, CLOUD_EVT_FOTA_DONE);
 		break;
 	}
-	case AWS_IOT_EVT_FOTA_DL_PROGRESS:
-		LOG_DBG("AWS_IOT_EVT_FOTA_DL_PROGRESS, (%d%%)",
-			evt->data.fota_progress);
-		break;
-	case AWS_IOT_EVT_ERROR:
+	case CLOUD_WRAP_EVT_ERROR:
 	{
-		LOG_DBG("AWS_IOT_EVT_ERROR, %d", evt->data.err);
-		SEND_ERROR(cloud, CLOUD_EVT_ERROR, evt->data.err);
+		LOG_DBG("CLOUD_WRAP_EVT_ERROR, %d", evt->err);
+		SEND_ERROR(cloud, CLOUD_EVT_ERROR, evt->err);
 		break;
 	}
-	case AWS_IOT_EVT_FOTA_ERROR:
+	case CLOUD_WRAP_EVT_FOTA_ERROR:
 	{
-		LOG_DBG("AWS_IOT_EVT_FOTA_ERROR");
+		LOG_DBG("CLOUD_WRAP_EVT_FOTA_ERROR");
 		SEND_EVENT(cloud, CLOUD_EVT_FOTA_ERROR);
 		break;
 	}
-	case AWS_IOT_EVT_PUBACK:
+	case CLOUD_WRAP_EVT_DATA_ACK:
 	{
-		LOG_DBG("AWS_IOT_EVT_PUBACK %d", evt->data.message_id);
-		if (evt->data.message_id == last_message_id) {
+		LOG_DBG("CLOUD_WRAP_EVT_PUBACK %d", evt->message_id);
+		if ((evt->message_id == last_message_id) ||
+		    (evt->message_id == 0)) {
 			/* Cloud receives data, sleep modem */
 			SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
 		}
 		break;
 	}
-	case AWS_IOT_EVT_PINGRESP:
+	case CLOUD_WRAP_EVT_REBOOT_REQUEST:
 	{
-		LOG_DBG("AWS_IOT_EVT_PINGRESP");
+		// FIXME: Implement
 		break;
 	}
 	default:
-		LOG_DBG("Unknown AWS IoT event type: %d", evt->type);
+		LOG_DBG("Unknown Cloud Wrap event type: %d", evt->type);
 		break;
 	}
 }
@@ -337,26 +318,7 @@ static int setup(void)
 	 */
 	boot_write_img_confirmed();
 #endif /* CONFIG_MCUBOOT_IMG_MANAGER */
-#ifdef CONFIG_APP_AWS_IOT
-	struct aws_iot_config config;
-	int len;
-	char id[ETC_SETTINGS_DEVICE_ID_LEN + sizeof("urn:dev:mac:")] = "urn:dev:mac:";
-
-	len = strlen(id);
-	etc_get_device_id(&id[len], sizeof(id) - len);
-	LOG_DBG("id: %s", id);
-
-	config.client_id = id;
-	config.client_id_len = strlen(config.client_id);
-
-	int err = aws_iot_init(&config, aws_iot_event_handler);
-	if (err)
-	{
-		LOG_ERR("AWS IoT library could not be initialized, error: %d", err);
-		return err;
-	}
-#endif
-	LOG_DBG("Setup the AWS IoT successful");
+	cloud_wrap_init(cloud_wrap_event_handler);
 	return 0;
 }
 
@@ -372,15 +334,8 @@ static void connect_cloud(void)
 		SEND_ERROR(cloud, CLOUD_EVT_ERROR, -ENETUNREACH);
 		return;
 	}
-#ifdef CONFIG_APP_AWS_IOT
-	err = aws_iot_connect(NULL);
-#else
-	SEND_EVENT(cloud, CLOUD_EVT_CONNECTED);
-#endif
-	if (err)
-	{
-		LOG_ERR("aws_iot_connect, error: %d", err);
-	}
+
+	cloud_wrap_connect();
 
 	connect_retries++;
 
@@ -395,14 +350,9 @@ static void connect_cloud(void)
 static void disconnect_cloud(void)
 {
 	connect_retries = 0;
-#ifdef CONFIG_APP_AWS_IOT
-	int err = aws_iot_disconnect();
-	if (err) {
-		LOG_ERR("aws_iot_disconnect, error: %d", err);
-	}
-#else
-	SEND_EVENT(cloud, CLOUD_EVT_DISCONNECTED);
-#endif
+	
+	cloud_wrap_disconnect();
+
 	k_work_cancel_delayable(&connect_check_work);
 }
 
@@ -562,21 +512,9 @@ static int shadow_update(bool version_number_include)
 		goto cleanup;
 	}
 
-	struct aws_iot_data tx_data = {
-		.qos = MQTT_QOS_0_AT_MOST_ONCE,
-		.topic.type = AWS_IOT_SHADOW_TOPIC_UPDATE,
-		.ptr = shadow_msg,
-		.len = strlen(shadow_msg)
-	};
+	LOG_INF("Publishing: %s to Cloud", shadow_msg);
 
-	LOG_INF("Publishing: %s to AWS IoT broker", shadow_msg);
-
-#ifdef CONFIG_APP_AWS_IOT
-	err = aws_iot_send(&tx_data);
-	if (err) {
-		LOG_ERR("aws_iot_send, error: %d", err);
-	}
-#endif
+	cloud_wrap_state_send(shadow_msg, strlen(shadow_msg), false, 0);
 
 cleanup:
 	cJSON_Delete(root_obj);

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <zephyr.h>
-#include <drivers/pwm.h>
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/pwm.h>
 #include <string.h>
 #include <zephyr/pm/device.h>
 #include "ui.h"

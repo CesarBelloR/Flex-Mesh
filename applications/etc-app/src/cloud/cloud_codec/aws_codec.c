@@ -17,6 +17,9 @@ LOG_MODULE_REGISTER(data_codec, CONFIG_ETC_APP_LOG_LEVEL);
 static char data_codec_buffer[DATA_CODEC_BUFFER_MAX_SIZE];
 static char data_codec_temp_buffer[DATA_CODEC_TEMP_BUFFER_MAX_SIZE];
 
+/* Module event handler.  */
+static cloud_codec_evt_handler_t module_evt_handler;
+
 /* External declarations */
 extern int quectel_bg95_get_rssi(void);
 
@@ -27,46 +30,12 @@ static inline bool is_digit(char in) {
 	return false;
 }
 
-void data_codec_populate_lora_sensor_buffer(
-				struct data_lora_sensors *sensor_buffer,
-				struct data_lora_sensors *new_sensor_data,
-				int *head_sensor_buf,
-				size_t buffer_count)
+int data_codec_init(struct cloud_data_cfg *cfg, cloud_codec_evt_handler_t event_handler)
 {
-	if (!new_sensor_data->queued) {
-		return;
-	}
-
-	/* Go to start of buffer if end is reached. */
-	if (*head_sensor_buf == buffer_count) {
-		*head_sensor_buf = 0;
-	}
-
-	sensor_buffer[*head_sensor_buf] = *new_sensor_data;
-	*head_sensor_buf += 1;
-	LOG_DBG("Entry: %d of %d in sensor buffer filled", *head_sensor_buf,
-		buffer_count - 1);
-}
-
-void data_codec_populate_sensor_internal_buffer(
-				struct data_sensors *sensor_buffer,
-				struct data_sensors *new_sensor_data,
-				int *head_sensor_buf,
-				size_t buffer_count)
-{
-	if (!new_sensor_data->queued) {
-		return;
-	}
-
-	/* Go to start of buffer if end is reached. */
-	if (*head_sensor_buf == buffer_count) {
-		*head_sensor_buf = 0;
-	}
-
-	sensor_buffer[*head_sensor_buf] = *new_sensor_data;
-	*head_sensor_buf += 1;
-	LOG_DBG("Entry: %d of %d in sensor buffer filled", *head_sensor_buf,
-		buffer_count - 1);
+	ARG_UNUSED(cfg);
+	
+	module_evt_handler = event_handler;
+	return 0;
 }
 
 static cJSON *create_sensor_value_item(float temperature)
@@ -229,23 +198,24 @@ static int create_packet_header(cJSON *root_obj,
 	return 0;
 } 
 
-char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer, 
+int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
+				struct data_lora_sensors *lora_buffer, 
 				size_t lora_buf_count,
 				struct data_sensors *sensor_buffer,
 				size_t sensor_buf_count,
 				struct data_modem_static *modem_data,
 				struct data_battery *batt_data)
 {
-	int err;
 	char *buffer;
 	bool object_added = false;
 	cJSON *data_arr;
 	cJSON *arr;
-	char *retval = NULL;
+	int retval = 0;
 	char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 	cJSON *root_obj = cJSON_CreateObject();
 	if (root_obj == NULL) {
+		retval = -ENOMEM;
 		goto exit;
 	}
 
@@ -261,6 +231,7 @@ char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer,
 		data_arr = create_data_arr_logger(&sensor_buffer[i],  modem_data,
 						  device_id);
 		if (data_arr == NULL) {
+			retval = -ENOMEM;
 			goto exit;
 		}
 		cJSON_AddItemToArray(arr, data_arr);
@@ -269,11 +240,12 @@ char* data_codec_prepare_cloud_packet(struct data_lora_sensors *lora_buffer,
 	bool ret = cJSON_PrintPreallocated(root_obj, data_codec_buffer, sizeof(data_codec_buffer), false);
 	if (ret == false) {
 		LOG_ERR("Failed to allocate memory for JSON string");
-		err = -ENOMEM;
+		retval = -ENOMEM;
 		goto exit;
 	}
 
-	retval = data_codec_buffer;
+	cloud_data->buf = data_codec_buffer;
+	cloud_data->len = strlen(data_codec_buffer);
 
 exit:
 	cJSON_Delete(root_obj);

@@ -1,4 +1,4 @@
-#include <zephyr.h>
+#include <zephyr/kernel.h>
 #include "etc_json.h"
 
 int json_add_obj(cJSON *parent, const char *str, cJSON *item)

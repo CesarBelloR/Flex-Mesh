@@ -1,0 +1,19 @@
+menu "EXACT Monitor 2.0 Application"
+
+config APP_VERSION
+	string "Application version"
+	default "v1.0.0"
+
+config NATIVE_TLS
+	bool "Use the native TLS stack instead of the offloaded stack."
+	default false
+
+endmenu
+
+menu "Zephyr Kernel"
+source "$ZEPHYR_BASE/Kconfig.zephyr"
+endmenu
+
+module = ETC_APP
+module-str = ETC App
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
