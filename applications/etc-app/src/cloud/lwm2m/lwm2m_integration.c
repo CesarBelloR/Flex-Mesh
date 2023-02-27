@@ -478,7 +478,7 @@ int cloud_wrap_state_send(char *buf, size_t len, bool ack, uint32_t id)
 }
 
 int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id,  
-			 struct lwm2m_obj_path path_list[])
+			 const struct lwm2m_obj_path path_list[])
 {
 	ARG_UNUSED(buf);
 	ARG_UNUSED(id);
