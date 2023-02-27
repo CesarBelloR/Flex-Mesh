@@ -4,7 +4,7 @@
 #include "data_codec.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(data_codec, CONFIG_ETC_APP_LOG_LEVEL);
+LOG_MODULE_REGISTER(data_codec_ringbuffer, CONFIG_ETC_APP_LOG_LEVEL);
 
 
 void data_codec_populate_lora_sensor_buffer(

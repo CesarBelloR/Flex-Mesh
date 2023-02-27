@@ -11,8 +11,8 @@
 #include <zephyr/settings/settings.h>
 #include "cloud/cloud_codec/data_codec.h"
 #include "etc_date_time.h"
-#include "etc_data_fs.h"
 #include "etc_settings.h"
+#include "etc_device.h"
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE data_module
@@ -369,12 +369,12 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
+		etc_device_write_record_sensor(msg->module.sensor.data.sensors);		
 		struct data_sensors new_sensor_data = {
 			.queued = true
 		};
 
 		memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
-		//etc_data_fs_notify_data((uint8_t*)&new_sensor_data, sizeof(struct data_sensors));
 		data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
 		/* Send data to cloud right now after they were taken */
 		SEND_EVENT(data, DATA_EVT_DATA_READY);

@@ -9,8 +9,6 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/stats/stats.h>
-#include <zephyr/fs/fs.h>
-#include <zephyr/fs/littlefs.h>
 #include <zephyr/storage/flash_map.h>
 #include <app_event_manager.h>
 #include <zephyr/sys/reboot.h>
@@ -20,7 +18,8 @@
 #include "ui.h"
 #include "data/etc_cape.h"
 #include "events/app_event.h"
-
+#include "etc_device.h"
+#include "etc_settings.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -39,19 +38,6 @@ LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 #ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
 #include <zephyr/mgmt/mcumgr/grp/shell_mgmt/shell_mgmt.h>
 #endif
-#ifdef CONFIG_MCUMGR_CMD_FS_MGMT
-#include <zephyr/mgmt/mcumgr/grp/fs_mgmt/fs_mgmt.h>
-#endif
-
-#define PARTITION_NODE DT_NODELABEL(lfs1)
-
-#if DT_NODE_EXISTS(PARTITION_NODE)
-FS_FSTAB_DECLARE_ENTRY(PARTITION_NODE);
-#else /* PARTITION_NODE */
-FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(storage);
-#endif /* PARTITION_NODE */
-
-struct fs_mount_t *mount_point = &FS_FSTAB_ENTRY(PARTITION_NODE);
 
 /* Define an example stats group; approximates seconds since boot. */
 STATS_SECT_START(smp_svr_stats)
@@ -66,29 +52,6 @@ STATS_NAME_END(smp_svr_stats);
 STATS_SECT_DECL(smp_svr_stats) smp_svr_stats;
 
 char key[] = "ElL10TaC4T";
-
-int main_external_flash_erase(unsigned int id)
-{
-	const struct flash_area *pfa;
-	int rc;
-
-	rc = flash_area_open(id, &pfa);
-	if (rc < 0) {
-		LOG_ERR("FAIL: unable to find flash area %u: %d\n",
-			id, rc);
-		return rc;
-	}
-
-	LOG_INF("Area %u at 0x%x for %u bytes",
-		   id, (unsigned int)pfa->fa_off, (unsigned int)pfa->fa_size);
-
-	/* Optional wipe flash contents */
-	rc = flash_area_erase(pfa, 0, pfa->fa_size);
-	LOG_ERR("Erasing flash area ... %d", rc);
-
-	flash_area_close(pfa);
-	return rc;
-}
 
 void main(void)
 {
@@ -118,13 +81,7 @@ void main(void)
 #ifdef CONFIG_MCUMGR_SMP_UDP
 	start_smp_udp();
 #endif
-#if 0
-	rc = main_external_flash_erase((uintptr_t)mount_point->storage_dev);
-	if (rc < 0) {
-		LOG_ERR("Failed to erase flash memory %d", rc);
-		return;
-	}
-#endif 
+
 	struct mcuboot_img_header img_hdr;
 	etc_cape_init(key, 10, 0);
 	etc_cape_set_key(key, 10); 
@@ -154,6 +111,8 @@ void main(void)
 	}
 #endif
 
+	etc_device_init();
+	etc_settings_init();
 	ui_init();
 
 	if (app_event_manager_init()) {

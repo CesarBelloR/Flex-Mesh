@@ -1,6 +1,5 @@
 menuconfig ETC_SETTINGS
 	bool "ETC Settings Library"
-	depends on FILE_SYSTEM
 	help
 	  Settings subsystem for ETC
 
