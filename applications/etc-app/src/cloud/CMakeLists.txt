@@ -22,3 +22,7 @@ target_sources_ifdef(CONFIG_LWM2M app
                      PRIVATE 
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/configuration_object.c)
 
+target_sources_ifdef(CONFIG_LWM2M app
+                     PRIVATE 
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_temperature_object.c)
+

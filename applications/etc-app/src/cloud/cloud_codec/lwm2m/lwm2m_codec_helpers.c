@@ -36,14 +36,14 @@ static int lwm2m_codec_helpers_set_sensor_ranges(void)
 	for (int i = 0; i < SENSOR_INPUT_MAX; i++)
 	{
 		/* Temperature object. */
-		err = lwm2m_set_f64(&LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, i,
+		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i,
 					       MIN_RANGE_VALUE_RID),
 				    temp_min_range_val);
 		if (err) {
 			return err;
 		}
 
-		err = lwm2m_set_f64(&LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, i,
+		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i,
 					       MAX_RANGE_VALUE_RID),
 				    temp_max_range_val);
 		if (err) {
@@ -74,7 +74,7 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 	int err;
 
 	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
-		err = lwm2m_create_object_inst(&LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID,
+		err = lwm2m_create_object_inst(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID,
 							  i));
 		if (err) {
 			return err;
@@ -213,14 +213,14 @@ int lwm2m_codec_helpers_setup_resources(void)
 	}
 
 	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
-		err = lwm2m_set_res_buf(&LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 
+		err = lwm2m_set_res_buf(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 
 						   i, TIMESTAMP_RID),
 					&temperature_ts[i], sizeof(temperature_ts[i]),
 					sizeof(temperature_ts[i]), LWM2M_RES_DATA_FLAG_RW);
 		if (err) {
 			return err;
 		}
-		err = lwm2m_set_res_buf(&LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 
+		err = lwm2m_set_res_buf(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 
 						   i, SENSOR_UNITS_RID),
 					TEMP_UNIT, (uint16_t)strlen(TEMP_UNIT),
 					(uint16_t)strlen(TEMP_UNIT), LWM2M_RES_DATA_FLAG_RO);
@@ -603,7 +603,7 @@ int lwm2m_codec_helpers_set_sensor_data(struct data_sensors *sensor)
 	}
 
 	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
-		err = lwm2m_set_time(&LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, i, TIMESTAMP_RID),
+		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, TIMESTAMP_RID),
 				(int32_t)(sensor->data.timestamp / MSEC_PER_SEC));
 		if (err) {
 			return err;
@@ -619,7 +619,7 @@ int lwm2m_codec_helpers_set_sensor_data(struct data_sensors *sensor)
 #endif
 
 	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
-		err = lwm2m_set_f64(&LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, i, SENSOR_VALUE_RID),
+		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, SENSOR_VALUE_RID),
 				    sensor->data.temperature[i]);
 		if (err) {
 			return err;
