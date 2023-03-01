@@ -1186,13 +1186,23 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 		}
 	}
 
-	// Modem expects file content in format <PSK_ID>&<PSK_KEY>
-	ret = snprintk(buf, sizeof(buf), "%s&%s", 
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK)
+	// Use dynamic psk data if not empty.
+	if (mdata.psk.id_len > 0 && mdata.psk.psk_len > 0) {
+		ret = snprintk(buf, sizeof(buf), "%s&", mdata.psk.id);
+		ret += bin2hex(mdata.psk.psk, mdata.psk.psk_len,
+			       buf + ret, sizeof(buf) - ret);
+	} else
+#endif  
+	{
+		// Modem expects file content in format <PSK_ID>&<PSK_KEY>
+		ret = snprintk(buf, sizeof(buf), "%s&%s", 
 				CONFIG_MODEM_QUECTEL_BG95_M3_PSK_ID, 
 				CONFIG_MODEM_QUECTEL_BG95_M3_PSK_KEY);
-	if (ret >= sizeof(buf)) {
-		LOG_WRN("PSK file truncated");
-		ret = sizeof(buf) - 1;
+		if (ret >= sizeof(buf)) {
+			LOG_WRN("PSK file truncated");
+			ret = sizeof(buf) - 1;
+		}
 	}
 	ret = quectel_bg95_file_download(psk_fn, buf, ret);
 	if (ret != 0) {
@@ -1972,10 +1982,43 @@ static int quectel_bg95_evt_handler_init(const struct device *dev,
 	return 0;
 }
 
+static int quectel_bg95_set_credentials(const struct device *dev,
+					enum modem_api_cred_type type,
+					uint8_t *cred_buf, uint8_t cred_len)
+{
+	struct modem_data *data = dev->data;
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK)
+	if (dev == NULL || cred_buf == NULL) {
+		return -EINVAL;
+	}
+
+	if (type == MODEM_API_CRED_TYPE_PSK_ID) {
+		if (cred_len > sizeof(data->psk.id)) {
+			return -ENOMEM;
+		}
+		memcpy(data->psk.id, cred_buf, cred_len);
+		data->psk.id_len = cred_len;
+	} else if (type == MODEM_API_CRED_TYPE_PSK) {
+		if (cred_len > sizeof(data->psk.psk)) {
+			return -ENOMEM;
+		}
+		memcpy(data->psk.psk, cred_buf, cred_len);
+		data->psk.psk_len = cred_len;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}					
+
 static struct modem_api api_funcs = {
 	.iface_api.init = modem_net_iface_init,
 
 	.evt_handler_init = quectel_bg95_evt_handler_init,
+	.set_credentials = quectel_bg95_set_credentials
 };
 
 static bool offload_is_supported(int family, int type, int proto)

@@ -1,0 +1,20 @@
+#
+# Copyright (c) 2023 EXACT Technology
+#
+
+menuconfig EXACT_LWM2M_CLIENT_UTILS
+	bool "LWM2M client utilities library"
+	select LWM2M if !ZTEST
+
+if EXACT_LWM2M_CLIENT_UTILS
+
+config EXACT_LWM2M_CLIENT_UTILS_SECURITY_OBJ_SUPPORT
+	bool "Security object support"
+	default y
+
+module = EXACT_LWM2M_CLIENT_UTILS
+module-dep = LOG
+module-str = EXACT LwM2M client utilities library
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # EXACT_LWM2M_CLIENT_UTILS
