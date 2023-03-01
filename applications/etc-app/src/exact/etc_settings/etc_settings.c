@@ -770,6 +770,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(firmware, NULL, "Set firmware version", cmd_set_firmware_version),
 	SHELL_CMD(device, NULL, "Set device ID", cmd_set_device_id),
 	SHELL_CMD(measurement, NULL, "Set measurement interval time", cmd_set_measurement_time),
+	SHELL_CMD(transmission, NULL, "Set transmission interval time", cmd_set_transmission_time),
 	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),
 	SHELL_CMD(set_radio, NULL, "Set radio mode", cmd_set_radio),
 	SHELL_CMD(set_power, NULL, "Set power mode", cmd_set_power),
