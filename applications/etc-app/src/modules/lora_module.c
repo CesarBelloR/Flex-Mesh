@@ -1,14 +1,14 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
 #include <app_event_manager.h>
-#include <drivers/lora.h>
-#include <zephyr.h>
+#include <zephyr/drivers/lora.h>
+#include <zephyr/kernel.h>
 #include "etc_date_time.h"
 #include "etc_device.h"
 #include "etc_settings.h"
 #include "app_version.h"
 #include "data/etc_cape.h"
-#include "data/data_codec.h"
+#include "cloud/cloud_codec/data_codec.h"
 
 #define MODULE lora_module
 #define MODULE_LORA_THREAD_STACK_SIZE 2048
@@ -313,7 +313,7 @@ static int module_lora_wait_packet(void) {
 char decr_buf[LORA_ACKUNCRYPT_LEN + 1];
 #endif
 
-static int module_lora_process_packet(etc_device_record_t record)
+static int module_lora_process_packet(union etc_device_record record)
 {
 	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
 	int decoded_buf_len = snprintf(decoded_buf, sizeof(decoded_buf), "S,OPEN,%s,%s,%1.2f,0,%u,", APP_VERSION_STR, buf_tmp, record.battery, record.timestamp); 
@@ -371,7 +371,7 @@ static void on_all_states(struct lora_msg_data *msg)
 			int rc = 0;
 			do
 			{
-				etc_device_record_t record;
+				union etc_device_record record;
 				rc = etc_device_read_record(&record);
 				if (rc > 0)
 				{

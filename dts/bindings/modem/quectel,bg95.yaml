@@ -8,9 +8,6 @@ compatible: "quectel,bg95"
 include: uart-device.yaml
 
 properties:
-    label:
-      required: true
-
     mdm-on-off-gpios:
       type: phandle-array
       required: false

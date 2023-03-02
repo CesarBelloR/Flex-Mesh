@@ -1,11 +1,11 @@
-#include <drivers/gpio.h>
-#include <drivers/lora.h>
-#include <drivers/spi.h>
-#include <zephyr.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/lora.h>
+#include <zephyr/drivers/spi.h>
+#include <zephyr/kernel.h>
 
 #include "sx12xx_common.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(sx1276, CONFIG_LORA_LOG_LEVEL);
 
 #if DT_HAS_COMPAT_STATUS_OKAY(semtech_sx1276)

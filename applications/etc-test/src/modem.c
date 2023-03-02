@@ -2,10 +2,10 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <drivers/uart.h>
-#include <drivers/gpio.h>
-#include <kernel.h>
-#include <shell/shell.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/kernel.h>
+#include <zephyr/shell/shell.h>
 
 static const struct device *uart_dev = NULL;
 extern const struct device *gpio_0;

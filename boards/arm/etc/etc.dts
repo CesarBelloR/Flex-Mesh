@@ -1,6 +1,6 @@
 /dts-v1/;
 #include <nordic/nrf52833_qiaa.dtsi>
-#include <dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
 #include "etc_pinctrl.dtsi"
 
 / {

@@ -14,7 +14,7 @@
 #define ADC_H_
 
 #include <stdint.h>
-#include <sys/timeutil.h>
+#include <zephyr/sys/timeutil.h>
 
 /***************************************************************************/
 /* Definitions                                                             */

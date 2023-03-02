@@ -10,12 +10,12 @@
 \author     Kien Bui
  */
 /***************************************************************************/
-#include <drivers/sensor.h>
-#include <kernel.h>
-#include <logging/log.h>
-#include <drivers/gpio.h>
-#include <drivers/i2c.h>
-#include <sys/crc.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/sys/crc.h>
 #include "ds2484.h"
 
 LOG_MODULE_REGISTER(DS2484, CONFIG_DS2484_LOG_LEVEL);

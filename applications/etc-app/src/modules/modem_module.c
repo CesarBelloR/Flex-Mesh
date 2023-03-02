@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <app_event_manager.h>
 #include <math.h>
-#include <devicetree.h>
+#include <zephyr/devicetree.h>
 #include <modem_api.h>
 
 #define MODULE modem_module
@@ -20,8 +20,8 @@
 #include "events/lora_event.h"
 
 #ifdef CONFIG_PM_DEVICE
-#include <pm/pm.h>
-#include <pm/device.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
 #endif
 
 #ifdef CONFIG_LWM2M_CARRIER

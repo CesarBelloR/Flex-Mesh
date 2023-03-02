@@ -1,14 +1,14 @@
 #include <stdio.h>
-#include <zephyr.h>
-#include <device.h>
-#include <init.h>
-#include <pm/pm.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+#include <zephyr/pm/pm.h>
 #include "retained.h"
 #include <hal/nrf_gpio.h>
 #include "pcf85263a.h"
-#include <drivers/gpio.h>
+#include <zephyr/drivers/gpio.h>
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 #define ALARM_PIN (3)

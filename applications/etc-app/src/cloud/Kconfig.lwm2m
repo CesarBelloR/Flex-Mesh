@@ -1,0 +1,46 @@
+#
+# Copyright (c) 2022 Nordic Semiconductor
+#
+# Copyright (c) 2023 EXACT Technology Corporation
+#
+
+module = LWM2M_INTEGRATION
+module-prompt = "LwM2M integration"
+
+config $(module)
+	bool
+	prompt "LwM2M integration layer"
+
+if LWM2M_INTEGRATION
+
+menu "LwM2M integration library"
+
+config LWM2M_INTEGRATION_ENDPOINT_PREFIX
+	string "LwM2M endpoint prefix"
+	default "urn:dev:mac:"
+
+config LWM2M_INTEGRATION_PSK_ID
+	string "LwM2M PSK"
+	default MODEM_QUECTEL_BG95_M3_PSK_ID
+	help
+	  LwM2M PSK ID to be used. Defaults to ID configured
+	  for modem.
+	
+
+config LWM2M_INTEGRATION_PSK
+	string "LwM2M PSK"
+	default MODEM_QUECTEL_BG95_M3_PSK_KEY
+	help
+	  LwM2M PSK key to be used. Defaults to key configured
+	  for modem.
+
+# Make AVsystem the default lwM2M server.
+config LWM2M_INTEGRATION_SERVER_URL
+	string "LwM2M server address"
+	default "coaps://eu.iot.avsystem.cloud:5684"
+	help
+	  Kconfig redefinition, please see the help text of the original definition.
+
+endmenu
+
+endif # LWM2M_INTEGRATION

@@ -2,16 +2,19 @@
  * Copyright (c) 2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ * 
+ * Copyright (c) 2023 EXACT Technology Corporation
  */
 
 #include <zephyr/kernel.h>
 #include <app_event_manager.h>
 #include <zephyr/settings/settings.h>
-#include <net/aws_iot.h>
-#include "data/data_codec.h"
+#include "cloud/cloud_codec/data_codec.h"
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #include "etc_device.h"
+#include "cloud/cloud_wrapper.h"
+
 #define MODULE data_module
 #define MODULE_DATA_THREAD_STACK_SIZE 2048
 #define MODULE_DATA_SENSOR_BUFFER_COUNT 8
@@ -75,6 +78,10 @@ static int head_bat_buf = 0;
 static k_timeout_t data_publish_timeout = K_FOREVER; 
 
 static K_SEM_DEFINE(config_load_sem, 0, 1);
+
+/* Default device configuration. */
+static struct cloud_data_cfg current_cfg = {
+};
 
 static struct k_work_delayable data_send_work;
 
@@ -221,8 +228,20 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void cloud_codec_event_handler(const struct cloud_codec_evt *evt)
+{
+}
+
 static int setup(void)
 {
+	int err;
+	
+	err = data_codec_init(&current_cfg, cloud_codec_event_handler);
+	if (err) {
+		LOG_ERR("cloud_codec_init, error: %d", err);
+		return err;
+	}
+
 	return 0;
 }
 
@@ -241,35 +260,33 @@ static void data_module_send_message_id(uint32_t message_id)
 
 static void data_encode(void) 
 {
+	struct cloud_codec_data codec = { 0 };
+	int ret;
+
 	if (head_sensor_buf == 0) {
 		return;
 	}
 
 	LOG_INF("Head sensor buf %d", head_sensor_buf);
-	char* data_msg = data_codec_prepare_cloud_packet(NULL, 0, sensors_buf, head_sensor_buf,
-		&modem_stat, NULL);
-	if (data_msg == NULL) {
+	ret = data_codec_prepare_cloud_packet(&codec, NULL, 0, 
+					sensors_buf, head_sensor_buf,
+					&modem_stat, NULL);
+	if (ret != 0) {
 		LOG_WRN("No message to publish");
 		return;
-	}
-	const char topic_lora_data[] = "exact/core/readings/old";
-
+	}	
+	
 	uint16_t message_id = (uint16_t)k_uptime_get_32();
-	struct aws_iot_data tx_data = {
-		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.topic.str = topic_lora_data,
-		.topic.len = strlen(topic_lora_data),
-		.ptr = data_msg,
-		.len = strlen(data_msg),
-		.message_id = message_id,
-	};
 
-	LOG_INF("Publishing: %s", data_msg);
-
-	int err = aws_iot_send(&tx_data);
-	if (err) {
-		LOG_ERR("aws_iot_send, error: %d", err);
+	if (codec.buf != NULL) {
+		LOG_INF("Publishing: %s", codec.buf);
 	}
+	if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
+		codec.len = codec.valid_object_paths;
+	}
+
+	cloud_wrap_data_send(codec.buf, codec.len, true,
+			     message_id, codec.paths);
 
 	head_lora_buf = 0;
 	head_sensor_buf = 0;
@@ -355,7 +372,7 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
-		etc_device_mode_e mode = etc_device_get_mode();
+		enum etc_device_mode mode = etc_device_get_mode();
 		if (mode == ETC_DEVICE_MODE_LOGGER) {
 			/* Update logger function */
 		} else if (mode == ETC_DEVICE_MODE_RELAY) {

@@ -7,7 +7,7 @@
 #include <zephyr/pm/pm.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/policy.h>
-#include <drivers/gpio.h>
+#include <zephyr/drivers/gpio.h>
 #include <hal/nrf_gpio.h>
 #include "etc_settings.h"
 #include "etc_interface.h"

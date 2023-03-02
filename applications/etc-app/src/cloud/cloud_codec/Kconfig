@@ -1,0 +1,59 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig CLOUD_CODEC
+	bool "Application cloud codec"
+	default y
+
+if CLOUD_CODEC
+
+choice
+	prompt "Application cloud codec backend"
+	default CLOUD_CODEC_LWM2M if LWM2M
+	default CLOUD_CODEC_AWS_IOT if AWS_IOT
+
+config CLOUD_CODEC_AWS_IOT
+	bool "Enable AWS IoT codec backend"
+
+config CLOUD_CODEC_LWM2M
+	bool "Enable lwM2M codec backend"
+
+endchoice
+
+config CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX
+	int "Maximum size of path list"
+	default LWM2M_COMPOSITE_PATH_LIST_SIZE if LWM2M
+	default 1
+	help
+	  Maximum number of entries in the path list constructed when writing to objects.
+
+config CLOUD_CODEC_APN_LEN_MAX
+	int "Maximum length of APN"
+	default 30
+	help
+	  Maximum length of APN (Access Point Name).
+
+config CLOUD_CODEC_MANUFACTURER
+	string "Manufacturer name"
+	default "Quectel"
+
+if LWM2M_IPSO_HUMIDITY_SENSOR
+choice LWM2M_IPSO_HUMIDITY_SENSOR_VERSION
+	default LWM2M_IPSO_HUMIDITY_SENSOR_VERSION_1_1
+endchoice
+endif # LWM2M_IPSO_HUMIDITY_SENSOR
+
+if LWM2M_IPSO_TEMP_SENSOR
+choice LWM2M_IPSO_TEMP_SENSOR_VERSION
+	default LWM2M_IPSO_TEMP_SENSOR_VERSION_1_1
+endchoice
+endif # LWM2M_IPSO_TEMP_SENSOR
+
+module = CLOUD_CODEC
+module-str = Cloud codec
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # CLOUD_CODEC #
