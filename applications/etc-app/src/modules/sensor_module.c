@@ -8,6 +8,7 @@
 #include "adc.h"
 #include "etc_date_time.h"
 #include "etc_settings.h"
+#include "etc_device.h"
 #define MODULE sensor_module
 #define MODULE_SENSOR_THREAD_STACK_SIZE 2048
 
@@ -280,10 +281,13 @@ static void on_all_states(struct sensor_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		/* In boot-up, device connected to cloud, start a sensor poll to get data */
 		static bool is_send = false;
-		if (!is_send) {
-			LOG_DBG("Device is online. Collecting and sending first sensor data");
-			is_send = true;
-			sensor_poll_handler();
+		enum etc_logger_job job = etc_device_get_job();
+		if (job == ETC_LOGGER_JOB_LOG || job == ETC_LOGGER_JOB_BOTH) {
+			if (!is_send) {
+				LOG_DBG("Device is online. Collecting and sending first sensor data");
+				is_send = true;
+				sensor_poll_handler();
+			}
 		}
 		return;
 	}

@@ -72,9 +72,9 @@ settings_storage:
 record_storage:
   address: 0x88000
   device: /soc/spi@40023000/mx25r1635@0
-  end_address: 0xD8000
+  end_address: 0xE8000
   region: external_flash
-  size: 0x50000
+  size: 0x60000
 sram_primary:
   address: 0x20000000
   end_address: 0x20020000

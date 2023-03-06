@@ -289,6 +289,11 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
+	if (etc_device_is_logger_lora()) {
+		state_set(STATE_CONNECTED);
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
+		return 0;
+	}
 	if (quectel_bg95_is_ready()) {
 		modem_set_connected();
 	}
@@ -356,12 +361,6 @@ static void on_all_states(struct modem_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
-		modem_enter_sleep();
-		state_set(STATE_DISCONNECTED);
-		SEND_EVENT(modem, MODEM_EVT_SLEEP_READY);
-	}
-
-	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
 		modem_enter_sleep();
 		state_set(STATE_DISCONNECTED);
 		SEND_EVENT(modem, MODEM_EVT_SLEEP_READY);

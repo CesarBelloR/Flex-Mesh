@@ -355,7 +355,7 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
-		etc_device_mode_e mode = etc_device_get_mode();
+		enum etc_device_mode mode = etc_device_get_mode();
 		if (mode == ETC_DEVICE_MODE_LOGGER) {
 			/* Update logger function */
 		} else if (mode == ETC_DEVICE_MODE_RELAY) {

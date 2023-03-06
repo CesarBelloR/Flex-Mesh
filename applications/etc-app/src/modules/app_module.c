@@ -11,7 +11,7 @@
 #include "pcf85263a.h"
 #include "etc_settings.h"
 #include "etc_interface.h"
-
+#include "etc_device.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
@@ -242,6 +242,27 @@ static void app_peripheral_on(void) {
 #ifdef CONFIG_PM_DEVICE
 	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
 #endif
+	LOG_DBG("Wakeup from sleep");
+#if defined(CONFIG_PCF85263)
+	time_t now = 0;
+	pcf85263a_rtc_get_time(&now);
+	int last_sample = etc_get_time_last_log(); // Get the last wakeup time for sample
+	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
+	LOG_DBG("Sample %d - Transmit %d - UTC time %d", last_sample, last_transmit, (int)now);
+	if (now >= last_sample && now < last_transmit) {
+		LOG_DBG("Doing sample");
+		etc_device_set_job(ETC_LOGGER_JOB_LOG);
+	} else if (now >= last_transmit && now < last_sample) {
+		LOG_DBG("Doing transmit");
+		etc_device_set_job(ETC_LOGGER_JOB_TX);
+	} else if (now >= last_transmit && now >= last_sample) {
+		LOG_DBG("Doing both job");
+		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+	} else {
+		LOG_DBG("Unknown task - set default job to log");
+		etc_device_set_job(ETC_LOGGER_JOB_LOG);
+	}
+#endif
 }
 
 static void app_input_handler(void) {
@@ -259,12 +280,58 @@ static void app_set_wakeup_time(void) {
 	struct tm tm_time = { 0 };
 #if defined(CONFIG_PCF85263)
 	pcf85263a_rtc_get_time(&now);
-	uint16_t sample_time_second = etc_get_time_measurement_interval();
-	uint8_t sample_time_min = sample_time_second / 60;
-	if (sample_time_min == 0) {
-		sample_time_min = 3;
+	int wakeup_for_sample = etc_device_get_log_interval_second();
+	int wakeup_for_transmit = etc_device_get_tx_interval_second();
+	int last_sample = etc_get_time_last_log(); // Get the last wakeup time for sample
+	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
+	int next_sample = 0;
+	int next_transmit = 0;
+	int sleep_time = 0;
+	if ((last_sample == -1) && (last_transmit == -1)) {
+		LOG_DBG("Case 1");
+		// Setup the wakeup time for next sample and transmit
+		next_sample = now + wakeup_for_sample; 
+		next_transmit = now + wakeup_for_transmit;
+		sleep_time = wakeup_for_sample > wakeup_for_transmit ? wakeup_for_transmit : wakeup_for_sample;
+	} else {
+		if (last_sample <= now && now < last_transmit) {
+			// Just wakeup for sampling
+			LOG_DBG("Case 2");
+			next_sample = now + wakeup_for_sample;
+			next_transmit = last_transmit;
+			sleep_time = next_sample > last_transmit ? last_transmit - now : next_sample - now;
+		} else if (last_transmit <= now && now < last_sample) {
+			// Just wakeup for transmiting	
+			LOG_DBG("Case 3");
+			next_transmit = now + wakeup_for_transmit;
+			next_sample = last_sample; 
+			sleep_time = next_transmit > last_sample ? last_sample - now : next_transmit - now;
+		} else if (last_transmit <= now && last_sample <= now) {
+			// Just wakeup for doing both works (transmit and sample)
+			LOG_DBG("Case 4");
+			next_sample = now + wakeup_for_sample; 
+			next_transmit = now + wakeup_for_transmit;
+			sleep_time = wakeup_for_sample > wakeup_for_transmit ? wakeup_for_transmit : wakeup_for_sample;
+		} else if (now < last_sample && now < last_transmit) {
+			LOG_WRN("Case 5: Wakeup with any reason %d %d %d", (int)now, last_sample, last_transmit);
+			sleep_time = abs(last_transmit - last_sample);
+			next_transmit = last_transmit;
+			next_sample = last_sample;
+		} else {
+			LOG_WRN("Wakeup with any reason %d %d %d", (int)now, last_sample, last_transmit);
+			sleep_time = abs(last_transmit - last_sample);
+			next_transmit = last_transmit;
+			next_sample = last_sample;
+		}
 	}
 
+	LOG_DBG("Sample %d (%d) - Transmit %d (%d)- Sleep time %d", next_sample, last_sample, next_transmit, last_transmit, sleep_time);
+	etc_set_time_last_log(next_sample);
+	etc_set_time_last_tx(next_transmit);
+	uint8_t sample_time_min = sleep_time / 60;
+	if (sample_time_min == 0) {
+		sample_time_min = 1;
+	}
 	gmtime_r(&now, &tm_time);
 	uint8_t alarm_min = (uint8_t)tm_time.tm_min;
 	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
@@ -350,6 +417,17 @@ static void on_all_events(struct app_msg_data *msg)
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_SLEEP_READY)) {
 		app_set_wakeup_time();
+	}
+
+	enum etc_logger_job job = etc_device_get_job();
+	if (job == ETC_LOGGER_JOB_BOTH || job == ETC_LOGGER_JOB_TX) {
+		if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+			app_set_wakeup_time();
+		}
+	} else if (job == ETC_LOGGER_JOB_LOG) {
+		if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+			app_set_wakeup_time();
+		}
 	}
 }
 

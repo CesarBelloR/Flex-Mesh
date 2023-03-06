@@ -19,21 +19,17 @@ static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 static int saved_time_measurement;
 static int saved_time_transmission;
+static int saved_last_log_time;
+static int saved_last_tx_time;
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
 
-K_MUTEX_DEFINE(hw_mutex);
-K_MUTEX_DEFINE(fw_mutex);
-K_MUTEX_DEFINE(device_mutex);
-K_MUTEX_DEFINE(time_meas_mutex);
-K_MUTEX_DEFINE(time_trans_mutex);
+K_MUTEX_DEFINE(setting_mutex);
 
 void etc_settings_refresh()
 {
-	k_mutex_lock(&hw_mutex, K_FOREVER);
-	k_mutex_lock(&fw_mutex, K_FOREVER);
-	k_mutex_lock(&device_mutex, K_FOREVER);
-	k_mutex_lock(&time_meas_mutex, K_FOREVER);
-	k_mutex_lock(&time_trans_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	saved_last_log_time = -1;
+	saved_last_tx_time = -1;
 	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
 	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
 	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
@@ -42,61 +38,57 @@ void etc_settings_refresh()
 	etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
 	etc_device_read_setting(SETTINGS_TIME_MEASUREMENT, (char *)&saved_time_measurement, sizeof(int));
 	etc_device_read_setting(SETTINGS_TIME_TRANSMISSION, (char *)&saved_time_transmission, sizeof(int));
-	k_mutex_unlock(&device_mutex);
-	k_mutex_unlock(&fw_mutex);
-	k_mutex_unlock(&hw_mutex);
-	k_mutex_unlock(&time_meas_mutex);
-	k_mutex_unlock(&time_trans_mutex);
+	k_mutex_unlock(&setting_mutex);
 }
 
 void etc_set_hw_version(const char *hw_version)
 {
-	k_mutex_lock(&hw_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	strncpy(saved_hw_version, hw_version, ETC_SETTING_HW_VER_LEN);
 	etc_device_write_setting(SETTINGS_HW_VERSION, (char *)hw_version, ETC_SETTING_HW_VER_LEN);
-	k_mutex_unlock(&hw_mutex);
+	k_mutex_unlock(&setting_mutex);
 }
 
 void etc_set_fw_version(const char *fw_version)
 {
-	k_mutex_lock(&fw_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	strncpy(saved_fw_version, fw_version, ETC_SETTING_FW_VER_LEN);
 	etc_device_write_setting(SETTINGS_FW_VERSION, (char *)fw_version, ETC_SETTING_FW_VER_LEN);
-	k_mutex_unlock(&fw_mutex);
+	k_mutex_unlock(&setting_mutex);
 }
 
 void etc_set_device_id(const char *device_id)
 {
-	k_mutex_lock(&device_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	strncpy(saved_device_id, device_id, ETC_SETTINGS_DEVICE_ID_LEN);
 	etc_device_write_setting(SETTINGS_DEVICE_ID, (char *)device_id, ETC_SETTINGS_DEVICE_ID_LEN);
-	k_mutex_unlock(&device_mutex);
+	k_mutex_unlock(&setting_mutex);
 }
 
 void etc_set_time_measurement_interval(int time_in_sec)
 {
-	k_mutex_lock(&time_meas_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	saved_time_measurement = time_in_sec;
 	etc_device_write_setting(SETTINGS_TIME_MEASUREMENT, (char *)&saved_time_measurement, sizeof(int));
-	k_mutex_unlock(&time_meas_mutex);
+	k_mutex_unlock(&setting_mutex);
 }
 
 void etc_set_time_transmission_interval(int time_in_sec)
 {
-	k_mutex_lock(&time_trans_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	saved_time_transmission = time_in_sec;
 	etc_device_write_setting(SETTINGS_TIME_TRANSMISSION, (char *)&saved_time_transmission, sizeof(int));
-	k_mutex_unlock(&time_trans_mutex);
+	k_mutex_unlock(&setting_mutex);
 }
 
 int etc_get_hw_version(char *buf, int buf_len)
 {
 	int copy_size;
 
-	k_mutex_lock(&hw_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	copy_size = ETC_SETTING_HW_VER_LEN < buf_len ? ETC_SETTING_HW_VER_LEN : buf_len;
 	memcpy(buf, saved_hw_version, copy_size);
-	k_mutex_unlock(&hw_mutex);
+	k_mutex_unlock(&setting_mutex);
 	return copy_size;
 }
 
@@ -104,10 +96,10 @@ int etc_get_fw_version(char *buf, int buf_len)
 {
 	int copy_size;
 
-	k_mutex_lock(&fw_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	copy_size = ETC_SETTING_FW_VER_LEN < buf_len ? ETC_SETTING_FW_VER_LEN : buf_len;
 	memcpy(buf, saved_fw_version, copy_size);
-	k_mutex_unlock(&fw_mutex);
+	k_mutex_unlock(&setting_mutex);
 	return copy_size;
 }
 
@@ -123,18 +115,18 @@ int etc_get_device_id(char *buf, int buf_len)
 int etc_get_time_measurement_interval(void)
 {
 	int interval = 0;
-	k_mutex_lock(&time_meas_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	interval = saved_time_measurement;
-	k_mutex_unlock(&time_meas_mutex);
+	k_mutex_unlock(&setting_mutex);
 	return interval;
 }
 
 int etc_get_time_transmission_interval(void)
 {
 	int interval = 0;
-	k_mutex_lock(&time_trans_mutex, K_FOREVER);
+	k_mutex_lock(&setting_mutex, K_FOREVER);
 	interval = saved_time_transmission;
-	k_mutex_unlock(&time_trans_mutex);
+	k_mutex_unlock(&setting_mutex);
 	return interval;
 }
 
@@ -177,7 +169,53 @@ int etc_settings_init(void)
 		etc_set_time_transmission_interval(CONFIG_INTERVAL_TIME_TRANSMISSION_IN_SECONDS);
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time, sizeof(int));
+	if (ret)
+	{
+		saved_last_log_time = -1;
+		etc_set_time_last_log(-1);
+	}
+
+	ret = etc_device_read_setting(ETC_SETTING_LAST_TX_TIME_ID, (char *)&saved_last_tx_time, sizeof(int));
+	if (ret)
+	{
+		saved_last_tx_time = -1;
+		etc_set_time_last_tx(-1);
+	}
+
+	LOG_DBG("Load setting successfully");
 	return 0;
+}
+
+void etc_set_time_last_log(int time) {
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	saved_last_log_time = time;
+	etc_device_write_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time, sizeof(int));
+	k_mutex_unlock(&setting_mutex);
+	
+}
+
+void etc_set_time_last_tx(int time) {
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	saved_last_tx_time = time;
+	etc_device_write_setting(ETC_SETTING_LAST_TX_TIME_ID, (char *)&saved_last_tx_time, sizeof(int));
+	k_mutex_unlock(&setting_mutex);
+}
+
+int etc_get_time_last_log(void) {
+	int time = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	time = saved_last_log_time;
+	k_mutex_unlock(&setting_mutex);
+	return time;
+}
+
+int etc_get_time_last_tx(void) {
+	int time = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	time = saved_last_tx_time;
+	k_mutex_unlock(&setting_mutex);
+	return time;
 }
 
 #ifdef CONFIG_SHELL
@@ -269,6 +307,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings,
 							   SHELL_CMD(firmware, NULL, "Set firmware version", cmd_set_firmware_version),
 							   SHELL_CMD(device, NULL, "Set device ID", cmd_set_device_id),
 							   SHELL_CMD(measurement, NULL, "Set measurement interval time", cmd_set_measurement_time),
+							   SHELL_CMD(transmission, NULL, "Set transmission interval time", cmd_set_transmission_time),
 							   SHELL_CMD(transmission, NULL, "Set transmission interval time", cmd_set_transmission_time),
 							   SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
