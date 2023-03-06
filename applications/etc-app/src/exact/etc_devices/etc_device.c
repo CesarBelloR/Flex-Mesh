@@ -69,11 +69,11 @@ static struct etc_device_record_table etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
 static int etc_nvs_read(uint16_t element_id, void *data, size_t len);
 static struct etc_device_record_index etc_device_get_next_index(void);
-extern union etc_config etc_cfg;
+extern struct etc_config etc_cfg;
 static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
 
-union etc_config *p_etc_config = &etc_cfg;
+struct etc_config *p_etc_config = &etc_cfg;
 
 static void etc_nvs_init(void)
 {

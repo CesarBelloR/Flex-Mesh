@@ -69,22 +69,19 @@ enum {
 	ETC_RECORD_HEADER = 0x1000,
 };
 
-union etc_config {
-	uint8_t bytes[ETC_CONFIG_TYPE_SIZE];
-	struct {
-		enum etc_device_mode device_mode;
-		enum etc_radio_mode radio_mode;
-		enum etc_power_mode_e power_mode;
-		enum etc_alarm_direction alarm_direction;
-		uint32_t log_interval_secs;
-		uint16_t log_interval_alarm_secs;
-		uint16_t tx_interval_secs;
-		uint16_t tx_interval_alarm_secs;
-		uint16_t wake_early_secs;
-		uint16_t tx_delay_msec;
-		uint16_t rx_duration_secs;
-		uint16_t alarm_threshold;
-	};
+struct etc_config {
+	enum etc_device_mode device_mode;
+	enum etc_radio_mode radio_mode;
+	enum etc_power_mode_e power_mode;
+	enum etc_alarm_direction alarm_direction;
+	uint32_t log_interval_secs;
+	uint16_t log_interval_alarm_secs;
+	uint16_t tx_interval_secs;
+	uint16_t tx_interval_alarm_secs;
+	uint16_t wake_early_secs;
+	uint16_t tx_delay_msec;
+	uint16_t rx_duration_secs;
+	uint16_t alarm_threshold;
 };
 
 union etc_device_record {
@@ -99,8 +96,6 @@ union etc_device_record {
 
 /* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
 BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
-/* Assert to verify the configuration size must fit the macro ETC_CONFIG_TYPE_SIZE */
-BUILD_ASSERT(ETC_CONFIG_TYPE_SIZE >= sizeof(union etc_config));
 
 void etc_device_init(void);
 

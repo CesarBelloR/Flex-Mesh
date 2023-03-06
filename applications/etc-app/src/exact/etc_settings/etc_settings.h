@@ -1,7 +1,7 @@
 #ifndef ETC_SETTINGS_H__
 #define ETC_SETTINGS_H__
-#include <stdint.h>
 #include "etc_device.h"
+#include <stdint.h>
 
 #define ETC_SETTINGS_DEVICE_ID_LEN (32)
 #define ETC_SETTING_FW_VER_LEN	   (8)
