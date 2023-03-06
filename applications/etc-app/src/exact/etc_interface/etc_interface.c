@@ -27,16 +27,19 @@ K_WORK_DELAYABLE_DEFINE(etc_interface_work, etc_interface_work_handler);
 
 static void user_btn_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
+	LOG_DBG("");
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 
 static void hall_sensor_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
+	LOG_DBG("");
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 
 static void rtc_int_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
+	LOG_DBG("");
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 

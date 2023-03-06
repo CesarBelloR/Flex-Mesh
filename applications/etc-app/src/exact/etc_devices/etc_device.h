@@ -13,6 +13,13 @@
 #define ETC_DEVICE_RECORD_SIZE (36)
 #define ETC_DEVICE_NUM_SENSOR  (6) // 5 temperatures + 1 humidity
 
+/* Define an enum to describe the job of logger currently */
+enum etc_logger_job {
+	ETC_LOGGER_JOB_LOG = 0x00,
+	ETC_LOGGER_JOB_TX,
+	ETC_LOGGER_JOB_BOTH,
+};
+
 /* Define a enum to describe about device mode */
 enum etc_device_mode {
 	ETC_DEVICE_MODE_RELAY = 0x01,
@@ -54,6 +61,8 @@ enum {
 	ETC_SETTING_DEVICE_ID,
 	ETC_SETTING_TIME_MEASURE_INTERVAL_ID,
 	ETC_SETTING_TIME_TRANSMISSION_INTERVAL_ID,
+	ETC_SETTING_LAST_LOG_TIME_ID,
+	ETC_SETTING_LAST_TX_TIME_ID,
 	ETC_RECORD_HEADER = 0x1000,
 };
 
@@ -70,7 +79,7 @@ union etc_config {
 		uint16_t tx_interval_alarm_secs;
 		uint16_t wake_early_secs;
 		uint16_t tx_delay_msec;
-		uint16_t rx_duration_secs;
+		uint16_t rx_duration_msecs;
 		uint16_t alarm_threshold;
 	};
 };
@@ -98,8 +107,13 @@ int etc_device_write_record_sensor(struct sensor_data *sensor);
 int etc_device_write_record(union etc_device_record *record);
 int etc_device_read_record(union etc_device_record *record);
 int etc_device_set_ack_record(int record_id);
-enum etc_device_mode etc_device_get_mode(void);
+bool etc_device_is_logger_lora(void);
 int etc_device_get_rx_timeout(void);
+int etc_device_get_log_interval_second(void);
+int etc_device_get_tx_interval_second(void);
 int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data);
+enum etc_device_mode etc_device_get_mode(void);
+void etc_device_set_job(enum etc_logger_job job);
+enum etc_logger_job etc_device_get_job(void);
 
 #endif /* ETC_DEVICE_H_ */

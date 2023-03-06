@@ -18,6 +18,18 @@ config ETC_DEVICE_MODE
 	int "ETC Device Mode Relay (1) or Logger (2)"
 	default ETC_DEVICE_MODE_LOGGER
 
+config ETC_DEVICE_RADIO_LTE
+	int "Radio mode over LTE"
+	default 0
+
+config ETC_DEVICE_RADIO_LORA
+	int "Radio mode over Lora"
+	default 1
+
+config ETC_DEVICE_RADIO_MODE
+	int "ETC Radio Mode LTE (0) or Lora (1)"
+	default ETC_DEVICE_RADIO_LORA
+
 module = ETC_DEVICE
 module-str = device
 source "subsys/logging/Kconfig.template.log_config"
