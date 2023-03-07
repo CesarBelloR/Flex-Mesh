@@ -11,7 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/kernel.h>
-
+#include "etc_settings.h"
 #include "cloud/cloud_codec/data_codec.h"
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -43,11 +43,6 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_MAX_SECTOR	  ((int)((ETC_RECORD_MAX_RECORD) / (ETC_RECORD_MAX_PER_SECTOR)) + 1)
 #endif
 
-struct config {
-	union etc_config etc_config;
-	bool is_loaded;
-};
-
 union etc_device_record_header { // It will always change  NVS
 	uint8_t header;
 	struct {
@@ -74,11 +69,8 @@ static struct etc_device_record_table etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
 static int etc_nvs_read(uint16_t element_id, void *data, size_t len);
 static struct etc_device_record_index etc_device_get_next_index(void);
-static struct config etc_config;
 static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
-
-union etc_config *p_etc_config = &etc_config.etc_config;
 
 static void etc_nvs_init(void)
 {
@@ -179,45 +171,10 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 
 void etc_device_init(void)
 {
-	p_etc_config->device_mode = (enum etc_device_mode)CONFIG_ETC_DEVICE_MODE;
+	etc_set_device_mode((enum etc_device_mode)CONFIG_ETC_DEVICE_MODE);
 	LOG_INF("Device is %s",
-		p_etc_config->device_mode == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger");
+		etc_get_device_mode() == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger");
 	etc_nvs_init();
-}
-
-int etc_device_get_config(union etc_config *config)
-{
-	if (etc_config.is_loaded) {
-		memcpy(config, &etc_config.etc_config, sizeof(etc_config.etc_config));
-		return 0;
-	}
-
-	memset(&etc_config.etc_config, 0, sizeof(etc_config.etc_config));
-	int read_len =
-		etc_nvs_read(ETC_CONFIG_ID, &etc_config.etc_config, sizeof(etc_config.etc_config));
-	if (read_len < 0) {
-		LOG_ERR("Failed to read ETC Config");
-		return -EINVAL;
-	}
-	memcpy(config, &etc_config.etc_config, sizeof(etc_config.etc_config));
-	etc_config.is_loaded = true;
-	return 0;
-}
-
-int etc_device_set_config(union etc_config *config)
-{
-	etc_config.is_loaded = true;
-	memcpy(&etc_config.etc_config, config, sizeof(etc_config.etc_config));
-	int rc =
-		etc_nvs_write(ETC_CONFIG_ID, &etc_config.etc_config, sizeof(etc_config.etc_config));
-	if (rc != 0) {
-		LOG_ERR("Failed to write ETC Config");
-		return -EINVAL;
-	} else {
-		LOG_DBG("Wrote successful ETC Config");
-	}
-
-	return 0;
 }
 
 bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length)
@@ -500,11 +457,12 @@ int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size
 
 enum etc_device_mode etc_device_get_mode(void)
 {
-	return p_etc_config->device_mode;
+	return etc_get_device_mode();
 }
-int etc_device_get_rx_timeout(void)
+
+uint16_t etc_device_get_rx_timeout(void)
 {
-	return p_etc_config->rx_duration_secs;
+	return etc_get_rx_duration_secs();;
 }
 
 #ifdef CONFIG_SHELL

@@ -54,25 +54,34 @@ enum {
 	ETC_SETTING_DEVICE_ID,
 	ETC_SETTING_TIME_MEASURE_INTERVAL_ID,
 	ETC_SETTING_TIME_TRANSMISSION_INTERVAL_ID,
+	ETC_SETTING_DEVICE_MODE_ID,
+	ETC_SETTING_RADIO_MODE_ID,
+	ETC_SETTING_POWER_MODE_ID,
+	ETC_SETTING_ALARM_DIRECTION_ID,
+	ETC_SETTING_LOG_INTERVAL_SECS_ID,
+	ETC_SETTING_LOG_INTERVAL_ALARM_SECS_ID,
+	ETC_SETTING_TX_INTERVAL_SECS_ID,
+	ETC_SETTING_TX_INTERVAL_ALARMS_SECS_ID,
+	ETC_SETTING_WAKEUP_EARLY_SECS_ID,
+	ETC_SETTING_TX_DELAY_MSEC_ID,
+	ETC_SETTING_RX_DURATION_SECS_ID,
+	ETC_SETTING_ALARM_THRESHOLD_ID,
 	ETC_RECORD_HEADER = 0x1000,
 };
 
-union etc_config {
-	uint8_t bytes[ETC_CONFIG_TYPE_SIZE];
-	struct {
-		enum etc_device_mode device_mode;
-		enum etc_radio_mode radio_mode;
-		enum etc_power_mode_e power_mode;
-		enum etc_alarm_direction alarm_direction;
-		uint32_t log_interval_secs;
-		uint16_t log_interval_alarm_secs;
-		uint16_t tx_interval_secs;
-		uint16_t tx_interval_alarm_secs;
-		uint16_t wake_early_secs;
-		uint16_t tx_delay_msec;
-		uint16_t rx_duration_secs;
-		uint16_t alarm_threshold;
-	};
+struct etc_config {
+	enum etc_device_mode device_mode;
+	enum etc_radio_mode radio_mode;
+	enum etc_power_mode_e power_mode;
+	enum etc_alarm_direction alarm_direction;
+	uint32_t log_interval_secs;
+	uint16_t log_interval_alarm_secs;
+	uint16_t tx_interval_secs;
+	uint16_t tx_interval_alarm_secs;
+	uint16_t wake_early_secs;
+	uint16_t tx_delay_msec;
+	uint16_t rx_duration_secs;
+	uint16_t alarm_threshold;
 };
 
 union etc_device_record {
@@ -87,8 +96,6 @@ union etc_device_record {
 
 /* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
 BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
-/* Assert to verify the configuration size must fit the macro ETC_CONFIG_TYPE_SIZE */
-BUILD_ASSERT(ETC_CONFIG_TYPE_SIZE >= sizeof(union etc_config));
 
 void etc_device_init(void);
 
@@ -99,7 +106,7 @@ int etc_device_write_record(union etc_device_record *record);
 int etc_device_read_record(union etc_device_record *record);
 int etc_device_set_ack_record(int record_id);
 enum etc_device_mode etc_device_get_mode(void);
-int etc_device_get_rx_timeout(void);
+uint16_t etc_device_get_rx_timeout(void);
 int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data);
 
 #endif /* ETC_DEVICE_H_ */
