@@ -106,7 +106,7 @@ int etc_device_write_record(union etc_device_record *record);
 int etc_device_read_record(union etc_device_record *record);
 int etc_device_set_ack_record(int record_id);
 enum etc_device_mode etc_device_get_mode(void);
-int etc_device_get_rx_timeout(void);
+uint16_t etc_device_get_rx_timeout(void);
 int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data);
 
 #endif /* ETC_DEVICE_H_ */

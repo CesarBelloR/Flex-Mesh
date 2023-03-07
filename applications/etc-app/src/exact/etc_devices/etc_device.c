@@ -11,7 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/kernel.h>
-
+#include "etc_settings.h"
 #include "cloud/cloud_codec/data_codec.h"
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -69,11 +69,8 @@ static struct etc_device_record_table etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
 static int etc_nvs_read(uint16_t element_id, void *data, size_t len);
 static struct etc_device_record_index etc_device_get_next_index(void);
-extern struct etc_config etc_cfg;
 static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
-
-struct etc_config *p_etc_config = &etc_cfg;
 
 static void etc_nvs_init(void)
 {
@@ -174,9 +171,9 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 
 void etc_device_init(void)
 {
-	p_etc_config->device_mode = (enum etc_device_mode)CONFIG_ETC_DEVICE_MODE;
+	etc_set_device_mode((enum etc_device_mode)CONFIG_ETC_DEVICE_MODE);
 	LOG_INF("Device is %s",
-		p_etc_config->device_mode == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger");
+		etc_get_device_mode() == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger");
 	etc_nvs_init();
 }
 
@@ -460,11 +457,12 @@ int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size
 
 enum etc_device_mode etc_device_get_mode(void)
 {
-	return p_etc_config->device_mode;
+	return etc_get_device_mode();
 }
-int etc_device_get_rx_timeout(void)
+
+uint16_t etc_device_get_rx_timeout(void)
 {
-	return p_etc_config->rx_duration_secs;
+	return etc_get_rx_duration_secs();;
 }
 
 #ifdef CONFIG_SHELL
