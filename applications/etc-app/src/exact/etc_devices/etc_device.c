@@ -196,7 +196,7 @@ void etc_device_init(void)
 	p_etc_config->rx_duration_msecs = ETC_RECORD_DEFAULT_RX_DURATION_MSECONDS;
 	p_etc_config->log_interval_secs = ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS;
 	p_etc_config->tx_interval_secs = ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS;
-	logger_job = ETC_LOGGER_JOB_LOG;
+	logger_job = ETC_LOGGER_JOB_TX;
 	LOG_INF("Device is %s with radio %s",
 		p_etc_config->device_mode == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger",
 		p_etc_config->radio_mode == ETC_RADIO_MODE_LTE ? "LTE" : "Lora");

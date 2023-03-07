@@ -11,6 +11,8 @@ extern "C" {
 
 typedef void (*etc_interface_event_handler)(void);
 
+void etc_interface_enable_rtc_event(void);
+void etc_interface_disable_rtc_event(void);
 void etc_interface_register_event_handler(etc_interface_event_handler handler);
 
 #ifdef __cplusplus

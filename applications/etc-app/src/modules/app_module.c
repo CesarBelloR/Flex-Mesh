@@ -243,6 +243,7 @@ static void app_peripheral_on(void) {
 	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
 #endif
 	LOG_DBG("Wakeup from sleep");
+	etc_interface_disable_rtc_event();
 #if defined(CONFIG_PCF85263)
 	time_t now = 0;
 	pcf85263a_rtc_get_time(&now);
@@ -373,6 +374,7 @@ static void app_set_wakeup_time(void) {
 	pcf85263a_alarm_enable_type_1(flag);
 #endif
 	k_sleep(K_SECONDS(1)); // Wait for print out LOG
+	etc_interface_enable_rtc_event();
 	app_peripheral_off();
 }
 

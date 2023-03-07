@@ -24,7 +24,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define LORA_ACKUNCRYPT_LEN	128
 #define LORA_ACKCRYPT_LEN	128
-#define LORA_RETRY_MAX_TIME	2
+#define LORA_RETRY_MAX_TIME	5
 #define LORA_SYNC_TIME_DIFF_SEC 30
 
 struct lora_msg_data {
@@ -372,7 +372,7 @@ static int module_lora_process_packet(union etc_device_record record)
 			if (cnt++ >= LORA_RETRY_MAX_TIME) {
 				return rc;
 			}
-			k_sleep(K_SECONDS(30));
+			k_sleep(K_SECONDS(1));
 			goto retry;
 		}
 	} else {
