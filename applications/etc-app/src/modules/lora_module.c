@@ -358,10 +358,11 @@ static int module_lora_process_packet(union etc_device_record record)
 	etc_cape_decrypt(encoded_buffer, decr_buf, decoded_buf_len + 1);
 	LOG_HEXDUMP_INF(decr_buf, sizeof(decr_buf), "DECRYPTED");
 #endif
-	int rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
+	int rc = 0;
+	uint8_t cnt = 0;
+retry:
+	rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc == 0) {
-		uint8_t cnt = 0;
-	retry:
 		rc = module_lora_wait_packet();
 		if (rc == 0) {
 			return 0;
