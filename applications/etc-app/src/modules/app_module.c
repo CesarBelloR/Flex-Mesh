@@ -336,16 +336,13 @@ static void app_set_wakeup_time(void)
 
 	uint8_t alarm_min = (uint8_t)tm_time.tm_min;
 	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
-	if (alarm_min >= 60) {
-		alarm_min = 0;
-	}
 
-	if (flag_add_offset) {
+	if ((sample_time_min == 1) && (60 - tm_time.tm_sec < 30)) {
 		// Increase alarm to 1 minutes because the sleep time is not enough
 		alarm_min += 1;
-		alarm_min = alarm_min >= 60 ? 0 : alarm_min;
 	}
-
+	alarm_min = alarm_min % 60;
+	
 	LOG_DBG("      Now: %4d-%02d-%02d %2d:%02d:%02d", tm_time.tm_year - 100,
 		tm_time.tm_mon + 1, tm_time.tm_mday, tm_time.tm_hour,
 		tm_time.tm_min, tm_time.tm_sec);
