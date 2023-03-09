@@ -11,7 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/kernel.h>
-
+#include "etc_settings.h"
 #include "cloud/cloud_codec/data_codec.h"
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -43,14 +43,9 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_MAX_SECTOR	  ((int)((ETC_RECORD_MAX_RECORD) / (ETC_RECORD_MAX_PER_SECTOR)) + 1)
 #endif
 
-#define ETC_RECORD_DEFAULT_RX_DURATION_MSECONDS (5000)
+#define ETC_RECORD_DEFAULT_RX_DURATION_SECONDS (5)
 #define ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS (60)
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
-
-struct config {
-	union etc_config etc_config;
-	bool is_loaded;
-};
 
 union etc_device_record_header { // It will always change  NVS
 	uint8_t header;
@@ -79,14 +74,12 @@ static struct etc_device_record_table etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
 static int etc_nvs_read(uint16_t element_id, void *data, size_t len);
 static struct etc_device_record_index etc_device_get_next_index(void);
-static struct config etc_config;
 static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
 static uint16_t ram_nack_record_id;
 static enum etc_logger_job logger_job = ETC_LOGGER_JOB_LOG;
-union etc_config *p_etc_config = &etc_config.etc_config;
 
-static void etc_nvs_init(void)
+void etc_device_nvs_init(void)
 {
 	int rc = 0;
 	struct flash_pages_info info;
@@ -191,51 +184,15 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 
 void etc_device_init(void)
 {
-	p_etc_config->device_mode = (enum etc_device_mode)CONFIG_ETC_DEVICE_MODE;
-	p_etc_config->radio_mode = (enum etc_radio_mode)CONFIG_ETC_DEVICE_RADIO_MODE;
-	p_etc_config->rx_duration_msecs = ETC_RECORD_DEFAULT_RX_DURATION_MSECONDS;
-	p_etc_config->log_interval_secs = ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS;
-	p_etc_config->tx_interval_secs = ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS;
+	etc_set_device_mode((enum etc_device_mode)CONFIG_ETC_DEVICE_MODE);
+	etc_set_radio_mode((enum etc_radio_mode)CONFIG_ETC_DEVICE_RADIO_MODE);
+	etc_set_rx_duration_secs(ETC_RECORD_DEFAULT_RX_DURATION_SECONDS);
+	etc_set_log_interval_secs(ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS);
+	etc_set_tx_interval_secs(ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS);
 	logger_job = ETC_LOGGER_JOB_TX;
 	LOG_INF("Device is %s with radio %s",
-		p_etc_config->device_mode == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger",
-		p_etc_config->radio_mode == ETC_RADIO_MODE_LTE ? "LTE" : "Lora");
-	etc_nvs_init();
-}
-
-int etc_device_get_config(union etc_config *config)
-{
-	if (etc_config.is_loaded) {
-		memcpy(config, &etc_config.etc_config, sizeof(etc_config.etc_config));
-		return 0;
-	}
-
-	memset(&etc_config.etc_config, 0, sizeof(etc_config.etc_config));
-	int read_len =
-		etc_nvs_read(ETC_CONFIG_ID, &etc_config.etc_config, sizeof(etc_config.etc_config));
-	if (read_len < 0) {
-		LOG_ERR("Failed to read ETC Config");
-		return -EINVAL;
-	}
-	memcpy(config, &etc_config.etc_config, sizeof(etc_config.etc_config));
-	etc_config.is_loaded = true;
-	return 0;
-}
-
-int etc_device_set_config(union etc_config *config)
-{
-	etc_config.is_loaded = true;
-	memcpy(&etc_config.etc_config, config, sizeof(etc_config.etc_config));
-	int rc =
-		etc_nvs_write(ETC_CONFIG_ID, &etc_config.etc_config, sizeof(etc_config.etc_config));
-	if (rc != 0) {
-		LOG_ERR("Failed to write ETC Config");
-		return -EINVAL;
-	} else {
-		LOG_DBG("Wrote successful ETC Config");
-	}
-
-	return 0;
+		etc_get_device_mode() == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger",
+		etc_get_radio_mode() == ETC_RADIO_MODE_LTE ? "LTE" : "Lora");
 }
 
 bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length)
@@ -483,33 +440,32 @@ int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size
 
 enum etc_device_mode etc_device_get_mode(void)
 {
-	return p_etc_config->device_mode;
+	return etc_get_device_mode();
 }
 
 bool etc_device_is_logger_lora(void)
 {
-	return ((p_etc_config->device_mode == ETC_DEVICE_MODE_LOGGER) && (p_etc_config->radio_mode == ETC_RADIO_MODE_LORA));
+	return ((etc_get_device_mode() == ETC_DEVICE_MODE_LOGGER) && (etc_get_radio_mode() == ETC_RADIO_MODE_LORA));
 }
 
 int etc_device_get_rx_timeout(void)
 {
-	int rx_duration = p_etc_config->rx_duration_msecs;
-	return rx_duration == 0 ? ETC_RECORD_DEFAULT_RX_DURATION_MSECONDS
-				: p_etc_config->rx_duration_msecs;
+	int rx_duration = etc_device_get_rx_timeout();
+	return rx_duration == 0 ? ETC_RECORD_DEFAULT_RX_DURATION_SECONDS
+				: rx_duration;
 }
 
 int etc_device_get_log_interval_second(void) 
 {
-	int second = p_etc_config->log_interval_secs;
+	int second = etc_get_log_interval_secs();
 	return second == 0 ? ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS
-				: p_etc_config->log_interval_secs;
+				: second;
 }
 
 int etc_device_get_tx_interval_second(void) 
 {
-	int second = p_etc_config->tx_interval_secs;
-	return second == 0 ? ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS
-				: p_etc_config->tx_interval_secs;
+	int second = etc_get_tx_interval_secs();
+	return second == 0 ? ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS : second;
 }
 
 void etc_device_set_job(enum etc_logger_job job) {

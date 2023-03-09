@@ -111,8 +111,9 @@ void main(void)
 	}
 #endif
 
-	etc_device_init();
+	etc_device_nvs_init();
 	etc_settings_init();
+	etc_device_init();
 	ui_init();
 
 	if (app_event_manager_init()) {

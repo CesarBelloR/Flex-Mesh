@@ -138,6 +138,10 @@ struct modem_data {
 	/* Modem API */
 	modem_api_evt_handler_t evt_callback;
 
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK)
+	struct modem_psk psk;
+#endif
+
 	/* Semaphore(s) */
 	struct k_sem sem_response;
 	struct k_sem sem_tx_ready;
