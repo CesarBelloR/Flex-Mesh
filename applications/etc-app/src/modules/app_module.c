@@ -326,14 +326,6 @@ static void app_set_wakeup_time(void)
 		sample_time_min = 1;
 	}
 
-	if (sample_time_min == 1) {
-		// If current second is nearly 60, need to add offset 1 minutes to avoid triggering
-		// interrupt incorrectly.
-		if (60 - tm_time.tm_sec < 30) {
-			flag_add_offset = true;
-		}
-	}
-
 	uint8_t alarm_min = (uint8_t)tm_time.tm_min;
 	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
 
