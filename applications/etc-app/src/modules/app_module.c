@@ -335,12 +335,8 @@ static void app_set_wakeup_time(void)
 	}
 	alarm_min = alarm_min % 60;
 	
-	LOG_DBG("      Now: %4d-%02d-%02d %2d:%02d:%02d", tm_time.tm_year - 100,
-		tm_time.tm_mon + 1, tm_time.tm_mday, tm_time.tm_hour,
-		tm_time.tm_min, tm_time.tm_sec);
-	LOG_DBG("Wakeup at: %4d-%02d-%02d %2d:%02d:%02d", tm_time.tm_year - 100,
-		tm_time.tm_mon + 1, tm_time.tm_mday, tm_time.tm_hour,
-		alarm_min, 0);
+	LOG_DBG("      Now: %02d:%02d", tm_time.tm_min, tm_time.tm_sec);
+	LOG_DBG("Wakeup at: %02d:%02d", alarm_min, 0);
 	pcf85263a_alarm_type_1_config_t config = {
 		.seconds = 0,
 		.minutes = alarm_min,

@@ -450,7 +450,7 @@ bool etc_device_is_logger_lora(void)
 
 int etc_device_get_rx_timeout(void)
 {
-	int rx_duration = etc_device_get_rx_timeout();
+	int rx_duration = etc_get_rx_duration_secs();
 	return rx_duration == 0 ? ETC_RECORD_DEFAULT_RX_DURATION_SECONDS
 				: rx_duration;
 }

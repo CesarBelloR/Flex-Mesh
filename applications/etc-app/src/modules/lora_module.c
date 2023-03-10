@@ -285,8 +285,7 @@ static int module_lora_wait_packet(void)
 		LOG_ERR("Lora_config failed error %d", ret);
 		return -EINVAL;
 	}
-
-	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), K_MSEC(etc_device_get_rx_timeout()), &rssi, &snr);
+	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), K_SECONDS(etc_device_get_rx_timeout()), &rssi, &snr);
 	if (ret < 0) {
 		LOG_DBG("Timeout");
 		return -ETIMEDOUT;
