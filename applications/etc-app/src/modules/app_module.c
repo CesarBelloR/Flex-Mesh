@@ -11,12 +11,12 @@
 #include "pcf85263a.h"
 #include "etc_settings.h"
 #include "etc_interface.h"
-
+#include "etc_device.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
 
-#define MODULE app
+#define MODULE			     app
 #define MODULE_APP_THREAD_STACK_SIZE 2048
 
 #include <zephyr/logging/log.h>
@@ -59,8 +59,8 @@ static enum sub_state_type {
 } sub_state;
 
 /* Application module message queue. */
-#define APP_QUEUE_ENTRY_COUNT		10
-#define APP_QUEUE_BYTE_ALIGNMENT	4
+#define APP_QUEUE_ENTRY_COUNT	 10
+#define APP_QUEUE_BYTE_ALIGNMENT 4
 
 K_MSGQ_DEFINE(msgq_app, sizeof(struct app_msg_data), APP_QUEUE_ENTRY_COUNT,
 	      APP_QUEUE_BYTE_ALIGNMENT);
@@ -105,9 +105,7 @@ static void state_set(enum state_type new_state)
 		return;
 	}
 
-	LOG_DBG("State transition %s --> %s",
-		state2str(state),
-		state2str(new_state));
+	LOG_DBG("State transition %s --> %s", state2str(state), state2str(new_state));
 
 	state = new_state;
 }
@@ -119,8 +117,7 @@ static void sub_state_set(enum sub_state_type new_state)
 		return;
 	}
 
-	LOG_DBG("Sub state transition %s --> %s",
-		sub_state2str(sub_state),
+	LOG_DBG("Sub state transition %s --> %s", sub_state2str(sub_state),
 		sub_state2str(new_state));
 
 	sub_state = new_state;
@@ -199,8 +196,10 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void app_peripheral_off(void) {
-	const struct gpio_dt_spec vsen_en_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+static void app_peripheral_off(void)
+{
+	const struct gpio_dt_spec vsen_en_dt =
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 	if (!device_is_ready(vsen_en_dt.port)) {
 		return;
 	}
@@ -217,7 +216,7 @@ static void app_peripheral_off(void) {
 #endif
 
 	/* Disconnect all ADC pin */
-	const struct device* gpio_0 = device_get_binding("GPIO_0");
+	const struct device *gpio_0 = device_get_binding("GPIO_0");
 	if (!device_is_ready(gpio_0)) {
 		LOG_ERR("%s: device not ready.", gpio_0->name);
 		return;
@@ -228,8 +227,10 @@ static void app_peripheral_off(void) {
 	gpio_pin_configure(gpio_0, 4, GPIO_DISCONNECTED);
 }
 
-static void app_peripheral_on(void) {
-	const struct gpio_dt_spec vsen_en_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+static void app_peripheral_on(void)
+{
+	const struct gpio_dt_spec vsen_en_dt =
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 	if (!device_is_ready(vsen_en_dt.port)) {
 		return;
 	}
@@ -242,9 +243,32 @@ static void app_peripheral_on(void) {
 #ifdef CONFIG_PM_DEVICE
 	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
 #endif
+	LOG_DBG("Wakeup from sleep");
+	etc_interface_disable_rtc_event();
+#if defined(CONFIG_PCF85263)
+	time_t now = 0;
+	pcf85263a_rtc_get_time(&now);
+	int last_sample = etc_get_time_last_log();  // Get the last wakeup time for sample
+	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
+	LOG_DBG("Sample %d - Transmit %d - UTC time %d", last_sample, last_transmit, (int)now);
+	if (now >= last_sample && now < last_transmit) {
+		LOG_DBG("Doing sample");
+		etc_device_set_job(ETC_LOGGER_JOB_LOG);
+	} else if (now >= last_transmit && now < last_sample) {
+		LOG_DBG("Doing transmit");
+		etc_device_set_job(ETC_LOGGER_JOB_TX);
+	} else if (now >= last_transmit && now >= last_sample) {
+		LOG_DBG("Doing both job");
+		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+	} else {
+		LOG_DBG("Unknown task - set default job to log");
+		etc_device_set_job(ETC_LOGGER_JOB_LOG);
+	}
+#endif
 }
 
-static void app_input_handler(void) {
+static void app_input_handler(void)
+{
 	app_peripheral_on();
 }
 
@@ -254,25 +278,65 @@ static int setup(void)
 	return 0;
 }
 
-static void app_set_wakeup_time(void) {
+static void app_set_wakeup_time(void)
+{
 	time_t now = 0;
-	struct tm tm_time = { 0 };
+	struct tm tm_time = {0};
 #if defined(CONFIG_PCF85263)
+	bool flag_add_offset = false;
 	pcf85263a_rtc_get_time(&now);
-	uint16_t sample_time_second = etc_get_time_measurement_interval();
-	uint8_t sample_time_min = sample_time_second / 60;
-	if (sample_time_min == 0) {
-		sample_time_min = 3;
+	int wakeup_for_sample = etc_device_get_log_interval_second();
+	int wakeup_for_transmit = etc_device_get_tx_interval_second();
+	int last_sample = etc_get_time_last_log();  // Get the last wakeup time for sample
+	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
+	int next_sample = 0;
+	int next_transmit = 0;
+	int sleep_time = 0;
+	if ((last_sample == -1) && (last_transmit == -1)) {
+		// Setup the wakeup time for next sample and transmit
+		next_sample = now + wakeup_for_sample;
+		next_transmit = now + wakeup_for_transmit;
+	} else {
+		if (last_transmit <= now) {
+			next_transmit = now + wakeup_for_transmit;
+		} else {
+			next_transmit = last_transmit;
+		}
+		if (last_sample <= now) {
+			next_sample = now + wakeup_for_sample;
+		} else {
+			next_sample = last_sample;
+		}
 	}
+
+	if (next_sample < next_transmit) {
+		sleep_time = next_sample - now;
+	} else {
+		sleep_time = next_transmit - now;
+	}
+	LOG_DBG("Sample %d (%d) - Transmit %d (%d)- Sleep time %d", next_sample, last_sample,
+		next_transmit, last_transmit, sleep_time);
+	// Update for next sleep
+	etc_set_time_last_log(next_sample);
+	etc_set_time_last_tx(next_transmit);
 
 	gmtime_r(&now, &tm_time);
-	uint8_t alarm_min = (uint8_t)tm_time.tm_min;
-	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
-	if (alarm_min >= 60) {
-		alarm_min = 0;
+	uint8_t sample_time_min = sleep_time / 60;
+	if (sample_time_min == 0) {
+		sample_time_min = 1;
 	}
 
-	LOG_INF("Set last wakeup at minutes %d %d", alarm_min, (int)now);
+	uint8_t alarm_min = (uint8_t)tm_time.tm_min;
+	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
+
+	if ((sample_time_min == 1) && (60 - tm_time.tm_sec < 30)) {
+		// Increase alarm to 1 minutes because the sleep time is not enough
+		alarm_min += 1;
+	}
+	alarm_min = alarm_min % 60;
+	
+	LOG_DBG("      Now: %02d:%02d", tm_time.tm_min, tm_time.tm_sec);
+	LOG_DBG("Wakeup at: %02d:%02d", alarm_min, 0);
 	pcf85263a_alarm_type_1_config_t config = {
 		.seconds = 0,
 		.minutes = alarm_min,
@@ -306,6 +370,7 @@ static void app_set_wakeup_time(void) {
 	pcf85263a_alarm_enable_type_1(flag);
 #endif
 	k_sleep(K_SECONDS(1)); // Wait for print out LOG
+	etc_interface_enable_rtc_event();
 	app_peripheral_off();
 }
 
@@ -317,7 +382,6 @@ static void on_state_init(struct app_msg_data *msg)
 
 static void on_state_running(struct app_msg_data *msg)
 {
-
 }
 
 /* Message handler for SUB_STATE_PASSIVE_MODE. */
@@ -328,7 +392,6 @@ static void on_sub_state_passive(struct app_msg_data *msg)
 /* Message handler for SUB_STATE_ACTIVE_MODE. */
 static void on_sub_state_active(struct app_msg_data *msg)
 {
-	
 }
 
 /* Message handler for all states. */
@@ -336,7 +399,7 @@ static void on_all_events(struct app_msg_data *msg)
 {
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
-	date_time_start_work();
+		date_time_start_work();
 #endif
 	}
 
@@ -351,12 +414,23 @@ static void on_all_events(struct app_msg_data *msg)
 	if (IS_EVENT(msg, modem, MODEM_EVT_SLEEP_READY)) {
 		app_set_wakeup_time();
 	}
+
+	enum etc_logger_job job = etc_device_get_job();
+	if (job == ETC_LOGGER_JOB_BOTH || job == ETC_LOGGER_JOB_TX) {
+		if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+			app_set_wakeup_time();
+		}
+	} else if (job == ETC_LOGGER_JOB_LOG) {
+		if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+			app_set_wakeup_time();
+		}
+	}
 }
 
 static void module_thread_fn(void)
 {
 	int err;
-	struct app_msg_data msg = { 0 };
+	struct app_msg_data msg = {0};
 	self.thread_id = k_current_get();
 
 	err = module_start(&self);
@@ -407,8 +481,7 @@ static void module_thread_fn(void)
 	}
 }
 
-K_THREAD_DEFINE(app_module_thread, MODULE_APP_THREAD_STACK_SIZE,
-		module_thread_fn, NULL, NULL, NULL,
+K_THREAD_DEFINE(app_module_thread, MODULE_APP_THREAD_STACK_SIZE, module_thread_fn, NULL, NULL, NULL,
 		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);

@@ -5,7 +5,7 @@
 #include <math.h>
 #include <zephyr/devicetree.h>
 #include <modem_api.h>
-
+#include "etc_device.h"
 #define MODULE modem_module
 #define MODULE_MODEM_THREAD_STACK_SIZE 1024
 
@@ -17,6 +17,7 @@
 #include "events/cloud_event.h"
 #include "events/util_event.h"
 #include "events/sensor_event.h"
+#include "events/lora_event.h"
 
 #ifdef CONFIG_PM_DEVICE
 #include <zephyr/pm/pm.h>
@@ -37,6 +38,7 @@ struct modem_msg_data {
 		struct util_event util;
 		struct modem_event modem;
 		struct data_event data;
+		struct lora_event lora;
 	} module;
 };
 
@@ -151,6 +153,13 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct data_event *evt = cast_data_event(aeh);
 
 		msg.module.data = *evt;
+		enqueue_msg = true;
+	}
+
+	if (is_lora_event(aeh)) {
+		struct lora_event *evt = cast_lora_event(aeh);
+
+		msg.module.lora = *evt;
 		enqueue_msg = true;
 	}
 
@@ -280,6 +289,11 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
+	if (etc_device_is_logger_lora()) {
+		state_set(STATE_CONNECTED);
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
+		return 0;
+	}
 	if (quectel_bg95_is_ready()) {
 		modem_set_connected();
 	}
@@ -413,4 +427,5 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
+APP_EVENT_SUBSCRIBE(MODULE, lora_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, util_event);
