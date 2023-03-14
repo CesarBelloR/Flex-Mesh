@@ -11,7 +11,6 @@
 #include "cloud/cloud_codec/data_codec.h"
 #include "common.h"
 #define MODULE			      lora_module
-#define MODULE_LORA_THREAD_STACK_SIZE 2048
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -385,9 +384,11 @@ retry:
 
 /* Message handler for all states. */
 static void on_all_states(struct lora_msg_data *msg)
-{	
+{
+	enum etc_device_mode mode = etc_device_get_mode();
+	enum etc_logger_job job = etc_device_get_job();
+	LOG_DBG("Mode %d %d", mode, job);
 	if (etc_device_get_mode() == ETC_DEVICE_MODE_LOGGER) {
-		enum etc_logger_job job = etc_device_get_job();
 		if (((IS_EVENT(msg, data, DATA_EVT_DATA_READY)) && (job == ETC_LOGGER_JOB_BOTH)) ||
 			((IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) && (job == ETC_LOGGER_JOB_TX))))  {
 			LOG_INF("Logger sending data");
@@ -483,7 +484,7 @@ static void rx_thread_fn(void)
 	}
 }
 
-static void module_thread_fn(void)
+void lora_module_thread_fn(void)
 {
 	int err;
 	struct lora_msg_data msg = {0};
@@ -536,9 +537,6 @@ static void module_thread_fn(void)
 		on_all_states(&msg);
 	}
 }
-
-K_THREAD_DEFINE(lora_module_thread, MODULE_LORA_THREAD_STACK_SIZE, module_thread_fn, NULL, NULL,
-		NULL, K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
