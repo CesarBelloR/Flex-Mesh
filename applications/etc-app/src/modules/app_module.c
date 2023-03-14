@@ -17,7 +17,6 @@
 #endif
 
 #define MODULE			     app
-#define MODULE_APP_THREAD_STACK_SIZE 2048
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -427,7 +426,7 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 }
 
-static void module_thread_fn(void)
+void app_module_thread_fn(void)
 {
 	int err;
 	struct app_msg_data msg = {0};
@@ -480,9 +479,6 @@ static void module_thread_fn(void)
 		on_all_events(&msg);
 	}
 }
-
-K_THREAD_DEFINE(app_module_thread, MODULE_APP_THREAD_STACK_SIZE, module_thread_fn, NULL, NULL, NULL,
-		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, cloud_event);

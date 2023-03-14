@@ -16,7 +16,6 @@
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE data_module
-#define MODULE_DATA_THREAD_STACK_SIZE 2048
 #define MODULE_DATA_SENSOR_BUFFER_COUNT 8
 #define MODULE_DATA_BATTERY_BUFFER_COUNT 8
 #define MODULE_LORA_SENSOR_BUFFER_COUNT 8
@@ -405,7 +404,7 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 }
 
-static void module_thread_fn(void)
+void data_module_thread_fn(void)
 {
 	int err;
 	struct data_msg_data msg = { 0 };
@@ -451,10 +450,6 @@ static void module_thread_fn(void)
 		on_all_states(&msg);
 	}
 }
-
-K_THREAD_DEFINE(data_module_thread, MODULE_DATA_THREAD_STACK_SIZE,
-		module_thread_fn, NULL, NULL, NULL,
-		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);

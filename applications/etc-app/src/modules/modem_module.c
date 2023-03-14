@@ -7,8 +7,6 @@
 #include <modem_api.h>
 #include "etc_device.h"
 #define MODULE modem_module
-#define MODULE_MODEM_THREAD_STACK_SIZE 1024
-
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -374,13 +372,13 @@ static void on_all_states(struct modem_msg_data *msg)
 	}
 }
 
-static void module_thread_fn(void)
+void modem_module_thread_fn(void)
 {
 	int err;
 	struct modem_msg_data msg = { 0 };
 
 	self.thread_id = k_current_get();
-
+	LOG_INF("Go to modem");
 	state_set(STATE_DISCONNECTED);
 	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
 
@@ -417,10 +415,6 @@ static void module_thread_fn(void)
 		on_all_states(&msg);
 	}
 }
-
-K_THREAD_DEFINE(modem_module_thread, MODULE_MODEM_THREAD_STACK_SIZE,
-		module_thread_fn, NULL, NULL, NULL,
-		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, modem_event);
