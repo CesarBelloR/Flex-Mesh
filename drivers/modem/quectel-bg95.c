@@ -15,6 +15,8 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #include <zephyr/pm/device.h>
 #endif
 
+#define PSM_TIMER_VAL_LEN	sizeof("00000011")
+
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
@@ -44,6 +46,11 @@ static const struct gpio_dt_spec dtr_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_dtr_gpi
 #endif
 #if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
 static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wdisable_gpios);
+#endif
+
+#if defined(CONFIG_MODEM_QUECTEL_BG95_PSM)
+static char psm_param_rat[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RAT;
+static char psm_param_rptau[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RPTAU;
 #endif
 
 /* Implementation in net/ip/utils.h */
@@ -432,6 +439,69 @@ MODEM_CMD_DEFINE(on_cmd_sock_getdatasize)
 	unread = ATOI(argv[2], 0, "unread");
 	LOG_DBG("recvd %d, read %d, unread %d", received, read, unread);
 	mdata.unread_size = unread;
+
+	return 0;
+}
+
+enum cereg_stat {
+	STAT_NOT_REGISTERED = 0,
+	STAT_REGISTERED_HOME = 1,
+	STAT_SEARCHING = 2,
+	STAT_REGISTRATION_DENIED = 3,
+	STAT_UNKNOWN = 4,
+	STAT_REGISTERED_ROAMING = 5
+};
+
+enum access_technology {
+	ACT_GSM = 0,
+	ACT_LTE_M = 8,
+	ACT_NB_IOT = 9
+};
+
+struct cereg_data {
+	enum cereg_stat stat;
+	char tac[sizeof("##")]; 
+	char cell_id[sizeof("####")];
+	enum access_technology act;
+	uint8_t cause_type;
+	uint8_t reject_cause;
+	char active_time[PSM_TIMER_VAL_LEN];
+	char periodic_tau[PSM_TIMER_VAL_LEN];
+};
+
+MODEM_CMD_DEFINE(on_cmd_unsol_cereg)
+{
+	struct cereg_data reg_data;
+
+	memset(&reg_data, 0, sizeof(reg_data));
+
+	reg_data.stat = ATOI(argv[0], STAT_NOT_REGISTERED, "stat");	
+	/* Copy PSM active timer and periodic TAU values */
+	if (argc >= 7) {
+		uint8_t val_len;
+		uint8_t copy_len;
+
+		val_len = strlen(argv[6]);
+		copy_len = val_len < sizeof(reg_data.active_time) ? 
+			   val_len : sizeof(reg_data.active_time) - 1;
+		memcpy(reg_data.active_time, argv[6], copy_len);
+		reg_data.active_time[copy_len] = '\0';
+
+		val_len = strlen(argv[7]);
+		copy_len = val_len < sizeof(reg_data.active_time) ? 
+			   val_len : sizeof(reg_data.active_time) - 1;
+		memcpy(reg_data.periodic_tau, argv[7], copy_len);
+		reg_data.periodic_tau[copy_len] = '\0';
+	}
+	LOG_INF("Status: %u, AT: %s, TAU: %s", 
+		reg_data.stat, reg_data.active_time, reg_data.periodic_tau);
+	
+	if ((reg_data.stat == STAT_REGISTERED_HOME) || 
+	    (reg_data.stat == STAT_REGISTERED_ROAMING)) {
+		LOG_INF("Network connected");
+	} else {
+		LOG_INF("Network disconnected.");
+	}
 
 	return 0;
 }
@@ -1033,6 +1103,64 @@ error:
 	/* unset handler commands */
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
 				      NULL, 0U, false);
+	return ret;
+}
+
+static int quectel_bg95_set_cereg(uint8_t n)
+{
+	char buf[sizeof("AT+CEREG=#")];
+	int ret;
+
+	if (!(n >= 0 && n <= 3) || (n != 4)) {
+		return -EINVAL;
+	}
+	snprintk(buf, sizeof(buf), "AT+CEREG=%d", n);
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0, buf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret != 0) {
+		LOG_ERR("Failed to set CEREG");
+	} else {
+		LOG_DBG("Set CEREG: %u", n);
+	}
+
+	return ret;
+}
+
+/**
+ * @brief Set the PSM requested active and periodic TAU timer values.
+ * 
+ * @param enable true to enable PSM request, false to disable
+ * @param req_rat requested active timer value in E-UTRAN format
+ * @param req_rptau requested periodic TAU timer value in E-UTRAN format
+ * @return 0 on success, negative on error
+*/
+static int quectel_bg95_set_psm(bool enable, char *req_rat, char *req_rptau)
+{
+	char buf[sizeof("AT+QPSMS=#,,,##########,##########")];
+	int ret;
+
+	if (enable) {
+		if (req_rat == NULL || req_rptau == NULL ||
+		    strlen(req_rat) != PSM_TIMER_VAL_LEN - 1 ||
+		    strlen(req_rptau) != PSM_TIMER_VAL_LEN - 1) {
+			return -EINVAL;
+		}
+		snprintk(buf, sizeof(buf), "AT+QPSMS=1,,,\"%s\",\"%s\"",
+			 req_rptau, req_rat);
+	}
+	else {
+		snprintk(buf, sizeof(buf), "AT+QPSMS=0");
+	}
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0, buf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret != 0) {
+		LOG_ERR("Failed to set PSM requested values");
+	} else {
+		LOG_DBG("Set PSM requested values");
+	}
+
 	return ret;
 }
 
@@ -1654,6 +1782,10 @@ static void modem_connect_work(void)
 	if (ret < 0) {
 		LOG_ERR("Error activating modem with pdp context");
 	} else if (ret == 0) {
+		bool enable = IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM);
+		quectel_bg95_set_psm(enable,
+				     CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RAT,
+				     CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RPTAU);
 		modem_event_callback(MODEM_API_CONNECTED_EVT);
 		LOG_INF("Network connected.");
 		mdata.is_connected = true;
@@ -1721,6 +1853,7 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("+QSSLURC: \"recv\",",   on_cmd_unsol_recv,  1U, ""),
 	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
 	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
+	MODEM_CMD("+CEREG: ", on_cmd_unsol_cereg, 9U, ""),
 	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
 	MODEM_CMD("NORMAL POWER DOWN", on_cmd_power_down, 0U, ""),
 };
@@ -1730,6 +1863,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("ATH"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
+	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
 
 	/* Commands to read info from the modem (things like IMEI, Model etc). */
 	SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),

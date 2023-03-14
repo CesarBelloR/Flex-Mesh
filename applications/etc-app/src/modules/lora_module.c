@@ -385,7 +385,7 @@ retry:
 
 /* Message handler for all states. */
 static void on_all_states(struct lora_msg_data *msg)
-{
+{	
 	if (etc_device_get_mode() == ETC_DEVICE_MODE_LOGGER) {
 		enum etc_logger_job job = etc_device_get_job();
 		if (((IS_EVENT(msg, data, DATA_EVT_DATA_READY)) && (job == ETC_LOGGER_JOB_BOTH)) ||
