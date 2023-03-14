@@ -699,7 +699,8 @@ static int cmd_set_alarm_direction(const struct shell *shell, size_t argc, char 
 static int cmd_set_log_interval(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_log_interval_secs((uint32_t)atoi(argv[1])) != 0) {
+
+		if (etc_set_log_interval_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -711,7 +712,7 @@ static int cmd_set_log_interval(const struct shell *shell, size_t argc, char **a
 static int cmd_set_log_interval_alarm(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_log_interval_alarm_secs((uint16_t)atoi(argv[1])) != 0) {
+		if (etc_set_log_interval_alarm_secs((uint16_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -723,7 +724,7 @@ static int cmd_set_log_interval_alarm(const struct shell *shell, size_t argc, ch
 static int cmd_set_tx_interval(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_tx_interval_secs((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_tx_interval_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -735,7 +736,7 @@ static int cmd_set_tx_interval(const struct shell *shell, size_t argc, char **ar
 static int cmd_set_tx_interval_alarm(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_tx_interval_alarm_secs((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_tx_interval_alarm_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -747,7 +748,7 @@ static int cmd_set_tx_interval_alarm(const struct shell *shell, size_t argc, cha
 static int cmd_set_wakeup_early(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_wake_early_secs((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_wake_early_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -759,7 +760,7 @@ static int cmd_set_wakeup_early(const struct shell *shell, size_t argc, char **a
 static int cmd_set_tx_delay(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_tx_delay_msec((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_tx_delay_msec((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -771,7 +772,7 @@ static int cmd_set_tx_delay(const struct shell *shell, size_t argc, char **argv)
 static int cmd_set_rx_duration(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_rx_duration_secs((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_rx_duration_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -783,7 +784,7 @@ static int cmd_set_rx_duration(const struct shell *shell, size_t argc, char **ar
 static int cmd_set_alarm_threshold(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_alarm_threshold((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_alarm_threshold((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
