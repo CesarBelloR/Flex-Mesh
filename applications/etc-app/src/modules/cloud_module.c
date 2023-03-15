@@ -12,7 +12,6 @@
 
 #define MODULE cloud
 #define MODULE_CLOUD_CONNECT_RETRIES 5
-#define MODULE_CLOUD_THREAD_STACK_SIZE 1024
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -529,7 +528,7 @@ static void shadow_work_fn(struct k_work *work) {
 	shadow_update(true);
 }
 
-static void module_thread_fn(void)
+void cloud_module_thread_fn(void)
 {
 	int err;
 	struct cloud_msg_data msg = {0};
@@ -587,10 +586,6 @@ static void module_thread_fn(void)
 		on_all_states(&msg);
 	}
 }
-
-K_THREAD_DEFINE(cloud_module_thread, MODULE_CLOUD_THREAD_STACK_SIZE,
-		module_thread_fn, NULL, NULL, NULL,
-		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);

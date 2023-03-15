@@ -10,7 +10,6 @@
 #include "etc_settings.h"
 #include "etc_device.h"
 #define MODULE sensor_module
-#define MODULE_SENSOR_THREAD_STACK_SIZE 2048
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -293,7 +292,7 @@ static void on_all_states(struct sensor_msg_data *msg)
 	}
 }
 
-static void module_thread_fn(void)
+void sensor_module_thread_fn(void)
 {
 	int err;
 	struct sensor_msg_data msg = { 0 };
@@ -335,10 +334,6 @@ static void module_thread_fn(void)
 		on_all_states(&msg);
 	}
 }
-
-K_THREAD_DEFINE(sensor_module_thread, MODULE_SENSOR_THREAD_STACK_SIZE,
-		module_thread_fn, NULL, NULL, NULL,
-		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
