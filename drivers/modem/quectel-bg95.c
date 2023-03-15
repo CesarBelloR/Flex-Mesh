@@ -53,6 +53,7 @@ static char psm_param_rat[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_PSM_REQ
 static char psm_param_rptau[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RPTAU;
 #endif
 
+static void quectel_bg95_set_connected(bool connected);
 /* Implementation in net/ip/utils.h */
 extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
 
@@ -468,6 +469,26 @@ struct cereg_data {
 	char active_time[PSM_TIMER_VAL_LEN];
 	char periodic_tau[PSM_TIMER_VAL_LEN];
 };
+
+MODEM_CMD_DEFINE(on_cmd_unsol_qpsmtimer)
+{
+	uint32_t tau;
+	uint32_t active_timer;
+
+	tau = ATOI(argv[0], 0, "tau");
+	active_timer = ATOI(argv[1], 0, "active_timer");
+
+	LOG_INF("Entering PSM. TAU: %u, AT: %u", tau, active_timer);
+
+	/* stop RSSI delay work */
+	k_work_cancel_delayable(&mdata.rssi_query_work);
+
+	quectel_bg95_set_connected(false);
+
+	modem_event_callback(MODEM_API_PSM_ENTERED_EVT);
+
+	return 0;
+}
 
 MODEM_CMD_DEFINE(on_cmd_unsol_cereg)
 {
@@ -1758,38 +1779,54 @@ static int modem_event_callback(enum modem_api_evt_type evt_type)
 }
 
 /**
+ * @brief Set modem status to connected/disconnected and call event callback.
+ * When modem state changes to connected, activate pdp context.
+ * 
+ * @param connected true: change to connected, false: change to disconnected.
+*/
+static void quectel_bg95_set_connected(bool connected)
+{
+	int ret;
+
+	if (!connected) {
+		if (mdata.is_connected) {
+			modem_event_callback(MODEM_API_DISCONNECTED_EVT);
+		}
+		mdata.is_connected = false;
+	} else {
+		if (mdata.is_connected) {
+			return;
+		}
+
+		ret = modem_pdp_context_activate();
+		if (ret < 0) {
+			LOG_ERR("Error activating modem with pdp context");
+		} else if (ret == 0) {
+			bool enable = IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM);
+			quectel_bg95_set_psm(enable,
+					CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RAT,
+					CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RPTAU);
+			modem_event_callback(MODEM_API_CONNECTED_EVT);
+			LOG_INF("Network connected.");
+			mdata.is_connected = true;
+		}
+	}
+}
+
+/**
  * @brief Activate pdp context and call event handler when device disconnects/
  * 	  connects.
 */
 static void modem_connect_work(void) 
 {
-	int ret;
-
 	if (mdata.mdm_rssi == MDM_RSSI_INVALID) {
-		if (mdata.is_connected) {
-			modem_event_callback(MODEM_API_DISCONNECTED_EVT);
-		}
-		mdata.is_connected = false;
-		return;
-	}
-	if (mdata.is_connected) {
+		quectel_bg95_set_connected(false);
 		return;
 	}
 
 	/* If the RSSI is valid, which means that the network is ready, 
 	 * and the modem is not connected, we try to activate the PDP context. */
-	ret = modem_pdp_context_activate();
-	if (ret < 0) {
-		LOG_ERR("Error activating modem with pdp context");
-	} else if (ret == 0) {
-		bool enable = IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM);
-		quectel_bg95_set_psm(enable,
-				     CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RAT,
-				     CONFIG_MODEM_QUECTEL_BG95_PSM_REQ_RPTAU);
-		modem_event_callback(MODEM_API_CONNECTED_EVT);
-		LOG_INF("Network connected.");
-		mdata.is_connected = true;
-	}
+	quectel_bg95_set_connected(true);
 }
 
 /* Func: modem_rssi_query_work
@@ -1854,6 +1891,7 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
 	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
 	MODEM_CMD("+CEREG: ", on_cmd_unsol_cereg, 9U, ""),
+	MODEM_CMD("+QPSMTIMER: ", on_cmd_unsol_qpsmtimer, 2U, ""),
 	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
 	MODEM_CMD("NORMAL POWER DOWN", on_cmd_power_down, 0U, ""),
 };
@@ -1864,6 +1902,9 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATH"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
 	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
+#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
+	SETUP_CMD_NOHANDLE("AT+QCFG=\"psm/urc\",1"),
+#endif
 
 	/* Commands to read info from the modem (things like IMEI, Model etc). */
 	SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
