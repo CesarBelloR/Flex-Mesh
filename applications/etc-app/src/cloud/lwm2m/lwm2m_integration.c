@@ -49,6 +49,7 @@ static enum lwm2m_integration_state_type {
 	DISCONNECTED,
 	CONNECTING,
 	CONNECTED,
+	PAUSED,
 } state;
 
 static cloud_wrap_evt_handler_t wrapper_evt_handler;
@@ -481,6 +482,45 @@ int cloud_wrap_disconnect(void)
 	
 	state = DISCONNECTED;
 	return 0;
+}
+
+int cloud_wrap_pause(void)
+{
+	int err;
+	struct cloud_wrap_event event = { 0 };
+
+	if (state != CONNECTED) {
+		return -ENOTSUP;
+	}
+
+	err = lwm2m_engine_pause();
+	if (err) {
+		LOG_ERR("lwm2m_engine_pause, error: %d", err);
+		return err;
+	}	
+	event.type = CLOUD_WRAP_EVT_PAUSED;
+
+	cloud_wrapper_notify_event(&event);
+	
+	state = PAUSED;
+	return 0;
+}
+
+int cloud_wrap_resume(void)
+{
+	int err;
+
+	if (state != PAUSED) {
+		return -ENOTSUP;
+	}
+
+	err = lwm2m_engine_resume();
+	if (err) {
+		LOG_ERR("lwm2m_engine_resume, error: %d", err);
+		return err;
+	}	
+
+	state = CONNECTING;
 }
 
 int cloud_wrap_state_get(bool ack, uint32_t id)

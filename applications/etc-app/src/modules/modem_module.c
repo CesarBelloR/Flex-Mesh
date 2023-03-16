@@ -62,7 +62,7 @@ static int16_t rsrp_value_latest;
 
 const k_tid_t module_thread;
 
-const struct device *modem_dev;
+const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
 
 static bool modem_module_is_sleep = false;
 /* Modem module message queue. */
@@ -175,7 +175,10 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static void modem_set_connected(void)
 {
-	static_modem_data_get();
+	// Do not retrieve static modem data when waking up from PSM.
+	if (!(state == STATE_DISCONNECTED && sub_state == SUB_STATE_MODEM_PSM)) {
+		static_modem_data_get();
+	}
 	state_set(STATE_CONNECTED);
 	SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
 }
@@ -287,15 +290,9 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
-	if (etc_device_is_logger_lora()) {
-		state_set(STATE_CONNECTED);
-		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
-		return 0;
-	}
 	if (quectel_bg95_is_ready()) {
 		modem_set_connected();
 	}
-	modem_dev = device_get_binding("quectel-bg95");
 	if (modem_dev != NULL) {
 		modem_evt_handler_init(modem_dev, modem_evt_handler);
 	}
@@ -311,9 +308,17 @@ static void on_state_init(struct modem_msg_data *msg)
 	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
 }
 
-/* Message handler for STATE_DISCONNECTED. */
-static void on_state_disconnected(struct modem_msg_data *msg)
+/* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_OFF. */
+static void on_sub_state_modem_off(struct modem_msg_data *msg)
 {
+}
+
+/* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_PSM. */
+static void on_sub_state_modem_psm(struct modem_msg_data *msg)
+{
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+		modem_psm_cmd(modem_dev, MODEM_API_PSM_CMD_WAKEUP, NULL);
+	}
 }
 
 /* Message handler for STATE_CONNECTING. */
@@ -357,19 +362,6 @@ static void on_all_states(struct modem_msg_data *msg)
 		SEND_SHUTDOWN_ACK(modem, MODEM_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
 	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
-		modem_enter_sleep();
-		state_set(STATE_DISCONNECTED);
-		SEND_EVENT(modem, MODEM_EVT_SLEEP_READY);
-	}
-
-	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-		if (modem_module_is_sleep) {
-			modem_enter_wakeup();
-			state_set(STATE_CONNECTING);
-		}
-	}
 }
 
 void modem_module_thread_fn(void)
@@ -396,7 +388,15 @@ void modem_module_thread_fn(void)
 			on_state_init(&msg);
 			break;
 		case STATE_DISCONNECTED:
-			on_state_disconnected(&msg);
+			switch (sub_state)
+			{
+			case SUB_STATE_MODEM_OFF:
+				on_sub_state_modem_off(&msg);
+				break;
+			case SUB_STATE_MODEM_PSM:
+				on_sub_state_modem_psm(&msg);
+				break;
+			}
 			break;
 		case STATE_CONNECTING:
 			on_state_connecting(&msg);

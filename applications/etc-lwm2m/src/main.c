@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 
 //#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
-#define SERVER_ADDR "eu.iot.avsystem.cloud"
+#define SERVER_ADDR "us.iot.avsystem.cloud"
 // From Google DNS through native_posix
 //#define SERVER_ADDR "13.53.112.42"
 #define SERVER_PORT CONFIG_LWM2M_PEER_PORT
@@ -34,9 +34,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define EP_NAME "bg95test_bt"
 #else
 #if CONFIG_LWM2M_DTLS_SUPPORT
-#define EP_NAME "bg95test"
+#define EP_NAME "exact-dtls"
 #else
-#define EP_NAME "andi-test"
+#define EP_NAME "exact"
 #endif
 #endif
 
@@ -536,6 +536,13 @@ void main(void)
 	}
 	/* client.sec_obj_inst is 0 as a starting point */
 	lwm2m_rd_client_start(&client, EP_NAME, flags, rd_client_event, observe_cb);
+
+	k_sleep(K_SECONDS(40));
+
+	lwm2m_engine_pause();
+
+	k_sleep(K_SECONDS(10));
+	lwm2m_engine_resume();
 
 	k_sem_take(&quit_lock, K_FOREVER);
 }
