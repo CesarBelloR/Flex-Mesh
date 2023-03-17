@@ -418,7 +418,7 @@ void data_module_thread_fn(void)
 	}
 
 	state_set(STATE_CLOUD_DISCONNECTED);
-	int transmission_in_seconds = etc_get_time_transmission_interval();
+	int transmission_in_seconds = etc_get_tx_interval_secs();
 	data_publish_timeout = K_SECONDS(transmission_in_seconds);
 	k_work_init_delayable(&data_send_work, data_send_work_fn);
 	k_work_reschedule(&data_send_work, data_publish_timeout);
