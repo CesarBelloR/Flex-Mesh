@@ -451,8 +451,8 @@ static void rd_client_event(struct lwm2m_ctx *client,
 		LOG_DBG("Registration complete");
 		break;
 
-	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE_FAILURE:
-		LOG_DBG("Registration update failure!");
+	case LWM2M_RD_CLIENT_EVENT_REG_TIMEOUT:
+		LOG_DBG("Registration timeout!");
 		break;
 
 	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE_COMPLETE:
@@ -478,6 +478,10 @@ static void rd_client_event(struct lwm2m_ctx *client,
 	case LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR:
 		LOG_ERR("LwM2M engine reported a network error.");
 		lwm2m_rd_client_stop(client, rd_client_event, true);
+		break;
+
+	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE:
+		LOG_DBG("LwM2M registration update");
 		break;
 	}
 }
