@@ -6,4 +6,5 @@ rsource "etc_settings/Kconfig"
 rsource "etc_devices/Kconfig"
 rsource "watchdog/Kconfig"
 rsource "etc_devices/Kconfig"
+rsource "etc_mgmt/Kconfig"
 endmenu

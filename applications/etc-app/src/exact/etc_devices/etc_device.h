@@ -46,6 +46,27 @@ enum etc_alarm_direction {
 	ETC_ALARM_DIR_GREATER = 0x00,
 	ETC_ALARM_DIR_LESS = 0x01,
 };
+union etc_device_record_header { // It will always change  NVS
+	uint8_t header;
+	struct {
+		uint8_t ready: 1;
+		uint8_t ack: 1;
+		uint8_t wait: 1;
+		uint8_t unused: 3;
+	};
+};
+
+struct etc_device_record_index { // Constant in flash until the index is override (exflash)
+	int8_t sector_idx;
+	int8_t element_idx;
+};
+
+struct etc_device_record_table {
+	struct etc_device_record_index oldest;
+	struct etc_device_record_index newest;
+	uint16_t total;
+	uint16_t last_nack_record_id;
+};
 
 /**
  * @brief Define a callback function for record reading
@@ -123,5 +144,11 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 enum etc_device_mode etc_device_get_mode(void);
 void etc_device_set_job(enum etc_logger_job job);
 enum etc_logger_job etc_device_get_job(void);
-
+const struct device* etc_device_get_record(void);
+size_t etc_device_get_record_size(void);
+off_t etc_device_get_record_offset(void);
+size_t etc_device_get_record_max_element_index(void);
+size_t etc_device_get_record_max_sector_index(void);
+size_t etc_device_get_record_element_size(void);
+struct etc_device_record_table etc_device_get_record_status(void);
 #endif /* ETC_DEVICE_H_ */
