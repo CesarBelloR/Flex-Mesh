@@ -2,6 +2,7 @@ import os
 import time
 import subprocess
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -9,8 +10,16 @@ def all_same(items):
     return all(x == items[0] for x in items)
 
 
-class McuMgrExecutor():
-    def __init__(self, conn=None, conn_string=None, conn_type=None, timeout=60, smp_serial_obj=None, run_root=False):
+class McuMgrExecutor:
+    def __init__(
+        self,
+        conn=None,
+        conn_string=None,
+        conn_type=None,
+        timeout=60,
+        smp_serial_obj=None,
+        run_root=False,
+    ):
         self.conn = conn
         self.conn_string = conn_string
         self.conn_type = conn_type
@@ -19,9 +28,9 @@ class McuMgrExecutor():
         # get mcumgr path for independence of environment when running root
         self.mcumgr_path = self.get_mcumgr_path()
 
-        if 'mtu' in conn_string:
+        if "mtu" in conn_string:
             for i, s in enumerate(conn_string.split(",")):
-                if 'mtu' in s:
+                if "mtu" in s:
                     self.mtu = int(s.split("=")[1])
 
     def set_conn(self, conn):
@@ -50,8 +59,7 @@ class McuMgrExecutor():
             return all_same(lines)
 
     def get_mcumgr_path(self):
-        process = subprocess.run(
-            "which mcumgr", capture_output=True, shell=True)
+        process = subprocess.run("which mcumgr", capture_output=True, shell=True)
         mcumgr_path = process.stdout.decode().strip()
         return mcumgr_path
 
@@ -83,21 +91,27 @@ class McuMgrExecutor():
         command_success = False
         if max_repeat:
             last_lines = []
-        while (num_retries < 10 and (not command_success)):
+        while num_retries < 10 and (not command_success):
             try:
                 logger.debug(f"Num Command Retries: {num_retries}")
-                process = subprocess.Popen([command], stdout=subprocess.PIPE,
-                                           stderr=subprocess.PIPE, shell=True,
-                                           universal_newlines=True)
+                process = subprocess.Popen(
+                    [command],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    shell=True,
+                    universal_newlines=True,
+                )
                 for stdout_line in iter(process.stdout.readline, ""):
                     stdout += stdout_line
                     logger.debug(stdout_line)
-                    if max_repeat and self.check_line_repeats(last_lines, stdout_line, max_repeat):
+                    if max_repeat and self.check_line_repeats(
+                        last_lines, stdout_line, max_repeat
+                    ):
                         process.terminate()
                         last_lines = []
                 return_code = process.wait()
                 stderr = process.stderr.read()
-                command_success = (return_code == 0)
+                command_success = return_code == 0
                 num_retries += 1
                 # ensure process is terminated
                 process.terminate()
@@ -106,16 +120,15 @@ class McuMgrExecutor():
         logger.debug(stderr)
         return command_success, stdout, stderr
 
-
-# mcumgr commands
+    # mcumgr commands
 
     def shell_command(self, shell_exec_cmd, extra_args=None):
         shell_cmd = f"shell exec {shell_exec_cmd}"
-        ret_status, output, error =  self.execute_mcumgr_cmd(shell_cmd, extra_args)
+        ret_status, output, error = self.execute_mcumgr_cmd(shell_cmd, extra_args)
         if error:
             logger.error(error)
         return ret_status, output
-        
+
     def fs_command(self, fs_exec_cmd, extra_args=None):
         fs_cmd = f"fs {fs_exec_cmd}"
         return self.execute_mcumgr_cmd(fs_cmd, extra_args)
@@ -133,8 +146,7 @@ class McuMgrExecutor():
 
         return ret_status
 
-
-# fs Commands
+    # fs Commands
 
     def upload_file(self, src, dst, extra_args=None):
         upload_cmd = f"upload {src} {dst}"
@@ -146,7 +158,7 @@ class McuMgrExecutor():
 
         return self.fs_command(download_cmd, extra_args)
 
-# image commands
+    # image commands
     def upload_image(self, image_file, extra_args=None, max_repeat=None):
         abs_path_to_image = os.path.abspath(image_file)
         upload_cmd = f"upload {abs_path_to_image}"

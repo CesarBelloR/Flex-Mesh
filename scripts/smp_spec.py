@@ -1,60 +1,55 @@
-
-MGMT_OP_READ        = 0
-MGMT_OP_READ_RSP    = 1
-MGMT_OP_WRITE       = 2
-MGMT_OP_WRITE_RSP   = 3
+MGMT_OP_READ = 0
+MGMT_OP_READ_RSP = 1
+MGMT_OP_WRITE = 2
+MGMT_OP_WRITE_RSP = 3
 
 SMP_DICT = {
-    "default":{
+    "default": {
         "group_id": 0,
-        "echo" : {
+        "echo": {
             "cmd_id": 0,
-            "request":{
-                "op_code": MGMT_OP_WRITE,
-                "json" : {
-                    "d" : ""
-                }
-            },
-            "response": {
-                "op_code": MGMT_OP_WRITE_RSP,
-                "json_keys" : ["r", "rc"]
-            }
+            "request": {"op_code": MGMT_OP_WRITE, "json": {"d": ""}},
+            "response": {"op_code": MGMT_OP_WRITE_RSP, "json_keys": ["r", "rc"]},
         },
-        "reset" : {
-                "cmd_id": 5,
-                "request": {
-                    "op_code": MGMT_OP_WRITE,
-                    "json" : {}
-                }
-        }
+        "reset": {"cmd_id": 5, "request": {"op_code": MGMT_OP_WRITE, "json": {}}},
     },
     "image_mgmt": {
         "group_id": 1,
         "state": {
             "cmd_id": 0,
-            "get_request": {
-                "op_code": MGMT_OP_READ,
-                "json": {}
-            },
+            "get_request": {"op_code": MGMT_OP_READ, "json": {}},
             "get_response": {
                 "op_code": MGMT_OP_READ_RSP,
-                "json_keys" : ["image", "slot", "version", 
-                                "hash", "bootable","pending",
-                                "confirmed", "active","permanent"]
+                "json_keys": [
+                    "image",
+                    "slot",
+                    "version",
+                    "hash",
+                    "bootable",
+                    "pending",
+                    "confirmed",
+                    "active",
+                    "permanent",
+                ],
             },
             "set_request": {
                 "op_code": MGMT_OP_WRITE,
-                "json":{
-                    "hash": "",
-                    "confirm": False
-                }
+                "json": {"hash": "", "confirm": False},
             },
             "set_response": {
                 "op_code": MGMT_OP_WRITE_RSP,
-                "json_keys" : ["image", "slot", "version", 
-                                "hash", "bootable","pending",
-                                "confirmed", "active","permanent"]
-            }
+                "json_keys": [
+                    "image",
+                    "slot",
+                    "version",
+                    "hash",
+                    "bootable",
+                    "pending",
+                    "confirmed",
+                    "active",
+                    "permanent",
+                ],
+            },
         },
         "upload": {
             "cmd_id": 1,
@@ -66,59 +61,37 @@ SMP_DICT = {
                     "off": 0,
                     "sha": "",
                     "data": "",
-                    "upgrade": False
-                }
+                    "upgrade": False,
+                },
             },
             "response": {
                 "op_code": MGMT_OP_WRITE_RSP,
-                "json_keys": ["off", "rc", "rsn"]
-            }
+                "json_keys": ["off", "rc", "rsn"],
+            },
         },
         "erase": {
             "cmd_id": 5,
-            "request": {
-                "op_code": MGMT_OP_WRITE,
-                "json": {
-                    "slot": 0
-                }
-            },
-            "response": {
-                "op_code": MGMT_OP_WRITE_RSP,
-                "json_keys": ["rc", "rsn"]
-            }
-        }
+            "request": {"op_code": MGMT_OP_WRITE, "json": {"slot": 0}},
+            "response": {"op_code": MGMT_OP_WRITE_RSP, "json_keys": ["rc", "rsn"]},
+        },
     },
     "file_management": {
-        "group_id" : 8,
+        "group_id": 8,
         "upload": {
             "cmd_id": 2,
             "request": {
                 "op_code": MGMT_OP_WRITE,
-                "json": {
-                    "off": 0,
-                    "data": "",
-                    "name": "",
-                    "len": 0
-                }
+                "json": {"off": 0, "data": "", "name": "", "len": 0},
             },
-            "response": {
-                "op_code" : MGMT_OP_WRITE_RSP,
-                "json_keys" : ["off", "rc"]
-            }
-        }
+            "response": {"op_code": MGMT_OP_WRITE_RSP, "json_keys": ["off", "rc"]},
+        },
     },
     "etc": {
         "group_id": 65,
         "status": {
             "cmd_id": 0,
-            "request": {
-                "op_code": MGMT_OP_READ,
-                "json": {}
-            },
-            "response": {
-                "op_code" : MGMT_OP_READ_RSP,
-                "json_keys" : []
-            }
+            "request": {"op_code": MGMT_OP_READ, "json": {}},
+            "response": {"op_code": MGMT_OP_READ_RSP, "json_keys": []},
         },
         "record": {
             "cmd_id": 1,
@@ -126,12 +99,9 @@ SMP_DICT = {
                 "op_code": MGMT_OP_READ,
                 "json": {
                     "off": 0,
-                }
+                },
             },
-            "response": {
-                "op_code" : MGMT_OP_READ_RSP,
-                "json_keys" : []
-            }
+            "response": {"op_code": MGMT_OP_READ_RSP, "json_keys": []},
         },
-    }
+    },
 }
