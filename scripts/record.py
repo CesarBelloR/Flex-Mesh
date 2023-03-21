@@ -47,8 +47,7 @@ def buffer_to_structs(buffer):
         my_struct = record()
         my_struct.unpack(struct_bytes)
         struct_list.append(my_struct)
-    remain_data = bytearray(buffer[len(struct_list) * struct_size:])
-    return struct_list, remain_data
+    return struct_list
 
 
 def buffer_dump(buffer):
@@ -65,7 +64,7 @@ if __name__ == "__main__":
     # Add the argument for connection string (COM port)
     parser.add_argument("--conn", help="Serial connection for Monitor Devices")
     parser.add_argument("--cmd", help="Command to execute over MCUMGR")
-
+    parser.add_argument("--file", help="Save record to file")
     args = parser.parse_args()
     conn_port = args.conn
     if conn_port is None:
@@ -74,63 +73,56 @@ if __name__ == "__main__":
         mgr = SimpleMgmtSerial(conn_port)
         if args.cmd == "retrieve":
             status = mgr.get_status()
+            # Logger the status to know about the record information
             logger.info(status)
             current_record = status["record"]
-            offset_max_addr = status["info"]["max_sector"] * SECTOR_SIZE
-            offset_first_addr = current_record["first_record"]["sector"] * SECTOR_SIZE + current_record["first_record"]["index"] * status["info"]["element_size"]
-            offset_last_addr = current_record["last_record"]["sector"] * SECTOR_SIZE + (current_record["last_record"]["index"] + 1) * status["info"]["element_size"]
-            total_size = status["info"]["element_size"] * status["info"]["total"]
-            start_time = time.time()
-            current_size = 0
+            # Get maximum element in sector, maximum sector for record and maximum range of records
+            max_element_in_sector = status["info"]["max_index"]
+            max_sector = status["info"]["max_sector"]
+            max_offset = max_element_in_sector * max_sector
+            element_in_byte = status["info"]["element_size"]
+            max_byte_record_per_request = DATA_RECORD_CHUNK_SIZE - (DATA_RECORD_CHUNK_SIZE % element_in_byte)
+            max_record_per_request = int(max_byte_record_per_request / element_in_byte)
+            total_record = status["info"]["total"]
+            total_size = element_in_byte * total_record
+            offset_first_record_pos = current_record["first_record"]["index"] + current_record["first_record"]["sector"] * max_element_in_sector
+            offset_last_record_pos = current_record["last_record"]["index"] + current_record["last_record"]["sector"] * max_element_in_sector
+            logger.info( f"{max_element_in_sector} {max_sector} {max_record_per_request} {offset_first_record_pos} {offset_last_record_pos}")
             struct_list = []
-            remain_data = []
-            data = bytearray()
-            offset = offset_first_addr
+            offset = offset_first_record_pos
+            offset_total = offset_first_record_pos + total_record
             logger.info(f"Total size {total_size}")
-            while current_size < total_size:
-                offset_need_reset = False
-                length = (total_size - current_size) / DATA_RECORD_CHUNK_SIZE
-                # Find the length for request
-                if length > 1:
-                    length = DATA_RECORD_CHUNK_SIZE
-                else:
-                    length = total_size - current_size
-                    
-                if offset + length >= offset_max_addr:
-                    offset_need_reset = True
-                    length = offset + length - offset_max_addr
-                
-                record_data = mgr.get_record(offset, length)
-                data += record_data["data"]
-                current_size += length
-                if offset_need_reset:
+            offset_need_update = False
+            while offset <= offset_total:
+                if offset > max_offset:
                     offset = 0
+                    offset_total = offset_total - max_offset
+                sector = int(offset / max_element_in_sector)
+                if offset_need_update == True:
+                    offset = (sector  * max_element_in_sector)
+                    offset_need_update = False
+                element = offset - (sector * max_element_in_sector)
+                offset_addr = sector * SECTOR_SIZE + element * element_in_byte
+                if element + max_record_per_request > max_element_in_sector:
+                    length = (max_element_in_sector - element) * element_in_byte
+                    offset_need_update = True
+                elif offset + max_record_per_request >= offset_total:
+                    length = (offset_total - offset) * element_in_byte
                 else:
-                    offset += length
-                # logger.info( f"Length {length} - Size {current_size}")
-                # buffer_dump(data)
-                list_record, remain_data = buffer_to_structs(data)
-                data = bytearray()
-                data += remain_data
+                    length  = max_record_per_request * element_in_byte 
+                logger.info( f"{offset} - {element, sector} {offset_addr}, {length} {int(length/element_in_byte)}")
+                record_data = mgr.get_record(offset_addr, length)
+                list_record = buffer_to_structs(record_data["data"])
                 struct_list.extend(list_record)
-                
+                offset = offset + max_record_per_request
             
-            logger.info(struct_list[0])
-            for element in struct_list:
-                record_dump(element) 
-            # record_len = data["len"]
-            # logger.info(f"Offset {offset}")
-            # struct_list = []
-            # offset = 0
-            # while offset < 2048:
-            #     data = mgr.get_record(offset, DATA_RECORD_CHUNK_SIZE)
-            #     logger.info(data["data"])
-            #     struct_list.extend(buffer_to_structs(data["data"]))
-            #     offset += DATA_RECORD_CHUNK_SIZE
-            #     # logger.info(f"Offset {offset}")
-
-            # end_time = time.time()
-            # elapsed_time = end_time - start_time
-            # logger.info(f"Process time {elapsed_time}")
+            if args.file is not None:
+                with open(args.file, 'w', newline='') as csvfile:
+                    csv_writer = csv.writer(csvfile)
+                    csv_writer.writerow(["Timestamp", "Battery", "Sensor 1", "Sensor 2", " Sensor 3", "Sensor 4", " Sensor 5", "Sensor 6"])
+                    
+                    for element in struct_list:
+                        csv_writer.writerow([element.timestamp, round(element.battery, 2), round(element.sensor[0], 2), round(element.sensor[1], 2), round(element.sensor[2], 2), round(element.sensor[3], 2), round(element.sensor[4], 2), round(element.sensor[5], 2)])
+                        
         else:
             logger.warning(f"No support command {args.cmd}")
