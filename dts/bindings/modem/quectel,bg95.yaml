@@ -20,6 +20,10 @@ properties:
       type: phandle-array
       required: false
 
+    mdm-psm-ind-gpios:
+      type: phandle-array
+      required: false
+
     mdm-reset-gpios:
       type: phandle-array
       required: false

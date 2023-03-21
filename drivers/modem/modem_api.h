@@ -13,7 +13,7 @@
 
 enum modem_api_evt_type {
 	MODEM_API_CONNECTED_EVT,
-        MODEM_API_DISCONNECTED_EVT,
+	MODEM_API_DISCONNECTED_EVT,
 	MODEM_API_PSM_ENTERED_EVT,
 };
 
@@ -27,6 +27,10 @@ enum modem_api_cred_type {
 	MODEM_API_CRED_TYPE_PSK
 };
 
+enum modem_api_psm_cmd {
+	MODEM_API_PSM_CMD_WAKEUP,
+};
+
 typedef void(*modem_api_evt_handler_t)(const struct modem_api_evt *const evt);
 
 typedef int(*modem_api_evt_handler_init_t)(const struct device *dev,
@@ -35,6 +39,10 @@ typedef int(*modem_api_evt_handler_init_t)(const struct device *dev,
 typedef int(*modem_api_set_credentials_t)(const struct device *dev,
 					  enum modem_api_cred_type type,
 					  uint8_t *cred_buf, uint8_t cred_len);
+
+typedef int(*modem_api_psm_t)(const struct device *dev,
+			      enum modem_api_psm_cmd cmd,
+			      void *psm_data);
 
 struct modem_api {
 	/**
@@ -51,7 +59,9 @@ struct modem_api {
 	modem_api_evt_handler_init_t evt_handler_init;
 	/* Set the modem's DTLS credentials.
 	*/
-	modem_api_set_credentials_t set_credentials;
+	modem_api_set_credentials_t set_credentials;	
+	/* Send a PSM command, e.g. wakeup */
+	modem_api_psm_t psm_cmd;
 };
 
 struct modem_psk {
@@ -105,15 +115,25 @@ inline static int modem_set_credentials(const struct device *dev,
 	return api->set_credentials(dev, type, cred_buf, cred_len);
 }
 
+inline static int modem_psm_cmd(const struct device *dev,
+			        enum modem_api_psm_cmd cmd,
+			        void *psm_data)
+{
+	const struct modem_api *api =
+		(const struct modem_api *)dev->api;
+
+	if (api->psm_cmd == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->psm_cmd(dev, cmd, psm_data);
+}
+
 char* quectel_bg95_get_imei(void);
 char* quectel_bg95_get_revision(void);
 char* quectel_bg95_get_sim_number(void);
 bool quectel_bg95_is_ready(void);
 int quectel_bg95_get_time(char* time_buf);
 int quectel_bg95_get_rssi(void);
-
-int quectel_bg95_get_psm_timers(void);
-int quectel_bg95_psm_wakeup(void);
-int quectel_bg95_psm(bool enable);
 
 #endif // MODEM_API_H
