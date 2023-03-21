@@ -52,6 +52,13 @@ static enum state_type {
 	STATE_SHUTDOWN,
 } state;
 
+/* Cloud module sub states. */
+static enum sub_state_type {
+	SUB_STATE_MODEM_OFF,
+	SUB_STATE_MODEM_PSM,
+} sub_state;
+
+
 /* Enumerator that specifies the data type that is sampled. */
 enum sample_type {
 	MODEM_STATIC,
@@ -99,6 +106,20 @@ static char *state2str(enum state_type state)
 	}
 }
 
+/* Convenience functions used in internal state handling. */
+static char *sub_state2str(enum state_type state)
+{
+	switch (state)
+	{
+	case SUB_STATE_MODEM_OFF:
+		return "SUB_STATE_MODEM_OFF";
+	case SUB_STATE_MODEM_PSM:
+		return "SUB_STATE_MODEM_PSM";
+	default:
+		return "Unknown";
+	}
+}
+
 static void state_set(enum state_type new_state)
 {
 	if (new_state == state) {
@@ -111,6 +132,21 @@ static void state_set(enum state_type new_state)
 		state2str(new_state));
 
 	state = new_state;
+}
+
+static void sub_state_set(enum sub_state_type new_state)
+{
+	if (new_state == sub_state)
+	{
+		LOG_DBG("Sub state: %s", sub_state2str(sub_state));
+		return;
+	}
+
+	LOG_DBG("Sub state transition %s --> %s",
+		sub_state2str(sub_state),
+		sub_state2str(new_state));
+
+	sub_state = new_state;
 }
 
 /* Handlers */
@@ -195,6 +231,11 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 		state_set(STATE_DISCONNECTED);
 		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
 		break;
+	}
+	case MODEM_API_PSM_ENTERED_EVT: {
+		state_set(STATE_DISCONNECTED);
+		sub_state_set(SUB_STATE_MODEM_PSM);
+		SEND_EVENT(modem, MODEM_EVT_PSM_ENTERED);
 	}
 	}
 }

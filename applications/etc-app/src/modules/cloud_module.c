@@ -435,8 +435,6 @@ static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
-		disconnect_cloud();
-		state_set(STATE_LTE_DISCONNECTED);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
