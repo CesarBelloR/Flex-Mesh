@@ -100,15 +100,14 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 		return MGMT_ERR_EINVAL;
 	}
 
-	rc = flash_read(etc_device_get_record(), record_offset + off, buf, ETC_MGMT_RECORD_BUF_SIZE);
+	rc = flash_read(etc_device_get_record(), record_offset + off, buf, length);
 	if (rc != 0) {
 		return MGMT_ERR_EINVAL;
 	}
-
 	/* Encode the response. */
 	ok = etc_mgmt_rsp(zse, MGMT_ERR_EOK)				&&
 	     zcbor_tstr_put_lit(zse, "data")					&&
-	     zcbor_bstr_encode_ptr(zse, buf, ETC_MGMT_RECORD_BUF_SIZE)			&&
+	     zcbor_bstr_encode_ptr(zse, buf, length)			&&
 	     ((off != 0)							||
 		(zcbor_tstr_put_lit(zse, "len") && zcbor_uint64_put(zse, record_len)));
 
