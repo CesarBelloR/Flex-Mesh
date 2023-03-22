@@ -274,6 +274,12 @@ static void app_input_handler(void)
 static int setup(void)
 {
 	etc_interface_register_event_handler(app_input_handler);
+	static bool is_send = false;
+	if ((etc_device_is_logger_lora() == true) && (is_send == false)) {
+		LOG_DBG("Request to transmit records");
+		is_send = true;
+		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+	}
 	return 0;
 }
 
@@ -313,7 +319,7 @@ static void app_set_wakeup_time(void)
 	} else {
 		sleep_time = next_transmit - now;
 	}
-	LOG_DBG("Sample %d (%d) - Transmit %d (%d)- Sleep time %d", next_sample, last_sample,
+	LOG_DBG("Sample %d (%d) - Transmit %d (%d) - Sleep time %d", next_sample, last_sample,
 		next_transmit, last_transmit, sleep_time);
 	// Update for next sleep
 	etc_set_time_last_log(next_sample);

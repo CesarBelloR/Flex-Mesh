@@ -287,11 +287,6 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
-	if (etc_device_is_logger_lora()) {
-		state_set(STATE_CONNECTED);
-		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
-		return 0;
-	}
 	if (quectel_bg95_is_ready()) {
 		modem_set_connected();
 	}
