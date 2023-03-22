@@ -313,6 +313,7 @@ static void app_set_wakeup_time(void)
 	} else {
 		sleep_time = next_transmit - now;
 	}
+	LOG_DBG("Sample interval: %d - Transmit interval %d", wakeup_for_sample, wakeup_for_transmit);
 	LOG_DBG("Sample %d (%d) - Transmit %d (%d)- Sleep time %d", next_sample, last_sample,
 		next_transmit, last_transmit, sleep_time);
 	// Update for next sleep
