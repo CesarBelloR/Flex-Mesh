@@ -1,0 +1,7 @@
+if BOARD_ETC_V0_2
+
+config GPIO_AS_PINRESET
+	bool "GPIO as pin reset (reset button)"
+	default y
+
+endif # BOARD_ETC

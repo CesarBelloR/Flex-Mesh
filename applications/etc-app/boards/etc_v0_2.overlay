@@ -1,0 +1,77 @@
+/ {
+	chosen {
+		nordic,pm-ext-flash = &mx25r1635;
+		zephyr,uart-mcumgr = &cdc_acm_uart0;
+	};
+
+	vbatt {
+		compatible = "voltage-divider";
+		output-ohms = <2000000>;
+		full-ohms = <(2000000 + 2000000)>;
+		io-channels = <&adc 3>;
+	};
+
+	ntc {
+		compatible = "temp,ntc";
+		b-value-k = <3434>;
+		norminal-25c-ohms = <10000>;
+		reference-res-ohms = <10000>;
+	};
+};
+
+/* A7 = P0.31 = AIN7 - ADC_AMB */ 
+/* A2 = P0.29 = AIN5 - HW_VER*/
+/* A3 = P0.5  = AIN3 - ADC_BATT*/
+/* A2 = P0.4 = AIN2 - ADC_TH*/
+/ {
+	zephyr,user {
+		/* adjust channel number according to pinmux in board.dts */
+		io-channels = <&adc 7>, <&adc 3>, <&adc 2>;
+	};
+};
+
+&adc {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@7 {
+		reg = <7>;
+		zephyr,gain = "ADC_GAIN_1_5";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN7>; 
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <8>;
+	};
+
+	channel@3 {
+		reg = <3>;
+		zephyr,gain = "ADC_GAIN_1_5";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN3>;
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <8>;
+	};
+
+	channel@2 {
+		reg = <2>;
+		zephyr,gain = "ADC_GAIN_1_5";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN2>;
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <8>;
+	};
+
+	/* HW_VER analog input */
+	channel@5 {
+		reg = <5>;
+		zephyr,gain = "ADC_GAIN_1_6";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN5>;
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <8>;
+	};
+};
