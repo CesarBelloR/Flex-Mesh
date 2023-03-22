@@ -255,7 +255,7 @@ static void on_state_running(struct sensor_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct sensor_msg_data *msg)
 {
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET_ALL)) {
+	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
 		LOG_INF("APP_EVT_DATA_GET");
 		sensor_poll_handler();
 		return;

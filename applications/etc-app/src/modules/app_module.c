@@ -253,22 +253,28 @@ static void app_peripheral_on(void)
 	if (now >= last_sample && now < last_transmit) {
 		LOG_DBG("Doing sample");
 		etc_device_set_job(ETC_LOGGER_JOB_LOG);
+		SEND_EVENT(app, APP_EVT_DATA_GET);
 	} else if (now >= last_transmit && now < last_sample) {
 		LOG_DBG("Doing transmit");
 		etc_device_set_job(ETC_LOGGER_JOB_TX);
+		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
 	} else if (now >= last_transmit && now >= last_sample) {
 		LOG_DBG("Doing both job");
 		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+		SEND_EVENT(app, APP_EVT_DATA_GET);
 	} else {
 		LOG_DBG("Unknown task - set default job to log");
 		etc_device_set_job(ETC_LOGGER_JOB_LOG);
+		SEND_EVENT(app, APP_EVT_DATA_GET);
 	}
 #endif
 }
 
-static void app_input_handler(void)
+static void app_input_handler(enum etc_interface_event_type type)
 {
-	app_peripheral_on();
+	if (type == ETC_INTERFACE_EVENT_RTC) {
+		app_peripheral_on();
+	}
 }
 
 static int setup(void)
@@ -406,6 +412,7 @@ static void on_all_events(struct app_msg_data *msg)
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 		date_time_start_work();
 #endif
+		return;
 	}
 
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
@@ -414,21 +421,28 @@ static void on_all_events(struct app_msg_data *msg)
 		 */
 		SEND_SHUTDOWN_ACK(app, APP_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
+		return;
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_SLEEP_READY)) {
 		app_set_wakeup_time();
+		return;
 	}
 
 	enum etc_logger_job job = etc_device_get_job();
-	if (job == ETC_LOGGER_JOB_BOTH || job == ETC_LOGGER_JOB_TX) {
-		if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+		if (job == ETC_LOGGER_JOB_BOTH) {
+			LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
+			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+		} else if (job == ETC_LOGGER_JOB_LOG) {
 			app_set_wakeup_time();
 		}
-	} else if (job == ETC_LOGGER_JOB_LOG) {
-		if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-			app_set_wakeup_time();
-		}
+		return;
+	}
+	
+	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+		app_set_wakeup_time();
+		return;
 	}
 }
 
