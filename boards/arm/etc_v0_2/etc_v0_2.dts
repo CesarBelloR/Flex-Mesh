@@ -18,6 +18,7 @@
 		zephyr,code-partition = &slot0_partition;
 	};
 
+<<<<<<< HEAD
 	vbatt {
 		compatible = "voltage-divider";
 		output-ohms = <2000000>;
@@ -33,6 +34,8 @@
 		reference-voltage-mv = <3000>;
 	};
 
+=======
+>>>>>>> 00d7923 (HW-617 add device tree for Monitor PCBA v0.2)
 	leds {
 		compatible = "gpio-leds";
 		led0: led_0 {
@@ -107,6 +110,7 @@
 	};
 };
 
+<<<<<<< HEAD
 /* A7 = P0.31 = AIN7 - ADC_AMB */ 
 /* A3 = P0.5  = AIN3 - ADC_BATT*/
 /* A2 = P0.4 = AIN2 - ADC_TH*/
@@ -118,6 +122,8 @@
 	};
 };
 
+=======
+>>>>>>> 00d7923 (HW-617 add device tree for Monitor PCBA v0.2)
 &gpiote {
 	status = "okay";
 };

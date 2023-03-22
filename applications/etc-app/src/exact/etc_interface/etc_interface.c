@@ -9,6 +9,11 @@ LOG_MODULE_REGISTER(etc_interface, CONFIG_ETC_INTERFACE_LOG_LEVEL);
 
 #define ETC_INTERFACE_STACK_SIZE 512
 
+static const struct gpio_dt_spec rtc_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
+static const struct gpio_dt_spec hall_sensor_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
+static struct gpio_callback hall_sensor_callback;
+static struct gpio_callback rtc_int_callback;
+
 struct etc_interface_event_callback {
 	sys_snode_t node;
 	etc_interface_event_handler handler;
