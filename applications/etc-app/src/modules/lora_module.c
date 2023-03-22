@@ -385,12 +385,10 @@ retry:
 /* Message handler for all states. */
 static void on_all_states(struct lora_msg_data *msg)
 {
-	enum etc_device_mode mode = etc_device_get_mode();
-	enum etc_logger_job job = etc_device_get_job();
-	LOG_DBG("Mode %d %d", mode, job);
-	if (etc_device_get_mode() == ETC_DEVICE_MODE_LOGGER) {
+	if (etc_device_is_logger_lora()) {
+		enum etc_logger_job job = etc_device_get_job();
 		if (((IS_EVENT(msg, data, DATA_EVT_DATA_READY)) && (job == ETC_LOGGER_JOB_BOTH)) ||
-			((IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) && (job == ETC_LOGGER_JOB_TX))))  {
+			((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && (job == ETC_LOGGER_JOB_TX))))  {
 			LOG_INF("Logger sending data");
 			k_sleep(K_MSEC(100));
 			int rc = 0;

@@ -281,8 +281,7 @@ static void on_all_states(struct sensor_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		/* In boot-up, device connected to cloud, start a sensor poll to get data */
 		static bool is_send = false;
-		enum etc_logger_job job = etc_device_get_job();
-		if (job == ETC_LOGGER_JOB_LOG || job == ETC_LOGGER_JOB_BOTH) {
+		if (etc_device_is_logger_lora() == false) {
 			if (!is_send) {
 				LOG_DBG("Device is online. Collecting and sending first sensor data");
 				is_send = true;
