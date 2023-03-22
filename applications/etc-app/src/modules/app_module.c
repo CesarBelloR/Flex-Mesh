@@ -279,9 +279,8 @@ static int setup(void)
 
 static void app_set_wakeup_time(void)
 {
-	time_t now = 0;
-	struct tm tm_time = {0};
 #if defined(CONFIG_PCF85263)
+	time_t now = 0;
 	bool flag_add_offset = false;
 	pcf85263a_rtc_get_time(&now);
 	int wakeup_for_sample = etc_device_get_log_interval_second();
@@ -318,28 +317,26 @@ static void app_set_wakeup_time(void)
 	// Update for next sleep
 	etc_set_time_last_log(next_sample);
 	etc_set_time_last_tx(next_transmit);
-
+	struct tm tm_time = {0};
+	struct tm tm_next_time = {0};
 	gmtime_r(&now, &tm_time);
-	uint8_t sample_time_min = sleep_time / 60;
-	if (sample_time_min == 0) {
-		sample_time_min = 1;
-	}
 
-	uint8_t alarm_min = (uint8_t)tm_time.tm_min;
-	alarm_min = ((uint8_t)(alarm_min / sample_time_min) + 1) * sample_time_min;
+	sleep_time = 360;
 
-	if ((sample_time_min == 1) && (60 - tm_time.tm_sec < 30)) {
+	if ((sleep_time < 60) && (60 - tm_time.tm_sec < 30)) {
 		// Increase alarm to 1 minutes because the sleep time is not enough
-		alarm_min += 1;
+		sleep_time += 60;
 	}
-	alarm_min = alarm_min % 60;
+
+	time_t next_sleep = now + sleep_time;
+	gmtime_r(&next_sleep, &tm_next_time);
 	
-	LOG_DBG("      Now: %02d:%02d", tm_time.tm_min, tm_time.tm_sec);
-	LOG_DBG("Wakeup at: %02d:%02d", alarm_min, 0);
+	LOG_DBG("      Now: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
+	LOG_DBG("Wakeup at: %02d:%02d:%02d", tm_next_time.tm_hour, tm_next_time.tm_min, 0);
 	pcf85263a_alarm_type_1_config_t config = {
 		.seconds = 0,
-		.minutes = alarm_min,
-		.hours = 0,
+		.minutes = tm_next_time.tm_min,
+		.hours = tm_next_time.tm_hour,
 		.days = 0,
 		.months = 0,
 	};
@@ -347,7 +344,7 @@ static void app_set_wakeup_time(void)
 	pcf85263a_alarm_type_1_flag_t flag = {
 		.enable_seconds = 0,
 		.enable_minutes = 1,
-		.enable_hours = 0,
+		.enable_hours = 1,
 		.enable_days = 0,
 		.enable_months = 0,
 	};
