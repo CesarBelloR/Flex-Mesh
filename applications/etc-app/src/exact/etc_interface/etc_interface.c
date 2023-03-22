@@ -21,25 +21,26 @@ struct etc_interface_event_callback {
 	etc_interface_event_handler handler;
 };
 
+static enum etc_interface_event_type event_type = ETC_INTERFACE_EVENT_UNKNOWN;
 static sys_slist_t etc_interface_callback_list = SYS_SLIST_STATIC_INIT(&etc_interface_callback_list);
 static void etc_interface_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(etc_interface_work, etc_interface_work_handler);
 
 static void user_btn_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
-	LOG_DBG("");
+	event_type = ETC_INTERFACE_EVENT_BUTTON;
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 
 static void hall_sensor_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
-	LOG_DBG("");
+	event_type = ETC_INTERFACE_EVENT_HALL;
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 
 static void rtc_int_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
-	LOG_DBG("");
+	event_type = ETC_INTERFACE_EVENT_RTC;
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 
@@ -88,7 +89,7 @@ static void etc_interface_work_handler(struct k_work *work)
 	{
 		if (cb->handler)
 		{
-			cb->handler();
+			cb->handler(event_type);
 		}
 	}
 }

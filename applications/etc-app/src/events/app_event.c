@@ -54,19 +54,6 @@ static void log_app_event(const struct app_event_header *aeh)
 	if (event->type == APP_EVT_ERROR) {
 		APP_EVENT_MANAGER_LOG(aeh, "%s - Error code %d",
 				get_evt_type_str(event->type), event->data.err);
-	} else if (event->type == APP_EVT_DATA_GET) {
-		for (int i = 0; i < event->count; i++) {
-			strcat(data_types, type2str(event->data_list[i]));
-
-			if (i == event->count - 1) {
-				break;
-			}
-
-			strcat(data_types, ", ");
-		}
-
-		APP_EVENT_MANAGER_LOG(aeh, "%s - Requested data types (%s)",
-				get_evt_type_str(event->type), data_types);
 	} else {
 		APP_EVENT_MANAGER_LOG(aeh, "%s", get_evt_type_str(event->type));
 	}

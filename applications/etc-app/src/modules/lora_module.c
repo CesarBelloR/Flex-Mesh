@@ -227,11 +227,6 @@ static void on_state_init(struct lora_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct lora_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-	}
 }
 
 static int module_lora_transmit_packet(const uint8_t *decoded_buf, int buf_len)
