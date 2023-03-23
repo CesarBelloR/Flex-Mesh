@@ -98,21 +98,6 @@
 		};
 	};
 	
-	fstab {
-		compatible = "zephyr,fstab";
-		lfs1: lfs1 {
-			compatible = "zephyr,fstab,littlefs";
-			mount-point = "/lfs1";
-			partition = <&lfs1_part>;
-			automount;
-			read-size = <16>;
-			prog-size = <16>;
-			cache-size = <64>;
-			lookahead-size = <32>;
-			block-cycles = <512>;
-		};
-	};
-
 	/* These aliases are provided for compatibility with samples */
 	aliases {
 		led0 = &led0;
@@ -205,7 +190,7 @@
 	mx25r1635: mx25r1635@0 {
 		compatible = "jedec,spi-nor";
 		reg = <0>;
-		spi-max-frequency = <1000000>;
+		spi-max-frequency = <8000000>;
 		label = "MX25R16";
 		jedec-id = [ C2 28 15 ];
 		size = <16777216>;
@@ -239,6 +224,8 @@
 		status     = "okay";
 		mdm-power-gpios = <&gpio1 1 0>;
 		mdm-on-off-gpios = <&gpio1 4 0>;
+		mdm-pon-trig-gpios = <&gpio0 29 0>;
+		mdm-psm-ind-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
 	};
 };
 
@@ -268,10 +255,6 @@
 		slot1_partition: partition@0 {
 			label = "image-1";
 			reg = <0x00000000 0x00070000>;
-		};
-		lfs1_part: partition@70000 {
-			label = "littlefs-storage";
-			reg = <0x00070000 0x00180000>;
 		};
 		storage_partition: partition@1F0000 {
 			label = "storage";

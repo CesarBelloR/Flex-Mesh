@@ -36,7 +36,6 @@ static struct time_aux {
 } time_aux;
 
 static bool initial_valid_time;
-static bool flag_set_rtc_time;
 static date_time_evt_handler_t app_evt_handler;
 
 static struct date_time_evt evt;
@@ -188,7 +187,7 @@ static void new_date_time_get(void)
 			LOG_DBG("Time from cellular network obtained");
 			initial_valid_time = true;
 			date_time_store(time_aux.date_time_utc / 1000);
-			date_time_set_second(time_aux.date_time_local_second);
+			date_time_set_second(time_aux.date_time_utc / 1000);
 			evt.type = DATE_TIME_OBTAINED_MODEM;
 			date_time_notify_event(&evt);
 			continue;
@@ -224,7 +223,6 @@ static void date_time_handler(struct k_work *work)
 
 static int date_time_init(const struct device *unused)
 {
-	flag_set_rtc_time = false;
 	pcf85263a_init("I2C_0");
 	k_work_init_delayable(&time_work, date_time_handler);
 	return 0;
@@ -305,10 +303,6 @@ int date_time_set(const struct tm *new_date_time)
 }
 
 int date_time_set_second(uint32_t new_date_time_sec) {
-	if (flag_set_rtc_time) {
-		return 0;
-	}
-	flag_set_rtc_time = true;
 	return pcf85263a_rtc_set_time((time_t)new_date_time_sec);
 }
 

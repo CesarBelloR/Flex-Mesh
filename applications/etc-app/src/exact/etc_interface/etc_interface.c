@@ -27,16 +27,19 @@ K_WORK_DELAYABLE_DEFINE(etc_interface_work, etc_interface_work_handler);
 
 static void user_btn_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
+	LOG_DBG("");
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 
 static void hall_sensor_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
+	LOG_DBG("");
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 
 static void rtc_int_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
+	LOG_DBG("");
 	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
 }
 
@@ -70,11 +73,6 @@ static int etc_interface_init(const struct device *unused)
 	gpio_init_callback(&hall_sensor_callback, hall_sensor_callback_handler, BIT(hall_sensor_dt.pin));
 	gpio_add_callback(hall_sensor_dt.port, &hall_sensor_callback);
 
-	gpio_pin_configure_dt(&rtc_dt, GPIO_INPUT | GPIO_PULL_UP);
-    	gpio_pin_interrupt_configure_dt(&rtc_dt, GPIO_INT_EDGE_FALLING);
-	gpio_init_callback(&rtc_int_callback, rtc_int_callback_handler, BIT(rtc_dt.pin));
-	gpio_add_callback(rtc_dt.port, &rtc_int_callback);
-
 	return 0;
 }
 
@@ -106,4 +104,18 @@ void etc_interface_register_event_handler(etc_interface_event_handler handler)
 	}
 	callback->handler = handler;
 	sys_slist_append(&etc_interface_callback_list, &callback->node);
+}
+
+void etc_interface_enable_rtc_event(void) 
+{
+	gpio_pin_configure_dt(&rtc_dt, GPIO_INPUT | GPIO_PULL_UP);
+    	gpio_pin_interrupt_configure_dt(&rtc_dt, GPIO_INT_EDGE_FALLING);
+	gpio_init_callback(&rtc_int_callback, rtc_int_callback_handler, BIT(rtc_dt.pin));
+	gpio_add_callback(rtc_dt.port, &rtc_int_callback);
+}
+
+void etc_interface_disable_rtc_event(void) 
+{
+	gpio_pin_interrupt_configure_dt(&rtc_dt, GPIO_INT_DISABLE);
+	gpio_remove_callback(rtc_dt.port, &rtc_int_callback);
 }

@@ -13,6 +13,13 @@
 #define ETC_DEVICE_RECORD_SIZE (36)
 #define ETC_DEVICE_NUM_SENSOR  (6) // 5 temperatures + 1 humidity
 
+/* Define an enum to describe the job of logger currently */
+enum etc_logger_job {
+	ETC_LOGGER_JOB_LOG = 0x00,
+	ETC_LOGGER_JOB_TX,
+	ETC_LOGGER_JOB_BOTH,
+};
+
 /* Define a enum to describe about device mode */
 enum etc_device_mode {
 	ETC_DEVICE_MODE_RELAY = 0x01,
@@ -54,25 +61,36 @@ enum {
 	ETC_SETTING_DEVICE_ID,
 	ETC_SETTING_TIME_MEASURE_INTERVAL_ID,
 	ETC_SETTING_TIME_TRANSMISSION_INTERVAL_ID,
+	ETC_SETTING_DEVICE_MODE_ID,
+	ETC_SETTING_RADIO_MODE_ID,
+	ETC_SETTING_POWER_MODE_ID,
+	ETC_SETTING_ALARM_DIRECTION_ID,
+	ETC_SETTING_LOG_INTERVAL_SECS_ID,
+	ETC_SETTING_LOG_INTERVAL_ALARM_SECS_ID,
+	ETC_SETTING_TX_INTERVAL_SECS_ID,
+	ETC_SETTING_TX_INTERVAL_ALARMS_SECS_ID,
+	ETC_SETTING_WAKEUP_EARLY_SECS_ID,
+	ETC_SETTING_TX_DELAY_MSEC_ID,
+	ETC_SETTING_RX_DURATION_SECS_ID,
+	ETC_SETTING_ALARM_THRESHOLD_ID,
+	ETC_SETTING_LAST_LOG_TIME_ID,
+	ETC_SETTING_LAST_TX_TIME_ID,
 	ETC_RECORD_HEADER = 0x1000,
 };
 
-union etc_config {
-	uint8_t bytes[ETC_CONFIG_TYPE_SIZE];
-	struct {
-		enum etc_device_mode device_mode;
-		enum etc_radio_mode radio_mode;
-		enum etc_power_mode_e power_mode;
-		enum etc_alarm_direction alarm_direction;
-		uint32_t log_interval_secs;
-		uint16_t log_interval_alarm_secs;
-		uint16_t tx_interval_secs;
-		uint16_t tx_interval_alarm_secs;
-		uint16_t wake_early_secs;
-		uint16_t tx_delay_msec;
-		uint16_t rx_duration_secs;
-		uint16_t alarm_threshold;
-	};
+struct etc_config {
+	enum etc_device_mode device_mode;
+	enum etc_radio_mode radio_mode;
+	enum etc_power_mode_e power_mode;
+	enum etc_alarm_direction alarm_direction;
+	uint32_t log_interval_secs;
+	uint16_t log_interval_alarm_secs;
+	uint16_t tx_interval_secs;
+	uint16_t tx_interval_alarm_secs;
+	uint16_t wake_early_secs;
+	uint16_t tx_delay_msec;
+	uint16_t rx_duration_secs;
+	uint16_t alarm_threshold;
 };
 
 union etc_device_record {
@@ -87,9 +105,8 @@ union etc_device_record {
 
 /* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
 BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
-/* Assert to verify the configuration size must fit the macro ETC_CONFIG_TYPE_SIZE */
-BUILD_ASSERT(ETC_CONFIG_TYPE_SIZE >= sizeof(union etc_config));
 
+void etc_device_nvs_init(void);
 void etc_device_init(void);
 
 int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size);
@@ -98,8 +115,13 @@ int etc_device_write_record_sensor(struct sensor_data *sensor);
 int etc_device_write_record(union etc_device_record *record);
 int etc_device_read_record(union etc_device_record *record);
 int etc_device_set_ack_record(int record_id);
-enum etc_device_mode etc_device_get_mode(void);
+bool etc_device_is_logger_lora(void);
 int etc_device_get_rx_timeout(void);
+int etc_device_get_log_interval_second(void);
+int etc_device_get_tx_interval_second(void);
 int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data);
+enum etc_device_mode etc_device_get_mode(void);
+void etc_device_set_job(enum etc_logger_job job);
+enum etc_logger_job etc_device_get_job(void);
 
 #endif /* ETC_DEVICE_H_ */

@@ -12,7 +12,6 @@
 
 #define MODULE cloud
 #define MODULE_CLOUD_CONNECT_RETRIES 5
-#define MODULE_CLOUD_THREAD_STACK_SIZE 1024
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -27,7 +26,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "modules_common.h"
 #include "app_version.h"
 #include "etc_settings.h"
-
+#include "etc_device.h"
 struct cloud_msg_data
 {
 	union
@@ -51,7 +50,8 @@ static enum state_type {
 /* Cloud module sub states. */
 static enum sub_state_type {
 	SUB_STATE_CLOUD_DISCONNECTED,
-	SUB_STATE_CLOUD_CONNECTED
+	SUB_STATE_CLOUD_CONNECTED,
+	SUB_STATE_CLOUD_PAUSED,
 } sub_state;
 
 struct cloud_backoff_delay_lookup
@@ -115,6 +115,8 @@ static char *sub_state2str(enum sub_state_type new_state)
 		return "SUB_STATE_CLOUD_DISCONNECTED";
 	case SUB_STATE_CLOUD_CONNECTED:
 		return "SUB_STATE_CLOUD_CONNECTED";
+	case SUB_STATE_CLOUD_PAUSED:
+		return "SUB_STATE_CLOUD_PAUSED";
 	default:
 		return "Unknown";
 	}
@@ -324,6 +326,10 @@ static int setup(void)
 
 static void connect_cloud(void)
 {
+	if (etc_device_is_logger_lora()) {
+		SEND_EVENT(cloud, CLOUD_EVT_CONNECTED);
+		return;
+	}
 	int backoff_sec = backoff_delay[connect_retries].delay;
 	int err = 0;
 	LOG_DBG("Connecting to cloud");
@@ -354,6 +360,26 @@ static void disconnect_cloud(void)
 	cloud_wrap_disconnect();
 
 	k_work_cancel_delayable(&connect_check_work);
+}
+
+static void pause_cloud(void)
+{
+	connect_retries = 0;
+	
+	cloud_wrap_pause();
+
+	k_work_cancel_delayable(&connect_check_work);
+}
+
+static void resume_cloud(void)
+{
+	cloud_wrap_resume();
+
+	int backoff_sec = backoff_delay[connect_retries].delay;
+	connect_retries++;
+
+	/* Start timer to check connection status after backoff */
+	k_work_reschedule(&connect_check_work, K_SECONDS(backoff_sec));
 }
 
 /* Message handler for STATE_LTE_INIT. */
@@ -408,10 +434,12 @@ static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 /* Message handler for SUB_STATE_CLOUD_CONNECTED. */
 static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED))
-	{
-		disconnect_cloud();
-		state_set(STATE_LTE_DISCONNECTED);
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+		pause_cloud();
+		sub_state_set(SUB_STATE_CLOUD_PAUSED);
 	}
 }
 
@@ -428,6 +456,26 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT))
 	{
 		connect_cloud();
+	}
+}
+
+/* Message handler for SUB_STATE_CLOUD_PAUSED. */
+static void on_sub_state_cloud_paused(struct cloud_msg_data *msg)
+{
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
+		resume_cloud();
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED))
+	{
+		sub_state_set(SUB_STATE_CLOUD_CONNECTED);
+		connect_retries = 0;
+		k_work_cancel_delayable(&connect_check_work);
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT))
+	{
+		resume_cloud();
 	}
 }
 
@@ -525,7 +573,7 @@ static void shadow_work_fn(struct k_work *work) {
 	shadow_update(true);
 }
 
-static void module_thread_fn(void)
+void cloud_module_thread_fn(void)
 {
 	int err;
 	struct cloud_msg_data msg = {0};
@@ -562,6 +610,9 @@ static void module_thread_fn(void)
 			case SUB_STATE_CLOUD_DISCONNECTED:
 				on_sub_state_cloud_disconnected(&msg);
 				break;
+			case SUB_STATE_CLOUD_PAUSED:
+				on_sub_state_cloud_paused(&msg);
+				break;
 			default:
 				LOG_ERR("Unknown Cloud module sub state");
 				break;
@@ -583,10 +634,6 @@ static void module_thread_fn(void)
 		on_all_states(&msg);
 	}
 }
-
-K_THREAD_DEFINE(cloud_module_thread, MODULE_CLOUD_THREAD_STACK_SIZE,
-		module_thread_fn, NULL, NULL, NULL,
-		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
