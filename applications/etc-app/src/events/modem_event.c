@@ -33,10 +33,6 @@ static char *get_evt_type_str(enum modem_event_type type)
 		return "MODEM_EVT_MODEM_STATIC_DATA_NOT_READY";
 	case MODEM_EVT_MODEM_DYNAMIC_DATA_NOT_READY:
 		return "MODEM_EVT_MODEM_DYNAMIC_DATA_NOT_READY";
-	case MODEM_EVT_BATTERY_DATA_NOT_READY:
-		return "MODEM_EVT_BATTERY_DATA_NOT_READY";
-	case MODEM_EVT_BATTERY_DATA_READY:
-		return "MODEM_EVT_BATTERY_DATA_READY";
 	case MODEM_EVT_NEIGHBOR_CELLS_DATA_NOT_READY:
 		return "MODEM_EVT_NEIGHBOR_CELLS_DATA_NOT_READY";
 	case MODEM_EVT_NEIGHBOR_CELLS_DATA_READY:
@@ -57,6 +53,8 @@ static char *get_evt_type_str(enum modem_event_type type)
 		return "MODEM_EVT_CARRIER_FOTA_STOPPED";
 	case MODEM_EVT_CARRIER_REBOOT_REQUEST:
 		return "MODEM_EVT_CARRIER_REBOOT_REQUEST";
+	case MODEM_EVT_PSM_ENTERED:
+		return "MODEM_EVT_PSM_ENTERED";
 	default:
 		return "Unknown event";
 	}

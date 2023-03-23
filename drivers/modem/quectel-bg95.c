@@ -15,6 +15,8 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #include <zephyr/pm/device.h>
 #endif
 
+#define PSM_TIMER_VAL_LEN	sizeof("00000011")
+
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
@@ -36,6 +38,9 @@ static const struct gpio_dt_spec power_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_power
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 static const struct gpio_dt_spec on_off_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_on_off_gpios);
 #endif
+#if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
+static const struct gpio_dt_spec pon_trig_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_pon_trig_gpios);
+#endif
 #if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
 static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
 #endif
@@ -46,6 +51,15 @@ static const struct gpio_dt_spec dtr_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_dtr_gpi
 static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wdisable_gpios);
 #endif
 
+#if defined(CONFIG_MODEM_QUECTEL_BG95_PSM)
+static const struct gpio_dt_spec psm_ind_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_psm_ind_gpios);
+static char psm_param_rat[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT;
+static char psm_param_rptau[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU;
+#endif
+
+static void quectel_bg95_set_connected(bool connected);
+static int modem_event_callback(enum modem_api_evt_type evt_type);
+int quectel_bg95_psm_wakeup(void);
 /* Implementation in net/ip/utils.h */
 extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
 
@@ -224,12 +238,14 @@ static void socket_close(struct modem_socket *sock)
 	}
 	
 	k_sem_reset(&mdata.sem_response);
-	/* Tell the modem to close the socket. */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     NULL, 0U, buf,
-			     &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", buf, ret);
+	/* Tell the modem to close the socket, if connected */
+	if (sock->is_connected) {
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+				NULL, 0U, buf,
+				&mdata.sem_response, MDM_CMD_TIMEOUT);
+		if (ret < 0) {
+			LOG_ERR("%s ret:%d", buf, ret);
+		}
 	}
 
 	modem_socket_put(&mdata.socket_config, sock->sock_fd);
@@ -436,6 +452,137 @@ MODEM_CMD_DEFINE(on_cmd_sock_getdatasize)
 	return 0;
 }
 
+enum cereg_stat {
+	STAT_NOT_REGISTERED = 0,
+	STAT_REGISTERED_HOME = 1,
+	STAT_SEARCHING = 2,
+	STAT_REGISTRATION_DENIED = 3,
+	STAT_UNKNOWN = 4,
+	STAT_REGISTERED_ROAMING = 5
+};
+
+enum access_technology {
+	ACT_GSM = 0,
+	ACT_LTE_M = 8,
+	ACT_NB_IOT = 9
+};
+
+struct cereg_data {
+	enum cereg_stat stat;
+	char tac[sizeof("##")]; 
+	char cell_id[sizeof("####")];
+	enum access_technology act;
+	uint8_t cause_type;
+	uint8_t reject_cause;
+	char active_time[PSM_TIMER_VAL_LEN];
+	char periodic_tau[PSM_TIMER_VAL_LEN];
+};
+
+struct psm_ind {
+	/* 1 rising, 0 falling */
+	uint8_t edge;
+	struct k_work work;
+} psm_ind;
+
+/**
+ * @brief Work that needs to be performed when modem signals a wakeup from PSM.
+ * This can be used in the future to wake up the modem UART from suspend/sleep state.
+ * The modem changes the PSM_IND's pin status before sending APP RDY.
+*/
+static void psm_ind_work_fn(struct k_work *work)
+{	
+	ARG_UNUSED(work);
+
+	LOG_INF("Woken up from PSM.");
+}
+
+static void psm_ind_callback(const struct device *dev,
+			     struct gpio_callback *cb, uint32_t pins)
+{
+	psm_ind.edge = gpio_pin_get(dev, pins);
+	k_work_submit_to_queue(&modem_workq, &psm_ind.work);
+}
+
+static struct gpio_callback psm_ind_gpio_callback;
+
+static int setup_psm_ind_interrupt()
+{
+#if CONFIG_MODEM_QUECTEL_BG95_PSM
+	int ret;
+
+	ret = gpio_pin_configure_dt(&psm_ind_gpio, GPIO_INPUT);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "psm_ind");
+		return ret;
+	}
+
+	gpio_init_callback(&psm_ind_gpio_callback, psm_ind_callback,
+			   BIT(psm_ind_gpio.pin));
+	ret = gpio_add_callback(psm_ind_gpio.port, &psm_ind_gpio_callback);
+	if (ret < 0) {
+		LOG_ERR("Failed to set gpio callback!");
+		return ret;
+	}
+
+	ret = gpio_pin_interrupt_configure_dt(&psm_ind_gpio, GPIO_INT_EDGE_TO_ACTIVE);
+
+	k_work_init(&psm_ind.work, psm_ind_work_fn);
+
+	return ret;
+#endif
+	return -ENOTSUP;
+}
+
+MODEM_CMD_DEFINE(on_cmd_unsol_qpsmtimer)
+{
+	uint32_t tau;
+	uint32_t active_timer;
+
+	tau = ATOI(argv[0], 0, "tau");
+	active_timer = ATOI(argv[1], 0, "active_timer");
+
+	LOG_INF("Entering PSM. TAU: %u, AT: %u", tau, active_timer);
+
+	return 0;
+}
+
+MODEM_CMD_DEFINE(on_cmd_unsol_cereg)
+{
+	struct cereg_data reg_data;
+
+	memset(&reg_data, 0, sizeof(reg_data));
+
+	reg_data.stat = ATOI(argv[0], STAT_NOT_REGISTERED, "stat");	
+	/* Copy PSM active timer and periodic TAU values */
+	if (argc >= 7) {
+		uint8_t val_len;
+		uint8_t copy_len;
+
+		val_len = strlen(argv[6]);
+		copy_len = val_len < sizeof(reg_data.active_time) ? 
+			   val_len : sizeof(reg_data.active_time) - 1;
+		memcpy(reg_data.active_time, argv[6], copy_len);
+		reg_data.active_time[copy_len] = '\0';
+
+		val_len = strlen(argv[7]);
+		copy_len = val_len < sizeof(reg_data.periodic_tau) ? 
+			   val_len : sizeof(reg_data.periodic_tau) - 1;
+		memcpy(reg_data.periodic_tau, argv[7], copy_len);
+		reg_data.periodic_tau[copy_len] = '\0';
+	}
+	LOG_INF("Status: %u, AT: %s, TAU: %s", 
+		reg_data.stat, reg_data.active_time, reg_data.periodic_tau);
+	
+	if ((reg_data.stat == STAT_REGISTERED_HOME) || 
+	    (reg_data.stat == STAT_REGISTERED_ROAMING)) {
+		LOG_INF("Network connected");
+	} else {
+		LOG_INF("Network disconnected.");
+	}
+
+	return 0;
+}
+
 /* Func: get_data_size
  * Desc: This function will retrieve the size of the
  * data available on the socket object.
@@ -529,7 +676,13 @@ MODEM_CMD_DEFINE(on_cmd_unsol_close)
 /* Handler: Modem initialization ready. */
 MODEM_CMD_DEFINE(on_cmd_unsol_rdy)
 {
-	k_sem_give(&mdata.sem_response);
+	if (!mdata.psm_active) {
+		k_sem_give(&mdata.sem_response);
+		return 0;
+	} 
+
+	k_work_submit_to_queue(&modem_workq, &mdata.psm_wakeup_work);
+	
 	return 0;
 }
 
@@ -971,6 +1124,20 @@ MODEM_CMD_DEFINE(on_cmd_data_done)
 	return 0;
 }
 
+MODEM_CMD_DEFINE(on_cmd_psm_power_down)
+{	
+	/* stop RSSI delay work */
+	k_work_cancel_delayable(&mdata.rssi_query_work);
+
+	mdata.psm_active = true;
+	quectel_bg95_set_connected(false);
+	setup_psm_ind_interrupt();
+
+	modem_event_callback(MODEM_API_PSM_ENTERED_EVT);
+
+	return 0;
+}
+
 MODEM_CMD_DEFINE(on_cmd_power_down)
 {
 	k_sem_give(&mdata.sem_shutdown);
@@ -1033,6 +1200,64 @@ error:
 	/* unset handler commands */
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
 				      NULL, 0U, false);
+	return ret;
+}
+
+static int quectel_bg95_set_cereg(uint8_t n)
+{
+	char buf[sizeof("AT+CEREG=#")];
+	int ret;
+
+	if (!(n >= 0 && n <= 3) || (n != 4)) {
+		return -EINVAL;
+	}
+	snprintk(buf, sizeof(buf), "AT+CEREG=%d", n);
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0, buf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret != 0) {
+		LOG_ERR("Failed to set CEREG");
+	} else {
+		LOG_DBG("Set CEREG: %u", n);
+	}
+
+	return ret;
+}
+
+/**
+ * @brief Set the PSM requested active and periodic TAU timer values.
+ * 
+ * @param enable true to enable PSM request, false to disable
+ * @param req_rat requested active timer value in E-UTRAN format
+ * @param req_rptau requested periodic TAU timer value in E-UTRAN format
+ * @return 0 on success, negative on error
+*/
+static int quectel_bg95_set_psm(bool enable, char *req_rat, char *req_rptau)
+{
+	char buf[sizeof("AT+QPSMS=#,,,##########,##########")];
+	int ret;
+
+	if (enable) {
+		if (req_rat == NULL || req_rptau == NULL ||
+		    strlen(req_rat) != PSM_TIMER_VAL_LEN - 1 ||
+		    strlen(req_rptau) != PSM_TIMER_VAL_LEN - 1) {
+			return -EINVAL;
+		}
+		snprintk(buf, sizeof(buf), "AT+QPSMS=1,,,\"%s\",\"%s\"",
+			 req_rptau, req_rat);
+	}
+	else {
+		snprintk(buf, sizeof(buf), "AT+QPSMS=0");
+	}
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0, buf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret != 0) {
+		LOG_ERR("Failed to set PSM requested values");
+	} else {
+		LOG_DBG("Set PSM requested values");
+	}
+
 	return ret;
 }
 
@@ -1399,7 +1624,6 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	int		    ret;
 	char		ip_str[NET_IPV6_ADDR_LEN];
 
-
 	if (sock->id < mdata.socket_config.base_socket_num - 1) {
 		LOG_ERR("Invalid socket_id(%d) from fd:%d",
 			sock->id, sock->sock_fd);
@@ -1511,10 +1735,8 @@ static int offload_close(void *obj)
 		return 0;
 	}
 
-	/* Close the socket only if it is connected. */
-	if (sock->is_connected) {
-		socket_close(sock);
-	}
+	/* Close the socket */
+	socket_close(sock);
 
 	return 0;
 }
@@ -1630,34 +1852,55 @@ static int modem_event_callback(enum modem_api_evt_type evt_type)
 }
 
 /**
+ * @brief Set modem status to connected/disconnected and call event callback.
+ * When modem state changes to connected, activate pdp context.
+ * 
+ * @param connected true: change to connected, false: change to disconnected.
+*/
+static void quectel_bg95_set_connected(bool connected)
+{
+	int ret;
+
+	if (!connected) {
+		if (mdata.is_connected && !mdata.psm_active) {
+			modem_event_callback(MODEM_API_DISCONNECTED_EVT);
+		}
+		mdata.is_connected = false;
+	} else {
+		if (mdata.is_connected) {
+			return;
+		}
+		mdata.psm_active = false;
+
+		ret = modem_pdp_context_activate();
+		if (ret < 0) {
+			LOG_ERR("Error activating modem with pdp context");
+		} else if (ret == 0) {
+			bool enable = IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM);
+			quectel_bg95_set_psm(enable,
+					CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT,
+					CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU);
+			modem_event_callback(MODEM_API_CONNECTED_EVT);
+			LOG_INF("Network connected.");
+			mdata.is_connected = true;
+		}
+	}
+}
+
+/**
  * @brief Activate pdp context and call event handler when device disconnects/
  * 	  connects.
 */
 static void modem_connect_work(void) 
 {
-	int ret;
-
 	if (mdata.mdm_rssi == MDM_RSSI_INVALID) {
-		if (mdata.is_connected) {
-			modem_event_callback(MODEM_API_DISCONNECTED_EVT);
-		}
-		mdata.is_connected = false;
-		return;
-	}
-	if (mdata.is_connected) {
+		quectel_bg95_set_connected(false);
 		return;
 	}
 
 	/* If the RSSI is valid, which means that the network is ready, 
 	 * and the modem is not connected, we try to activate the PDP context. */
-	ret = modem_pdp_context_activate();
-	if (ret < 0) {
-		LOG_ERR("Error activating modem with pdp context");
-	} else if (ret == 0) {
-		modem_event_callback(MODEM_API_CONNECTED_EVT);
-		LOG_INF("Network connected.");
-		mdata.is_connected = true;
-	}
+	quectel_bg95_set_connected(true);
 }
 
 /* Func: modem_rssi_query_work
@@ -1721,8 +1964,17 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("+QSSLURC: \"recv\",",   on_cmd_unsol_recv,  1U, ""),
 	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
 	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
+	MODEM_CMD_ARGS_MAX("+CEREG: ", on_cmd_unsol_cereg, 1U, 9U, ","),
+	MODEM_CMD("+QPSMTIMER: ", on_cmd_unsol_qpsmtimer, 2U, ","),
 	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
 	MODEM_CMD("NORMAL POWER DOWN", on_cmd_power_down, 0U, ""),
+	MODEM_CMD("PSM POWER DOWN", on_cmd_psm_power_down, 0U, ""),
+};
+
+static const struct setup_cmd psm_wakeup_cmds[] = {
+	SETUP_CMD_NOHANDLE("ATE0"),
+	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
+	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
 };
 
 /* Commands sent to the modem to set it up at boot time. */
@@ -1730,6 +1982,10 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("ATH"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
+	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
+#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
+	SETUP_CMD_NOHANDLE("AT+QCFG=\"psm/urc\",1"),
+#endif
 
 	/* Commands to read info from the modem (things like IMEI, Model etc). */
 	SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
@@ -1742,6 +1998,26 @@ static const struct setup_cmd setup_cmds[] = {
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
 	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
 };
+
+
+/* Func: modem_rssi_query_work
+ * Desc: Routine to get Modem RSSI.
+ */
+static void modem_psm_wakeup_work(struct k_work *work)
+{
+	int ret;
+
+	/* Run setup commands on the modem. */
+	ret = modem_cmd_handler_setup_cmds(&mctx.iface, &mctx.cmd_handler,
+					   psm_wakeup_cmds, ARRAY_SIZE(psm_wakeup_cmds),
+					   &mdata.sem_response, MDM_REGISTRATION_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("wakeup commands fail: %u", ret);
+	}
+
+	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
+				    K_NO_WAIT);
+}
 
 /* Func: modem_setup
  * Desc: This function is used to setup the modem from zero. The idea
@@ -2012,13 +2288,24 @@ static int quectel_bg95_set_credentials(const struct device *dev,
 #else
 	return -ENOTSUP;
 #endif
-}					
+}
+
+static int quectel_bg95_psm_cmd(const struct device *dev,
+				enum modem_api_psm_cmd cmd, void *psm_data)
+{
+	if (cmd == MODEM_API_PSM_CMD_WAKEUP) {
+		return quectel_bg95_psm_wakeup();
+	}
+
+	return -EINVAL;
+}
 
 static struct modem_api api_funcs = {
 	.iface_api.init = modem_net_iface_init,
 
 	.evt_handler_init = quectel_bg95_evt_handler_init,
-	.set_credentials = quectel_bg95_set_credentials
+	.set_credentials = quectel_bg95_set_credentials,
+	.psm_cmd = quectel_bg95_psm_cmd,
 };
 
 static bool offload_is_supported(int family, int type, int proto)
@@ -2116,6 +2403,14 @@ static int modem_init(const struct device *dev)
 		goto error;
 	}
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
+	ret = gpio_pin_configure_dt(&pon_trig_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "pon_trig");
+		goto error;
+	}
+#endif
+
 #if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
 	ret = gpio_pin_configure_dt(&reset_gpio, GPIO_OUTPUT_LOW);
 	if (ret < 0) {
@@ -2156,10 +2451,95 @@ static int modem_init(const struct device *dev)
 
 	/* Init RSSI query */
 	k_work_init_delayable(&mdata.rssi_query_work, modem_rssi_query_work);
+#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
+	/* Init PSM work */
+	k_work_init(&mdata.psm_wakeup_work, modem_psm_wakeup_work);
+#endif
 	return modem_setup();
 
 error:
 	return ret;
+}
+
+static int modem_set_psm_indication(bool enable)
+{
+	char sendbuf[sizeof("AT+QCFG=#psm/urc#,##")];
+	uint8_t en_val;
+	int ret;
+
+	if (enable) {
+		en_val = 1;
+	} else {
+		en_val = 0;
+	}
+
+	snprintk(sendbuf, sizeof(sendbuf), "AT+QCFG=\"psm/urc\",%u", en_val);
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_WRN("Error setting PSM indication");
+	}
+
+	return ret;
+}
+
+int quectel_bg95_get_psm_timers(void)
+{
+	char *sendcmd = "AT+QPSMS?";
+	int ret;
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendcmd,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);	
+	if (ret < 0) {
+		LOG_WRN("Error getting PSM parameters");
+	}
+	
+	return ret;
+}
+
+int quectel_bg95_psm(bool enable)
+{
+	char sendbuf[sizeof("AT+QPSMS=#,,,##########,###########")];
+	int ret;
+
+	modem_set_psm_indication(true);
+
+	if (enable) {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QPSMS=1,,,\"%s\",\"%s\"", 
+			CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU,
+			CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT);
+	} else {
+		snprintk(sendbuf, sizeof(sendbuf), "AT+QPSMS=0");
+	}
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Error requesting PSM");
+	}
+
+	return ret;
+}
+
+int quectel_bg95_psm_wakeup(void)
+{
+	int ret = -1;
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
+	LOG_DBG("Sending wakeup signal to modem");
+	ret = gpio_pin_set_dt(&pon_trig_gpio, 1);
+	k_sleep(K_MSEC(40));
+	ret = gpio_pin_set_dt(&pon_trig_gpio, 0);
+
+	return ret;
+#else
+	ret = gpio_pin_set_dt(&power_gpio, 1);
+	k_sleep(K_MSEC(1000));
+	ret = gpio_pin_set_dt(&power_gpio, 0);
+	
+	return ret;
+#endif
 }
 
 #ifdef CONFIG_PM_DEVICE
