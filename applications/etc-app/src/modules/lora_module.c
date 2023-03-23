@@ -381,9 +381,7 @@ retry:
 static void on_all_states(struct lora_msg_data *msg)
 {
 	if (etc_device_is_logger_lora()) {
-		enum etc_logger_job job = etc_device_get_job();
-		if (((IS_EVENT(msg, data, DATA_EVT_DATA_READY)) && (job == ETC_LOGGER_JOB_BOTH)) ||
-			((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && (job == ETC_LOGGER_JOB_TX))))  {
+		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
 			LOG_INF("Logger sending data");
 			k_sleep(K_MSEC(100));
 			int rc = 0;
