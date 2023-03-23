@@ -330,7 +330,7 @@ static void app_set_wakeup_time(void)
 	// Update for next sleep
 	etc_set_time_last_log(next_sample);
 	etc_set_time_last_tx(next_transmit);
-
+	
 	gmtime_r(&now, &tm_time);
 	uint8_t sample_time_min = sleep_time / 60;
 	if (sample_time_min == 0) {
@@ -429,8 +429,8 @@ static void on_all_events(struct app_msg_data *msg)
 		return;
 	}
 
-	enum etc_logger_job job = etc_device_get_job();
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+		enum etc_logger_job job = etc_device_get_job();
 		if (job == ETC_LOGGER_JOB_BOTH) {
 			LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
 			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
