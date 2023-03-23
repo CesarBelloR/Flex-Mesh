@@ -600,6 +600,17 @@ static int cmd_parser_hex_record(const struct shell *shell, size_t argc, char **
 	return 0;
 }
 
+static int cmd_erase_configuration(const struct shell *shell, size_t argc, char **argv)
+{
+	int rc = nvs_clear(&etc_fs);
+	if (rc != 0) {
+		shell_error(shell, "Failed to erase the configuration");
+	} else {
+		shell_print(shell, "Erased configuration successfully");
+		shell_print(shell, "Please reboot the device after erasing the configuration");
+	}
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_record,
 	SHELL_CMD(report, NULL, "Report number record (total/ack/nack)", cmd_num_report_record),
@@ -609,4 +620,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(parser, NULL, "Parser the hex record", cmd_parser_hex_record),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(record, &sub_record, "ETC Record Management", NULL);
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_config,
+	SHELL_CMD(erase, NULL, "Erase all configuration - development only", cmd_erase_configuration),
+	SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(config, &sub_config, "ETC Configuration Management", NULL);
 #endif

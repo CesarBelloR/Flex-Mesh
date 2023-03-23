@@ -37,6 +37,8 @@ enum cloud_wrap_event_type {
 	CLOUD_WRAP_EVT_READY,
 	/** Cloud integration layer is disconnected. */
 	CLOUD_WRAP_EVT_DISCONNECTED,
+	/** Cloud integration layer is paused. */
+	CLOUD_WRAP_EVT_PAUSED,
 	/** Data received from cloud integration layer.
 	 *  Payload is of type @ref cloud_wrap_event_data.
 	 */
@@ -179,6 +181,20 @@ int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id,
  * @return 0 on success, or a negative error code on failure.
  */
 int cloud_wrap_batch_send(char *buf, size_t len, bool ack, uint32_t id);
+
+/**
+ * @brief Pause cloud. Can be used when network is disconnected.
+ * 
+ * @return 0 on success, or a negative error code on failure.
+*/
+int cloud_wrap_pause(void);
+
+/**
+ * @brief Resume cloud from a paused state.
+ * 
+ * @return 0 on success, or a negative error code on failure.
+*/
+int cloud_wrap_resume(void);
 
 #ifdef __cplusplus
 }
