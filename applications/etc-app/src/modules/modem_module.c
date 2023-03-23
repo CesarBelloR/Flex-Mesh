@@ -52,6 +52,13 @@ static enum state_type {
 	STATE_SHUTDOWN,
 } state;
 
+/* Cloud module sub states. */
+static enum sub_state_type {
+	SUB_STATE_MODEM_OFF,
+	SUB_STATE_MODEM_PSM,
+} sub_state;
+
+
 /* Enumerator that specifies the data type that is sampled. */
 enum sample_type {
 	MODEM_STATIC,
@@ -62,7 +69,7 @@ static int16_t rsrp_value_latest;
 
 const k_tid_t module_thread;
 
-const struct device *modem_dev;
+const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
 
 static bool modem_module_is_sleep = false;
 /* Modem module message queue. */
@@ -99,6 +106,20 @@ static char *state2str(enum state_type state)
 	}
 }
 
+/* Convenience functions used in internal state handling. */
+static char *sub_state2str(enum state_type state)
+{
+	switch (state)
+	{
+	case SUB_STATE_MODEM_OFF:
+		return "SUB_STATE_MODEM_OFF";
+	case SUB_STATE_MODEM_PSM:
+		return "SUB_STATE_MODEM_PSM";
+	default:
+		return "Unknown";
+	}
+}
+
 static void state_set(enum state_type new_state)
 {
 	if (new_state == state) {
@@ -111,6 +132,21 @@ static void state_set(enum state_type new_state)
 		state2str(new_state));
 
 	state = new_state;
+}
+
+static void sub_state_set(enum sub_state_type new_state)
+{
+	if (new_state == sub_state)
+	{
+		LOG_DBG("Sub state: %s", sub_state2str(sub_state));
+		return;
+	}
+
+	LOG_DBG("Sub state transition %s --> %s",
+		sub_state2str(sub_state),
+		sub_state2str(new_state));
+
+	sub_state = new_state;
 }
 
 /* Handlers */
@@ -175,7 +211,10 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static void modem_set_connected(void)
 {
-	static_modem_data_get();
+	// Do not retrieve static modem data when waking up from PSM.
+	if (!(state == STATE_DISCONNECTED && sub_state == SUB_STATE_MODEM_PSM)) {
+		static_modem_data_get();
+	}
 	state_set(STATE_CONNECTED);
 	SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
 }
@@ -192,6 +231,11 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 		state_set(STATE_DISCONNECTED);
 		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
 		break;
+	}
+	case MODEM_API_PSM_ENTERED_EVT: {
+		state_set(STATE_DISCONNECTED);
+		sub_state_set(SUB_STATE_MODEM_PSM);
+		SEND_EVENT(modem, MODEM_EVT_PSM_ENTERED);
 	}
 	}
 }
@@ -290,7 +334,6 @@ static int setup(void)
 	if (quectel_bg95_is_ready()) {
 		modem_set_connected();
 	}
-	modem_dev = device_get_binding("quectel-bg95");
 	if (modem_dev != NULL) {
 		modem_evt_handler_init(modem_dev, modem_evt_handler);
 	}
@@ -306,9 +349,17 @@ static void on_state_init(struct modem_msg_data *msg)
 	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
 }
 
-/* Message handler for STATE_DISCONNECTED. */
-static void on_state_disconnected(struct modem_msg_data *msg)
+/* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_OFF. */
+static void on_sub_state_modem_off(struct modem_msg_data *msg)
 {
+}
+
+/* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_PSM. */
+static void on_sub_state_modem_psm(struct modem_msg_data *msg)
+{
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+		modem_psm_cmd(modem_dev, MODEM_API_PSM_CMD_WAKEUP, NULL);
+	}
 }
 
 /* Message handler for STATE_CONNECTING. */
@@ -352,19 +403,6 @@ static void on_all_states(struct modem_msg_data *msg)
 		SEND_SHUTDOWN_ACK(modem, MODEM_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
 	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
-		modem_enter_sleep();
-		state_set(STATE_DISCONNECTED);
-		SEND_EVENT(modem, MODEM_EVT_SLEEP_READY);
-	}
-
-	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-		if (modem_module_is_sleep) {
-			modem_enter_wakeup();
-			state_set(STATE_CONNECTING);
-		}
-	}
 }
 
 void modem_module_thread_fn(void)
@@ -391,7 +429,15 @@ void modem_module_thread_fn(void)
 			on_state_init(&msg);
 			break;
 		case STATE_DISCONNECTED:
-			on_state_disconnected(&msg);
+			switch (sub_state)
+			{
+			case SUB_STATE_MODEM_OFF:
+				on_sub_state_modem_off(&msg);
+				break;
+			case SUB_STATE_MODEM_PSM:
+				on_sub_state_modem_psm(&msg);
+				break;
+			}
 			break;
 		case STATE_CONNECTING:
 			on_state_connecting(&msg);

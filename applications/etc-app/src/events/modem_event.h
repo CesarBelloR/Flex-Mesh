@@ -97,17 +97,6 @@ enum modem_event_type {
 	 */
 	MODEM_EVT_NEIGHBOR_CELLS_DATA_NOT_READY,
 
-	/** Battery voltage has been sampled and is ready.
-	 *  The event has associated payload of type @ref modem_module_battery_data in
-	 *  the `data.bat` member.
-	 */
-	MODEM_EVT_BATTERY_DATA_READY,
-
-	/** Battery data could not be sampled will not be ready for this sampling interval.
-	 *  The event has no associated payload.
-	 */
-	MODEM_EVT_BATTERY_DATA_NOT_READY,
-
 	/** The modem module has successfully shut down.
 	 *  The event has associated payload of type `uint32_t` in the `data.id` member.
 	 */
@@ -144,6 +133,8 @@ enum modem_event_type {
 	MODEM_EVT_CARRIER_REBOOT_REQUEST,
 	MODEM_EVT_CARRIER_EVENT_LTE_LINK_UP_REQUEST,
 	MODEM_EVT_CARRIER_EVENT_LTE_LINK_DOWN_REQUEST,
+	/* Modem entered PSM */
+	MODEM_EVT_PSM_ENTERED,
 };
 
 struct modem_static_modem_data {

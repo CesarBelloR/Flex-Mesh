@@ -14,8 +14,6 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #define SETTINGS_HW_VERSION	   ETC_SETTING_HW_VERSION_ID
 #define SETTINGS_FW_VERSION	   ETC_SETTING_FW_VERSION_ID
 #define SETTINGS_DEVICE_ID	   ETC_SETTING_DEVICE_ID
-#define SETTINGS_TIME_MEASUREMENT  ETC_SETTING_TIME_MEASURE_INTERVAL_ID
-#define SETTINGS_TIME_TRANSMISSION ETC_SETTING_TIME_TRANSMISSION_INTERVAL_ID
 
 #define ETC_SETTING_DEVICE_MODE_DEFAULT		    ETC_DEVICE_MODE_RELAY
 #define ETC_SETTING_RADIO_MODE_DEFAULT		    ETC_RADIO_MODE_LORA
@@ -33,8 +31,6 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
-static int saved_time_measurement;
-static int saved_time_transmission;
 static int saved_last_log_time;
 static int saved_last_tx_time;
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
@@ -54,10 +50,6 @@ void etc_settings_refresh()
 	etc_device_read_setting(SETTINGS_HW_VERSION, saved_hw_version, ETC_SETTING_HW_VER_LEN);
 	etc_device_read_setting(SETTINGS_FW_VERSION, saved_fw_version, ETC_SETTING_FW_VER_LEN);
 	etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
-	etc_device_read_setting(SETTINGS_TIME_MEASUREMENT, (char *)&saved_time_measurement,
-				sizeof(int));
-	etc_device_read_setting(SETTINGS_TIME_TRANSMISSION, (char *)&saved_time_transmission,
-				sizeof(int));
 	k_mutex_unlock(&setting_mutex);
 }
 
@@ -82,23 +74,6 @@ void etc_set_device_id(const char *device_id)
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	strncpy(saved_device_id, device_id, ETC_SETTINGS_DEVICE_ID_LEN);
 	etc_device_write_setting(SETTINGS_DEVICE_ID, (char *)device_id, ETC_SETTINGS_DEVICE_ID_LEN);
-	k_mutex_unlock(&setting_mutex);
-}
-
-void etc_set_time_measurement_interval(int time_in_sec)
-{
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	saved_time_measurement = time_in_sec;
-	etc_device_write_setting(SETTINGS_TIME_MEASUREMENT, (char *)&saved_time_measurement,
-				 sizeof(int));
-	k_mutex_unlock(&setting_mutex);
-}
-
-void etc_set_time_transmission_interval(int time_in_sec)
-{
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	saved_time_transmission = time_in_sec;
-	etc_device_write_setting(SETTINGS_TIME_TRANSMISSION, (char *)&saved_time_transmission, sizeof(int));
 	k_mutex_unlock(&setting_mutex);
 }
 
@@ -135,24 +110,6 @@ int etc_get_device_id(char *buf, int buf_len)
 	return copy_size;
 }
 
-int etc_get_time_measurement_interval(void)
-{
-	int interval = 0;
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	interval = saved_time_measurement;
-	k_mutex_unlock(&setting_mutex);
-	return interval;
-}
-
-int etc_get_time_transmission_interval(void)
-{
-	int interval = 0;
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	interval = saved_time_transmission;
-	k_mutex_unlock(&setting_mutex);
-	return interval;
-}
-
 int etc_settings_init(void)
 {
 	int ret;
@@ -179,18 +136,6 @@ int etc_settings_init(void)
 			 NRF_FICR->DEVICEID[1]);
 		LOG_INF("Set default device ID %s", tmp_saved_value);
 		etc_set_device_id(tmp_saved_value);
-	}
-
-	ret = etc_device_read_setting(SETTINGS_TIME_MEASUREMENT, (char *)&saved_time_measurement,
-				      sizeof(int));
-	if (ret) {
-		etc_set_time_measurement_interval(CONFIG_INTERVAL_TIME_MEASUREMENT_IN_SECONDS);
-	}
-
-	ret = etc_device_read_setting(SETTINGS_TIME_TRANSMISSION, (char *)&saved_time_transmission,
-				      sizeof(int));
-	if (ret) {
-		etc_set_time_transmission_interval(CONFIG_INTERVAL_TIME_TRANSMISSION_IN_SECONDS);
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time, sizeof(int));
@@ -587,8 +532,6 @@ static int cmd_info(const struct shell *shell, size_t argc, char **argv)
 	shell_print(shell, "Hardware: %s", saved_hw_version);
 	shell_print(shell, "Firmware: %s", saved_fw_version);
 	shell_print(shell, "Device ID: %s", saved_device_id);
-	shell_print(shell, "Time measurement (s): %d", saved_time_measurement);
-	shell_print(shell, "Time transmission (s) %d", saved_time_transmission);
 	return 0;
 }
 
@@ -619,28 +562,6 @@ static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv
 		etc_set_device_id(argv[1]);
 	} else {
 		shell_error(shell, "Invalid device id");
-	}
-
-	return 0;
-}
-
-static int cmd_set_measurement_time(const struct shell *shell, size_t argc, char **argv)
-{
-	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		etc_set_time_measurement_interval(atoi(argv[1]));
-	} else {
-		shell_error(shell, "Invalid parameter for setting measurement interval");
-	}
-
-	return 0;
-}
-
-static int cmd_set_transmission_time(const struct shell *shell, size_t argc, char **argv)
-{
-	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		etc_set_time_transmission_interval(atoi(argv[1]));
-	} else {
-		shell_error(shell, "Invalid parameter for setting transmission interval");
 	}
 
 	return 0;
@@ -699,7 +620,8 @@ static int cmd_set_alarm_direction(const struct shell *shell, size_t argc, char 
 static int cmd_set_log_interval(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_log_interval_secs((uint32_t)atoi(argv[1])) != 0) {
+
+		if (etc_set_log_interval_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -711,7 +633,7 @@ static int cmd_set_log_interval(const struct shell *shell, size_t argc, char **a
 static int cmd_set_log_interval_alarm(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_log_interval_alarm_secs((uint16_t)atoi(argv[1])) != 0) {
+		if (etc_set_log_interval_alarm_secs((uint16_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -723,7 +645,7 @@ static int cmd_set_log_interval_alarm(const struct shell *shell, size_t argc, ch
 static int cmd_set_tx_interval(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_tx_interval_secs((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_tx_interval_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -735,7 +657,7 @@ static int cmd_set_tx_interval(const struct shell *shell, size_t argc, char **ar
 static int cmd_set_tx_interval_alarm(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_tx_interval_alarm_secs((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_tx_interval_alarm_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -747,7 +669,7 @@ static int cmd_set_tx_interval_alarm(const struct shell *shell, size_t argc, cha
 static int cmd_set_wakeup_early(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_wake_early_secs((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_wake_early_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -759,7 +681,7 @@ static int cmd_set_wakeup_early(const struct shell *shell, size_t argc, char **a
 static int cmd_set_tx_delay(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_tx_delay_msec((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_tx_delay_msec((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -771,7 +693,7 @@ static int cmd_set_tx_delay(const struct shell *shell, size_t argc, char **argv)
 static int cmd_set_rx_duration(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_rx_duration_secs((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_rx_duration_secs((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -783,7 +705,7 @@ static int cmd_set_rx_duration(const struct shell *shell, size_t argc, char **ar
 static int cmd_set_alarm_threshold(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_alarm_threshold((uint32_t)atoi(argv[1])) != 0) {
+		if (etc_set_alarm_threshold((uint32_t)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
@@ -882,8 +804,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(hardware, NULL, "Set hardware version", cmd_set_hardware_version),
 	SHELL_CMD(firmware, NULL, "Set firmware version", cmd_set_firmware_version),
 	SHELL_CMD(device, NULL, "Set device ID", cmd_set_device_id),
-	SHELL_CMD(measurement, NULL, "Set measurement interval time", cmd_set_measurement_time),
-	SHELL_CMD(transmission, NULL, "Set transmission interval time", cmd_set_transmission_time),
 	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),
 	SHELL_CMD(set_radio, NULL, "Set radio mode", cmd_set_radio),
 	SHELL_CMD(set_power, NULL, "Set power mode", cmd_set_power),
