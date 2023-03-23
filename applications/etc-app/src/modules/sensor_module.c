@@ -45,18 +45,13 @@ static struct sensor_data static_sensor_data;
 #define SENSOR_QUEUE_ENTRY_COUNT	10
 #define SENSOR_QUEUE_BYTE_ALIGNMENT	4
 
-#define SENSOR_GPIO_SENSE_ENABLE_PIN (13)
-#define SENSOR_GPIO_S0_PIN (9)
-#define SENSOR_GPIO_S1_PIN (10)
-
 /* Sensor Analog constant information */
 #define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
 #define SENSOR_NTC_NOMINAL_TEMP 25.0
 #define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
 #define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
-#define SENSOR_RAW_ADC_MAX 4095
+#define SENSOR_NTC_REFERENCE_VOLTAGE (float)(DT_PROP(DT_PATH(ntc), reference_voltage_mv) / 1000.0f)
 
-#define SENSOR_BATTERY_ADC_MAX SENSOR_RAW_ADC_MAX
 #define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
 
 /* Battery constant information */
@@ -197,9 +192,9 @@ static int setup(void)
 	return 0;
 }
 
-static float sensor_ntc_converter(int data) {
-	float raw_data = ((float)(data) * 3.6 / 3.3);
-	float tmp_value = (float)SENSOR_RAW_ADC_MAX / (float)raw_data - 1.0;
+static float sensor_ntc_converter(int data, float full_scale_v, int full_scale_count) {
+	float raw_data = ((float)(data) * full_scale_v / SENSOR_NTC_REFERENCE_VOLTAGE);
+	float tmp_value = (float)full_scale_count / (float)raw_data - 1.0;
 	tmp_value = SENSOR_NTC_RESISTOR_REF / tmp_value;
 	tmp_value = tmp_value / SENSOR_NTC_NOMINAL_RESISTANCE;
 	tmp_value = logf(tmp_value);
@@ -215,14 +210,20 @@ static void sensor_poll_handler(void) {
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
-	data->temperature[SENSOR_INPUT_AMBIENT] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB));
+	data->temperature[SENSOR_INPUT_AMBIENT] = 
+			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB),
+			  (float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
+			  adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
 	if (fabs(data->temperature[SENSOR_INPUT_AMBIENT] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 		LOG_DBG("Ambient temp %2.2f", data->temperature[0]);
 	}
 	for (int8_t i = SENSOR_INPUT_IN1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		sensor_adc_switch_channel(i - 1);
 		k_msleep(50);
-		data->temperature[i] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR));
+		data->temperature[i] = 
+			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR),
+				(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) / 1000.0f,
+				adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
 		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
 		} else {
