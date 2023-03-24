@@ -133,7 +133,7 @@
 	pinctrl-1 = <&i2c0_sleep>;
 	pinctrl-names = "default", "sleep";
 
-	bq24195@6b {
+	bq24195: bq24195@6b {
 		compatible = "ti,bq24195";
 		label = "BQ24195";
 		reg = <0x6b>;

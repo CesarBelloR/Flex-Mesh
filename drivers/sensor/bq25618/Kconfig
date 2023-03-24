@@ -1,0 +1,14 @@
+menuconfig BQ25618
+	bool "BQ25618 Power Management Integrated Circuits (PMIC)"
+	depends on I2C
+	depends on DT_HAS_TI_BQ25618_ENABLED
+	help
+	  Enable I2C-based driver for BQ25618 PMIC.
+
+if BQ25618
+
+module = BQ25618
+module-str = BQ25618
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # BQ25618

@@ -1,6 +1,7 @@
 rsource "modem/Kconfig"
 rsource "lora/Kconfig"
 rsource "sensor/bq24195/Kconfig"
+rsource "sensor/bq25618/Kconfig"
 rsource "sensor/onewire/Kconfig"
 rsource "io/Kconfig"
 rsource "rtc/pcf85263/Kconfig"
