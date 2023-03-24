@@ -5,6 +5,7 @@
 * [ Hardware ](#Hardware) <br>
 * [ Instruction ](#Instruction) <br>
 * [ Flash ](#Flash) <br>
+* [ Retrieve data ](#Retrieve) <br>
   
 <a name="Prerequisites"></a>
 # Installing Prerequisites
@@ -79,3 +80,7 @@ pip3 install -r {ROOT}\bootloader\mcuboot\scripts\requirements.txt
 ```
 west flash
 ```
+
+<a name="Retrieve"></a>
+# Retrieve Data
+Use the [retrieve_data script](scripts/retrieve_data/)
