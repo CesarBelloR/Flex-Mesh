@@ -17,8 +17,10 @@
 #include "ds18b20.h"
 #include "sensor.h"
 #include "ds2484.h"
+
 #include "etc_cape.h"
 #include <stdio.h>
+#include "sensor.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
@@ -34,6 +36,10 @@ static struct k_sem lora_sem;
 
 static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) ;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ad6edad (HW_622 HW-620 Add HW_VER ain to etc-test)
 void lora_tx_rx_fn() {
 	k_sem_init(&lora_sem, 0, 1);
 
