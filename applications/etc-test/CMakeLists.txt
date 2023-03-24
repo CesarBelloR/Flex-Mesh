@@ -12,3 +12,5 @@ target_sources(app PRIVATE src/main.c
 zephyr_cc_option(-Wfatal-errors)
 
 zephyr_include_directories(src)
+
+add_subdirectory(src/modules)
