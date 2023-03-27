@@ -14,22 +14,15 @@
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"
+#include "sensor.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
 #define DEFAULT_RADIO_NODE DT_ALIAS(lora0)
-#define GPIO_SENSE_ENABLE_PIN (13)
-#define GPIO_S0_PIN (9)
-#define GPIO_S1_PIN (10)
+
 const struct device* dev_gpio = NULL;
 const struct device* dev_lora = DEVICE_DT_GET(DEFAULT_RADIO_NODE);
-
-static void adc_switch_channel(uint8_t channel) {
-	gpio_pin_set(dev_gpio, GPIO_SENSE_ENABLE_PIN, 0U);
-	gpio_pin_set(dev_gpio, GPIO_S0_PIN, 0U);
-	gpio_pin_set(dev_gpio, GPIO_S1_PIN, 0U);
-}
 
 void etc_test_init(void) {
 	dev_gpio = device_get_binding("GPIO_0");
@@ -41,11 +34,9 @@ void etc_test_init(void) {
 		return;
 	}
 
-	gpio_pin_configure(dev_gpio, GPIO_SENSE_ENABLE_PIN, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure(dev_gpio, GPIO_S0_PIN, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure(dev_gpio, GPIO_S1_PIN, GPIO_OUTPUT_INACTIVE);
+	sensor_init();
 
-	adc_switch_channel(0);
+	sensor_adc_switch_channel(SENSOR_INPUT_AMBIENT);
 }
 
 static int cmd_version(const struct shell *shell, size_t argc, char **argv)
@@ -60,66 +51,60 @@ static int cmd_version(const struct shell *shell, size_t argc, char **argv)
 
 SHELL_CMD_ARG_REGISTER(etc_version, NULL, "Show kernel version", cmd_version, 1, 0);
 
-const float nodepoints[34] = {
-  195.652,
-  148.171,
-  113.347,
-  87.559,
-  68.237,
-  53.650,
-  42.506,
-  33.892,
-  27.219,
-  22.021,
-  17.926,
-  14.674,
-  12.081,
-  10.000,
-  8.315,
-  6.948,
-  5.834,
-  4.917,
-  4.161,
-  3.535,
-  3.014,
-  2.586,
-  2.228,
-  1.925,
-  1.669,
-  1.452,
-  1.268,
-  1.110,
-  0.974,
-  0.858,
-  0.758,
-  0.672,
-  0.596,
-  0.531,
-};
+static void adc_print_channel(const struct shell *shell, int channel)
+{
+	uint16_t adc_raw = sensor_get_raw_value(channel);
+	float val;
+	if ((channel == ETC_ADC_CHANNEL_AMB) || (channel == ETC_ADC_CHANNEL_SENSOR)) {
+		val = sensor_ntc_converter(channel, adc_raw);
+		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
+			    channel, adc_raw, val);
+	} else {
+		int val_mv;
+		adc_get_raw_to_millivolts(channel, &val_mv);
+		val = (float)val_mv / 1000.0f;
+		shell_print(shell, "ADC Channel %d - Value %d - Voltage %.2f V",
+			    channel, adc_raw, val);
+	}
+}
 
-#define SERIESRESISTOR 10000 //on board series resistor - 10kohm
-
-float reMap(const float pts[34], float input) { //maps resistance to temperature lookup table. 
-  float mm = 0;
-  for (unsigned char nn = 0; nn < 33; nn++) {
-    if (input <= pts[nn] && input >= pts[nn + 1]) {
-      mm = ( (-40 + (nn * 5)) - (-40 + ((nn + 1) * 5)) ) / ( pts[nn] - pts[nn + 1] );
-      mm = mm * (input - pts[nn]);
-      mm = mm +  (-40 + (nn * 5));
-    }
-  }
-  return (mm);
+static void adc_print_all_channels(const struct shell *shell) 
+{
+	for (int chan = 0; chan < ETC_ADC_CHANNEL_MAX; chan++) {
+		if (chan == ETC_ADC_CHANNEL_SENSOR) {
+			for (int input = 0; input < SENSOR_INPUT_MAX; input++) {
+				sensor_adc_switch_channel(input);
+				k_msleep(100);
+				shell_print(shell, "Sensor input %u:", input);
+				adc_print_channel(shell, chan);
+			}
+		} else {
+			adc_print_channel(shell, chan);
+		}
+	}
 }
 
 static int cmd_adc_request(const struct shell *shell, size_t argc, char **argv)
 {
-	int channel = atoi(argv[1]);
-	uint16_t adc_raw = adc_get_channel(channel);
-	shell_print(shell, "ADC Channel %d - Value %d", channel, adc_raw);
+	if (argc != 2) {
+		shell_print(shell, 
+			    "Usage:\n"
+			    "%s <channel>\n"
+			    "channel: - all\n"
+			    "         - value between 0 and 3", argv[0]);
+		return -EINVAL;
+	}
+
+	if (strstr(argv[1], "all") != NULL) {
+		adc_print_all_channels(shell);
+	} else {
+		int channel = atoi(argv[1]);
+		adc_print_channel(shell, channel);
+	}
 	return 0;
 }
 
-SHELL_CMD_ARG_REGISTER(etc_adc, NULL, "Get ADC raw data", cmd_adc_request, 2, 0);
+SHELL_CMD_ARG_REGISTER(etc_adc, NULL, "Get ADC raw data", cmd_adc_request, 1, 1);
 
 static int cmd_ds18b20_request(const struct shell *shell, size_t argc, char **argv)
 {

@@ -18,14 +18,14 @@
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
 
+#include "adc.h"
+
 LOG_MODULE_REGISTER(ETC_ADC, CONFIG_ADC_MODULES_LOG_LEVEL);
 
 #if !DT_NODE_EXISTS(DT_PATH(zephyr_user)) || \
 	!DT_NODE_HAS_PROP(DT_PATH(zephyr_user), io_channels)
 #error "No suitable devicetree overlay specified"
 #endif
-
-#define ADC_NUM_CHANNELS    	DT_PROP_LEN(DT_PATH(zephyr_user), io_channels)
 
 #define DT_SPEC_AND_COMMA(node_id, prop, idx) \
 	ADC_DT_SPEC_GET_BY_IDX(node_id, idx),
@@ -81,4 +81,26 @@ int adc_get_channel(int channel)
 
 int adc_get_raw_to_millivolts(int channel, int* raw) {
 	return adc_raw_to_millivolts_dt(&adc_channels[channel], raw);
+}
+
+int adc_get_full_scale_voltage_mv(int channel)
+{
+	if (channel >= 0 && channel < ADC_NUM_CHANNELS) {
+		const struct adc_dt_spec *chan = &adc_channels[channel];
+		int32_t inv_gain = 1;
+		
+		adc_gain_invert(chan->channel_cfg.gain, &inv_gain);
+
+		return adc_ref_internal(chan->dev) * inv_gain;
+	}
+	return 0;
+}
+
+int adc_get_full_scale_count(int channel)
+{
+	if (channel >= 0 && channel < ADC_NUM_CHANNELS) {
+		const struct adc_dt_spec *chan = &adc_channels[channel];
+		return (1 << chan->resolution) - 1;
+	}
+	return 0;
 }
