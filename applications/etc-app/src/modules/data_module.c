@@ -343,11 +343,6 @@ static void on_all_states(struct data_msg_data *msg)
 		state_set(STATE_SHUTDOWN);
 	}
 
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-		LOG_INF("APP_EVT_DATA_GET");
-		return;
-	}
-
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_READY)) {
 		modem_stat.ts = msg->module.modem.data.modem_static.timestamp;
 		modem_stat.queued = true;
