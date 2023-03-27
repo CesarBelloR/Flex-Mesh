@@ -4,7 +4,7 @@
 #include "etc_pinctrl.dtsi"
 
 / {
-	model = "ETC Core";
+	model = "ETC Core v0.0.1";
 	compatible = "nordic,nrf52833-dk-nrf52833";
 
 	chosen {
