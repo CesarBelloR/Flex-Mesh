@@ -9,7 +9,6 @@
 #include <ctype.h>
 
 #include "pcf85263a.h"
-#include "bq24195.h"
 #include "adc.h"
 #include "ui.h"
 #include "ds18b20.h"

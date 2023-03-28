@@ -1,6 +1,7 @@
 
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
+#include <math.h>
 #include "adc.h"
 #include "sensor.h"
 #define MODULE sensor_module
@@ -50,7 +51,7 @@ int sensor_init(void)
 
 float sensor_ntc_converter(enum etc_adc_channel channel, int val) 
 {
-        float full_scale_v = adc_get_full_scale_voltage_mv(channel);
+        float full_scale_v = adc_get_full_scale_voltage_mv(channel) / 1000.0f;
         int full_scale_count = adc_get_full_scale_count(channel);
 	float raw_data = ((float)(val) * full_scale_v / SENSOR_NTC_REFERENCE_VOLTAGE);
 	float tmp_value = (float)full_scale_count / (float)raw_data - 1.0;

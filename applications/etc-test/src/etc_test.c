@@ -11,22 +11,29 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/gpio.h>
+#include <stdio.h>
 #include "pcf85263a.h"
 #include "adc.h"
 #include "ui.h"
-#include "ds18b20.h"
 #include "sensor.h"
 #include "ds2484.h"
-
+#include "ds18b20.h"
 #include "etc_cape.h"
-#include <stdio.h>
-#include "sensor.h"
+#ifdef CONFIG_BQ25618
+#include "bq25618.h"
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
 #define DEFAULT_RADIO_NODE DT_ALIAS(lora0)
-#define GPIO_HALL_PIN (28)
+
+static const struct gpio_dt_spec hall_dt =
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
+static const struct gpio_dt_spec sense_enable_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+static const struct gpio_dt_spec vsens_enable_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 
 const struct device* dev_gpio = NULL;
 const struct device* dev_lora = DEVICE_DT_GET(DEFAULT_RADIO_NODE);
@@ -36,10 +43,6 @@ static struct k_sem lora_sem;
 
 static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) ;
 
-<<<<<<< HEAD
-=======
-
->>>>>>> ad6edad (HW_622 HW-620 Add HW_VER ain to etc-test)
 void lora_tx_rx_fn() {
 	k_sem_init(&lora_sem, 0, 1);
 
@@ -60,11 +63,7 @@ static void hall_cb_fn(const struct device *dev,
 void etc_test_init(void) 
 {
 	int ret;
-	dev_gpio = device_get_binding("GPIO_0");
-	if (dev_gpio == NULL) {
-		return;
-	}
-
+	
 	if (!device_is_ready(dev_lora)) {
 		return;
 	}
@@ -72,13 +71,15 @@ void etc_test_init(void)
 	sensor_init();
 	k_mutex_init(&lora_mutex);
 	// Configure hall interrupt
-	gpio_pin_configure(dev_gpio, GPIO_HALL_PIN, GPIO_INPUT | GPIO_ACTIVE_LOW);
-	gpio_init_callback(&hall_cb, hall_cb_fn, BIT(GPIO_HALL_PIN));
-	ret = gpio_add_callback(dev_gpio, &hall_cb);
+	gpio_pin_configure_dt(&hall_dt, GPIO_INPUT | GPIO_ACTIVE_LOW);
+	gpio_pin_configure_dt(&vsens_enable_dt, GPIO_OUTPUT_ACTIVE);
+	
+	gpio_init_callback(&hall_cb, hall_cb_fn, BIT(hall_dt.pin));
+	ret = gpio_add_callback(hall_dt.port, &hall_cb);
 	if (ret < 0) {
 		LOG_ERR("Failed to set gpio callback!");
 	}
-	gpio_pin_interrupt_configure(dev_gpio, GPIO_HALL_PIN, GPIO_INT_EDGE_TO_ACTIVE);
+	gpio_pin_interrupt_configure_dt(&hall_dt, GPIO_INT_EDGE_TO_ACTIVE);
 
 	sensor_adc_switch_channel(SENSOR_INPUT_AMBIENT);
 }
@@ -97,16 +98,16 @@ SHELL_CMD_ARG_REGISTER(etc_version, NULL, "Show kernel version", cmd_version, 1,
 
 static void adc_print_channel(const struct shell *shell, int channel)
 {
-	uint16_t adc_raw = sensor_get_raw_value(channel);
+	int adc_raw = sensor_get_raw_value(channel);
 	float val;
+
 	if ((channel == ETC_ADC_CHANNEL_AMB) || (channel == ETC_ADC_CHANNEL_SENSOR)) {
 		val = sensor_ntc_converter(channel, adc_raw);
 		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
 			    channel, adc_raw, val);
 	} else {
-		int val_mv;
-		adc_get_raw_to_millivolts(channel, &val_mv);
-		val = (float)val_mv / 1000.0f;
+		adc_get_raw_to_millivolts(channel, &adc_raw);
+		val = (float)adc_raw / 1000.0f;
 		shell_print(shell, "ADC Channel %d - Value %d - Voltage %.2f V",
 			    channel, adc_raw, val);
 	}
@@ -132,6 +133,14 @@ static int cmd_set_etc_gpio(const struct shell *sh,
 	const struct device *dev;
 	uint8_t index = 0U;
 	uint8_t value = 0U;
+
+	if (argc != 4) {
+		shell_print(sh, "Usage:\n"
+				"  %s <port> <pin> <value>\n"
+				"  value: 1 disconnect, 0 drive low",
+			    argv[0]);
+		return -EINVAL;
+	}
 
 	if (isdigit((unsigned char)argv[args_indx.index][0]) &&
 	    isdigit((unsigned char)argv[args_indx.value][0])) {
@@ -161,7 +170,7 @@ static int cmd_set_etc_gpio(const struct shell *sh,
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_etc_gpio,
-			       SHELL_CMD_ARG(set, NULL, "Set GPIO: 1 disconnect, 0 drive low", cmd_set_etc_gpio, 4, 0),
+			       SHELL_CMD_ARG(set, NULL, "Set GPIO: 1 disconnect, 0 drive low", cmd_set_etc_gpio, 1, 3),
 			       SHELL_SUBCMD_SET_END /* Array terminated. */
 			       );
 SHELL_CMD_REGISTER(etc_gpio, &sub_etc_gpio, "ETC GPIO commands", NULL);			       
@@ -204,21 +213,24 @@ static int cmd_adc_request(const struct shell *shell, size_t argc, char **argv)
 
 SHELL_CMD_ARG_REGISTER(etc_adc, NULL, "Get ADC raw data", cmd_adc_request, 1, 1);
 
-static int cmd_ds18b20_request(const struct shell *shell, size_t argc, char **argv)
+static int cmd_vsens_enable(const struct shell *shell, size_t argc, char **argv) 
 {
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-	ds18b20_init();
-	k_sleep(K_SECONDS(1));
-	if (ds18b20_manualconvert()) {
-		shell_print(shell, "DS18B20 return %d", (int)ds18b20[0].temperature);
-	} else {
-		shell_print(shell, "DS18B20 error");
+	int enable;
+
+	if (argc != 2) {
+		shell_print(shell, "Usage:\n"
+				   "%s 0/1",
+			    argv[0]);
+		return -EINVAL;
 	}
+
+	enable = atoi(argv[1]);
+	gpio_pin_set_dt(&vsens_enable_dt, enable);
+
 	return 0;
 }
 
-SHELL_CMD_ARG_REGISTER(etc_ds18b20, NULL, "Get DS18B20 temperature sensor", cmd_ds18b20_request, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_vsens_en, NULL, "Enable/disable VCC_SENS", cmd_vsens_enable, 1, 1);
 
 static int cmd_ds2484_write(const struct shell *shell, size_t argc, char **argv)
 {
@@ -394,7 +406,7 @@ static int cmd_ds2484_enable(const struct shell *shell, size_t argc, char **argv
 {
 	int ret;
 
-	gpio_pin_set(dev_gpio, GPIO_SENSE_ENABLE_PIN, 1U);
+	gpio_pin_set_dt(&sense_enable_dt, 1U);
 	k_sleep(K_SECONDS(1));
 
 	ret = ds2484_init();
@@ -420,16 +432,19 @@ static int cmd_ds2484_convert_temp(const struct shell *shell, size_t argc, char 
 
 	while (attempt < MAX_ATTEMPTS && !success) {
 		if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
-		if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}		//Send command to all devices
+		/* Send command to all devices*/
+		if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}		
 		if (ds2484_write_byte(0x44) != 0) {shell_print(shell, "Error requesting temperature measurement");}
 		if (ds2484_set_config((ds248x_config_t)(1 << 2)) != 0) {shell_print(shell, "Error setting strong pullup");}
 		k_sleep(K_MSEC(800));
 		if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
-		if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}		//Send command to all devices
-		if (ds2484_write_byte(0xBE) != 0) {shell_print(shell, "Error requesting data from scratch pad");}		//read scratch pad *this will not work if there is more than one device on the bus
+		/* Send command to all devices */
+		if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}	
+		/* read scratch pad *this will not work if there is more than one device on the bus */
+		if (ds2484_write_byte(0xBE) != 0) {shell_print(shell, "Error requesting data from scratch pad");}
 		if (ds2484_read_bytes(data, 9) != 0) {shell_print(shell, "Error reading data from scratch pad");}
 		
-		//check CRC to ensure reading was valid
+		/* check CRC to ensure reading was valid */
 		uint8_t crc = 0;
 		uint8_t len = 8;
 		uint8_t *addr = data;
@@ -454,61 +469,56 @@ static int cmd_ds2484_convert_temp(const struct shell *shell, size_t argc, char 
 		//if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
 	}
 
-	//if (success) {
-		/* First two bytes of scratchpad are temperature values */
-		temperature = data[0] | data[1] << 8;
+	/* First two bytes of scratchpad are temperature values */
+	temperature = data[0] | data[1] << 8;
 
-		/* Check if temperature is negative */
-		if (temperature & 0x8000)
-		{
-			/* Two's complement, temperature is negative */
-			temperature = ~temperature + 1;
-			minus = 1;
-		}
+	/* Check if temperature is negative */
+	if (temperature & 0x8000) {
+		/* Two's complement, temperature is negative */
+		temperature = ~temperature + 1;
+		minus = 1;
+	}
 
-		/* Get sensor resolution */
-		resolution = ((data[4] & 0x60) >> 5) + 9;
+	/* Get sensor resolution */
+	resolution = ((data[4] & 0x60) >> 5) + 9;
 
+	/* Store temperature integer digits and decimal digits */
+	digit = temperature >> 4;
+	digit |= ((temperature >> 8) & 0x7) << 4;
 
-		/* Store temperature integer digits and decimal digits */
-		digit = temperature >> 4;
-		digit |= ((temperature >> 8) & 0x7) << 4;
+	/* Store decimal digits */
+	switch (resolution) {
+	case 9:
+		decimal = (temperature >> 3) & 0x01;
+		decimal *= (float)DS18B20_DECIMAL_STEPS_9BIT;
+		break;
+	case 10:
+		decimal = (temperature >> 2) & 0x03;
+		decimal *= (float)DS18B20_DECIMAL_STEPS_10BIT;
+		break;
+	case 11:
+		decimal = (temperature >> 1) & 0x07;
+		decimal *= (float)DS18B20_DECIMAL_STEPS_11BIT;
+		break;
+	case 12:
+		decimal = temperature & 0x0F;
+		decimal *= (float)DS18B20_DECIMAL_STEPS_12BIT;
+		break;
+	default:
+		decimal = 0xFF;
+		digit = 0;
+	}
 
-		/* Store decimal digits */
-		switch (resolution)
-		{
-		case 9:
-			decimal = (temperature >> 3) & 0x01;
-			decimal *= (float)DS18B20_DECIMAL_STEPS_9BIT;
-			break;
-		case 10:
-			decimal = (temperature >> 2) & 0x03;
-			decimal *= (float)DS18B20_DECIMAL_STEPS_10BIT;
-			break;
-		case 11:
-			decimal = (temperature >> 1) & 0x07;
-			decimal *= (float)DS18B20_DECIMAL_STEPS_11BIT;
-			break;
-		case 12:
-			decimal = temperature & 0x0F;
-			decimal *= (float)DS18B20_DECIMAL_STEPS_12BIT;
-			break;
-		default:
-			decimal = 0xFF;
-			digit = 0;
-		}
+	/* Check for negative part */
+	decimal = digit + decimal;
+	if (minus) {
+		decimal = 0 - decimal;
+	}
 
-		/* Check for negative part */
-		decimal = digit + decimal;
-		if (minus)
-			decimal = 0 - decimal;
+	shell_print(shell, "Temperature: %02f°C --> %u attempts", decimal, attempt + 1);
 
-		shell_print(shell, "Temperature: %02f°C --> %u attempts", decimal, attempt + 1);
-	
 	if (success) {
-		
 		return 0;
-
 	} else {
 		shell_print(shell, "ERROR: Invalid temperature conversion");
 
@@ -535,6 +545,23 @@ SHELL_STATIC_SUBCMD_SET_CREATE(ds2484_sub,
 );
 SHELL_CMD_REGISTER(ds2484, &ds2484_sub, "DS2484 1-wire commands", NULL);
 
+#ifdef CONFIG_BQ25618
+static const struct device *bq25618_dev = DEVICE_DT_GET(DT_NODELABEL(bq25618));
+
+static int cmd_bq25618_read_all(const struct shell *shell, size_t argc, char **argv)
+{
+	bq25618_print_all_registers(bq25618_dev);
+
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(bq25618_sub,
+	SHELL_CMD(read_all, NULL, "Read and print all registers", cmd_bq25618_read_all),
+	SHELL_SUBCMD_SET_END
+);
+SHELL_CMD_REGISTER(bq25618, &bq25618_sub, "BQ25618/9 PMIC commands", NULL);
+#endif
+
 static int cmd_ui_request(const struct shell *shell, size_t argc, char **argv)
 {
 	int pattern = atoi(argv[1]);
@@ -553,7 +580,7 @@ static int cmd_pcf85263_set_time(const struct shell *shell, size_t argc, char **
 	return 0;
 }
 
-SHELL_CMD_ARG_REGISTER(etc_set_time, NULL, "Set time in PCF85263", cmd_pcf85263_set_time, 2, 0);
+SHELL_CMD_ARG_REGISTER(etc_set_time, NULL, "Set RTC time in seconds since epoch", cmd_pcf85263_set_time, 2, 0);
 
 static int cmd_pcf85263_get_time(const struct shell *shell, size_t argc, char **argv)
 {
@@ -565,7 +592,7 @@ static int cmd_pcf85263_get_time(const struct shell *shell, size_t argc, char **
 	return 0;
 }
 
-SHELL_CMD_ARG_REGISTER(etc_get_time, NULL, "Get time in PCF85263", cmd_pcf85263_get_time, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_get_time, NULL, "Get RTC time in seconds since epoch", cmd_pcf85263_get_time, 1, 0);
 
 #if DT_HAS_COMPAT_STATUS_OKAY(jedec_spi_nor)
 #define FLASH_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(jedec_spi_nor)
@@ -600,32 +627,6 @@ static int cmd_external_flash_get_info(const struct shell *shell, size_t argc, c
 }
 
 SHELL_CMD_ARG_REGISTER(etc_flash_info, NULL, "Get information of external flash", cmd_external_flash_get_info, 1, 0);
-
-#define GPIO_USER_BUTTON_PIN 5
-static int cmd_button_pull_module(const struct shell *shell, size_t argc, char **argv)
-{
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-	const struct device *dev = device_get_binding("GPIO_1");
-	if (dev == NULL) {
-		shell_print(shell, "Can't get GPIO_1 for button");
-		return 0;
-	} else {
-		gpio_pin_configure(dev, GPIO_USER_BUTTON_PIN, GPIO_INPUT | GPIO_PULL_UP);
-		k_usleep(50);
-		uint32_t t0 = k_uptime_get_32();
-		while(k_uptime_get_32() - t0 < 10000) {
-			int btn_status = gpio_pin_get(dev, GPIO_USER_BUTTON_PIN);
-			if (btn_status == 0) {
-				shell_print(shell, "Button User pressed");
-				break;
-			}
-		}
-	}
-	return 0;
-}
-
-SHELL_CMD_ARG_REGISTER(etc_button_user, NULL, "Check Button User", cmd_button_pull_module, 1, 0);
 
 const struct device *lora_dev = NULL;
 static struct lora_modem_config etc_lora_rx_config = {
@@ -739,6 +740,8 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 	if (ret != 0) {
 		return -1;
 	}
+
+	shell_print(shell, "Starting LoRa receive...");
 
 	int16_t rssi;
 	int8_t snr;
