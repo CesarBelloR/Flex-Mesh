@@ -140,15 +140,13 @@
 	pinctrl-1 = <&i2c0_sleep>;
 	pinctrl-names = "default", "sleep";
 
-        // To do: update to new charger chip (BQ25619)
-        bq24195@6b {
-                compatible = "ti,bq24195";
-                label = "BQ24195";
-                reg = <0x6b>;
-                min-voltage = <4360>;
+        bq25618: bq25618@6a {
+                compatible = "ti,bq25618";
+                reg = <0x6a>;
+                min-voltage = <4400>;
                 max-current = <2000>;
-                charge-current = <2048>;
-                charge-voltage = <4208>;
+                charge-current = <1500>;
+                charge-voltage = <4200>;
                 int-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
         };
 };
