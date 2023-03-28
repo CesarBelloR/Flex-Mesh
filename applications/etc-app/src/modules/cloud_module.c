@@ -326,10 +326,6 @@ static int setup(void)
 
 static void connect_cloud(void)
 {
-	if (etc_device_is_logger_lora()) {
-		SEND_EVENT(cloud, CLOUD_EVT_CONNECTED);
-		return;
-	}
 	int backoff_sec = backoff_delay[connect_retries].delay;
 	int err = 0;
 	LOG_DBG("Connecting to cloud");

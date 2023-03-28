@@ -237,11 +237,6 @@ static void on_state_init(struct lora_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct lora_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-	}
 }
 
 static int module_lora_transmit_packet(const uint8_t *decoded_buf, int buf_len)
@@ -411,12 +406,8 @@ retry:
 /* Message handler for all states. */
 static void on_all_states(struct lora_msg_data *msg)
 {
-	enum etc_device_mode mode = etc_device_get_mode();
-	enum etc_logger_job job = etc_device_get_job();
-	LOG_DBG("Mode %d %d", mode, job);
-	if (etc_device_get_mode() == ETC_DEVICE_MODE_LOGGER) {
-		if (((IS_EVENT(msg, data, DATA_EVT_DATA_READY)) && (job == ETC_LOGGER_JOB_BOTH)) ||
-			((IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) && (job == ETC_LOGGER_JOB_TX))))  {
+	if (etc_device_is_logger_lora()) {
+		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
 			LOG_INF("Logger sending data");
 			k_sleep(K_MSEC(100));
 			int rc = 0;
