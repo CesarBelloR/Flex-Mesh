@@ -27,13 +27,34 @@
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
 #define DEFAULT_RADIO_NODE DT_ALIAS(lora0)
-
+ 
+/* Outputs */
 static const struct gpio_dt_spec hall_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
 static const struct gpio_dt_spec sense_enable_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+static const struct gpio_dt_spec s0_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 static const struct gpio_dt_spec vsens_enable_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+static const struct gpio_dt_spec lte_on_off_gpio_dt =
+		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios);
+static const struct gpio_dt_spec power_gpio_dt =
+		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_power_gpios);
+static const struct gpio_dt_spec pon_trig_gpio_dt =
+		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_pon_trig_gpios);
+#if DT_NODE_EXISTS(DT_NODELABEL(modem_uart_oe))
+static const struct gpio_dt_spec modem_uart_oe_dt =
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(modem_uart_oe), control_gpios, 0);
+#endif
+
+/* Inputs */
+static const struct gpio_dt_spec rtc_int_dt =
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
+static const struct gpio_dt_spec psm_ind_gpio_dt =
+		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_psm_ind_gpios);
 
 const struct device* dev_gpio = NULL;
 const struct device* dev_lora = DEVICE_DT_GET(DEFAULT_RADIO_NODE);
@@ -47,7 +68,8 @@ void lora_tx_rx_fn() {
 	k_sem_init(&lora_sem, 0, 1);
 
 	while (k_sem_take(&lora_sem, K_FOREVER) == 0) {
-		shell_execute_cmd(shell_backend_uart_get_ptr(), "etc_lora_tx_rx");
+		LOG_INF("Hall sensor triggered");
+		//shell_execute_cmd(shell_backend_uart_get_ptr(), "etc_lora_tx_rx");
 		//cmd_lora_tx_rx(shell_backend_uart_get_ptr(), 0, NULL);
 	}
 }
@@ -127,6 +149,90 @@ static const struct args_index args_indx = {
 	.value = 3,
 };
 
+static int cmd_etc_io(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc < 3) {
+		shell_print(shell, "Syntax: etc_io <io id> 0/1");
+		shell_print(shell, "Active-low I/Os will be set to active state on 1 (low output)");
+		shell_print(shell, "IO as below:");
+		shell_print(shell, "\t SENS_ENABLE    -> ID: 0");
+		shell_print(shell, "\t LTE_PWRKEY     -> ID: 1");
+		shell_print(shell, "\t VSEN_EN        -> ID: 2");
+		shell_print(shell, "\t LTE_PON_TRIG   -> ID: 3");
+		shell_print(shell, "\t MODEM_UART_OE  -> ID: 4");
+		shell_print(shell, "\t SENS_SEL0      -> ID: 5");
+		shell_print(shell, "\t SENS_SEL1      -> ID: 6");
+		shell_print(shell, "\t LTE_ON_OFF     -> ID: 7");
+		shell_print(shell, "\t LTE_PON_TRIG   -> ID: 8");
+		return 0;
+	}
+
+	int id = atoi(argv[1]);
+	int level = atoi(argv[2]);
+	
+	if (level != 0 && level != 1) {
+		shell_error(shell, "Unsupported level %d", level);
+		return 0;
+	}
+
+	const struct gpio_dt_spec *gpio_dt;
+	char* name = NULL;
+	switch (id) {
+	case 0:
+		gpio_dt = &sense_enable_dt;
+		name = "SENS_ENABLE";
+		break;
+	case 1:
+		gpio_dt = &power_gpio_dt;
+		name = "LTE_PWRKEY";
+		break;
+	case 2:
+		gpio_dt = &vsens_enable_dt;
+		name = "VSEN_EN";
+		break;
+	case 3:
+		gpio_dt = &pon_trig_gpio_dt;
+		name = "LTE_PON_TRIG";
+		break;
+	case 4:
+#if DT_NODE_EXISTS(DT_NODELABEL(modem_uart_oe))
+		gpio_dt = &modem_uart_oe_dt;
+		name = "GPIO24";
+		break;
+#else
+		shell_error(shell, "Not supported");
+		return 0;
+#endif
+	case 5:
+		gpio_dt = &s0_dt;
+		name = "SENS_SEL0";
+		break;
+	case 6:
+		gpio_dt = &s1_dt;
+		name = "SENS_SEL1";
+		break;
+	case 7:
+		gpio_dt = &lte_on_off_gpio_dt;
+		name = "LTE_ON_OFF";
+		break;
+	case 8:
+		gpio_dt = &pon_trig_gpio_dt;
+		name = "LTE_PON_TRIG";
+		break;
+	default:
+		shell_error(shell, "Invalid ID %d", id);
+		return 0;
+	}
+
+	shell_print(shell, "Set %s (%s.%02d) level %d", name, gpio_dt->port->name, gpio_dt->pin, level);
+	gpio_pin_configure_dt(gpio_dt, GPIO_OUTPUT);
+	gpio_pin_set_dt(gpio_dt, level == 0 ? 0 : 1U);
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_io, NULL, "Set IO", cmd_etc_io, 0, 0);
+
+#if 0
 static int cmd_set_etc_gpio(const struct shell *sh,
 			    size_t argc, char **argv)
 {
@@ -173,7 +279,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_etc_gpio,
 			       SHELL_CMD_ARG(set, NULL, "Set GPIO: 1 disconnect, 0 drive low", cmd_set_etc_gpio, 1, 3),
 			       SHELL_SUBCMD_SET_END /* Array terminated. */
 			       );
-SHELL_CMD_REGISTER(etc_gpio, &sub_etc_gpio, "ETC GPIO commands", NULL);			       
+SHELL_CMD_REGISTER(etc_gpio, &sub_etc_gpio, "ETC GPIO commands", NULL);	
+#endif		       
 
 static void adc_print_all_channels(const struct shell *shell) 
 {
@@ -555,8 +662,46 @@ static int cmd_bq25618_read_all(const struct shell *shell, size_t argc, char **a
 	return 0;
 }
 
+
+static int cmd_bq25618_set_charge_current(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc < 2) {
+		shell_print(shell, "Syntax: %s <current in mA>", argv[0]);
+		return 0;
+	}
+	int ret;
+	int current_ma = atoi(argv[1]);
+	
+	ret = bq25618_set_charge_current(bq25618_dev, current_ma);
+	if (ret != 0) {
+		shell_error(shell, "Error setting value");
+	}
+	
+	return 0;
+}
+
+static int cmd_bq25618_set_input_current(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc < 2) {
+		shell_print(shell, "Syntax: %s <current in mA>", argv[0]);
+		return 0;
+	}
+	int ret;
+	int current_ma = atoi(argv[1]);
+	
+	ret = bq25618_set_input_current_limit(bq25618_dev, current_ma);
+	if (ret != 0) {
+		shell_error(shell, "Error setting value");
+	}
+	
+	return 0;
+}
+
+
 SHELL_STATIC_SUBCMD_SET_CREATE(bq25618_sub,
 	SHELL_CMD(read_all, NULL, "Read and print all registers", cmd_bq25618_read_all),
+	SHELL_CMD_ARG(set_charge_current, NULL, "Set charge current in mA", cmd_bq25618_set_charge_current, 1, 1),
+	SHELL_CMD_ARG(set_input_current, NULL, "Set charge current in mA", cmd_bq25618_set_input_current, 1, 1),
 	SHELL_SUBCMD_SET_END
 );
 SHELL_CMD_REGISTER(bq25618, &bq25618_sub, "BQ25618/9 PMIC commands", NULL);
@@ -778,7 +923,6 @@ exit:
 }
 SHELL_CMD_ARG_REGISTER(etc_lora_tx_rx, NULL, "Receive message over Lora", cmd_lora_tx_rx, 1, 0);
 
-#define GPIO_RTC_INT_PIN 3
 static struct gpio_callback watchdog_cb_data;
 void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
@@ -791,16 +935,12 @@ static int cmd_hw_wdt(const struct shell *shell, size_t argc, char **argv) {
 	pcf85263a_interrupt_flag_t flag_b = {0};
 	flag_b.enable_wdg = 1;
 	flag_a.enable_wdg = 1;
-	const struct device *dev = device_get_binding("GPIO_0");
-	if (dev == NULL) {
-		shell_print(shell, "Can't get GPIO_0 for button");
-		return 0;
-	} else {
-		gpio_pin_configure(dev, GPIO_RTC_INT_PIN, GPIO_INPUT | GPIO_PULL_UP);
-		gpio_pin_interrupt_configure(dev, GPIO_RTC_INT_PIN, GPIO_INT_EDGE_FALLING);
-		gpio_init_callback(&watchdog_cb_data, gpio_watchdog_interrupt_event, BIT(GPIO_RTC_INT_PIN));
-		gpio_add_callback(dev, &watchdog_cb_data);
-	}
+
+	gpio_pin_configure_dt(&rtc_int_dt, GPIO_INPUT | GPIO_PULL_UP);
+	gpio_pin_interrupt_configure_dt(&rtc_int_dt, GPIO_INT_EDGE_TO_ACTIVE);
+	gpio_init_callback(&watchdog_cb_data, gpio_watchdog_interrupt_event, BIT(rtc_int_dt.pin));
+	gpio_add_callback(rtc_int_dt.port, &watchdog_cb_data);
+
 	/* Interrupt channel A - INTA*/
 	pcf85263a_set_interrupt_a_io(true);
 	/* Interrupt channel B - TS */

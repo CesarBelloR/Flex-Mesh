@@ -19,16 +19,16 @@ static const struct device *uart_dev = DEVICE_DT_GET(DT_PARENT(DT_NODELABEL(quec
 K_MSGQ_DEFINE(uart_msgq, RX_BUF_SIZE, 10, 4);
 
 static const struct gpio_dt_spec lte_on_off_gpio_dt =
-    GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios);
+		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios);
 static const struct gpio_dt_spec power_gpio_dt =
-    GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_power_gpios);
+		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_power_gpios);
 static const struct gpio_dt_spec pon_trig_gpio_dt =
-    GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_pon_trig_gpios);
+		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_pon_trig_gpios);
 static const struct gpio_dt_spec psm_ind_gpio_dt =
-    GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_psm_ind_gpios);
+		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_psm_ind_gpios);
 #if DT_NODE_EXISTS(DT_NODELABEL(modem_uart_oe))
 static const struct gpio_dt_spec modem_uart_oe_dt =
-    GPIO_DT_SPEC_GET_OR(DT_NODELABEL(modem_uart_oe), control_gpios, 0);
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(modem_uart_oe), control_gpios, 0);
 #endif
 
 static const char at_cmd_usage_str[] =

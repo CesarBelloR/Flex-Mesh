@@ -5,6 +5,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
+#include <zephyr/shell/shell_uart.h>
 #include <zephyr/drivers/uart.h>
 
 static const struct device *uart0_dev = DEVICE_DT_GET(DT_NODELABEL(uart0));
