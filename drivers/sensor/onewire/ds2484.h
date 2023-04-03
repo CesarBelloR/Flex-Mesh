@@ -37,6 +37,9 @@
 #define DS248X_CB_DEVICE_RESET_NEEDED 3
 
 #define DS248X_MAX_I2C_BUFF_SIZE (8)
+
+#define DS2484_ROM_MAX_SIZE (8)
+
 typedef enum
 {
     active_pull_up = DS248X_CONFIG_APU,
@@ -53,6 +56,14 @@ typedef enum
  * transaction or invalid parameter.
  */
 int ds2484_init(void);
+
+/** @brief Read the DS2484's status register
+ * 
+ * @param status Pointer to where the retrieved status will be stored.
+ * 
+ * @retval 0 on success. 
+*/
+int ds2484_read_status(uint8_t *status);
 
 /** @brief Set configuration
  *
@@ -75,6 +86,13 @@ int ds2484_clear_config(ds248x_config_t config);
  * @retval return 0 on success.
  */
 int ds2484_load_config(void);
+
+/** @brief Get the value of the configuration register
+ * 
+ * @param config Pointer to buffer that the config value is stored in.
+ * @retval return 0 on success.
+*/
+int ds2484_get_config(uint8_t *config);
 
 /** @brief Reset the device
  *
@@ -147,7 +165,8 @@ int ds2484_request_select(const char* rom);
 
 /** @brief Send a request search for device on 1-wire bus
  *
- * @param rom place to put the unique address of device
+ * @param rom buffer to put the unique 8 byte address of device.
+ *            Buffer needs to be at least 8 bytes long.
  * @retval return 0 on success.
  */
 int ds2484_request_search(char* rom);

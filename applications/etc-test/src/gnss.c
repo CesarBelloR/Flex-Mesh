@@ -1,35 +1,23 @@
-
 #include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <zephyr/drivers/uart.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/kernel.h>
-#include <zephyr/shell/shell.h>
-#include <zephyr/logging/log.h>
-
-#define LTE_POWER_ON_OFF_PIN 4
-#define LTE_PSM_IND_PIN 2
-#define LTE_POWER_KEY_PIN 1
-#define LTE_POWER_PON_TRIG 23
-
-LOG_MODULE_REGISTER(modem, CONFIG_ETC_TEST_LOG_LEVEL);
+#include <drivers/uart.h>
+#include <drivers/gpio.h>
+#include <kernel.h>
+#include <shell/shell.h>
 
 static const struct device *uart_dev = NULL;
-const struct device * gpio_0 = NULL;
-const struct device * gpio_1 = NULL;
 
-#define LTE_PSM_IND_PIN 2
-K_MSGQ_DEFINE(uart_msgq, 32, 10, 4);
+K_MSGQ_DEFINE(uart0_msgq, 128, 10, 4);
 
 static const char at_cmd_usage_str[] =
-    "Usage: at <sub-command>\n"
+    "Usage: gnss <sub-command>\n"
     "\n"
     "where <command> is one of the following:\n"
     "  help:   Show this message\n"
-    "  send:   Send AT command\n";
+    "  send:   Send GNSS command\n";
 
-static char rx_buf[32];
+static char rx_buf[128];
 static int rx_buf_pos;
 
 static void at_send_uart(char *buf) {
@@ -56,7 +44,7 @@ static void serial_cb(const struct device *dev, void *user_data) {
       rx_buf[rx_buf_pos] = '\0';
 
       /* if queue is full, message is silently dropped */
-      k_msgq_put(&uart_msgq, &rx_buf, K_NO_WAIT);
+      k_msgq_put(&uart0_msgq, &rx_buf, K_NO_WAIT);
 
       /* reset the buffer (it was copied to the msgq) */
       rx_buf_pos = 0;
@@ -67,7 +55,7 @@ static void serial_cb(const struct device *dev, void *user_data) {
   }
 }
 
-static int at_shell_cmd(const struct shell *shell, size_t argc, char **argv) {
+static int gnss_shell_cmd(const struct shell *shell, size_t argc, char **argv) {
   int ret = 0;
   bool uartconf_option_given = false;
 
@@ -94,37 +82,8 @@ show_usage:
   return 0;
 }
 
-
-static void pin_init(void) {
-	gpio_0 = device_get_binding("GPIO_0");
-	gpio_1 = device_get_binding("GPIO_1");
-
-	if (!device_is_ready(gpio_0)) {
-		LOG_ERR("GPIO 0 is not ready");
-		return;
-	}
-
-	if (!device_is_ready(gpio_1)) {
-		LOG_ERR("GPIO 1 is not ready");
-		return;
-	}
-
-	gpio_pin_configure(gpio_1, LTE_POWER_ON_OFF_PIN, GPIO_OUTPUT_ACTIVE);
-	
-	gpio_pin_configure(gpio_1, LTE_POWER_KEY_PIN, GPIO_OUTPUT);
-	gpio_pin_set(gpio_1, LTE_POWER_KEY_PIN, 0U);
-	k_sleep(K_MSEC(500));
-	gpio_pin_set(gpio_1, LTE_POWER_KEY_PIN, 1U);
-	k_sleep(K_MSEC(1000));
-	gpio_pin_set(gpio_1, LTE_POWER_KEY_PIN, 0U);
-	k_sleep(K_MSEC(2500));
-	LOG_INF("IO Done");
-}
-
-void modem_init() {
-  pin_init();
-
-  uart_dev = device_get_binding("UART_1");
+void gnss_init() {
+  uart_dev = device_get_binding("UART_0");
   const struct shell *shell = shell_backend_uart_get_ptr();
 
   if (!device_is_ready(uart_dev)) {
@@ -132,16 +91,16 @@ void modem_init() {
     return;
   }
 
-  SHELL_CMD_REGISTER(at, NULL, "Commands for interact with modem.",
-                     at_shell_cmd);
+  SHELL_CMD_REGISTER(gnss, NULL, "Commands for interact with gnss.",
+                     gnss_shell_cmd);
   uart_irq_callback_user_data_set(uart_dev, serial_cb, NULL);
   uart_irq_rx_enable(uart_dev);
 
-  char tx_buf[32];
+  char tx_buf[128];
 
-  while (k_msgq_get(&uart_msgq, &tx_buf, K_FOREVER) == 0) {
-    shell_print(shell, "%s", tx_buf);
+  while (k_msgq_get(&uart0_msgq, &tx_buf, K_FOREVER) == 0) {
+    shell_fprintf(shell, SHELL_NORMAL, "%s", tx_buf);
   }
 }
 
-K_THREAD_DEFINE(modem, 512, modem_init, NULL, NULL, NULL, 5, 0, 0);
+K_THREAD_DEFINE(gnss, 2048, gnss_init, NULL, NULL, NULL, 6, 0, 0);
