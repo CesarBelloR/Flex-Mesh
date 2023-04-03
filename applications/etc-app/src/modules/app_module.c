@@ -322,7 +322,7 @@ static void app_set_wakeup_time(void)
 	struct tm tm_next_time = {0};
 	gmtime_r(&now, &tm_time);
 
-	if ((sleep_time < 60) && (60 - tm_time.tm_sec < 30)) {
+	if ((sleep_time < 60) || (60 - tm_time.tm_sec < 30)) {
 		// Increase alarm to 1 minutes because the sleep time is not enough
 		sleep_time += 60;
 	}
