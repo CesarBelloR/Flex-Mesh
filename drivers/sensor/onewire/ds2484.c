@@ -21,7 +21,6 @@
 LOG_MODULE_REGISTER(DS2484, CONFIG_DS2484_LOG_LEVEL);
 
 #define DS2484_DEFAULT_7BIT_ADDR (0x18)
-#define DS2844_ROM_MAX_SIZE (8)
 
 struct ds2484_config {
 	const struct device *bus;
@@ -29,7 +28,7 @@ struct ds2484_config {
 };
 
 struct ds2484_data {
-	uint8_t _rom[DS2844_ROM_MAX_SIZE];
+	uint8_t _rom[DS2484_ROM_MAX_SIZE];
 	uint8_t _last_discrepancy;
 	bool _last_device_flag;
 	uint8_t _last_family_discrepancy;
@@ -48,7 +47,11 @@ typedef enum {
 	CMD_DRST = 0xF0, // device reset
 } ds248x_cmd_t;
 
-typedef enum { POINTER_CONFIG = 0xC3, POINTER_DATA = 0xE1, POINTER_STATUS = 0xF0 } ds248x_pointer_t;
+typedef enum { 
+	POINTER_CONFIG = 0xC3, 
+	POINTER_DATA = 0xE1, 
+	POINTER_STATUS = 0xF0
+} ds248x_pointer_t;
 
 typedef enum {
 	WIRE_COMMAND_SELECT = 0x55,
@@ -174,6 +177,24 @@ int ds2484_init(void)
 	return 0;
 }
 
+int ds2484_read_status(uint8_t *status)
+{
+	int ret;
+
+	if (status == NULL) {
+		return -EINVAL;
+	}
+
+	ret = ds2484_set_read_pointer(POINTER_STATUS);
+	if (ret != 0) {
+		goto exit;
+	}
+	ret = read_register(status);
+
+exit:
+	return ret;
+}
+
 int ds2484_set_config(ds248x_config_t config)
 {
 	struct ds2484_data *data = &m_ds2484_data;
@@ -201,6 +222,18 @@ int ds2484_load_config(void)
 
 	ret = read_register(buf);
 	data->_config = buf[0];
+	return ret;
+}
+
+int ds2484_get_config(uint8_t *config)
+{
+	struct ds2484_data *data = &m_ds2484_data;
+	int ret;
+
+	ret = ds2484_load_config();
+
+	*config = data->_config;
+
 	return ret;
 }
 
@@ -350,10 +383,16 @@ int ds2484_request_reset(void)
 
 	if (spu & (ds2484_set_config(strong_pull_up) != 0)) {
 		return -EINVAL;
-		;
 	}
 
-	return (buf[0] & DS248X_STATUS_PPD);
+	/* Check PPD register to see if a device was detected */
+	if (buf[0] & DS248X_STATUS_PPD) {
+		ret = 0;
+	} else {
+		ret = -EIO;
+	}
+
+	return ret;
 }
 
 int ds2484_request_skip(void)
@@ -370,7 +409,7 @@ int ds2484_request_select(const char *rom)
 		return ret;
 	}
 
-	return ds2484_write_bytes(data->_rom, DS2844_ROM_MAX_SIZE);
+	return ds2484_write_bytes(data->_rom, DS2484_ROM_MAX_SIZE);
 }
 
 int ds2484_request_search(char *rom)
