@@ -8,6 +8,13 @@
 #include <zephyr/usb/usb_device.h>
 #include <ctype.h>
 
+#ifdef CONFIG_MCUMGR_CMD_OS_MGMT
+#include <zephyr/mgmt/mcumgr/grp/os_mgmt/os_mgmt.h>
+#endif
+#ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
+#include <zephyr/mgmt/mcumgr/grp/shell_mgmt/shell_mgmt.h>
+#endif
+
 #include "pcf85263a.h"
 #include "adc.h"
 #include "ui.h"
@@ -45,6 +52,13 @@ void main(void)
 		k_sleep(K_MSEC(100));
 	}
 
+#ifdef CONFIG_MCUMGR_CMD_OS_MGMT
+	os_mgmt_register_group();
+#endif
+
+#ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
+	shell_mgmt_register_group();
+#endif
 	app_driver_init();
 	while(1) {
 		k_sleep(K_MSEC(100));

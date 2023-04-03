@@ -957,3 +957,17 @@ static int cmd_stop_wdt(const struct shell *shell, size_t argc, char **argv) {
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd_stop_wdt, 1, 0);
+
+static int cmd_ble_active(const struct shell *shell, size_t argc, char **argv) {
+#ifdef CONFIG_MCUMGR_SMP_BT
+	extern void start_smp_bluetooth(void);
+	start_smp_bluetooth();
+	shell_print(shell, "Enable the BLE MCUMGR");
+	return 0;
+
+#endif	
+	shell_error(shell, "BLE is not supported");
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_ble_active, NULL, "Active the BLE MCUMGR", cmd_ble_active, 1, 0);
