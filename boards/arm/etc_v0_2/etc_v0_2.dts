@@ -40,11 +40,11 @@
 			label = "Red LED";
 		};
 		led1: led_1 {
-			gpios = <&gpio1 6 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
 			label = "Green LED";
 		};
 		led2: led_2 {
-			gpios = <&gpio0 25 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio1 10 GPIO_ACTIVE_LOW>;
 			label = "Blue LED";
 		};
 	};
@@ -70,7 +70,7 @@
 		};
 		vsens_enable: vsens-enable {
 			compatible = "etc,output";
-			control-gpios = <&gpio0 23 GPIO_ACTIVE_HIGH>;
+			control-gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
 			status = "okay";
 		};
 		sens_sel0: sens-sel0 {
@@ -213,14 +213,14 @@
 	pinctrl-0 = <&spi1_default>;
 	pinctrl-1 = <&spi1_sleep>;
 	pinctrl-names = "default", "sleep";
-	cs-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
+	cs-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
 
 	lora: sx1276@0 {
 		compatible = "semtech,sx1276";
 		reg = <0>;
 		label = "sx1276";
-		reset-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>;
-		dio-gpios = <&gpio0 19 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+		reset-gpios = <&gpio1 11 GPIO_ACTIVE_LOW>;
+		dio-gpios = <&gpio1 15 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 		tcxo-power-startup-delay-ms = <5>;
 		spi-max-frequency = <1000000>;
 		power-amplifier-output = "pa-boost";
@@ -243,8 +243,8 @@
 		label = "MX25R16";
 		jedec-id = [ C2 28 15 ];
 		size = <16777216>;
-		wp-gpios = < &gpio1 8 GPIO_ACTIVE_LOW >;
-		hold-gpios = < &gpio0 8 GPIO_ACTIVE_LOW >;
+		wp-gpios = < &gpio0 17 GPIO_ACTIVE_LOW >;
+		hold-gpios = < &gpio0 19 GPIO_ACTIVE_LOW >;
 	};
 };
 
@@ -269,10 +269,10 @@
 		compatible = "quectel,bg95";
 		label      = "quectel-bg95";
 		status     = "okay";
-		mdm-power-gpios = <&gpio1 1 0>;
+		mdm-power-gpios = <&gpio0 25 0>;
                 // ToDo: check if on-off pin is used correctly
-		mdm-on-off-gpios = <&gpio1 4 0>;
-		mdm-pon-trig-gpios = <&gpio1 5 0>;
+		mdm-on-off-gpios = <&gpio1 1 0>;
+		mdm-pon-trig-gpios = <&gpio1 13 0>;
 		mdm-psm-ind-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
                 // ToDo: add MODEM_UART_OE
 	};
