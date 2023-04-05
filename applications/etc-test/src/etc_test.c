@@ -930,33 +930,28 @@ void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callbac
 	LOG_INF("Watchdog triggered interrupt pin");
 }
 
-static int cmd_hw_wdt(const struct shell *shell, size_t argc, char **argv) {
-	pcf85263a_interrupt_flag_t flag_a = {0};
-	pcf85263a_interrupt_flag_t flag_b = {0};
-	flag_b.enable_wdg = 1;
-	flag_a.enable_wdg = 1;
+void hw_wdt_work_handler(struct k_work *work) {
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT);
+	gpio_pin_set_dt(&s0_dt, 0U);
+	k_sleep(K_MSEC(1));
+	gpio_pin_set_dt(&s0_dt, 1U);
+	k_sleep(K_MSEC(1));
+	gpio_pin_set_dt(&s0_dt, 0U);
+}
 
-	gpio_pin_configure_dt(&rtc_int_dt, GPIO_INPUT | GPIO_PULL_UP);
-	gpio_pin_interrupt_configure_dt(&rtc_int_dt, GPIO_INT_EDGE_TO_ACTIVE);
-	gpio_init_callback(&watchdog_cb_data, gpio_watchdog_interrupt_event, BIT(rtc_int_dt.pin));
-	gpio_add_callback(rtc_int_dt.port, &watchdog_cb_data);
+K_WORK_DELAYABLE_DEFINE(hw_wdt_work, hw_wdt_work_handler);
 
-	/* Interrupt channel A - INTA*/
-	pcf85263a_set_interrupt_a_io(true);
-	/* Interrupt channel B - TS */
-	pcf85263a_set_interrupt_b_io(true);
-	pcf85263a_interrupt_a_enable(flag_a);
-	pcf85263a_interrupt_b_enable(flag_b);
-	pcf85263a_watchdog_init();
+static int cmd_stop_feed_wdt(const struct shell *shell, size_t argc, char **argv) {
+	k_work_cancel_delayable(&hw_wdt_work);
 	return 0;
 }
-SHELL_CMD_ARG_REGISTER(etc_hw_wdt, NULL, "Enable hardware watchdog from PCF85", cmd_hw_wdt, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd_stop_feed_wdt, 1, 0);
 
-static int cmd_stop_wdt(const struct shell *shell, size_t argc, char **argv) {
-	pcf85263a_watchdog_stop_feed();
+static int cmd_start_feed_wdt(const struct shell *shell, size_t argc, char **argv) {
+	k_work_schedule(&hw_wdt_work, K_SECONDS(10 * 60));
 	return 0;
 }
-SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd_stop_wdt, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_start_wdt, NULL, "Start feeding hardware watchdog", cmd_start_feed_wdt, 1, 0);
 
 static int cmd_ble_active(const struct shell *shell, size_t argc, char **argv) {
 #ifdef CONFIG_MCUMGR_SMP_BT
