@@ -711,7 +711,16 @@ static int cmd_ui_request(const struct shell *shell, size_t argc, char **argv)
 {
 	int pattern = atoi(argv[1]);
 	shell_print(shell, "Set UI color %d", pattern);
-	ui_led_set_pattern((enum ui_led_pattern)pattern);
+	if (pattern == 4) {
+		ui_led_set_color(255, 0, 0);
+	} else if (pattern == 5) {
+		ui_led_set_color(0, 255, 0);
+	} else if (pattern == 6) {
+		ui_led_set_color(0, 0, 255);
+	} else {
+		ui_led_set_pattern((enum ui_led_pattern)pattern);
+	}
+	
 	return 0;
 }
 
