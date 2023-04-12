@@ -22,6 +22,9 @@
 #ifdef CONFIG_BQ25618
 #include "bq25618.h"
 #endif
+#ifdef CONFIG_BQ24195
+#include "bq24195.h"
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
@@ -705,6 +708,23 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bq25618_sub,
 	SHELL_SUBCMD_SET_END
 );
 SHELL_CMD_REGISTER(bq25618, &bq25618_sub, "BQ25618/9 PMIC commands", NULL);
+#endif
+
+#if CONFIG_BQ24195
+static const struct device *bq24195_dev = DEVICE_DT_GET(DT_NODELABEL(bq24195));
+
+static int cmd_bq24195_read_all(const struct shell *shell, size_t argc, char **argv)
+{
+	bq24195_print_all_registers(bq24195_dev);
+
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(bq24195_sub,
+	SHELL_CMD(read_all, NULL, "Read and print all registers", cmd_bq24195_read_all),
+	SHELL_SUBCMD_SET_END
+);
+SHELL_CMD_REGISTER(bq24195, &bq24195_sub, "BQ25618/9 PMIC commands", NULL);
 #endif
 
 static int cmd_ui_request(const struct shell *shell, size_t argc, char **argv)
