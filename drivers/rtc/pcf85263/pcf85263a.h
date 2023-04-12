@@ -222,6 +222,7 @@ int pcf85263a_alarm_disable_type_2(void);
  * @param flag @ref pcf85263a_interrupt_flag_t
  * @retval None
  */
+void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag);
 void pcf85263a_interrupt_a_enable(pcf85263a_interrupt_flag_t flag);
 void pcf85263a_interrupt_b_enable(pcf85263a_interrupt_flag_t flag);
 
@@ -230,6 +231,7 @@ void pcf85263a_interrupt_b_enable(pcf85263a_interrupt_flag_t flag);
  * @param enable or disable the IO
  * @retval None
  */
+void pcf85263a_set_interrupt_io(bool enable);
 void pcf85263a_set_interrupt_a_io(bool enable);
 void pcf85263a_set_interrupt_b_io(bool enable);
 #endif /* PCF85263A_H_ */
