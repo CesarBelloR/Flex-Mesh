@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pinctrl.h>
 
@@ -51,14 +51,14 @@ static void gpio_init(void)
 	const struct gpio_dt_spec rtc_int = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
 
-	gpio_pin_configure_dt(&sens_enable, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure_dt(&vsens_enable, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&sens_enable, GPIO_OUTPUT_LOW);
+	gpio_pin_configure_dt(&vsens_enable, GPIO_OUTPUT_HIGH);
 	gpio_pin_configure_dt(&sens_sel0, GPIO_OUTPUT_INACTIVE);
 	gpio_pin_configure_dt(&sens_sel1, GPIO_OUTPUT_INACTIVE);
 
 	gpio_pin_configure_dt(&rtc_int, GPIO_INPUT);
 
-	gpio_pin_configure(gpio0, LTE_LOGIC_TRANSLATOR_OE, GPIO_ACTIVE_LOW | GPIO_OUTPUT_ACTIVE);
+	gpio_pin_configure(gpio0, LTE_LOGIC_TRANSLATOR_OE, GPIO_ACTIVE_LOW | GPIO_OUTPUT_INACTIVE);
 }
 
 static void peripheral_init(void) {
@@ -90,8 +90,8 @@ void main(void)
 		return;
 	}
 
-	peripheral_init();
 	gpio_init();
+	peripheral_init();
 	peripheral_lp();
 
 	gpio_pin_set_dt(&led, 0);
@@ -101,7 +101,6 @@ void main(void)
 		// if (ret < 0) {
 		// 	return;
 		// }
-		ret = gpio_pin_toggle(gpio0, LTE_LOGIC_TRANSLATOR_OE);
 		k_msleep(SLEEP_TIME_MS);
 	}
 }
