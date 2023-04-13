@@ -41,6 +41,9 @@ static const struct gpio_dt_spec on_off_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_on_o
 #if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
 static const struct gpio_dt_spec pon_trig_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_pon_trig_gpios);
 #endif
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+static const struct gpio_dt_spec uart_oe_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_uart_oe_gpios);
+#endif
 #if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
 static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
 #endif
@@ -492,6 +495,10 @@ struct psm_ind {
 static void psm_ind_work_fn(struct k_work *work)
 {	
 	ARG_UNUSED(work);
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
+#endif
 
 	LOG_INF("Woken up from PSM.");
 }
@@ -1132,6 +1139,10 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 	mdata.psm_active = true;
 	quectel_bg95_set_connected(false);
 	setup_psm_ind_interrupt();
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
+#endif
 
 	modem_event_callback(MODEM_API_PSM_ENTERED_EVT);
 
@@ -2403,10 +2414,18 @@ static int modem_init(const struct device *dev)
 		goto error;
 	}
 
-#if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
-	ret = gpio_pin_configure_dt(&pon_trig_gpio, GPIO_OUTPUT_LOW);
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	ret = gpio_pin_configure_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
 	if (ret < 0) {
-		LOG_ERR("Failed to configure %s pin", "pon_trig");
+		LOG_ERR("Failed to configure %s pin", "uart_oe");
+		goto error;
+	}
+#endif
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
+	ret = gpio_pin_configure_dt(&wdisable_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "wdisable");
 		goto error;
 	}
 #endif
