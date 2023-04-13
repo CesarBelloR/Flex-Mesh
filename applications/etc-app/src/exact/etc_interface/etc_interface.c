@@ -13,6 +13,8 @@ static const struct gpio_dt_spec rtc_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_i
 static const struct gpio_dt_spec hall_sensor_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
 static struct gpio_callback hall_sensor_callback;
 static struct gpio_callback rtc_int_callback;
+static struct etc_interface_event_data hall_sensor_event_data;
+static struct etc_interface_event_data rtc_int_event_data;
 
 struct etc_interface_event_callback {
 	sys_snode_t node;
@@ -24,12 +26,6 @@ struct etc_interface_event_data {
 	struct k_work work;
 	enum etc_interface_event_type event_type;
 };
-
-static const struct gpio_dt_spec rtc_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
-static const struct gpio_dt_spec hall_sensor_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
-static struct etc_interface_event_data user_btn_event_data;
-static struct etc_interface_event_data hall_sensor_event_data;
-static struct etc_interface_event_data rtc_int_event_data;
 
 static sys_slist_t etc_interface_callback_list = SYS_SLIST_STATIC_INIT(&etc_interface_callback_list);
 static void etc_interface_work_handler(struct k_work *work);
@@ -72,7 +68,6 @@ static int etc_interface_init(const struct device *unused)
 	gpio_init_callback(&hall_sensor_event_data.callback, hall_sensor_callback_handler, BIT(hall_sensor_dt.pin));
 	gpio_add_callback(hall_sensor_dt.port, &hall_sensor_event_data.callback);
 
-	k_work_init(&user_btn_event_data.work, etc_interface_work_handler);
 	k_work_init(&hall_sensor_event_data.work, etc_interface_work_handler);
 	k_work_init(&rtc_int_event_data.work, etc_interface_work_handler);
 	return 0;
