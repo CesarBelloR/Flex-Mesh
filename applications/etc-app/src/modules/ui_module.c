@@ -242,11 +242,17 @@ static void ui_module_send(void)
 	APP_EVENT_SUBMIT(event);
 }
 
-static void ui_input_handler(void) {
+static void ui_input_handler(enum etc_interface_event_type type) {
 	extern void ui_leds_start(void);	
 	ui_leds_start();
 	k_msleep(100);	
-	ui_module_send();
+	if (type == ETC_INTERFACE_EVENT_RTC) {
+		LOG_INF("UI -> ETC_INTERFACE_EVENT_RTC");
+	} else if ((type == ETC_INTERFACE_EVENT_RTC) || (type == ETC_INTERFACE_EVENT_BUTTON)) {
+		ui_module_send();
+	} else {
+		/* No action required */
+	}
 }
 
 static int setup(const struct device *dev)

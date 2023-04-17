@@ -1,10 +1,11 @@
-# Orain ETC-Core Development Guide.
+# Monitor 2.0 Development Guide.
 
 # Table Of Contents
 * [ Installing Prerequisites ](#Prerequisites) <br>
 * [ Hardware ](#Hardware) <br>
 * [ Instruction ](#Instruction) <br>
 * [ Flash ](#Flash) <br>
+* [ Retrieve data ](#Retrieve) <br>
   
 <a name="Prerequisites"></a>
 # Installing Prerequisites
@@ -47,25 +48,28 @@ pip3 install -r {ROOT}\bootloader\mcuboot\scripts\requirements.txt
 
 * Step 3: Apply patches for Zephyr. Copy the patch code from `etc-firmware\patch` to `{ROOT}\zephyr` and apply the patch code with command 
 (only needed for LwM2M)
-
-```
-cd {ROOT}/zephyr
-git apply ../etc-firmware/0001-net-lwm2m-add-callback-for-send-confirmation.patch
-```
+    * If you use a system that supports bash, use the script to apply all applicable patches:
+        ```
+        cd {ROOT}
+        etc-firmware/scripts/apply_patches.sh 
+        ```
+    * Otherwise, apply patches manually:
+        ```
+        cd {ROOT}/zephyr
+        git apply ../etc-firmware/patch/zephyr/0001-net-lwm2m-add-callback-for-send-confirmation.patch
+        ```
 
 * Step 4: Build `etc-app` firmware at `applications\etc-app` folder
     * Build with AWS IoT support with logging over RTT
         ```
         cd {ROOT}
-        west build -b etc -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG=\
-        "rtt.conf aws-overlay.conf"
+        west build -b etc -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf aws-overlay.conf"
         ```
 
     * Build with LwM2M support with logging over RTT
         ```
         cd {ROOT}
-        west build -b etc -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG=\
-        "rtt.conf lwm2m-overlay.conf"
+        west build -b etc -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf lwm2m-overlay.conf"
         ```
 
 <a name="Flash"></a>
@@ -76,3 +80,7 @@ git apply ../etc-firmware/0001-net-lwm2m-add-callback-for-send-confirmation.patc
 ```
 west flash
 ```
+
+<a name="Retrieve"></a>
+# Retrieve Data
+Use the [retrieve_data script](scripts/retrieve_data/)

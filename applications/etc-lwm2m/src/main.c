@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 
 //#define SERVER_ADDR "datagram-ingress.alaska.ioterop.com"
-#define SERVER_ADDR "eu.iot.avsystem.cloud"
+#define SERVER_ADDR "us.iot.avsystem.cloud"
 // From Google DNS through native_posix
 //#define SERVER_ADDR "13.53.112.42"
 #define SERVER_PORT CONFIG_LWM2M_PEER_PORT
@@ -34,9 +34,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define EP_NAME "bg95test_bt"
 #else
 #if CONFIG_LWM2M_DTLS_SUPPORT
-#define EP_NAME "bg95test"
+#define EP_NAME "exact-dtls"
 #else
-#define EP_NAME "andi-test"
+#define EP_NAME "exact"
 #endif
 #endif
 
@@ -451,8 +451,8 @@ static void rd_client_event(struct lwm2m_ctx *client,
 		LOG_DBG("Registration complete");
 		break;
 
-	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE_FAILURE:
-		LOG_DBG("Registration update failure!");
+	case LWM2M_RD_CLIENT_EVENT_REG_TIMEOUT:
+		LOG_DBG("Registration timeout!");
 		break;
 
 	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE_COMPLETE:
@@ -478,6 +478,10 @@ static void rd_client_event(struct lwm2m_ctx *client,
 	case LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR:
 		LOG_ERR("LwM2M engine reported a network error.");
 		lwm2m_rd_client_stop(client, rd_client_event, true);
+		break;
+
+	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE:
+		LOG_DBG("LwM2M registration update");
 		break;
 	}
 }
@@ -536,6 +540,13 @@ void main(void)
 	}
 	/* client.sec_obj_inst is 0 as a starting point */
 	lwm2m_rd_client_start(&client, EP_NAME, flags, rd_client_event, observe_cb);
+
+	k_sleep(K_SECONDS(40));
+
+	lwm2m_engine_pause();
+
+	k_sleep(K_SECONDS(10));
+	lwm2m_engine_resume();
 
 	k_sem_take(&quit_lock, K_FOREVER);
 }

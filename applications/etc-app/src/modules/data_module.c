@@ -318,9 +318,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-		if (etc_device_get_mode() != ETC_DEVICE_MODE_LOGGER) {
-			data_encode();
-		}
+		data_encode();
 		return;
 	}
 
@@ -343,11 +341,6 @@ static void on_all_states(struct data_msg_data *msg)
 		 */
 		SEND_SHUTDOWN_ACK(data, DATA_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-		LOG_INF("APP_EVT_DATA_GET");
-		return;
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_READY)) {
@@ -373,7 +366,11 @@ static void on_all_states(struct data_msg_data *msg)
 		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
 		enum etc_device_mode mode = etc_device_get_mode();
 		if (mode == ETC_DEVICE_MODE_LOGGER) {
-			/* Update logger function */
+			struct data_sensors new_sensor_data = {
+				.queued = true
+			};
+			memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
+			data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
 		} else if (mode == ETC_DEVICE_MODE_RELAY) {
 			/* Update relay function */
 			struct data_sensors new_sensor_data = {
@@ -418,7 +415,7 @@ void data_module_thread_fn(void)
 	}
 
 	state_set(STATE_CLOUD_DISCONNECTED);
-	int transmission_in_seconds = etc_get_time_transmission_interval();
+	int transmission_in_seconds = etc_get_tx_interval_secs();
 	data_publish_timeout = K_SECONDS(transmission_in_seconds);
 	k_work_init_delayable(&data_send_work, data_send_work_fn);
 	k_work_reschedule(&data_send_work, data_publish_timeout);

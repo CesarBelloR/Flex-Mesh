@@ -47,28 +47,6 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS (60)
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
 
-union etc_device_record_header { // It will always change  NVS
-	uint8_t header;
-	struct {
-		uint8_t ready: 1;
-		uint8_t ack: 1;
-		uint8_t wait: 1;
-		uint8_t unused: 3;
-	};
-};
-
-struct etc_device_record_index { // Constant in flash until the index is override (exflash)
-	int8_t sector_idx;
-	int8_t element_idx;
-};
-
-struct etc_device_record_table {
-	struct etc_device_record_index oldest;
-	struct etc_device_record_index newest;
-	uint16_t total;
-	uint16_t last_nack_record_id;
-};
-
 static union etc_device_record_header etc_device_record_header;
 static struct etc_device_record_table etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
@@ -476,6 +454,33 @@ enum etc_logger_job etc_device_get_job(void) {
 	return logger_job;
 }
 
+const struct device* etc_device_get_record(void) {
+	return record_fs.flash_device;
+}
+
+size_t etc_device_get_record_size(void) {
+	return FLASH_AREA_SIZE(RECORD_NODE_LABEL);
+}
+
+off_t etc_device_get_record_offset(void) {
+	return record_fs.offset;
+}
+
+size_t etc_device_get_record_max_element_index(void) {
+	return ETC_RECORD_MAX_PER_SECTOR;
+}
+
+size_t etc_device_get_record_max_sector_index(void) {
+	return ETC_RECORD_MAX_SECTOR;
+}
+
+size_t etc_device_get_record_element_size(void) {
+	return sizeof(union etc_device_record);
+}
+
+struct etc_device_record_table etc_device_get_record_status(void) {
+	return etc_device_record_table;
+}
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
 
@@ -595,6 +600,17 @@ static int cmd_parser_hex_record(const struct shell *shell, size_t argc, char **
 	return 0;
 }
 
+static int cmd_erase_configuration(const struct shell *shell, size_t argc, char **argv)
+{
+	int rc = nvs_clear(&etc_fs);
+	if (rc != 0) {
+		shell_error(shell, "Failed to erase the configuration");
+	} else {
+		shell_print(shell, "Erased configuration successfully");
+		shell_print(shell, "Please reboot the device after erasing the configuration");
+	}
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_record,
 	SHELL_CMD(report, NULL, "Report number record (total/ack/nack)", cmd_num_report_record),
@@ -604,4 +620,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(parser, NULL, "Parser the hex record", cmd_parser_hex_record),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(record, &sub_record, "ETC Record Management", NULL);
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_config,
+	SHELL_CMD(erase, NULL, "Erase all configuration - development only", cmd_erase_configuration),
+	SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(config, &sub_config, "ETC Configuration Management", NULL);
 #endif

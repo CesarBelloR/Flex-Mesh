@@ -90,4 +90,23 @@ config MODEM_QUECTEL_BG95_M3_PSK_KEY
 	  When using DTLS over UDP, the modem uses the PSK method to encrypt the
 	  data. This option specifies the PSK key to use.
 
+config MODEM_QUECTEL_BG95_PSM
+	bool "Enable/disable PSM functionality"
+
+config MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU
+	string "PSM setting requested periodic TAU"
+	default "00111000"
+	help
+		Power saving mode setting for requested periodic TAU.
+		See 3GPP 27.007 Ch. 7.38.
+		And 3GPP 24.008 Ch. 10.5.7.4a for data format.
+
+config MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT
+	string "PSM setting requested active time"
+	default "00001111"
+	help
+		Power saving mode setting for requested active time.
+		See 3GPP 27.007 Ch. 7.38.
+		And 3GPP 24.008 Ch. 10.5.7.3 for data format.
+
 endif
