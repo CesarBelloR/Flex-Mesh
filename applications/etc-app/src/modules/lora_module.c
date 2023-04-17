@@ -266,6 +266,10 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 	pt = strtok(package, ",");
 	if (pt != NULL) { // break down ACK string into parts.
 		for (i = 0; i < 6; i++) {
+			if (pt == NULL) {
+				response.is_okay = false;
+				return response;
+			}
 			if (i == 0) {
 				snprintf(response.logger_id, sizeof(response.logger_id), "%s", pt);
 			} else if (i == 1) {
@@ -314,7 +318,7 @@ static int module_lora_wait_packet(void)
 				date_time_utc_second(&my_time);
 				lora_parent_id = response.relay_id;
 				LOG_INF("Sync time %d %d %d", lora_parent_id, my_time, response.current_time);
-				if (abs(response.current_time - my_time) >= LORA_SYNC_TIME_DIFF_SEC) {
+				if ((response.current_time != 0) && (abs(response.current_time - my_time) >= LORA_SYNC_TIME_DIFF_SEC)) {
 					LOG_DBG("Need to sync time");
 					date_time_set_second(response.current_time);
 				}
