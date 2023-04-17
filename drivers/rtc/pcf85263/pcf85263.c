@@ -251,6 +251,17 @@ static int write_register(uint8_t addr, uint8_t value)
 	return rc;
 }
 
+static int write_registers(uint8_t addr, uint8_t* value, uint8_t len)
+{
+	const struct pcf85263_config *cfg = &m_pcf85263_config;
+	int rc = 0;
+    uint8_t tx_buf[MAX_WRITE_SIZE + 1];
+	tx_buf[0] = {addr};
+    memcpy(&tx_buf[1], value, len);
+	rc = i2c_write(cfg->i2c_dev, tx_buf, len + 1, cfg->addr);
+	return rc;
+}
+
 static int write_data_block(uint8_t offset_addr, uint8_t size)
 {
 	struct pcf85263_data *data = &m_pcf85263_data;
@@ -313,9 +324,29 @@ int pcf85263a_rtc_set_time(time_t unix_time)
 		goto out;
 	}
 
+    /* Stop the RTC */
+    uint8_t stop_rtc_buf[2] = {0x01, 0xA4};
+    rc = write_registers(PCF85263A_STOP_ENABLE_REG, stop_rtc_buf, 2);
+    if (rc != 0) {
+        LOG_ERR("Failed to stop RTC");
+        goto out;
+    }
+
 	/* Write to device */
 	rc = write_data_block(PCF85263A_RTC_MODE_100TH_SECONDS_REG, 
         PCF85263A_REGISTER_COUNT(PCF85263A_RTC_MODE_100TH_SECONDS_REG, PCF85263A_RTC_MODE_YEARS_REG));
+    if (rc != 0) {
+        LOG_ERR("Failed to update RTC time");
+        goto out;
+    }
+
+    /* Start the RTC */
+    rc = write_register(PCF85263A_STOP_ENABLE_REG, 0x00);
+    if (rc != 0) {
+        LOG_ERR("Failed to start the RTC");
+        goto out;
+    }
+
 out:
 
 	return rc;
@@ -334,7 +365,6 @@ int pcf85263a_rtc_get_time(time_t* unix_time) {
 				&addr, sizeof(addr),
 				&data->rtc_registers, PCF85263A_REGISTER_COUNT(PCF85263A_RTC_MODE_100TH_SECONDS_REG, 
                     PCF85263A_RTC_MODE_YEARS_REG));
-    LOG_HEXDUMP_DBG((uint8_t*)&data->rtc_registers, sizeof(struct pcf85263a_rtc_time_registers), "RTC");
 	if (rc == 0) {
 		*unix_time = decode_rtc();
 	} else {
