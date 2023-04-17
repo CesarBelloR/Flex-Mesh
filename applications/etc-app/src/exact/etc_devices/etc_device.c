@@ -481,6 +481,11 @@ size_t etc_device_get_record_element_size(void) {
 struct etc_device_record_table etc_device_get_record_status(void) {
 	return etc_device_record_table;
 }
+
+int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_device_record_header *header) {
+	uint16_t record_id = sector * ETC_RECORD_MAX_PER_SECTOR + element + ETC_RECORD_HEADER;
+	return etc_nvs_read(record_id, header, sizeof(union etc_device_record_header));
+}
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
 

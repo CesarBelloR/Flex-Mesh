@@ -57,8 +57,8 @@ union etc_device_record_header { // It will always change  NVS
 };
 
 struct etc_device_record_index { // Constant in flash until the index is override (exflash)
-	int8_t sector_idx;
-	int8_t element_idx;
+	uint8_t sector_idx;
+	uint8_t element_idx;
 };
 
 struct etc_device_record_table {
@@ -151,4 +151,5 @@ size_t etc_device_get_record_max_element_index(void);
 size_t etc_device_get_record_max_sector_index(void);
 size_t etc_device_get_record_element_size(void);
 struct etc_device_record_table etc_device_get_record_status(void);
+int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_device_record_header *header);
 #endif /* ETC_DEVICE_H_ */

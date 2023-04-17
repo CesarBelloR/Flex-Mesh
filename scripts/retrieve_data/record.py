@@ -17,26 +17,27 @@ import struct
 
 
 class record:
-    def __init__(self, battery=0.0, sensor=[0.0] * 6, timestamp=0, flag=0):
+    def __init__(self, battery=0.0, sensor=[0.0] * 6, timestamp=0, flag=0, ack = 0):
         self.battery = battery
         self.sensor = sensor
         self.timestamp = timestamp
         self.flag = flag
-
+        self.ack = ack
     def pack(self):
         return struct.pack(
-            "<7fII", self.battery, *self.sensor, self.timestamp, self.flag
+            "<7fIIc", self.battery, *self.sensor, self.timestamp, self.flag, self.ack
         )
 
-    def unpack(self, packed_data):
+    def unpack(self, packed_data, status):
         # buffer_dump(packed_data)
         unpacked_data = struct.unpack("<7fII", packed_data)
         self.battery = unpacked_data[0]
         self.sensor = list(unpacked_data[1:7])
         self.timestamp = unpacked_data[7]
         self.flag = unpacked_data[8]
+        self.ack = status
 
-def buffer_to_structs(buffer):
+def buffer_to_structs(buffer, status):
     struct_size = struct.calcsize("<7fII")
     num_records = len(buffer) // struct_size
     struct_list = []
@@ -45,7 +46,7 @@ def buffer_to_structs(buffer):
         end = start + struct_size
         struct_bytes = buffer[start:end]
         my_struct = record()
-        my_struct.unpack(struct_bytes)
+        my_struct.unpack(struct_bytes, status[i])
         struct_list.append(my_struct)
     return struct_list
 
@@ -56,7 +57,7 @@ def buffer_dump(buffer):
 
 def record_dump(record):
     logger.info(
-            f"Battery: {round(record.battery, 2)} - Sensor: {round(record.sensor[0], 2)} {round(record.sensor[1], 2)} {round(record.sensor[2], 2)} {round(record.sensor[3], 2)} {round(record.sensor[4], 2)} {round(record.sensor[5], 2)} - Timestamp {record.timestamp}"
+            f"Battery: {round(record.battery, 2)} - Sensor: {round(record.sensor[0], 2)} {round(record.sensor[1], 2)} {round(record.sensor[2], 2)} {round(record.sensor[3], 2)} {round(record.sensor[4], 2)} {round(record.sensor[5], 2)} - Timestamp {record.timestamp} - Status {record.ack}"
         )
     
 if __name__ == "__main__":
@@ -111,18 +112,21 @@ if __name__ == "__main__":
                 else:
                     length  = max_record_per_request * element_in_byte 
                 logger.info( f"{offset} - {element, sector} {offset_addr}, {length} {int(length/element_in_byte)}")
-                record_data = mgr.get_record(offset_addr, length)
-                list_record = buffer_to_structs(record_data["data"])
-                struct_list.extend(list_record)
-                offset = offset + max_record_per_request
-            
+                if length != 0:
+                    record_data = mgr.get_record(offset_addr, length, element, sector, int(length/element_in_byte))
+                    print(record_data)
+                    list_record = buffer_to_structs(record_data["data"], record_data["status"])
+                    struct_list.extend(list_record)
+                    offset = offset + max_record_per_request
+                else:
+                    break
             if args.file is not None:
                 with open(args.file, 'w', newline='') as csvfile:
                     csv_writer = csv.writer(csvfile)
-                    csv_writer.writerow(["Timestamp", "Battery", "Sensor 1", "Sensor 2", " Sensor 3", "Sensor 4", " Sensor 5", "Sensor 6"])
+                    csv_writer.writerow(["Timestamp", "Battery", "Sensor 1", "Sensor 2", " Sensor 3", "Sensor 4", " Sensor 5", "Sensor 6", "Status"])
                     
                     for element in struct_list:
-                        csv_writer.writerow([element.timestamp, round(element.battery, 2), round(element.sensor[0], 2), round(element.sensor[1], 2), round(element.sensor[2], 2), round(element.sensor[3], 2), round(element.sensor[4], 2), round(element.sensor[5], 2)])
+                        csv_writer.writerow([element.timestamp, round(element.battery, 2), round(element.sensor[0], 2), round(element.sensor[1], 2), round(element.sensor[2], 2), round(element.sensor[3], 2), round(element.sensor[4], 2), round(element.sensor[5], 2), element.ack])
                         
         else:
             logger.warning(f"No support command {args.cmd}")
