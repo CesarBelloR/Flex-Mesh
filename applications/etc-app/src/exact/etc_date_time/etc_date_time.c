@@ -303,6 +303,9 @@ int date_time_set(const struct tm *new_date_time)
 }
 
 int date_time_set_second(uint32_t new_date_time_sec) {
+	initial_valid_time = true;
+	time_aux.last_date_time_update = k_uptime_get();
+	time_aux.date_time_utc = (int64_t)new_date_time_sec * 1000;
 	return pcf85263a_rtc_set_time((time_t)new_date_time_sec);
 }
 
