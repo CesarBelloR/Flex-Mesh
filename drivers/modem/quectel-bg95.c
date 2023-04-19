@@ -2576,6 +2576,10 @@ static int quectel_bg95_pm_suspend(void)
 		return -EAGAIN;
 	}
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
+#endif
+
 	uart_irq_rx_disable(mctx.iface.dev);
 	uart_irq_tx_disable(mctx.iface.dev);
 	// uart doesn't have a shutdown mode only suspend
@@ -2593,6 +2597,11 @@ static int quectel_bg95_pm_resume(void)
 {
 	int ret = 0;
 	LOG_INF("PM_DEVICE_ACTION_RESUME");
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
+#endif
+
 	uart_irq_rx_enable(mctx.iface.dev);
 	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_RESUME);
 	if (ret)
