@@ -9,6 +9,7 @@
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #include "etc_device.h"
+#include "watchdog_app.h"
 #define MODULE sensor_module
 
 #include "modules_common.h"
@@ -54,6 +55,8 @@ static struct sensor_data static_sensor_data;
 
 #define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
 
+#define SENSOR_HANDLER_MAX_WAIT_S 10
+
 /* Battery constant information */
 const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
 const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
@@ -91,7 +94,7 @@ static void sensor_adc_hw_init(void) {
 		return;
 	}
 	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+	/* Note: pin s0 is configured by watchdog module. */
 	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 }
 
@@ -205,8 +208,15 @@ static float sensor_ntc_converter(int data, float full_scale_v, int full_scale_c
 	return tmp_value;
 }
 
-static void sensor_poll_handler(void) {
-	if (sensor_is_processing) return;
+static int sensor_poll_handler(void) {
+	if (sensor_is_processing) {
+		return 0;
+	}
+	if (watchdog_sens_sel0_wdt_sem_take(K_SECONDS(SENSOR_HANDLER_MAX_WAIT_S)) != 0) {
+		LOG_WRN("Could not take watchdog_sens_sel0 semaphore");
+		return -EAGAIN;
+	}
+
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
@@ -237,6 +247,8 @@ static void sensor_poll_handler(void) {
 	data->battery_mV = adc_mv_battery;
 	sensor_module_send_sensor(data);
 	sensor_is_processing = false;
+
+	watchdog_sens_sel0_wdt_sem_give();
 }
 
 /* Message handler for STATE_INIT. */
