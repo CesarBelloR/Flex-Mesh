@@ -15,7 +15,7 @@ LOG_MODULE_REGISTER(etc_mgmt, CONFIG_ETC_INTERFACE_LOG_LEVEL);
 #include "etc_mgmt.h"
 
 #define ETC_MGMT_RECORD_BUF_SIZE (256)
-
+#define ETC_MGMT_RECORD_MAX_ELEMENT (7)
 /**
  * Encodes a response.
  */
@@ -80,6 +80,7 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 	uint8_t buf[ETC_MGMT_RECORD_BUF_SIZE];
 	uint64_t off = ULLONG_MAX;
 	size_t length = 0;
+	int element_offset = 0, sector_offset = 0, num_element = 0;
 	size_t record_len = etc_device_get_record_size();
 	off_t record_offset = etc_device_get_record_offset();
 	int rc;
@@ -91,6 +92,9 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 	struct zcbor_map_decode_key_val record_read_decode[] = {
 		ZCBOR_MAP_DECODE_KEY_VAL(off, zcbor_uint64_decode, &off),
 		ZCBOR_MAP_DECODE_KEY_VAL(length, zcbor_uint32_decode, &length),
+		ZCBOR_MAP_DECODE_KEY_VAL(element, zcbor_uint32_decode, &element_offset),
+		ZCBOR_MAP_DECODE_KEY_VAL(sector, zcbor_uint32_decode, &sector_offset),
+		ZCBOR_MAP_DECODE_KEY_VAL(num_element, zcbor_uint32_decode, &num_element),
 	};
 
 	ok = zcbor_map_decode_bulk(zsd, record_read_decode,
@@ -104,12 +108,27 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 	if (rc != 0) {
 		return MGMT_ERR_EINVAL;
 	}
+
+	/* Poll NACK/ACK status */
+	uint8_t ack_list[ETC_MGMT_RECORD_MAX_ELEMENT] = {0};
+	memset(ack_list, 255, ETC_MGMT_RECORD_MAX_ELEMENT);
+
+	union etc_device_record_header header = {0x00};
+	for (int i = 0; i < num_element; i++) {
+		int rc = etc_device_get_record_header((uint8_t)element_offset + i, (uint8_t)sector_offset, &header);
+		if (rc != 0) {
+			ack_list[i] = 255;
+		} else {
+			ack_list[i] = header.ack;
+		}
+	}
+
 	/* Encode the response. */
 	ok = etc_mgmt_rsp(zse, MGMT_ERR_EOK)				&&
-	     zcbor_tstr_put_lit(zse, "data")					&&
+	     zcbor_tstr_put_lit(zse, "data")				&&
 	     zcbor_bstr_encode_ptr(zse, buf, length)			&&
-	     ((off != 0)							||
-		(zcbor_tstr_put_lit(zse, "len") && zcbor_uint64_put(zse, record_len)));
+	     zcbor_tstr_put_lit(zse, "status")				&&
+	     zcbor_bstr_encode_ptr(zse, ack_list, num_element);;
 
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
