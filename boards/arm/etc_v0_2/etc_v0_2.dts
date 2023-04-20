@@ -270,11 +270,10 @@
 		label      = "quectel-bg95";
 		status     = "okay";
 		mdm-power-gpios = <&gpio0 25 0>;
-                // ToDo: check if on-off pin is used correctly
 		mdm-on-off-gpios = <&gpio1 1 0>;
 		mdm-pon-trig-gpios = <&gpio1 13 0>;
 		mdm-psm-ind-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
-                // ToDo: add MODEM_UART_OE
+		mdm-uart-oe-gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
 	};
 };
 
