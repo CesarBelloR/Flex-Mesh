@@ -9,13 +9,6 @@ LOG_MODULE_REGISTER(etc_interface, CONFIG_ETC_INTERFACE_LOG_LEVEL);
 
 #define ETC_INTERFACE_STACK_SIZE 512
 
-static const struct gpio_dt_spec rtc_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
-static const struct gpio_dt_spec hall_sensor_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
-static struct gpio_callback hall_sensor_callback;
-static struct gpio_callback rtc_int_callback;
-static struct etc_interface_event_data hall_sensor_event_data;
-static struct etc_interface_event_data rtc_int_event_data;
-
 struct etc_interface_event_callback {
 	sys_snode_t node;
 	etc_interface_event_handler handler;
@@ -26,6 +19,11 @@ struct etc_interface_event_data {
 	struct k_work work;
 	enum etc_interface_event_type event_type;
 };
+
+static const struct gpio_dt_spec rtc_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
+static const struct gpio_dt_spec hall_sensor_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
+static struct etc_interface_event_data hall_sensor_event_data;
+static struct etc_interface_event_data rtc_int_event_data;
 
 static sys_slist_t etc_interface_callback_list = SYS_SLIST_STATIC_INIT(&etc_interface_callback_list);
 static void etc_interface_work_handler(struct k_work *work);

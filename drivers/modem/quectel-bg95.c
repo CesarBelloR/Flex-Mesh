@@ -481,6 +481,7 @@ struct cereg_data {
 	char periodic_tau[PSM_TIMER_VAL_LEN];
 };
 
+#if CONFIG_MODEM_QUECTEL_BG95_PSM
 struct psm_ind {
 	/* 1 rising, 0 falling */
 	uint8_t edge;
@@ -509,8 +510,8 @@ static void psm_ind_callback(const struct device *dev,
 	psm_ind.edge = gpio_pin_get(dev, pins);
 	k_work_submit_to_queue(&modem_workq, &psm_ind.work);
 }
-
 static struct gpio_callback psm_ind_gpio_callback;
+#endif
 
 static int setup_psm_ind_interrupt()
 {
@@ -1214,6 +1215,7 @@ error:
 	return ret;
 }
 
+#if 0 // Uncomment when we need to use
 static int quectel_bg95_set_cereg(uint8_t n)
 {
 	char buf[sizeof("AT+CEREG=#")];
@@ -1234,6 +1236,7 @@ static int quectel_bg95_set_cereg(uint8_t n)
 
 	return ret;
 }
+#endif
 
 /**
  * @brief Set the PSM requested active and periodic TAU timer values.
@@ -1982,11 +1985,13 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("PSM POWER DOWN", on_cmd_psm_power_down, 0U, ""),
 };
 
+#if CONFIG_MODEM_QUECTEL_BG95_PSM
 static const struct setup_cmd psm_wakeup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
 	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
 };
+#endif
 
 /* Commands sent to the modem to set it up at boot time. */
 static const struct setup_cmd setup_cmds[] = {
@@ -2011,6 +2016,7 @@ static const struct setup_cmd setup_cmds[] = {
 };
 
 
+#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 /* Func: modem_rssi_query_work
  * Desc: Routine to get Modem RSSI.
  */
@@ -2029,6 +2035,7 @@ static void modem_psm_wakeup_work(struct k_work *work)
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    K_NO_WAIT);
 }
+#endif
 
 /* Func: modem_setup
  * Desc: This function is used to setup the modem from zero. The idea
