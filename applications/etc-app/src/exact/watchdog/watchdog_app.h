@@ -51,6 +51,24 @@ int watchdog_init_and_start(void);
  */
 void watchdog_register_handler(watchdog_evt_handler_t evt_handler);
 
+/**
+ * @brief Take the sens_sel0_wdt semaphore used to guarantee exclusive access
+ * to sens_sel0_wdt pin.
+ * 
+ * @param timeout Timeout passed to the k_sem_take() call.
+ * @return 0 Semaphore taken.
+ *         -EBUSY Returned without waiting.
+ *         -EAGAIN Waiting period timed out, or the semaphore was reset during 
+ *         the waiting period.
+*/
+int watchdog_sens_sel0_wdt_sem_take(k_timeout_t timeout);
+
+/**
+ * @brief Give the sens_sel0_wdt semaphore used to guarantee exclusive access
+ * to sens_sel0_wdt pin.
+*/
+void watchdog_sens_sel0_wdt_sem_give(void);
+
 #ifdef __cplusplus
 }
 #endif

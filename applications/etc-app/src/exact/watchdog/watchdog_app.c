@@ -7,6 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/watchdog.h>
+#include <zephyr/drivers/gpio.h>
 
 #include "watchdog_app.h"
 
@@ -18,6 +19,10 @@ LOG_MODULE_REGISTER(watchdog, CONFIG_WATCHDOG_LOG_LEVEL);
 #define WATCHDOG_TIMEOUT_MSEC						\
 	(CONFIG_WATCHDOG_APPLICATION_TIMEOUT_SEC * 1000)
 
+#define HW_WDT_TIMEOUT_S (17 * 60)
+#define HW_WDT_WORK_INTERVAL_S (HW_WDT_TIMEOUT_S - (2 * 60))
+#define HW_WDT_RETRY_INTERVAL_S 10
+
 struct wdt_config_storage {
 	const struct device *wdt;
 };
@@ -27,7 +32,12 @@ struct wdt_data_storage {
 	struct k_work_delayable system_workqueue_work;
 };
 
+
+struct k_sem sens_sel0_wdt_sem;
+static const struct gpio_dt_spec s0_watchdog_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+
 static watchdog_evt_handler_t app_evt_handler;
+static struct k_work_delayable hw_wdt_work;
 
 /* Flag set when the library has been initialized and started. */
 static bool init_and_start;
@@ -173,6 +183,46 @@ static int watchdog_enable(const struct wdt_config_storage *config,
 	return 0;
 }
 
+static void hw_wdt_feed(void)
+{
+	LOG_INF("Feeding HW WDT");
+	gpio_pin_set_dt(&s0_watchdog_dt, GPIO_OUTPUT_ACTIVE);
+	/* Minimum required pulse width according to datasheet is 100 ns. */
+	k_busy_wait(1);
+	gpio_pin_set_dt(&s0_watchdog_dt, GPIO_OUTPUT_INACTIVE);
+}
+
+static void hw_wdt_work_fn(struct k_work *work)
+{
+	if (watchdog_sens_sel0_wdt_sem_take(K_NO_WAIT) != 0) {
+		k_work_schedule(&hw_wdt_work, K_SECONDS(HW_WDT_RETRY_INTERVAL_S));
+	}
+
+	hw_wdt_feed();
+
+	watchdog_sens_sel0_wdt_sem_give();
+	k_work_schedule(&hw_wdt_work, K_SECONDS(HW_WDT_WORK_INTERVAL_S));
+}
+
+static void init_hw_wdt(void)
+{
+	k_sem_init(&sens_sel0_wdt_sem, 1, 1);
+	gpio_pin_configure_dt(&s0_watchdog_dt, GPIO_OUTPUT_INACTIVE);
+
+	k_work_init_delayable(&hw_wdt_work, hw_wdt_work_fn);
+	k_work_schedule(&hw_wdt_work, K_SECONDS(HW_WDT_WORK_INTERVAL_S));
+}
+
+int watchdog_sens_sel0_wdt_sem_take(k_timeout_t timeout)
+{
+	return k_sem_take(&sens_sel0_wdt_sem, timeout);
+}
+
+void watchdog_sens_sel0_wdt_sem_give(void)
+{
+	return k_sem_give(&sens_sel0_wdt_sem);
+}
+
 int watchdog_init_and_start(void)
 {
 	int err;
@@ -189,6 +239,9 @@ int watchdog_init_and_start(void)
 	watchdog_notify_event(&evt);
 	LOG_INF("Initialized and start WDT with period %d (ms)", WATCHDOG_TIMEOUT_MSEC);
 	init_and_start = true;
+
+	init_hw_wdt();
+
 	return 0;
 }
 
