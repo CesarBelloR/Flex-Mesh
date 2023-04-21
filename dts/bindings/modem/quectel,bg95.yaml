@@ -24,6 +24,10 @@ properties:
       type: phandle-array
       required: false
 
+    mdm-uart-oe-gpios:
+      type: phandle-array
+      required: false
+
     mdm-reset-gpios:
       type: phandle-array
       required: false

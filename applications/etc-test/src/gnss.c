@@ -1,12 +1,14 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <drivers/uart.h>
-#include <drivers/gpio.h>
-#include <kernel.h>
-#include <shell/shell.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/kernel.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/shell/shell_uart.h>
+#include <zephyr/drivers/uart.h>
 
-static const struct device *uart_dev = NULL;
+static const struct device *uart0_dev = DEVICE_DT_GET(DT_NODELABEL(uart0));
 
 K_MSGQ_DEFINE(uart0_msgq, 128, 10, 4);
 
@@ -20,87 +22,68 @@ static const char at_cmd_usage_str[] =
 static char rx_buf[128];
 static int rx_buf_pos;
 
-static void at_send_uart(char *buf) {
-  int msg_len = strlen(buf);
+static void at_send_uart(char *buf)
+{
+	int msg_len = strlen(buf);
 
-  for (int i = 0; i < msg_len; i++) {
-    uart_poll_out(uart_dev, buf[i]);
-  }
-  uart_poll_out(uart_dev, '\r');
-  uart_poll_out(uart_dev, '\n');
+	for (int i = 0; i < msg_len; i++)
+	{
+		uart_poll_out(uart0_dev, buf[i]);
+	}
+	uart_poll_out(uart0_dev, '\r');
+	uart_poll_out(uart0_dev, '\n');
 }
 
-static void serial_cb(const struct device *dev, void *user_data) {
-  uint8_t c;
-  
-  if (!uart_irq_update(uart_dev)) {
-    return;
-  }
+static void serial_cb(const struct device *dev, void *user_data)
+{
+	uint8_t c;
 
-  while (uart_irq_rx_ready(uart_dev)) {
-    uart_fifo_read(uart_dev, &c, 1);
+	if (!uart_irq_update(uart0_dev))
+	{
+		return;
+	}
 
-    if ((c == '\n' || c == '\r') && rx_buf_pos > 0) {
-      rx_buf[rx_buf_pos] = '\0';
+	while (uart_irq_rx_ready(uart0_dev))
+	{
+		uart_fifo_read(uart0_dev, &c, 1);
 
-      /* if queue is full, message is silently dropped */
-      k_msgq_put(&uart0_msgq, &rx_buf, K_NO_WAIT);
+		if ((c == '\n' || c == '\r') && rx_buf_pos > 0)
+		{
+			rx_buf[rx_buf_pos] = '\0';
 
-      /* reset the buffer (it was copied to the msgq) */
-      rx_buf_pos = 0;
-    } else if (rx_buf_pos < (sizeof(rx_buf) - 1)) {
-      rx_buf[rx_buf_pos++] = c;
-    }
-    /* else: characters beyond buffer size are dropped */
-  }
+			/* if queue is full, message is silently dropped */
+			k_msgq_put(&uart0_msgq, &rx_buf, K_NO_WAIT);
+
+			/* reset the buffer (it was copied to the msgq) */
+			rx_buf_pos = 0;
+		}
+		else if (rx_buf_pos < (sizeof(rx_buf) - 1))
+		{
+			rx_buf[rx_buf_pos++] = c;
+		}
+		/* else: characters beyond buffer size are dropped */
+	}
 }
 
-static int gnss_shell_cmd(const struct shell *shell, size_t argc, char **argv) {
-  int ret = 0;
-  bool uartconf_option_given = false;
+void gnss_init()
+{
+	const struct shell *shell = shell_backend_uart_get_ptr();
 
-  if (argc < 2) {
-    goto show_usage;
-  }
+	if (!device_is_ready(uart0_dev))
+	{
+		printk("UART device not found!");
+		return;
+	}
 
-  if (strcmp(argv[1], "send") == 0) {
-    shell_print(shell, "Send command: %s", argv[2]);
-    at_send_uart(argv[2]);
-  } else if (strcmp(argv[1], "help") == 0) {
-    goto show_usage;
-  } else {
-    shell_print(shell, "Unsupported command=%s", argv[1]);
-    ret = -EINVAL;
-    goto show_usage;
-  }
+	uart_irq_callback_user_data_set(uart0_dev, serial_cb, NULL);
+	uart_irq_rx_enable(uart0_dev);
 
-  return 0;
+	char tx_buf[128];
 
-show_usage:
-  shell_print(shell, "%s", at_cmd_usage_str);
-
-  return 0;
-}
-
-void gnss_init() {
-  uart_dev = device_get_binding("UART_0");
-  const struct shell *shell = shell_backend_uart_get_ptr();
-
-  if (!device_is_ready(uart_dev)) {
-    printk("UART device not found!");
-    return;
-  }
-
-  SHELL_CMD_REGISTER(gnss, NULL, "Commands for interact with gnss.",
-                     gnss_shell_cmd);
-  uart_irq_callback_user_data_set(uart_dev, serial_cb, NULL);
-  uart_irq_rx_enable(uart_dev);
-
-  char tx_buf[128];
-
-  while (k_msgq_get(&uart0_msgq, &tx_buf, K_FOREVER) == 0) {
-    shell_fprintf(shell, SHELL_NORMAL, "%s", tx_buf);
-  }
+	while (k_msgq_get(&uart0_msgq, &tx_buf, K_FOREVER) == 0)
+	{
+		shell_fprintf(shell, SHELL_NORMAL, "%s", tx_buf);
+	}
 }
 
 K_THREAD_DEFINE(gnss, 2048, gnss_init, NULL, NULL, NULL, 6, 0, 0);
