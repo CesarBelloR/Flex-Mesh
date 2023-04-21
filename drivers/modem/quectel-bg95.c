@@ -2421,6 +2421,14 @@ static int modem_init(const struct device *dev)
 		goto error;
 	}
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
+	ret = gpio_pin_configure_dt(&pon_trig_gpio, GPIO_OUTPUT_ACTIVE);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "pon_trig");
+		goto error;
+	}
+#endif
+
 #if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
 	ret = gpio_pin_configure_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
 	if (ret < 0) {

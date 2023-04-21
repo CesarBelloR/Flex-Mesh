@@ -521,6 +521,7 @@ int cloud_wrap_resume(void)
 	}	
 
 	state = CONNECTING;
+	return 0;
 }
 
 int cloud_wrap_state_get(bool ack, uint32_t id)

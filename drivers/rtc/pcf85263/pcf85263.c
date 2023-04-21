@@ -588,6 +588,7 @@ int pcf85263a_alarm_disable_type_2(void) {
 
     return 0;
 }
+
 void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag) {
     pcf85263a_inta_reg_t reg = {0x00};
     int rc = 0;
