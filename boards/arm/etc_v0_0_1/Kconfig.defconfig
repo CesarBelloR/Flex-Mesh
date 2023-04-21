@@ -1,0 +1,9 @@
+if BOARD_ETC_V0_0_1
+
+config BOARD
+	default "ETC Core v0.0.1 with nRF52833 and BG95x"
+
+config BT_CTLR
+	default BT
+
+endif # BOARD_ETC_V0_0_1
