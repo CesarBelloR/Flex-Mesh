@@ -23,6 +23,8 @@
 /* Definitions                                                             */
 /***************************************************************************/
 struct pcf85263a_rtc_time_registers {
+	uint8_t rtc_stop;
+	uint8_t rtc_reset;
 	pcf85263a_100th_seconds_reg_t rtc_100th_sec;
 	pcf85263a_seconds_reg_t rtc_sec;
 	pcf85263a_minutes_reg_t rtc_min;
