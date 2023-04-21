@@ -310,7 +310,7 @@ static int module_lora_wait_packet(void)
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
 		LOG_DBG("Decoded buf %s", decoded_buf);
 		etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
-		if (strncmp(decoded_buf, buf_tmp, 12) ==
+		if (strncmp(decoded_buf, buf_tmp, LORA_LOGGER_ID_LEN - 1) ==
 		    0) { 
 			struct logger_lora_response response = lora_module_get_sync_data(decoded_buf);
 			if (response.is_okay) {
