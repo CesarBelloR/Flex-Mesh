@@ -162,11 +162,6 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 
 void etc_device_init(void)
 {
-	etc_set_device_mode((enum etc_device_mode)CONFIG_ETC_DEVICE_MODE);
-	etc_set_radio_mode((enum etc_radio_mode)CONFIG_ETC_DEVICE_RADIO_MODE);
-	etc_set_rx_duration_secs(ETC_RECORD_DEFAULT_RX_DURATION_SECONDS);
-	etc_set_log_interval_secs(ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS);
-	etc_set_tx_interval_secs(ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS);
 	logger_job = ETC_LOGGER_JOB_TX;
 	LOG_INF("Device is %s with radio %s",
 		etc_get_device_mode() == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger",
