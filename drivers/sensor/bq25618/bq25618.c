@@ -729,7 +729,7 @@ int bq25618_set_charge_voltage(const struct device *dev, uint16_t voltage_mv)
 		temp = 0x09 + (temp - 4300) / 10U;
 	}
 
-	mask |= temp;
+	mask |= temp << 3;
 
 	return write_register(dev, BQ25618_BATTERY_VOLTAGE_LIMIT_REG, mask);
 }
