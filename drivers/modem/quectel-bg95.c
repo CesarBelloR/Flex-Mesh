@@ -2044,12 +2044,12 @@ static void modem_psm_wakeup_work(struct k_work *work)
  */
 static int modem_setup(void)
 {
-	int ret = 0, counter;
+	int ret = 0;
+	int counter = 0;
 
+retry:
 	/* Setup the pins to ensure that Modem is enabled. */
 	pin_init();
-
-	counter = 0;
 
 	/* stop RSSI delay work */
 	k_work_cancel_delayable(&mdata.rssi_query_work);
@@ -2059,6 +2059,11 @@ static int modem_setup(void)
 	ret = k_sem_take(&mdata.sem_response, MDM_MAX_BOOT_TIME);
 	if (ret < 0) {
 		LOG_ERR("Timeout waiting for RDY");
+		if (counter < 4) {
+			counter++;
+			LOG_INF("Retrying...");
+			goto retry;
+		}
 		goto error;
 	}
 
