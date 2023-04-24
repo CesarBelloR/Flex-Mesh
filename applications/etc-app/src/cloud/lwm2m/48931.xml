@@ -41,10 +41,10 @@
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>1..1440</RangeEnumeration>
-				<Units>min</Units>
+				<RangeEnumeration>60..86400</RangeEnumeration>
+				<Units>seconds</Units>
 				<Description><![CDATA[Frequency device wakes up, takes readings, and stores to flash.
-Interval is always synched to the clock. E.g. interval of 15 will log readings at 12:00:00, 12:15:00, 12:30:00, etc. Interval of 1 at 12:00:00, 12:01:00, 12:02:00, etc.
+Interval is always synched to the clock. E.g. interval of 900 seconds (15 mintues) will log readings at 12:00:00, 12:15:00, 12:30:00, etc. Interval of 1 at 12:00:00, 12:01:00, 12:02:00, etc.
 ]]></Description>
 			</Item>
 			<Item ID="4">
@@ -53,10 +53,10 @@ Interval is always synched to the clock. E.g. interval of 15 will log readings a
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>1..1440	</RangeEnumeration>
-				<Units>min</Units>
+				<RangeEnumeration>60..86400</RangeEnumeration>
+				<Units>seconds</Units>
 				<Description><![CDATA[Frequency device wakes up, takes readings, and stores to flash.
-Interval is always synched to the clock. E.g. interval of 15 will log readings at 12:00:00, 12:15:00, 12:30:00, etc. Interval of 1 at 12:00:00, 12:01:00, 12:02:00, etc.]]></Description>
+Interval is always synched to the clock. E.g. interval of 900 seconds (15 mintues) will log readings at 12:00:00, 12:15:00, 12:30:00, etc. Interval of 1 at 12:00:00, 12:01:00, 12:02:00, etc.]]></Description>
 			</Item>
 			<Item ID="5">
 				<Name>LOG_INTERVAL_ALARM</Name>
@@ -64,8 +64,8 @@ Interval is always synched to the clock. E.g. interval of 15 will log readings a
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>1..1440</RangeEnumeration>
-				<Units>min</Units>
+				<RangeEnumeration>60..86400</RangeEnumeration>
+				<Units>seconds</Units>
 				<Description><![CDATA[Frequency readings are recorded when an ALARM_THRESHOLD is crossed.]]></Description>
 			</Item>
 			
@@ -76,7 +76,7 @@ Interval is always synched to the clock. E.g. interval of 15 will log readings a
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
 				<RangeEnumeration>0..29500</RangeEnumeration>
-				<Units></Units>
+				<Units>milliseconds</Units>
 				<Description><![CDATA[Random value between 0 - 29500, rounded to closest 200 ms.
 Number of ms after TX_INTERVAL, for transmitting data. Minimizes LoRa collisions and server load. For a logger, random value between 0 and 29500, rounded to closest 200 ms. Random value determined at first transmit, then saved if transit was successful, resets again if ACK not immediately received.]]></Description>
 			</Item>

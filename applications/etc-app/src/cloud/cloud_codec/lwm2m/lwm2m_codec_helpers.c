@@ -230,7 +230,7 @@ int lwm2m_codec_helpers_setup_resources(void)
 	return 0;
 }
 
-int lwm2m_codec_helpers_setup_configuration_object(union etc_config *cfg,
+int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 						   lwm2m_engine_set_data_cb_t callback)
 {
 	int err;
@@ -285,7 +285,7 @@ int lwm2m_codec_helpers_setup_configuration_object(union etc_config *cfg,
 	return 0;
 }
 
-int lwm2m_codec_helpers_get_configuration_object(union etc_config *cfg)
+int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 {
 	int err;
 

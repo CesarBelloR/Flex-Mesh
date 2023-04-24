@@ -223,16 +223,26 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void new_config_handle(const struct etc_config *new_config)
+{
+	etc_settings_update(new_config);
+}
+
 static void cloud_codec_event_handler(const struct cloud_codec_evt *evt)
 {
+	if (evt->type == CLOUD_CODEC_EVT_CONFIG_UPDATE) {
+		new_config_handle(&evt->config_update);
+	} else {
+		LOG_ERR("Unknown event");
+	}
 }
 
 static int setup(void)
 {
 	int err;
-	union etc_config cfg;
+	struct etc_config cfg;
 
-	etc_device_get_config(&cfg);
+	etc_settings_get_config(&cfg);
 	
 	err = data_codec_init(&cfg, cloud_codec_event_handler);
 	if (err) {

@@ -14,6 +14,24 @@ void etc_set_fw_version(const char *fw_version);
 void etc_set_device_id(const char *device_id);
 void etc_set_time_last_log(int time);
 void etc_set_time_last_tx(int time);
+
+/**
+ * @brief Copy the current configuration into config.
+ * Load the configuration values from flash if called for the first time.
+ * 
+ * @param config Pointer to buffer that the current configuration is copied to.
+ * @return 0 on success, <0 on error.
+*/
+int etc_settings_get_config(struct etc_config *config);
+
+/**
+ * @brief Update the settings with the values passed in new_config.
+ * Individual settings are only updated if the value does not match
+ * the current setting's value.
+ * 
+ * @param new_config Configuration with new values.
+*/
+void etc_settings_update(const struct etc_config *new_config);
 int etc_set_device_mode(enum etc_device_mode mode);
 int etc_set_radio_mode(enum etc_radio_mode mode);
 int etc_set_power_mode(enum etc_power_mode_e power);

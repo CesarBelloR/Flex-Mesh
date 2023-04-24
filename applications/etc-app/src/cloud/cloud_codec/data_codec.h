@@ -12,6 +12,7 @@
 #include "events/sensor_event.h"
 
 #include "etc_device.h"
+#include "etc_settings.h"
 
 #if defined(CONFIG_LWM2M)
 #include <zephyr/net/lwm2m.h>
@@ -97,7 +98,7 @@ struct cloud_codec_evt {
 	/** Cloud codec event type. */
 	enum cloud_codec_event_type type;
 	/** New config data. */
-	union etc_config config_update;
+	struct etc_config config_update;
 };
 
 /**
@@ -143,7 +144,7 @@ static inline bool data_codec_compare_temperature_is_valid(float temperature) {
 	return false;
 }
 
-int data_codec_init(union etc_config *cfg, cloud_codec_evt_handler_t event_handler);
+int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_handler);
 
 void data_codec_populate_lora_sensor_buffer(
 				struct data_lora_sensors *sensor_buffer,

@@ -279,6 +279,45 @@ int etc_get_time_last_tx(void) {
 	return time;
 }
 
+int etc_settings_get_config(struct etc_config *config)
+{
+	if (config == NULL) {
+		return -EINVAL;
+	}
+
+	memcpy(config, &etc_cfg, sizeof(etc_cfg));
+	return 0;
+}
+
+void etc_settings_update(const struct etc_config *new_config)
+{
+	if (etc_cfg.device_mode != new_config->device_mode) {
+		etc_set_device_mode(new_config->device_mode);
+	} else if (etc_cfg.radio_mode != new_config->radio_mode) {
+		etc_set_radio_mode(new_config->radio_mode);
+	} else if (etc_cfg.power_mode != new_config->power_mode) {
+		etc_set_power_mode(new_config->power_mode);
+	} else if (etc_cfg.alarm_direction != new_config->alarm_direction) {
+		etc_set_alarm_direction(new_config->alarm_direction);
+	} else if (etc_cfg.log_interval_secs != new_config->log_interval_secs) {
+		etc_set_log_interval_secs(new_config->log_interval_secs);
+	} else if (etc_cfg.log_interval_alarm_secs != new_config->log_interval_alarm_secs) {
+		etc_set_log_interval_alarm_secs(new_config->log_interval_alarm_secs);
+	} else if (etc_cfg.tx_interval_secs != new_config->tx_interval_secs) {
+		etc_set_tx_interval_secs(new_config->tx_interval_secs);
+	} else if (etc_cfg.tx_interval_alarm_secs != new_config->tx_interval_alarm_secs) {
+		etc_set_tx_interval_alarm_secs(new_config->tx_interval_alarm_secs);
+	} else if (etc_cfg.wake_early_secs != new_config->wake_early_secs) {
+		etc_set_wake_early_secs(new_config->wake_early_secs);
+	} else if (etc_cfg.tx_delay_msec != new_config->tx_delay_msec) {
+		etc_set_tx_delay_msec(new_config->tx_delay_msec);
+	} else if (etc_cfg.rx_duration_secs != new_config->rx_duration_secs) {
+		etc_set_rx_duration_secs(new_config->rx_duration_secs);
+	} else if (etc_cfg.alarm_threshold != new_config->alarm_threshold) {
+		etc_set_alarm_threshold(new_config->alarm_threshold);
+	}
+}
+
 int etc_set_device_mode(enum etc_device_mode mode)
 {
 	int rc = 0;

@@ -130,15 +130,6 @@ BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
 void etc_device_nvs_init(void);
 void etc_device_init(void);
 
-/**
- * @brief Copy the current configuration into config.
- * Load the configuration values from flash if called for the first time.
- * 
- * @param config Pointer to buffer that the current configuration is copied to.
- * @return 0 on success, <0 on error.
-*/
-int etc_device_get_config(union etc_config *config);
-
 int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size);
 int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size);
 int etc_device_write_record_sensor(struct sensor_data *sensor);
