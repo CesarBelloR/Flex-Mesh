@@ -249,6 +249,8 @@ static int sensor_poll_handler(void) {
 	sensor_is_processing = false;
 
 	watchdog_sens_sel0_wdt_sem_give();
+
+	return 0;
 }
 
 /* Message handler for STATE_INIT. */
