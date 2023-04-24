@@ -15,18 +15,36 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #define SETTINGS_FW_VERSION	   ETC_SETTING_FW_VERSION_ID
 #define SETTINGS_DEVICE_ID	   ETC_SETTING_DEVICE_ID
 
-#define ETC_SETTING_DEVICE_MODE_DEFAULT		    ETC_DEVICE_MODE_RELAY
-#define ETC_SETTING_RADIO_MODE_DEFAULT		    ETC_RADIO_MODE_LORA
-#define ETC_SETTING_POWER_MODE_DEFAULT		    ETC_POWER_MODE_POWER_SAVER
-#define ETC_SETTING_ALARM_DIRECTION_DEFAULT	    ETC_ALARM_DIR_GREATER
-#define ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT	    900
-#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT 900
-#define ETC_SETTING_TX_INTERVAL_SECS_DEFAULT	    86400
-#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT 86400
-#define ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT	    840
-#define ETC_SETTING_TX_DELAY_MSEC_DEFAULT	    29500
-#define ETC_SETTING_RX_DURATION_SECS_DEFAULT	    120
-#define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    0
+#define ETC_SETTING_DEVICE_MODE_DEFAULT		    	ETC_DEVICE_MODE_LOGGER
+#define ETC_SETTING_RADIO_MODE_DEFAULT		    	ETC_RADIO_MODE_LTE
+#define ETC_SETTING_POWER_MODE_DEFAULT		    	ETC_POWER_MODE_POWER_SAVER
+#define ETC_SETTING_ALARM_DIRECTION_DEFAULT	    	ETC_ALARM_DIR_GREATER
+#define ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT	    	900
+#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT 	900
+#define ETC_SETTING_TX_INTERVAL_SECS_DEFAULT	    	900
+#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT 	86400
+#define ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT	    	840
+#define ETC_SETTING_TX_DELAY_MSEC_DEFAULT	    	29500
+#define ETC_SETTING_RX_DURATION_SECS_DEFAULT	    	120
+#define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    	0
+
+#define ETC_SETTING_LOG_INTERVAL_SECS_MAX		86400
+#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MAX		86400
+#define ETC_SETTING_TX_INTERVAL_SECS_MAX		86400
+#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MAX		86400
+#define ETC_SETTING_WAKEUP_EARLY_SECS_MAX		840
+#define ETC_SETTING_TX_DELAY_MSEC_MAX			29500
+#define ETC_SETTING_RX_DURATION_SECS_MAX		120
+#define ETC_SETTING_ALARM_THRESHOLD_MAX			120
+
+#define ETC_SETTING_LOG_INTERVAL_SECS_MIN		60
+#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MIN		60
+#define ETC_SETTING_TX_INTERVAL_SECS_MIN		60
+#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MIN		60
+#define ETC_SETTING_WAKEUP_EARLY_SECS_MIN		0
+#define ETC_SETTING_TX_DELAY_MSEC_MIN			0
+#define ETC_SETTING_RX_DURATION_SECS_MIN		30
+#define ETC_SETTING_ALARM_THRESHOLD_MIN			-20
 
 static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
@@ -307,7 +325,8 @@ int etc_set_alarm_direction(enum etc_alarm_direction alarm)
 
 int etc_set_log_interval_secs(uint32_t second)
 {
-	if (second > ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_LOG_INTERVAL_SECS_MAX) ||
+	    (second < ETC_SETTING_LOG_INTERVAL_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -321,7 +340,8 @@ int etc_set_log_interval_secs(uint32_t second)
 
 int etc_set_log_interval_alarm_secs(uint16_t second)
 {
-	if (second > ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MAX) ||
+	    (second < ETC_SETTING_LOG_INTERVAL_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -336,7 +356,8 @@ int etc_set_log_interval_alarm_secs(uint16_t second)
 
 int etc_set_tx_interval_secs(uint32_t second)
 {
-	if (second > ETC_SETTING_TX_INTERVAL_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_TX_INTERVAL_SECS_MAX) ||
+	    (second < ETC_SETTING_TX_INTERVAL_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -350,7 +371,8 @@ int etc_set_tx_interval_secs(uint32_t second)
 
 int etc_set_tx_interval_alarm_secs(uint32_t second)
 {
-	if (second > ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MAX) ||
+	    (second < ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -365,7 +387,8 @@ int etc_set_tx_interval_alarm_secs(uint32_t second)
 
 int etc_set_wake_early_secs(uint16_t second)
 {
-	if (second > ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_WAKEUP_EARLY_SECS_MAX) ||
+	    (second < ETC_SETTING_WAKEUP_EARLY_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -379,7 +402,8 @@ int etc_set_wake_early_secs(uint16_t second)
 
 int etc_set_tx_delay_msec(uint16_t msecond)
 {
-	if (msecond > ETC_SETTING_TX_DELAY_MSEC_DEFAULT) {
+	if ((msecond > ETC_SETTING_TX_DELAY_MSEC_MAX) ||
+	    (msecond < ETC_SETTING_TX_DELAY_MSEC_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -393,7 +417,8 @@ int etc_set_tx_delay_msec(uint16_t msecond)
 
 int etc_set_rx_duration_secs(uint16_t second)
 {
-	if (second > ETC_SETTING_RX_DURATION_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_RX_DURATION_SECS_MAX) ||
+	    (second < ETC_SETTING_RX_DURATION_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;

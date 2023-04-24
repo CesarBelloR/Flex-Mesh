@@ -419,11 +419,6 @@ static void on_all_events(struct app_msg_data *msg)
 		return;
 	}
 
-	if (IS_EVENT(msg, modem, MODEM_EVT_SLEEP_READY)) {
-		app_set_wakeup_time();
-		return;
-	}
-
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
 		enum etc_logger_job job = etc_device_get_job();
 		if (job == ETC_LOGGER_JOB_BOTH) {
@@ -435,7 +430,8 @@ static void on_all_events(struct app_msg_data *msg)
 		return;
 	}
 	
-	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+	if ((IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) ||
+	    (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED))) {
 		app_set_wakeup_time();
 		return;
 	}
