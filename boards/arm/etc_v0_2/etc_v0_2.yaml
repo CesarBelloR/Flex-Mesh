@@ -1,0 +1,11 @@
+identifier: ETC Core v0.2 (nRF52840 with BG95)
+name: ETC Core v0.2
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+supported:
+  - ble
+  - ieee802154
+  - network with bg95x

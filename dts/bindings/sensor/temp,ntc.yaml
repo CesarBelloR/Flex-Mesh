@@ -18,3 +18,7 @@ properties:
       required: true
       description: Reference resistor value in ohms
     
+    reference-voltage-mv:
+      type: int
+      required: true
+      description: Reference voltage in millivolt

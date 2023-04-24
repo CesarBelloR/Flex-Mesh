@@ -16,7 +16,6 @@
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE data_module
-#define MODULE_DATA_THREAD_STACK_SIZE 2048
 #define MODULE_DATA_SENSOR_BUFFER_COUNT 8
 #define MODULE_DATA_BATTERY_BUFFER_COUNT 8
 #define MODULE_LORA_SENSOR_BUFFER_COUNT 8
@@ -343,11 +342,6 @@ static void on_all_states(struct data_msg_data *msg)
 		state_set(STATE_SHUTDOWN);
 	}
 
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-		LOG_INF("APP_EVT_DATA_GET");
-		return;
-	}
-
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_READY)) {
 		modem_stat.ts = msg->module.modem.data.modem_static.timestamp;
 		modem_stat.queued = true;
@@ -368,14 +362,26 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		etc_device_write_record_sensor(msg->module.sensor.data.sensors);		
-		struct data_sensors new_sensor_data = {
-			.queued = true
-		};
+		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
+		enum etc_device_mode mode = etc_device_get_mode();
+		if (mode == ETC_DEVICE_MODE_LOGGER) {
+			struct data_sensors new_sensor_data = {
+				.queued = true
+			};
+			memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
+			data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
+		} else if (mode == ETC_DEVICE_MODE_RELAY) {
+			/* Update relay function */
+			struct data_sensors new_sensor_data = {
+				.queued = true
+			};
 
-		memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
-		data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
-		/* Send data to cloud right now after they were taken */
+			memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
+			data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
+			/* Send data to cloud right now after they were taken */
+		} else {
+			/* Unknown mode ? */
+		}
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 
@@ -394,7 +400,7 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 }
 
-static void module_thread_fn(void)
+void data_module_thread_fn(void)
 {
 	int err;
 	struct data_msg_data msg = { 0 };
@@ -408,7 +414,7 @@ static void module_thread_fn(void)
 	}
 
 	state_set(STATE_CLOUD_DISCONNECTED);
-	int transmission_in_seconds = etc_get_time_transmission_interval();
+	int transmission_in_seconds = etc_get_tx_interval_secs();
 	data_publish_timeout = K_SECONDS(transmission_in_seconds);
 	k_work_init_delayable(&data_send_work, data_send_work_fn);
 	k_work_reschedule(&data_send_work, data_publish_timeout);
@@ -440,10 +446,6 @@ static void module_thread_fn(void)
 		on_all_states(&msg);
 	}
 }
-
-K_THREAD_DEFINE(data_module_thread, MODULE_DATA_THREAD_STACK_SIZE,
-		module_thread_fn, NULL, NULL, NULL,
-		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);

@@ -5,6 +5,9 @@ typedef enum {
         ETC_ADC_CHANNEL_AMB = 0,
         ETC_ADC_CHANNEL_BATTERY,
         ETC_ADC_CHANNEL_SENSOR,
+        ETC_ADC_CHANNEL_HW_VER,
 } etc_adc_channel_e;
+
+#define LOGGER_MAXIMUM_COUNTER  99
 
 #endif /* COMMON_H_ */

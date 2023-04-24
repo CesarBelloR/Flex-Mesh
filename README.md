@@ -1,10 +1,11 @@
-# Orain ETC-Core Development Guide.
+# Monitor 2.0 Development Guide.
 
 # Table Of Contents
 * [ Installing Prerequisites ](#Prerequisites) <br>
 * [ Hardware ](#Hardware) <br>
 * [ Instruction ](#Instruction) <br>
 * [ Flash ](#Flash) <br>
+* [ Retrieve data ](#Retrieve) <br>
   
 <a name="Prerequisites"></a>
 # Installing Prerequisites
@@ -45,24 +46,41 @@ pip3 install -r {ROOT}\nrf\scripts\requirements.txt
 pip3 install -r {ROOT}\bootloader\mcuboot\scripts\requirements.txt
 ```
 
-* Step 3: Apply patch code for nRF library. Copy the patch code from `etc-core-fw\patch\nrf` to `{ROOT}\nrf` and apply the patch code with command 
+* Step 3: Apply patches for Zephyr. Copy the patch code from `etc-firmware\patch` to `{ROOT}\zephyr` and apply the patch code with command 
+(only needed for LwM2M)
+    * If you use a system that supports bash, use the script to apply all applicable patches:
+        ```
+        cd {ROOT}
+        etc-firmware/scripts/apply_patches.sh 
+        ```
+    * Otherwise, apply patches manually:
+        ```
+        cd {ROOT}/zephyr
+        git apply ../etc-firmware/patch/zephyr/0001-net-lwm2m-add-callback-for-send-confirmation.patch
+        ```
 
-```
-git apply 0001-aws_iot-ignore-certification-step.patch
-```
+* Step 4: Build `etc-app` firmware at `applications\etc-app` folder
+    * Build with AWS IoT support with logging over RTT
+        ```
+        cd {ROOT}
+        west build -b etc -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf aws-overlay.conf"
+        ```
 
-* Step 4: Build `etc-core` firmware at `applications\etc-core` folder with command
-
-```
-cd {ROOT}
-west build -b etc -s etc-firmware/applications/etc-core
-```
+    * Build with LwM2M support with logging over RTT
+        ```
+        cd {ROOT}
+        west build -b etc -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf lwm2m-overlay.conf"
+        ```
 
 <a name="Flash"></a>
 # Flash
 
-* Step 1: Connect the board NINA B406 and flash firmware over JLINK
+* Step 1: Connect a JLink Debugger to the Monitor 2.0 board and flash the device:
 
 ```
 west flash
 ```
+
+<a name="Retrieve"></a>
+# Retrieve Data
+Use the [retrieve_data script](scripts/retrieve_data/)
