@@ -15,37 +15,6 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #define SETTINGS_FW_VERSION	   ETC_SETTING_FW_VERSION_ID
 #define SETTINGS_DEVICE_ID	   ETC_SETTING_DEVICE_ID
 
-#define ETC_SETTING_DEVICE_MODE_DEFAULT		    	ETC_DEVICE_MODE_LOGGER
-#define ETC_SETTING_RADIO_MODE_DEFAULT		    	ETC_RADIO_MODE_LTE
-#define ETC_SETTING_POWER_MODE_DEFAULT		    	ETC_POWER_MODE_POWER_SAVER
-#define ETC_SETTING_ALARM_DIRECTION_DEFAULT	    	ETC_ALARM_DIR_GREATER
-#define ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT	    	900
-#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT 	900
-#define ETC_SETTING_TX_INTERVAL_SECS_DEFAULT	    	900
-#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT 	86400
-#define ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT	    	840
-#define ETC_SETTING_TX_DELAY_MSEC_DEFAULT	    	29500
-#define ETC_SETTING_RX_DURATION_SECS_DEFAULT	    	120
-#define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    	0
-
-#define ETC_SETTING_LOG_INTERVAL_SECS_MAX		86400
-#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MAX		86400
-#define ETC_SETTING_TX_INTERVAL_SECS_MAX		86400
-#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MAX		86400
-#define ETC_SETTING_WAKEUP_EARLY_SECS_MAX		840
-#define ETC_SETTING_TX_DELAY_MSEC_MAX			29500
-#define ETC_SETTING_RX_DURATION_SECS_MAX		120
-#define ETC_SETTING_ALARM_THRESHOLD_MAX			120
-
-#define ETC_SETTING_LOG_INTERVAL_SECS_MIN		60
-#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MIN		60
-#define ETC_SETTING_TX_INTERVAL_SECS_MIN		60
-#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MIN		60
-#define ETC_SETTING_WAKEUP_EARLY_SECS_MIN		0
-#define ETC_SETTING_TX_DELAY_MSEC_MIN			0
-#define ETC_SETTING_RX_DURATION_SECS_MIN		30
-#define ETC_SETTING_ALARM_THRESHOLD_MIN			-20
-
 static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
@@ -156,16 +125,16 @@ int etc_settings_init(void)
 		etc_set_device_id(tmp_saved_value);
 	}
 
-	ret = etc_device_read_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time, sizeof(int));
-	if (ret)
-	{
+	ret = etc_device_read_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time,
+				      sizeof(int));
+	if (ret) {
 		saved_last_log_time = -1;
 		etc_set_time_last_log(-1);
 	}
 
-	ret = etc_device_read_setting(ETC_SETTING_LAST_TX_TIME_ID, (char *)&saved_last_tx_time, sizeof(int));
-	if (ret)
-	{
+	ret = etc_device_read_setting(ETC_SETTING_LAST_TX_TIME_ID, (char *)&saved_last_tx_time,
+				      sizeof(int));
+	if (ret) {
 		saved_last_tx_time = -1;
 		etc_set_time_last_tx(-1);
 	}
@@ -243,27 +212,31 @@ int etc_settings_init(void)
 	if (ret) {
 		etc_set_alarm_threshold(ETC_SETTING_ALARM_THRESHOLD_DEFAULT);
 	}
-	
+
 	LOG_DBG("Load setting successfully");
 	return 0;
 }
 
-void etc_set_time_last_log(int time) {
+void etc_set_time_last_log(int time)
+{
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	saved_last_log_time = time;
-	etc_device_write_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time, sizeof(int));
+	etc_device_write_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time,
+				 sizeof(int));
 	k_mutex_unlock(&setting_mutex);
-	
 }
 
-void etc_set_time_last_tx(int time) {
+void etc_set_time_last_tx(int time)
+{
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	saved_last_tx_time = time;
-	etc_device_write_setting(ETC_SETTING_LAST_TX_TIME_ID, (char *)&saved_last_tx_time, sizeof(int));
+	etc_device_write_setting(ETC_SETTING_LAST_TX_TIME_ID, (char *)&saved_last_tx_time,
+				 sizeof(int));
 	k_mutex_unlock(&setting_mutex);
 }
 
-int etc_get_time_last_log(void) {
+int etc_get_time_last_log(void)
+{
 	int time = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	time = saved_last_log_time;
@@ -271,7 +244,8 @@ int etc_get_time_last_log(void) {
 	return time;
 }
 
-int etc_get_time_last_tx(void) {
+int etc_get_time_last_tx(void)
+{
 	int time = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	time = saved_last_tx_time;

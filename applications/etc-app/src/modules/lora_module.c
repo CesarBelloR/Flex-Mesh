@@ -3,6 +3,7 @@
 #include <app_event_manager.h>
 #include <zephyr/drivers/lora.h>
 #include <zephyr/kernel.h>
+#include <zephyr/random/rand32.h>
 #include "etc_date_time.h"
 #include "etc_device.h"
 #include "etc_settings.h"
@@ -10,7 +11,7 @@
 #include "data/etc_cape.h"
 #include "cloud/cloud_codec/data_codec.h"
 #include "common.h"
-#define MODULE			      lora_module
+#define MODULE lora_module
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -275,8 +276,9 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 			} else if (i == 1) {
 				response.tx_interval_in_mins = strtoul(pt, &ptr, 10);
 			} else if (i == 2) {
-				response.relay_id = strtoul(pt, &ptr, 10);;
-			} else  if (i == 3) {
+				response.relay_id = strtoul(pt, &ptr, 10);
+				;
+			} else if (i == 3) {
 				response.current_time = strtoul(pt, &ptr, 10);
 			} else if (i == 4) {
 				response.reclaim_start_time = strtoul(pt, &ptr, 10);
@@ -302,7 +304,8 @@ static int module_lora_wait_packet(void)
 		LOG_ERR("Lora_config failed error %d", ret);
 		return -EINVAL;
 	}
-	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), K_SECONDS(etc_device_get_rx_timeout()), &rssi, &snr);
+	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf),
+			K_SECONDS(etc_device_get_rx_timeout()), &rssi, &snr);
 	if (ret < 0) {
 		LOG_DBG("Timeout");
 		return -ETIMEDOUT;
@@ -310,22 +313,30 @@ static int module_lora_wait_packet(void)
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
 		LOG_DBG("Decoded buf %s", decoded_buf);
 		etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
-		if (strncmp(decoded_buf, buf_tmp, LORA_LOGGER_ID_LEN - 1) ==
-		    0) { 
-			struct logger_lora_response response = lora_module_get_sync_data(decoded_buf);
+		if (strncmp(decoded_buf, buf_tmp, LORA_LOGGER_ID_LEN - 1) == 0) {
+			struct logger_lora_response response =
+				lora_module_get_sync_data(decoded_buf);
 			if (response.is_okay) {
 				uint32_t my_time = 0;
 				date_time_utc_second(&my_time);
 				lora_parent_id = response.relay_id;
-				LOG_INF("Sync time %d %d %d", lora_parent_id, my_time, response.current_time);
-				if ((response.current_time != 0) && (abs(response.current_time - my_time) >= LORA_SYNC_TIME_DIFF_SEC)) {
+				LOG_INF("Sync time %d %d %d", lora_parent_id, my_time,
+					response.current_time);
+				if ((response.current_time != 0) &&
+				    (abs(response.current_time - my_time) >=
+				     LORA_SYNC_TIME_DIFF_SEC)) {
 					LOG_DBG("Need to sync time");
 					date_time_set_second(response.current_time);
 				}
-				if (response.reclaim_start_time == 0 || response.reclaim_end_time == 0) {
-					LOG_DBG("Receive the ACK message from the replay %d at %d", response.relay_id, response.current_time);
+				if (response.reclaim_start_time == 0 ||
+				    response.reclaim_end_time == 0) {
+					LOG_DBG("Receive the ACK message from the replay %d at %d",
+						response.relay_id, response.current_time);
 				} else {
-					LOG_DBG("Receive the RECLAIM message from the replay %d from %d to %d", response.relay_id, response.reclaim_start_time, response.reclaim_end_time);
+					LOG_DBG("Receive the RECLAIM message from the replay %d "
+						"from %d to %d",
+						response.relay_id, response.reclaim_start_time,
+						response.reclaim_end_time);
 				}
 				return 0;
 			}
@@ -384,6 +395,14 @@ static int module_lora_process_packet(union etc_device_record record)
 	int rc = 0;
 	uint8_t cnt = 0;
 retry:
+	if (cnt != 0) {
+		/* Generate new TX_DELAY */
+		uint16_t new_tx_delay_msec =
+			(uint16_t)(sys_rand32_get() % ETC_SETTING_TX_DELAY_MSEC_MAX);
+		etc_set_tx_delay_msec(new_tx_delay_msec);
+		k_msleep(new_tx_delay_msec);
+	}
+
 	rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc == 0) {
 		rc = module_lora_wait_packet();
@@ -413,7 +432,6 @@ static void on_all_states(struct lora_msg_data *msg)
 	if (etc_device_is_logger_lora()) {
 		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
 			LOG_INF("Logger sending data");
-			k_sleep(K_MSEC(100));
 			int rc = 0;
 			do {
 				union etc_device_record record;
