@@ -23,15 +23,8 @@ enum etc_logger_job {
 /* Define a enum to describe about device mode */
 enum etc_device_mode {
 	ETC_DEVICE_MODE_RELAY = 0x00,
-	ETC_DEVICE_MODE_LOGGER = 0x01,
-};
-
-/* Define a enum to describe about radio mode */
-enum etc_radio_mode {
-	ETC_RADIO_MODE_LTE = 0x00,
-	ETC_RADIO_MODE_LORA = 0x01,
-	ETC_RADIO_MODE_BLE = 0x02,
-	ETC_RADIO_MODE_LORAWAN = 0x03,
+	ETC_DEVICE_MODE_LORA_LOGGER = 0x01,
+	ETC_DEVICE_MODE_LTE_LOGGER = 0x02,
 };
 
 /* Define a enum to describe about power mode */
@@ -101,7 +94,6 @@ enum {
 
 struct etc_config {
 	enum etc_device_mode device_mode;
-	enum etc_radio_mode radio_mode;
 	enum etc_power_mode_e power_mode;
 	enum etc_alarm_direction alarm_direction;
 	uint32_t log_interval_secs;

@@ -68,6 +68,70 @@ static int lwm2m_codec_helpers_set_sensor_ranges(void)
 	return 0;
 }
 
+static int validate_u32(uint32_t data, uint32_t lower_limit, uint32_t upper_limit) {
+	if ((data < lower_limit) || (data > upper_limit)) {
+		return -1;
+	}
+	return 0;
+}
+
+inline static int validate_u16(uint16_t data, uint16_t lower_limit, uint16_t upper_limit) {
+	return validate_u32((uint32_t)data, (uint32_t)lower_limit, (uint32_t)upper_limit);
+}
+
+inline static int validate_u8(uint8_t data, uint8_t lower_limit, uint8_t upper_limit) {
+	return validate_u32((uint32_t)data, (uint32_t)lower_limit, (uint32_t)upper_limit);
+}
+
+static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
+						  uint16_t res_id, uint16_t res_inst_id,
+						  uint8_t *data, uint16_t data_len,
+						  bool last_block, size_t total_size)
+{
+	int rc = 0;
+
+	switch (res_id) {
+	case ETC_CFG_OBJ_R_DEVICE_MODE:
+		rc = validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_DEVICE_MODE_MIN_VAL,
+			    ETC_CFG_OBJ_R_DEVICE_MODE_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_POWER_MODE:
+		rc = validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_POWER_MODE_MIN_VAL,
+			    ETC_CFG_OBJ_R_POWER_MODE_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_TX_INTERVAL:
+		rc = validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_INTERVAL_MIN_VAL,
+			    ETC_CFG_OBJ_R_TX_INTERVAL_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_LOG_INTERVAL:
+		rc = validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_LOG_INTERVAL_MIN_VAL,
+			    ETC_CFG_OBJ_R_LOG_INTERVAL_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM:
+		rc = validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM_MIN_VAL,
+			    ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_TX_DELAY:
+		rc = validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_TX_DELAY_MIN_VAL,
+			    ETC_CFG_OBJ_R_TX_DELAY_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_WAKE_EARLY:
+		rc = validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_WAKE_EARLY_MIN_VAL,
+			    ETC_CFG_OBJ_R_WAKE_EARLY_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_RX_DURATION:
+		rc = validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_RX_DURATION_MIN_VAL,
+			    ETC_CFG_OBJ_R_RX_DURATION_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_TX_INTERVAL_ALARM:
+		rc = validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_INTERVAL_ALARM_MIN_VAL,
+			    ETC_CFG_OBJ_R_TX_INTERVAL_ALARM_MAX_VAL);
+		break;
+	}
+
+	return rc;
+}
+
 int lwm2m_codec_helpers_create_objects_and_resources(void)
 {
 	int err;
@@ -130,10 +194,22 @@ static int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_d
 	if (err) {
 		return err;
 	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, DEVICE_MODE_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
 	
 	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
 						 0, POWER_MODE_RID),
 						 callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, POWER_MODE_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
 	if (err) {
 		return err;
 	}
@@ -144,10 +220,48 @@ static int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_d
 	if (err) {
 		return err;
 	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, LOG_INTERVAL_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, LOG_INTERVAL_ALARM_RID),
+						 callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, LOG_INTERVAL_ALARM_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
 
 	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
 						 0, TX_INTERVAL_RID),
 						 callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, TX_INTERVAL_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, TX_INTERVAL_ALARM_RID),
+						 callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, TX_INTERVAL_ALARM_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
 	if (err) {
 		return err;
 	}
@@ -158,6 +272,12 @@ static int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_d
 	if (err) {
 		return err;
 	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, WAKE_EARLY_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
 
 	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
 						 0, TX_DELAY_RID),
@@ -165,10 +285,22 @@ static int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_d
 	if (err) {
 		return err;
 	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, TX_DELAY_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
 
 	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
 						 0, RX_DURATION_RID),
 						 callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 
+						 0, RX_DURATION_RID),
+						 lwm2m_codec_helpers_validate_config_cb);
 	if (err) {
 		return err;
 	}
@@ -248,31 +380,43 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 	}
 
 	err = lwm2m_set_u32(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, LOG_INTERVAL_RID),
-		     (uint8_t)cfg->log_interval_secs);
+		     cfg->log_interval_secs);
+	if (err) {
+		return err;
+	}
+		
+	err = lwm2m_set_u32(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, LOG_INTERVAL_ALARM_RID),
+		     cfg->log_interval_alarm_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u32(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, TX_INTERVAL_RID),
-		     (uint8_t)cfg->tx_interval_secs);
+		     cfg->tx_interval_secs);
+	if (err) {
+		return err;
+	}
+		
+	err = lwm2m_set_u32(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, TX_INTERVAL_ALARM_RID),
+		     cfg->tx_interval_alarm_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, WAKE_EARLY_RID),
-		     (uint8_t)cfg->wake_early_secs);
+		     cfg->wake_early_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, TX_DELAY_RID),
-		     (uint8_t)cfg->tx_delay_msec);
+		     cfg->tx_delay_msec);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, RX_DURATION_RID),
-		     (uint8_t)cfg->rx_duration_secs);
+		     cfg->rx_duration_secs);
 	if (err) {
 		return err;
 	}
@@ -309,9 +453,21 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 	if (err) {
 		return err;
 	}
+	
+	err = lwm2m_get_u32(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, LOG_INTERVAL_ALARM_RID),
+		     	    &cfg->log_interval_alarm_secs);
+	if (err) {
+		return err;
+	}
 
 	err = lwm2m_get_u32(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, TX_INTERVAL_RID),
 		     	    &cfg->tx_interval_secs);
+	if (err) {
+		return err;
+	}
+		
+	err = lwm2m_get_u32(&LWM2M_OBJ(CONFIGURATION_OBJECT_ID, 0, TX_INTERVAL_ALARM_RID),
+		     	    &cfg->tx_interval_alarm_secs);
 	if (err) {
 		return err;
 	}
@@ -333,7 +489,7 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 	if (err) {
 		return err;
 	}
-
+	
 	return 0;
 }
 

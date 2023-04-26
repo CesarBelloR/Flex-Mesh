@@ -7,6 +7,8 @@
 #ifndef LWM2M_CODEC_DEFINES_H__
 #define LWM2M_CODEC_DEFINES_H__
 
+#include "etc_cfg_obj_48931.h"
+
 /* LwM2M read-write flag. */
 #define LWM2M_RES_DATA_FLAG_RW 0
 
@@ -41,6 +43,7 @@
 #define TX_DELAY_RID		6
 #define WAKE_EARLY_RID		7
 #define RX_DURATION_RID		8
+#define TX_INTERVAL_ALARM_RID   9
 
 /* LTE-FDD (LTE-M) bearer & NB-IoT bearer. */
 #define LTE_FDD_BEARER 6U

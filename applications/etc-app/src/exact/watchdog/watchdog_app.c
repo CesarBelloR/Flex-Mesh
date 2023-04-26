@@ -210,7 +210,7 @@ static void init_hw_wdt(void)
 	gpio_pin_configure_dt(&s0_watchdog_dt, GPIO_OUTPUT_INACTIVE);
 
 	k_work_init_delayable(&hw_wdt_work, hw_wdt_work_fn);
-	k_work_schedule(&hw_wdt_work, K_SECONDS(HW_WDT_WORK_INTERVAL_S));
+	k_work_schedule(&hw_wdt_work, K_SECONDS(5));
 }
 
 int watchdog_sens_sel0_wdt_sem_take(k_timeout_t timeout)

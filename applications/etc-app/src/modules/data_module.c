@@ -374,7 +374,7 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
 		enum etc_device_mode mode = etc_device_get_mode();
-		if (mode == ETC_DEVICE_MODE_LOGGER) {
+		if ((mode == ETC_DEVICE_MODE_LTE_LOGGER) || (mode == ETC_DEVICE_MODE_LORA_LOGGER)) {
 			struct data_sensors new_sensor_data = {
 				.queued = true
 			};

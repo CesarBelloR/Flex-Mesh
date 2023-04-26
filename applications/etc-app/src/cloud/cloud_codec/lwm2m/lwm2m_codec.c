@@ -45,6 +45,7 @@ static int config_update_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_
 
 	int err;
 	struct etc_config cfg;
+	memset(&cfg, 0, sizeof(cfg));
 	struct cloud_codec_evt evt = {
 		.type = CLOUD_CODEC_EVT_CONFIG_UPDATE,
 	};
@@ -77,7 +78,7 @@ int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_hand
 		return err;
 	}
 
-	err = lwm2m_codec_helpers_setup_configuration_object(cfg, &config_update_cb);
+	err = lwm2m_codec_helpers_setup_configuration_object(cfg, config_update_cb);
 	if (err) {
 		LOG_ERR("lwm2m_codec_helpers_setup_configuration_object, error: %d",
 			err);
