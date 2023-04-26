@@ -338,7 +338,8 @@ static void app_set_wakeup_time(void)
 		sleep_time += 60;
 	}
 
-	time_t next_sleep = now + sleep_time;
+	uint16_t tx_delay_msec = etc_get_tx_delay_msec();
+	time_t next_sleep = now + sleep_time + (tx_delay_msec / 1000);
 	gmtime_r(&next_sleep, &tm_next_time);
 	
 	LOG_DBG("      Now: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);

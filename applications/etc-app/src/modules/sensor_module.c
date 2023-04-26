@@ -271,7 +271,6 @@ static void on_all_states(struct sensor_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
 		LOG_INF("APP_EVT_DATA_GET");
-		k_msleep(etc_get_tx_delay_msec());
 		sensor_poll_handler();
 		return;
 	}
