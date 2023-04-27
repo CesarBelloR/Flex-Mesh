@@ -150,7 +150,7 @@ int etc_settings_init(void)
 	ret = etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id,
 				      ETC_SETTINGS_DEVICE_ID_LEN);
 	if (ret) {
-		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%X%X", NRF_FICR->DEVICEID[0],
+		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%08X%08X", NRF_FICR->DEVICEID[0],
 			 NRF_FICR->DEVICEID[1]);
 		LOG_INF("Set default device ID %s", tmp_saved_value);
 		etc_set_device_id(tmp_saved_value);
