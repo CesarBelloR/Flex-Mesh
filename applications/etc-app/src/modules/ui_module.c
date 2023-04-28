@@ -248,7 +248,7 @@ static void ui_input_handler(enum etc_interface_event_type type) {
 	k_msleep(100);	
 	if (type == ETC_INTERFACE_EVENT_RTC) {
 		LOG_INF("UI -> ETC_INTERFACE_EVENT_RTC");
-	} else if ((type == ETC_INTERFACE_EVENT_RTC) || (type == ETC_INTERFACE_EVENT_BUTTON)) {
+	} else if ((type == ETC_INTERFACE_EVENT_RTC) || (type == ETC_INTERFACE_EVENT_HALL)) {
 		ui_module_send();
 	} else {
 		/* No action required */
