@@ -2,6 +2,8 @@
  * Copyright (c) 2022 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ *
+ * Copyright (c) 2023 EXACT Technology
  */
 
 #include <zephyr/net/lwm2m.h>
@@ -11,6 +13,7 @@
 
 #include "lwm2m_codec_defines.h"
 #include "lwm2m_codec_helpers.h"
+#include "etc_util.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lwm2m_codec_helpers, CONFIG_CLOUD_CODEC_LOG_LEVEL);
@@ -68,21 +71,6 @@ static int lwm2m_codec_helpers_set_sensor_ranges(void)
 	return 0;
 }
 
-static int validate_u32(uint32_t data, uint32_t lower_limit, uint32_t upper_limit) {
-	if ((data < lower_limit) || (data > upper_limit)) {
-		return -1;
-	}
-	return 0;
-}
-
-inline static int validate_u16(uint16_t data, uint16_t lower_limit, uint16_t upper_limit) {
-	return validate_u32((uint32_t)data, (uint32_t)lower_limit, (uint32_t)upper_limit);
-}
-
-inline static int validate_u8(uint8_t data, uint8_t lower_limit, uint8_t upper_limit) {
-	return validate_u32((uint32_t)data, (uint32_t)lower_limit, (uint32_t)upper_limit);
-}
-
 static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 						  uint16_t res_id, uint16_t res_inst_id,
 						  uint8_t *data, uint16_t data_len,
@@ -92,39 +80,39 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 
 	switch (res_id) {
 	case ETC_CFG_OBJ_R_DEVICE_MODE:
-		rc = validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_DEVICE_MODE_MIN_VAL,
+		rc = util_validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_DEVICE_MODE_MIN_VAL,
 			    ETC_CFG_OBJ_R_DEVICE_MODE_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_POWER_MODE:
-		rc = validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_POWER_MODE_MIN_VAL,
+		rc = util_validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_POWER_MODE_MIN_VAL,
 			    ETC_CFG_OBJ_R_POWER_MODE_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_TX_INTERVAL:
-		rc = validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_INTERVAL_MIN_VAL,
+		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_INTERVAL_MIN_VAL,
 			    ETC_CFG_OBJ_R_TX_INTERVAL_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_LOG_INTERVAL:
-		rc = validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_LOG_INTERVAL_MIN_VAL,
+		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_LOG_INTERVAL_MIN_VAL,
 			    ETC_CFG_OBJ_R_LOG_INTERVAL_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM:
-		rc = validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM_MIN_VAL,
+		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM_MIN_VAL,
 			    ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_TX_DELAY:
-		rc = validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_TX_DELAY_MIN_VAL,
+		rc = util_validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_TX_DELAY_MIN_VAL,
 			    ETC_CFG_OBJ_R_TX_DELAY_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_WAKE_EARLY:
-		rc = validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_WAKE_EARLY_MIN_VAL,
+		rc = util_validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_WAKE_EARLY_MIN_VAL,
 			    ETC_CFG_OBJ_R_WAKE_EARLY_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_RX_DURATION:
-		rc = validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_RX_DURATION_MIN_VAL,
+		rc = util_validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_RX_DURATION_MIN_VAL,
 			    ETC_CFG_OBJ_R_RX_DURATION_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_TX_INTERVAL_ALARM:
-		rc = validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_INTERVAL_ALARM_MIN_VAL,
+		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_INTERVAL_ALARM_MIN_VAL,
 			    ETC_CFG_OBJ_R_TX_INTERVAL_ALARM_MAX_VAL);
 		break;
 	}
