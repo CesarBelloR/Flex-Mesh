@@ -276,7 +276,6 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 				response.tx_interval_in_mins = strtoul(pt, &ptr, 10);
 			} else if (i == 2) {
 				response.relay_id = strtoul(pt, &ptr, 10);
-				;
 			} else if (i == 3) {
 				response.current_time = strtoul(pt, &ptr, 10);
 			} else if (i == 4) {
