@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #define LORA_ACKCRYPT_LEN	128
 #define LORA_RETRY_MAX_TIME	5
 #define LORA_SYNC_TIME_DIFF_SEC 30
-#define LORA_LOGGER_ID_LEN	(sizeof("FFFFFFFFFFFFFFFF") + 1)
+#define LORA_LOGGER_ID_LEN	(sizeof("FFFFFFFFFFFFFFFF"))
 struct lora_msg_data {
 	union {
 		struct app_event app;
