@@ -14,6 +14,12 @@ void etc_set_fw_version(const char *fw_version);
 void etc_set_device_id(const char *device_id);
 void etc_set_time_last_log(int time);
 void etc_set_time_last_tx(int time);
+void etc_set_interval_last_log(int time);
+void etc_set_interval_last_tx(int time);
+int etc_get_time_last_log(void);
+int etc_get_time_last_tx(void);
+int etc_get_interval_last_log(void);
+int etc_get_interval_last_tx(void);
 
 /**
  * @brief Copy the current configuration into config.
@@ -46,8 +52,7 @@ int etc_set_alarm_threshold(uint16_t threshold);
 int etc_get_hw_version(char *buf, int buf_len);
 int etc_get_fw_version(char *buf, int buf_len);
 int etc_get_device_id(char *buf, int buf_len);
-int etc_get_time_last_log(void);
-int etc_get_time_last_tx(void);
+
 enum etc_device_mode etc_get_device_mode(void);
 enum etc_power_mode_e etc_get_power_mode(void);
 enum etc_alarm_direction etc_get_alarm_direction(void);

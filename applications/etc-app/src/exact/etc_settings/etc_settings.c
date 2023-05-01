@@ -50,6 +50,8 @@ static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 static int saved_last_log_time;
 static int saved_last_tx_time;
+static int saved_last_log_interval;
+static int saved_last_tx_interval;
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
 static int flag_etc_config_load;
 struct etc_config etc_cfg;
@@ -61,6 +63,8 @@ void etc_settings_refresh()
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	saved_last_log_time = -1;
 	saved_last_tx_time = -1;
+	saved_last_log_interval = -1;
+	saved_last_tx_interval = -1;
 	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
 	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
 	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
@@ -169,6 +173,20 @@ int etc_settings_init(void)
 		etc_set_time_last_tx(-1);
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_LAST_LOG_INTERVAL_ID, (char *)&saved_last_log_interval, sizeof(int));
+	if (ret)
+	{
+		saved_last_log_interval = -1;
+		etc_set_time_last_log(-1);
+	}
+
+	ret = etc_device_read_setting(ETC_SETTING_LAST_TX_INTERVAL_ID, (char *)&saved_last_tx_interval, sizeof(int));
+	if (ret)
+	{
+		saved_last_tx_interval = -1;
+		etc_set_time_last_tx(-1);
+	}
+
 	ret = etc_device_read_setting(ETC_SETTING_DEVICE_MODE_ID, &etc_cfg.device_mode,
 				      sizeof(etc_cfg.device_mode));
 	if (ret) {
@@ -256,6 +274,20 @@ void etc_set_time_last_tx(int time) {
 	k_mutex_unlock(&setting_mutex);
 }
 
+void etc_set_interval_last_log(int time) {
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	saved_last_log_interval = time;
+	etc_device_write_setting(ETC_SETTING_LAST_LOG_INTERVAL_ID, (char *)&saved_last_log_interval, sizeof(int));
+	k_mutex_unlock(&setting_mutex);
+}
+
+void etc_set_interval_last_tx(int time) {
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	saved_last_tx_interval = time;
+	etc_device_write_setting(ETC_SETTING_LAST_TX_INTERVAL_ID, (char *)&saved_last_tx_interval, sizeof(int));
+	k_mutex_unlock(&setting_mutex);
+}
+
 int etc_get_time_last_log(void) {
 	int time = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
@@ -268,6 +300,22 @@ int etc_get_time_last_tx(void) {
 	int time = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	time = saved_last_tx_time;
+	k_mutex_unlock(&setting_mutex);
+	return time;
+}
+
+int etc_get_interval_last_log(void) {
+	int time = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	time = saved_last_log_interval;
+	k_mutex_unlock(&setting_mutex);
+	return time;
+}
+
+int etc_get_interval_last_tx(void) {
+	int time = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	time = saved_last_tx_interval;
 	k_mutex_unlock(&setting_mutex);
 	return time;
 }

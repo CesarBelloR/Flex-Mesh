@@ -295,40 +295,58 @@ static void app_set_wakeup_time(void)
 	time_t now = 0;
 	bool flag_add_offset = false;
 	pcf85263a_rtc_get_time(&now);
-	int wakeup_for_sample = etc_device_get_log_interval_second();
+	int wakeup_for_log = etc_device_get_log_interval_second();
 	int wakeup_for_transmit = etc_device_get_tx_interval_second();
-	int last_sample = etc_get_time_last_log();  // Get the last wakeup time for sample
+	int last_wakeup_for_log = etc_get_interval_last_log();
+	int last_wakeup_for_transmit = etc_get_interval_last_tx();
+	int last_log = etc_get_time_last_log();  // Get the last wakeup time for log
 	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
-	int next_sample = 0;
+	int next_log = 0;
 	int next_transmit = 0;
 	int sleep_time = 0;
-	if ((last_sample == -1) && (last_transmit == -1)) {
+
+	if (last_wakeup_for_log == -1 && last_wakeup_for_transmit == -1) {
+		last_wakeup_for_log = wakeup_for_log;
+		last_wakeup_for_transmit = last_wakeup_for_transmit;
+	} 
+
+	if ((last_log == -1) && (last_transmit == -1)) {
 		// Setup the wakeup time for next sample and transmit
-		next_sample = now + wakeup_for_sample;
+		next_log = now + wakeup_for_log;
 		next_transmit = now + wakeup_for_transmit;
 	} else {
 		if (last_transmit <= now) {
 			next_transmit = now + wakeup_for_transmit;
 		} else {
-			next_transmit = last_transmit;
+			if (last_wakeup_for_transmit != wakeup_for_transmit) {
+				next_transmit = now + wakeup_for_transmit;
+			} else {
+				next_transmit = last_transmit;
+			}
 		}
-		if (last_sample <= now) {
-			next_sample = now + wakeup_for_sample;
+		if (last_log <= now) {
+			next_log = now + wakeup_for_log;
 		} else {
-			next_sample = last_sample;
+			if (last_wakeup_for_log != wakeup_for_log) {
+				next_log = now + wakeup_for_log;
+			} else {
+				next_log = last_log;
+			}
 		}
 	}
 
-	if (next_sample < next_transmit) {
-		sleep_time = next_sample - now;
+	if (next_log < next_transmit) {
+		sleep_time = next_log - now;
 	} else {
 		sleep_time = next_transmit - now;
 	}
-	LOG_DBG("Sample %d (%d) - Transmit %d (%d) - Sleep time %d", next_sample, last_sample,
+	LOG_DBG("Sample %d (%d) - Transmit %d (%d) - Sleep time %d", next_log, last_log,
 		next_transmit, last_transmit, sleep_time);
-	// Update for next sleep
-	etc_set_time_last_log(next_sample);
+	// Update for next sleep and configuration for last log/tx interval
+	etc_set_time_last_log(next_log);
 	etc_set_time_last_tx(next_transmit);
+	etc_set_interval_last_log(wakeup_for_log);
+	etc_set_interval_last_tx(wakeup_for_transmit);
 	struct tm tm_time = {0};
 	struct tm tm_next_time = {0};
 	gmtime_r(&now, &tm_time);
