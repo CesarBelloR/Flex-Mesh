@@ -8,7 +8,12 @@ project(etc_test)
 target_sources(app PRIVATE src/main.c
     src/etc_test.c
     src/etc_cape.c
+    src/modem.c
+    src/gnss.c
+    src/bluetooth.c
 )
 zephyr_cc_option(-Wfatal-errors)
 
 zephyr_include_directories(src)
+
+add_subdirectory(src/modules)

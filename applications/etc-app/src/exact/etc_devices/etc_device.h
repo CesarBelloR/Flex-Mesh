@@ -22,22 +22,15 @@ enum etc_logger_job {
 
 /* Define a enum to describe about device mode */
 enum etc_device_mode {
-	ETC_DEVICE_MODE_RELAY = 0x01,
-	ETC_DEVICE_MODE_LOGGER = 0x02,
-};
-
-/* Define a enum to describe about radio mode */
-enum etc_radio_mode {
-	ETC_RADIO_MODE_LTE = 0x00,
-	ETC_RADIO_MODE_LORA = 0x01,
-	ETC_RADIO_MODE_BLE = 0x02,
-	ETC_RADIO_MODE_LORAWAN = 0x03,
+	ETC_DEVICE_MODE_RELAY = 0x00,
+	ETC_DEVICE_MODE_LORA_LOGGER = 0x01,
+	ETC_DEVICE_MODE_LTE_LOGGER = 0x02,
 };
 
 /* Define a enum to describe about power mode */
 enum etc_power_mode_e {
-	ETC_POWER_MODE_POWER_SAVER = 0x00,
-	ETC_POWER_MODE_AWLAYS_ON = 0x01,
+	ETC_POWER_MODE_AWLAYS_ON = 0x00,
+	ETC_POWER_MODE_POWER_SAVER = 0x01,
 	ETC_POWER_MODE_HIBERNATE = 0x02,
 };
 
@@ -45,6 +38,27 @@ enum etc_power_mode_e {
 enum etc_alarm_direction {
 	ETC_ALARM_DIR_GREATER = 0x00,
 	ETC_ALARM_DIR_LESS = 0x01,
+};
+union etc_device_record_header { // It will always change  NVS
+	uint8_t header;
+	struct {
+		uint8_t ready: 1;
+		uint8_t ack: 1;
+		uint8_t wait: 1;
+		uint8_t unused: 3;
+	};
+};
+
+struct etc_device_record_index { // Constant in flash until the index is override (exflash)
+	uint8_t sector_idx;
+	uint8_t element_idx;
+};
+
+struct etc_device_record_table {
+	struct etc_device_record_index oldest;
+	struct etc_device_record_index newest;
+	uint16_t total;
+	uint16_t last_nack_record_id;
 };
 
 /**
@@ -80,13 +94,12 @@ enum {
 
 struct etc_config {
 	enum etc_device_mode device_mode;
-	enum etc_radio_mode radio_mode;
 	enum etc_power_mode_e power_mode;
 	enum etc_alarm_direction alarm_direction;
 	uint32_t log_interval_secs;
-	uint16_t log_interval_alarm_secs;
-	uint16_t tx_interval_secs;
-	uint16_t tx_interval_alarm_secs;
+	uint32_t log_interval_alarm_secs;
+	uint32_t tx_interval_secs;
+	uint32_t tx_interval_alarm_secs;
 	uint16_t wake_early_secs;
 	uint16_t tx_delay_msec;
 	uint16_t rx_duration_secs;
@@ -123,5 +136,12 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 enum etc_device_mode etc_device_get_mode(void);
 void etc_device_set_job(enum etc_logger_job job);
 enum etc_logger_job etc_device_get_job(void);
-
+const struct device* etc_device_get_record(void);
+size_t etc_device_get_record_size(void);
+off_t etc_device_get_record_offset(void);
+size_t etc_device_get_record_max_element_index(void);
+size_t etc_device_get_record_max_sector_index(void);
+size_t etc_device_get_record_element_size(void);
+struct etc_device_record_table etc_device_get_record_status(void);
+int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_device_record_header *header);
 #endif /* ETC_DEVICE_H_ */

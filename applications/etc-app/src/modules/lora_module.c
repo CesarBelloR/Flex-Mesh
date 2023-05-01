@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #define LORA_ACKCRYPT_LEN	128
 #define LORA_RETRY_MAX_TIME	5
 #define LORA_SYNC_TIME_DIFF_SEC 30
-
+#define LORA_LOGGER_ID_LEN	(sizeof("FFFFFFFFFFFFFFFF") + 1)
 struct lora_msg_data {
 	union {
 		struct app_event app;
@@ -46,6 +46,16 @@ static enum sub_state_type {
 	SUB_STATE_TRANSMIT_MODE,
 	SUB_STATE_RECEIVE_MODE,
 } sub_state;
+
+struct logger_lora_response {
+	bool is_okay;
+	char logger_id[LORA_LOGGER_ID_LEN];
+	uint16_t tx_interval_in_mins;
+	int relay_id;
+	int current_time;
+	int reclaim_start_time;
+	int reclaim_end_time;
+};
 
 /* Lora module message queue. */
 #define LORA_QUEUE_ENTRY_COUNT	  10
@@ -227,11 +237,6 @@ static void on_state_init(struct lora_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct lora_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
-	}
-
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-	}
 }
 
 static int module_lora_transmit_packet(const uint8_t *decoded_buf, int buf_len)
@@ -251,25 +256,38 @@ static int module_lora_transmit_packet(const uint8_t *decoded_buf, int buf_len)
 	return 0;
 }
 
-static uint32_t lora_module_get_sync_data(char *package)
+static struct logger_lora_response lora_module_get_sync_data(char *package)
 {
-	uint32_t time = 0;
+	struct logger_lora_response response;
 	uint8_t i;
 	char *pt;
 	char *ptr;
+	response.is_okay = false;
 	pt = strtok(package, ",");
 	if (pt != NULL) { // break down ACK string into parts.
 		for (i = 0; i < 6; i++) {
-			if (i == 3) {
-				time = strtoul(pt, &ptr, 10);
-				break;
+			if (pt == NULL) {
+				response.is_okay = false;
+				return response;
+			}
+			if (i == 0) {
+				snprintf(response.logger_id, sizeof(response.logger_id), "%s", pt);
+			} else if (i == 1) {
+				response.tx_interval_in_mins = strtoul(pt, &ptr, 10);
 			} else if (i == 2) {
-				lora_parent_id = strtoul(pt, &ptr, 10);
+				response.relay_id = strtoul(pt, &ptr, 10);;
+			} else  if (i == 3) {
+				response.current_time = strtoul(pt, &ptr, 10);
+			} else if (i == 4) {
+				response.reclaim_start_time = strtoul(pt, &ptr, 10);
+			} else if (i == 5) {
+				response.reclaim_end_time = strtoul(pt, &ptr, 10);
+				response.is_okay = true;
 			}
 			pt = strtok(NULL, ",");
 		}
 	}
-	return time;
+	return response;
 }
 
 static int module_lora_wait_packet(void)
@@ -289,23 +307,29 @@ static int module_lora_wait_packet(void)
 		LOG_DBG("Timeout");
 		return -ETIMEDOUT;
 	} else {
-		LOG_DBG("Received ACK message");
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
 		LOG_DBG("Decoded buf %s", decoded_buf);
 		etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
-		if (strncmp(decoded_buf, buf_tmp, 12) ==
-		    0) { // Current length of relay only 12 bytes
-			uint32_t my_time = 0;
-			date_time_utc_second(&my_time);
-			uint32_t sync_time = lora_module_get_sync_data(decoded_buf);
-			LOG_INF("Sync time %d %d %d", lora_parent_id, my_time, sync_time);
-			if (abs(sync_time - my_time) >= LORA_SYNC_TIME_DIFF_SEC) {
-				LOG_DBG("Need to sync time");
-				date_time_set_second(sync_time);
+		if (strncmp(decoded_buf, buf_tmp, LORA_LOGGER_ID_LEN - 1) ==
+		    0) { 
+			struct logger_lora_response response = lora_module_get_sync_data(decoded_buf);
+			if (response.is_okay) {
+				uint32_t my_time = 0;
+				date_time_utc_second(&my_time);
+				lora_parent_id = response.relay_id;
+				LOG_INF("Sync time %d %d %d", lora_parent_id, my_time, response.current_time);
+				if ((response.current_time != 0) && (abs(response.current_time - my_time) >= LORA_SYNC_TIME_DIFF_SEC)) {
+					LOG_DBG("Need to sync time");
+					date_time_set_second(response.current_time);
+				}
+				if (response.reclaim_start_time == 0 || response.reclaim_end_time == 0) {
+					LOG_DBG("Receive the ACK message from the replay %d at %d", response.relay_id, response.current_time);
+				} else {
+					LOG_DBG("Receive the RECLAIM message from the replay %d from %d to %d", response.relay_id, response.reclaim_start_time, response.reclaim_end_time);
+				}
+				return 0;
 			}
-			return 0;
 		}
-		return 1;
 	}
 
 	return -EINVAL;
@@ -364,9 +388,6 @@ retry:
 		rc = module_lora_wait_packet();
 		if (rc == 0) {
 			return 0;
-		} else if (rc == 1) {
-			// Got invalid Lora message
-			goto retry;
 		} else {
 			if (cnt++ >= LORA_RETRY_MAX_TIME) {
 				return rc;
@@ -385,12 +406,8 @@ retry:
 /* Message handler for all states. */
 static void on_all_states(struct lora_msg_data *msg)
 {
-	enum etc_device_mode mode = etc_device_get_mode();
-	enum etc_logger_job job = etc_device_get_job();
-	LOG_DBG("Mode %d %d", mode, job);
-	if (etc_device_get_mode() == ETC_DEVICE_MODE_LOGGER) {
-		if (((IS_EVENT(msg, data, DATA_EVT_DATA_READY)) && (job == ETC_LOGGER_JOB_BOTH)) ||
-			((IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) && (job == ETC_LOGGER_JOB_TX))))  {
+	if (etc_device_is_logger_lora()) {
+		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
 			LOG_INF("Logger sending data");
 			k_sleep(K_MSEC(100));
 			int rc = 0;

@@ -78,10 +78,6 @@ static k_timeout_t data_publish_timeout = K_FOREVER;
 
 static K_SEM_DEFINE(config_load_sem, 0, 1);
 
-/* Default device configuration. */
-static struct cloud_data_cfg current_cfg = {
-};
-
 static struct k_work_delayable data_send_work;
 
 /* List used to keep track of responses from other modules with data that is
@@ -227,15 +223,28 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static void new_config_handle(const struct etc_config *new_config)
+{
+	etc_settings_update(new_config);
+}
+
 static void cloud_codec_event_handler(const struct cloud_codec_evt *evt)
 {
+	if (evt->type == CLOUD_CODEC_EVT_CONFIG_UPDATE) {
+		new_config_handle(&evt->config_update);
+	} else {
+		LOG_ERR("Unknown event");
+	}
 }
 
 static int setup(void)
 {
 	int err;
+	struct etc_config cfg;
+
+	etc_settings_get_config(&cfg);
 	
-	err = data_codec_init(&current_cfg, cloud_codec_event_handler);
+	err = data_codec_init(&cfg, cloud_codec_event_handler);
 	if (err) {
 		LOG_ERR("cloud_codec_init, error: %d", err);
 		return err;
@@ -343,11 +352,6 @@ static void on_all_states(struct data_msg_data *msg)
 		state_set(STATE_SHUTDOWN);
 	}
 
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
-		LOG_INF("APP_EVT_DATA_GET");
-		return;
-	}
-
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_READY)) {
 		modem_stat.ts = msg->module.modem.data.modem_static.timestamp;
 		modem_stat.queued = true;
@@ -370,7 +374,7 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
 		enum etc_device_mode mode = etc_device_get_mode();
-		if (mode == ETC_DEVICE_MODE_LOGGER) {
+		if ((mode == ETC_DEVICE_MODE_LTE_LOGGER) || (mode == ETC_DEVICE_MODE_LORA_LOGGER)) {
 			struct data_sensors new_sensor_data = {
 				.queued = true
 			};

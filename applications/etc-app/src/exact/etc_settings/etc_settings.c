@@ -15,18 +15,35 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #define SETTINGS_FW_VERSION	   ETC_SETTING_FW_VERSION_ID
 #define SETTINGS_DEVICE_ID	   ETC_SETTING_DEVICE_ID
 
-#define ETC_SETTING_DEVICE_MODE_DEFAULT		    ETC_DEVICE_MODE_RELAY
-#define ETC_SETTING_RADIO_MODE_DEFAULT		    ETC_RADIO_MODE_LORA
-#define ETC_SETTING_POWER_MODE_DEFAULT		    ETC_POWER_MODE_POWER_SAVER
-#define ETC_SETTING_ALARM_DIRECTION_DEFAULT	    ETC_ALARM_DIR_GREATER
-#define ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT	    900
-#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT 900
-#define ETC_SETTING_TX_INTERVAL_SECS_DEFAULT	    86400
-#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT 86400
-#define ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT	    840
-#define ETC_SETTING_TX_DELAY_MSEC_DEFAULT	    29500
-#define ETC_SETTING_RX_DURATION_SECS_DEFAULT	    120
-#define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    0
+#define ETC_SETTING_DEVICE_MODE_DEFAULT		    	ETC_DEVICE_MODE_LTE_LOGGER
+#define ETC_SETTING_POWER_MODE_DEFAULT		    	ETC_POWER_MODE_POWER_SAVER
+#define ETC_SETTING_ALARM_DIRECTION_DEFAULT	    	ETC_ALARM_DIR_GREATER
+#define ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT	    	900
+#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT 	900
+#define ETC_SETTING_TX_INTERVAL_SECS_DEFAULT	    	900
+#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT 	86400
+#define ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT	    	840
+#define ETC_SETTING_TX_DELAY_MSEC_DEFAULT	    	29500
+#define ETC_SETTING_RX_DURATION_SECS_DEFAULT	    	120
+#define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    	0
+
+#define ETC_SETTING_LOG_INTERVAL_SECS_MAX		86400
+#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MAX		86400
+#define ETC_SETTING_TX_INTERVAL_SECS_MAX		86400
+#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MAX		86400
+#define ETC_SETTING_WAKEUP_EARLY_SECS_MAX		840
+#define ETC_SETTING_TX_DELAY_MSEC_MAX			29500
+#define ETC_SETTING_RX_DURATION_SECS_MAX		120
+#define ETC_SETTING_ALARM_THRESHOLD_MAX			120
+
+#define ETC_SETTING_LOG_INTERVAL_SECS_MIN		60
+#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MIN		60
+#define ETC_SETTING_TX_INTERVAL_SECS_MIN		60
+#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MIN		60
+#define ETC_SETTING_WAKEUP_EARLY_SECS_MIN		0
+#define ETC_SETTING_TX_DELAY_MSEC_MIN			0
+#define ETC_SETTING_RX_DURATION_SECS_MIN		30
+#define ETC_SETTING_ALARM_THRESHOLD_MIN			-20
 
 static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
@@ -132,7 +149,7 @@ int etc_settings_init(void)
 	ret = etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id,
 				      ETC_SETTINGS_DEVICE_ID_LEN);
 	if (ret) {
-		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%X%X", NRF_FICR->DEVICEID[0],
+		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%08X%08X", NRF_FICR->DEVICEID[0],
 			 NRF_FICR->DEVICEID[1]);
 		LOG_INF("Set default device ID %s", tmp_saved_value);
 		etc_set_device_id(tmp_saved_value);
@@ -156,12 +173,6 @@ int etc_settings_init(void)
 				      sizeof(etc_cfg.device_mode));
 	if (ret) {
 		etc_set_device_mode(ETC_SETTING_DEVICE_MODE_DEFAULT);
-	}
-
-	ret = etc_device_read_setting(ETC_SETTING_RADIO_MODE_ID, &etc_cfg.radio_mode,
-				      sizeof(etc_cfg.radio_mode));
-	if (ret) {
-		etc_set_radio_mode(ETC_SETTING_RADIO_MODE_DEFAULT);
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_POWER_MODE_ID, &etc_cfg.power_mode,
@@ -261,6 +272,55 @@ int etc_get_time_last_tx(void) {
 	return time;
 }
 
+int etc_settings_get_config(struct etc_config *config)
+{
+	if (config == NULL) {
+		return -EINVAL;
+	}
+
+	memcpy(config, &etc_cfg, sizeof(etc_cfg));
+	return 0;
+}
+
+void etc_settings_update(const struct etc_config *new_config)
+{
+	int rc = 1;
+	if (etc_cfg.device_mode != new_config->device_mode) {
+		rc = etc_set_device_mode(new_config->device_mode);
+	}
+	if (etc_cfg.power_mode != new_config->power_mode) {
+		rc = etc_set_power_mode(new_config->power_mode);
+	} 
+	if (etc_cfg.log_interval_secs != new_config->log_interval_secs) {
+		rc = etc_set_log_interval_secs(new_config->log_interval_secs);
+	}
+	if (etc_cfg.log_interval_alarm_secs != new_config->log_interval_alarm_secs) {
+		rc = etc_set_log_interval_alarm_secs(new_config->log_interval_alarm_secs);
+	}
+	if (etc_cfg.tx_interval_secs != new_config->tx_interval_secs) {
+		rc = etc_set_tx_interval_secs(new_config->tx_interval_secs);
+	}
+	if (etc_cfg.tx_interval_alarm_secs != new_config->tx_interval_alarm_secs) {
+		rc = etc_set_tx_interval_alarm_secs(new_config->tx_interval_alarm_secs);
+	}
+	if (etc_cfg.wake_early_secs != new_config->wake_early_secs) {
+		rc = etc_set_wake_early_secs(new_config->wake_early_secs);
+	} 
+	if (etc_cfg.tx_delay_msec != new_config->tx_delay_msec) {
+		rc = etc_set_tx_delay_msec(new_config->tx_delay_msec);
+	} 
+	if (etc_cfg.rx_duration_secs != new_config->rx_duration_secs) {
+		rc = etc_set_rx_duration_secs(new_config->rx_duration_secs);
+	} 
+	if (rc == 1) {
+		LOG_DBG("No value changed");
+	} else if (rc == 0) {
+		LOG_DBG("Value changed success");
+	} else {
+		LOG_ERR("Error changing value: %d", rc);
+	}
+}
+
 int etc_set_device_mode(enum etc_device_mode mode)
 {
 	int rc = 0;
@@ -268,17 +328,9 @@ int etc_set_device_mode(enum etc_device_mode mode)
 	etc_cfg.device_mode = mode;
 	rc = etc_device_write_setting(ETC_SETTING_DEVICE_MODE_ID, &etc_cfg.device_mode,
 				      sizeof(etc_cfg.device_mode));
-	k_mutex_unlock(&setting_mutex);
-	return rc;
-}
-
-int etc_set_radio_mode(enum etc_radio_mode mode)
-{
-	int rc = 0;
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	etc_cfg.radio_mode = mode;
-	rc = etc_device_write_setting(ETC_SETTING_RADIO_MODE_ID, &etc_cfg.radio_mode,
-				      sizeof(etc_cfg.radio_mode));
+	if (rc == 0) {
+		LOG_DBG("set %u", mode);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
@@ -291,6 +343,9 @@ int etc_set_power_mode(enum etc_power_mode_e power)
 	rc = etc_device_write_setting(ETC_SETTING_POWER_MODE_ID, &etc_cfg.power_mode,
 				      sizeof(etc_cfg.power_mode));
 	k_mutex_unlock(&setting_mutex);
+	if (rc == 0) {
+		LOG_DBG("set %u", power);
+	}
 	return rc;
 }
 
@@ -301,13 +356,17 @@ int etc_set_alarm_direction(enum etc_alarm_direction alarm)
 	etc_cfg.alarm_direction = alarm;
 	rc = etc_device_write_setting(ETC_SETTING_ALARM_DIRECTION_ID, &etc_cfg.alarm_direction,
 				      sizeof(etc_cfg.alarm_direction));
+	if (rc == 0) {
+		LOG_DBG("set %u", alarm);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
 
 int etc_set_log_interval_secs(uint32_t second)
 {
-	if (second > ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_LOG_INTERVAL_SECS_MAX) ||
+	    (second < ETC_SETTING_LOG_INTERVAL_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -315,13 +374,17 @@ int etc_set_log_interval_secs(uint32_t second)
 	etc_cfg.log_interval_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_LOG_INTERVAL_SECS_ID, &etc_cfg.log_interval_secs,
 				      sizeof(etc_cfg.log_interval_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
 
-int etc_set_log_interval_alarm_secs(uint16_t second)
+int etc_set_log_interval_alarm_secs(uint32_t second)
 {
-	if (second > ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MAX) ||
+	    (second < ETC_SETTING_LOG_INTERVAL_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -330,27 +393,36 @@ int etc_set_log_interval_alarm_secs(uint16_t second)
 	rc = etc_device_write_setting(ETC_SETTING_LOG_INTERVAL_ALARM_SECS_ID,
 				      &etc_cfg.log_interval_alarm_secs,
 				      sizeof(etc_cfg.log_interval_alarm_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
 
 int etc_set_tx_interval_secs(uint32_t second)
 {
-	if (second > ETC_SETTING_TX_INTERVAL_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_TX_INTERVAL_SECS_MAX) ||
+	    (second < ETC_SETTING_TX_INTERVAL_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+
 	etc_cfg.tx_interval_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_TX_INTERVAL_SECS_ID, &etc_cfg.tx_interval_secs,
 				      sizeof(etc_cfg.tx_interval_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
 
 int etc_set_tx_interval_alarm_secs(uint32_t second)
 {
-	if (second > ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MAX) ||
+	    (second < ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -359,13 +431,17 @@ int etc_set_tx_interval_alarm_secs(uint32_t second)
 	rc = etc_device_write_setting(ETC_SETTING_TX_INTERVAL_ALARMS_SECS_ID,
 				      &etc_cfg.tx_interval_alarm_secs,
 				      sizeof(etc_cfg.tx_interval_alarm_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
 
 int etc_set_wake_early_secs(uint16_t second)
 {
-	if (second > ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_WAKEUP_EARLY_SECS_MAX) ||
+	    (second < ETC_SETTING_WAKEUP_EARLY_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -373,13 +449,17 @@ int etc_set_wake_early_secs(uint16_t second)
 	etc_cfg.wake_early_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
 				      sizeof(etc_cfg.wake_early_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
 
 int etc_set_tx_delay_msec(uint16_t msecond)
 {
-	if (msecond > ETC_SETTING_TX_DELAY_MSEC_DEFAULT) {
+	if ((msecond > ETC_SETTING_TX_DELAY_MSEC_MAX) ||
+	    (msecond < ETC_SETTING_TX_DELAY_MSEC_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -387,13 +467,17 @@ int etc_set_tx_delay_msec(uint16_t msecond)
 	etc_cfg.tx_delay_msec = msecond;
 	rc = etc_device_write_setting(ETC_SETTING_TX_DELAY_MSEC_ID, &etc_cfg.tx_delay_msec,
 				      sizeof(etc_cfg.tx_delay_msec));
+	if (rc == 0) {
+		LOG_DBG("set %u", msecond);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
 
 int etc_set_rx_duration_secs(uint16_t second)
 {
-	if (second > ETC_SETTING_RX_DURATION_SECS_DEFAULT) {
+	if ((second > ETC_SETTING_RX_DURATION_SECS_MAX) ||
+	    (second < ETC_SETTING_RX_DURATION_SECS_MIN)) {
 		return -EINVAL;
 	}
 	int rc = 0;
@@ -401,6 +485,9 @@ int etc_set_rx_duration_secs(uint16_t second)
 	etc_cfg.rx_duration_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_RX_DURATION_SECS_ID, &etc_cfg.rx_duration_secs,
 				      sizeof(etc_cfg.rx_duration_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
@@ -412,6 +499,9 @@ int etc_set_alarm_threshold(uint16_t threshold)
 	etc_cfg.alarm_threshold = threshold;
 	rc = etc_device_write_setting(ETC_SETTING_ALARM_THRESHOLD_ID, &etc_cfg.alarm_threshold,
 				      sizeof(etc_cfg.alarm_threshold));
+	if (rc == 0) {
+		LOG_DBG("set %u", threshold);
+	}
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
@@ -421,15 +511,6 @@ enum etc_device_mode etc_get_device_mode(void)
 	enum etc_device_mode mode;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	mode = etc_cfg.device_mode;
-	k_mutex_unlock(&setting_mutex);
-	return mode;
-}
-
-enum etc_radio_mode etc_get_radio_mode(void)
-{
-	enum etc_radio_mode mode;
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	mode = etc_cfg.radio_mode;
 	k_mutex_unlock(&setting_mutex);
 	return mode;
 }
@@ -570,24 +651,12 @@ static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv
 static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_device_mode((enum etc_radio_mode)atoi(argv[1])) == 0) {
+		if (etc_set_device_mode((enum etc_device_mode)atoi(argv[1])) == 0) {
 			shell_print(shell, "OK");
 			return 0;
 		}
 	}
 	shell_error(shell, "Invalid parameter for setting device mode");
-	return 0;
-}
-
-static int cmd_set_radio(const struct shell *shell, size_t argc, char **argv)
-{
-	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_radio_mode((enum etc_radio_mode)atoi(argv[1])) == 0) {
-			shell_print(shell, "OK");
-			return 0;
-		}
-	}
-	shell_error(shell, "Invalid parameter for setting radio mode");
 	return 0;
 }
 
@@ -716,15 +785,8 @@ static int cmd_set_alarm_threshold(const struct shell *shell, size_t argc, char 
 
 static int cmd_get_device(const struct shell *shell, size_t argc, char **argv)
 {
-	enum etc_radio_mode mode = etc_get_device_mode();
+	enum etc_device_mode mode = etc_get_device_mode();
 	shell_print(shell, "Device mode %d", mode);
-	return 0;
-}
-
-static int cmd_get_radio(const struct shell *shell, size_t argc, char **argv)
-{
-	enum etc_radio_mode mode = etc_get_radio_mode();
-	shell_print(shell, "Radio mode %d", mode);
 	return 0;
 }
 
@@ -805,7 +867,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(firmware, NULL, "Set firmware version", cmd_set_firmware_version),
 	SHELL_CMD(device, NULL, "Set device ID", cmd_set_device_id),
 	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),
-	SHELL_CMD(set_radio, NULL, "Set radio mode", cmd_set_radio),
 	SHELL_CMD(set_power, NULL, "Set power mode", cmd_set_power),
 	SHELL_CMD(set_alarm_direction, NULL, "Set alarm direction", cmd_set_alarm_direction),
 	SHELL_CMD(set_log_interval, NULL, "Set log interval in second", cmd_set_log_interval),
@@ -819,7 +880,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(set_rx_duration, NULL, "Set rx duration in second", cmd_set_rx_duration),
 	SHELL_CMD(set_alarm_threshold, NULL, "Set alarm threshold", cmd_set_alarm_threshold),
 	SHELL_CMD(get_device, NULL, "Get device mode", cmd_get_device),
-	SHELL_CMD(get_radio, NULL, "Get radio mode", cmd_get_radio),
 	SHELL_CMD(get_power, NULL, "Get power mode", cmd_get_power),
 	SHELL_CMD(get_alarm_direction, NULL, "Get alarm direction", cmd_get_alarm_direction),
 	SHELL_CMD(get_log_interval, NULL, "Get log interval in second", cmd_get_log_interval),

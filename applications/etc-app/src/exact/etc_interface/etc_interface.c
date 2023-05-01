@@ -9,47 +9,45 @@ LOG_MODULE_REGISTER(etc_interface, CONFIG_ETC_INTERFACE_LOG_LEVEL);
 
 #define ETC_INTERFACE_STACK_SIZE 512
 
-static const struct gpio_dt_spec rtc_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
-static const struct gpio_dt_spec user_btn_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(user_btn), control_gpios, 0);
-static const struct gpio_dt_spec hall_sensor_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
-static struct gpio_callback user_btn_callback;
-static struct gpio_callback hall_sensor_callback;
-static struct gpio_callback rtc_int_callback;
-
 struct etc_interface_event_callback {
 	sys_snode_t node;
 	etc_interface_event_handler handler;
 };
 
+struct etc_interface_event_data {
+	struct gpio_callback callback;
+	struct k_work work;
+	enum etc_interface_event_type event_type;
+};
+
+static const struct gpio_dt_spec rtc_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
+static const struct gpio_dt_spec hall_sensor_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
+static struct etc_interface_event_data hall_sensor_event_data;
+static struct etc_interface_event_data rtc_int_event_data;
+
 static sys_slist_t etc_interface_callback_list = SYS_SLIST_STATIC_INIT(&etc_interface_callback_list);
 static void etc_interface_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(etc_interface_work, etc_interface_work_handler);
 
-static void user_btn_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
-{
-	LOG_DBG("");
-	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
-}
-
 static void hall_sensor_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
-	LOG_DBG("");
-	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
+	struct etc_interface_event_data *event_data = 
+		CONTAINER_OF(cb, struct etc_interface_event_data, callback);
+	event_data->event_type = ETC_INTERFACE_EVENT_HALL;
+	k_work_submit(&event_data->work);
 }
 
 static void rtc_int_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
-	LOG_DBG("");
-	k_work_reschedule(&etc_interface_work, K_SECONDS(1));
+	struct etc_interface_event_data *event_data = 
+		CONTAINER_OF(cb, struct etc_interface_event_data, callback);
+	event_data->event_type = ETC_INTERFACE_EVENT_RTC;
+	k_work_submit(&event_data->work);
 }
 
 static int etc_interface_init(const struct device *unused)
 {
 	ARG_UNUSED(unused);
-	if (!device_is_ready(user_btn_dt.port)) {
-		LOG_ERR("User button device not ready");
-		return -EINVAL;
-	}
 
 	if (!device_is_ready(hall_sensor_dt.port)) {
 		LOG_ERR("HALL sensor device not ready");
@@ -63,16 +61,13 @@ static int etc_interface_init(const struct device *unused)
 
 	LOG_INF("Initialized the ETC Interface successfully");
 
-	gpio_pin_configure_dt(&user_btn_dt, GPIO_INPUT | GPIO_PULL_UP);
-    	gpio_pin_interrupt_configure_dt(&user_btn_dt, GPIO_INT_LEVEL_LOW);
-	gpio_init_callback(&user_btn_callback, user_btn_callback_handler, BIT(user_btn_dt.pin));
-	gpio_add_callback(user_btn_dt.port, &user_btn_callback);
-
 	gpio_pin_configure_dt(&hall_sensor_dt, GPIO_INPUT | GPIO_PULL_UP);
     	gpio_pin_interrupt_configure_dt(&hall_sensor_dt, GPIO_INT_LEVEL_LOW);
-	gpio_init_callback(&hall_sensor_callback, hall_sensor_callback_handler, BIT(hall_sensor_dt.pin));
-	gpio_add_callback(hall_sensor_dt.port, &hall_sensor_callback);
+	gpio_init_callback(&hall_sensor_event_data.callback, hall_sensor_callback_handler, BIT(hall_sensor_dt.pin));
+	gpio_add_callback(hall_sensor_dt.port, &hall_sensor_event_data.callback);
 
+	k_work_init(&hall_sensor_event_data.work, etc_interface_work_handler);
+	k_work_init(&rtc_int_event_data.work, etc_interface_work_handler);
 	return 0;
 }
 
@@ -83,12 +78,13 @@ static void etc_interface_work_handler(struct k_work *work)
 	}
 
 	struct etc_interface_event_callback* cb;
-
 	SYS_SLIST_FOR_EACH_CONTAINER(&etc_interface_callback_list, cb, node)
 	{
 		if (cb->handler)
 		{
-			cb->handler();
+			struct etc_interface_event_data *event_data = 
+				CONTAINER_OF(work, struct etc_interface_event_data, work);
+			cb->handler(event_data->event_type);
 		}
 	}
 }
@@ -110,12 +106,12 @@ void etc_interface_enable_rtc_event(void)
 {
 	gpio_pin_configure_dt(&rtc_dt, GPIO_INPUT | GPIO_PULL_UP);
     	gpio_pin_interrupt_configure_dt(&rtc_dt, GPIO_INT_EDGE_FALLING);
-	gpio_init_callback(&rtc_int_callback, rtc_int_callback_handler, BIT(rtc_dt.pin));
-	gpio_add_callback(rtc_dt.port, &rtc_int_callback);
+	gpio_init_callback(&rtc_int_event_data.callback, rtc_int_callback_handler, BIT(rtc_dt.pin));
+	gpio_add_callback(rtc_dt.port, &rtc_int_event_data.callback);
 }
 
 void etc_interface_disable_rtc_event(void) 
 {
 	gpio_pin_interrupt_configure_dt(&rtc_dt, GPIO_INT_DISABLE);
-	gpio_remove_callback(rtc_dt.port, &rtc_int_callback);
+	gpio_remove_callback(rtc_dt.port, &rtc_int_event_data.callback);
 }

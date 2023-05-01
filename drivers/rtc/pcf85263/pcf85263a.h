@@ -23,6 +23,8 @@
 /* Definitions                                                             */
 /***************************************************************************/
 struct pcf85263a_rtc_time_registers {
+	uint8_t rtc_stop;
+	uint8_t rtc_reset;
 	pcf85263a_100th_seconds_reg_t rtc_100th_sec;
 	pcf85263a_seconds_reg_t rtc_sec;
 	pcf85263a_minutes_reg_t rtc_min;
@@ -168,6 +170,13 @@ int pcf85263a_watchdog_init(void);
  */
 int pcf85263a_watchdog_feed(void);
 
+/**
+ * @brief Stop feeding watchdog by cancel the schedule
+ * 
+ * @return return 0 on success, or a negative error code
+ */
+int pcf85263a_watchdog_stop_feed(void);
+
 /** @brief Configure the Alarm mode 1 - Seconds/Minutes/Hours/Day/Month
  *
  * @retval return 0 on success, or a negative error code from an I2C
@@ -223,18 +232,4 @@ void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag);
  * @retval None
  */
 void pcf85263a_set_interrupt_io(bool enable);
-
-/** @brief Enable/disable CLK pin
- * 
- * @param enable true to enable, false to disable
- * 
-*/
-void pcf85263a_set_clkpin(bool enable);
-
-/**
- * @brief [MVP] This API will get the last wakeup minutes
- * 
- * @return uint8_t last minutes of alarm
- */
-uint8_t pcf85263a_get_alarm_min_type_1(void);
 #endif /* PCF85263A_H_ */

@@ -47,28 +47,6 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS (60)
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
 
-union etc_device_record_header { // It will always change  NVS
-	uint8_t header;
-	struct {
-		uint8_t ready: 1;
-		uint8_t ack: 1;
-		uint8_t wait: 1;
-		uint8_t unused: 3;
-	};
-};
-
-struct etc_device_record_index { // Constant in flash until the index is override (exflash)
-	int8_t sector_idx;
-	int8_t element_idx;
-};
-
-struct etc_device_record_table {
-	struct etc_device_record_index oldest;
-	struct etc_device_record_index newest;
-	uint16_t total;
-	uint16_t last_nack_record_id;
-};
-
 static union etc_device_record_header etc_device_record_header;
 static struct etc_device_record_table etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
@@ -184,15 +162,18 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 
 void etc_device_init(void)
 {
-	etc_set_device_mode((enum etc_device_mode)CONFIG_ETC_DEVICE_MODE);
-	etc_set_radio_mode((enum etc_radio_mode)CONFIG_ETC_DEVICE_RADIO_MODE);
-	etc_set_rx_duration_secs(ETC_RECORD_DEFAULT_RX_DURATION_SECONDS);
-	etc_set_log_interval_secs(ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS);
-	etc_set_tx_interval_secs(ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS);
+	char *dev_str = "Unknown";
+	enum etc_device_mode dev_mode = etc_get_device_mode();
 	logger_job = ETC_LOGGER_JOB_TX;
-	LOG_INF("Device is %s with radio %s",
-		etc_get_device_mode() == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger",
-		etc_get_radio_mode() == ETC_RADIO_MODE_LTE ? "LTE" : "Lora");
+
+	if (dev_mode == ETC_DEVICE_MODE_RELAY) {
+		dev_str = "Relay";
+	} else if (dev_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
+		dev_str = "LoRa Logger";
+	} else if (dev_mode == ETC_DEVICE_MODE_LTE_LOGGER) {
+		dev_str = "LTE Logger";
+	}
+	LOG_INF("Device is %s", dev_str);
 }
 
 bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length)
@@ -445,7 +426,7 @@ enum etc_device_mode etc_device_get_mode(void)
 
 bool etc_device_is_logger_lora(void)
 {
-	return ((etc_get_device_mode() == ETC_DEVICE_MODE_LOGGER) && (etc_get_radio_mode() == ETC_RADIO_MODE_LORA));
+	return (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER);
 }
 
 int etc_device_get_rx_timeout(void)
@@ -476,6 +457,38 @@ enum etc_logger_job etc_device_get_job(void) {
 	return logger_job;
 }
 
+const struct device* etc_device_get_record(void) {
+	return record_fs.flash_device;
+}
+
+size_t etc_device_get_record_size(void) {
+	return FLASH_AREA_SIZE(RECORD_NODE_LABEL);
+}
+
+off_t etc_device_get_record_offset(void) {
+	return record_fs.offset;
+}
+
+size_t etc_device_get_record_max_element_index(void) {
+	return ETC_RECORD_MAX_PER_SECTOR;
+}
+
+size_t etc_device_get_record_max_sector_index(void) {
+	return ETC_RECORD_MAX_SECTOR;
+}
+
+size_t etc_device_get_record_element_size(void) {
+	return sizeof(union etc_device_record);
+}
+
+struct etc_device_record_table etc_device_get_record_status(void) {
+	return etc_device_record_table;
+}
+
+int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_device_record_header *header) {
+	uint16_t record_id = sector * ETC_RECORD_MAX_PER_SECTOR + element + ETC_RECORD_HEADER;
+	return etc_nvs_read(record_id, header, sizeof(union etc_device_record_header));
+}
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
 

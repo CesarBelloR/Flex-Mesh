@@ -41,6 +41,9 @@ static const struct gpio_dt_spec on_off_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_on_o
 #if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
 static const struct gpio_dt_spec pon_trig_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_pon_trig_gpios);
 #endif
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+static const struct gpio_dt_spec uart_oe_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_uart_oe_gpios);
+#endif
 #if DT_INST_NODE_HAS_PROP(0, mdm_reset_gpios)
 static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
 #endif
@@ -478,6 +481,7 @@ struct cereg_data {
 	char periodic_tau[PSM_TIMER_VAL_LEN];
 };
 
+#if CONFIG_MODEM_QUECTEL_BG95_PSM
 struct psm_ind {
 	/* 1 rising, 0 falling */
 	uint8_t edge;
@@ -493,6 +497,10 @@ static void psm_ind_work_fn(struct k_work *work)
 {	
 	ARG_UNUSED(work);
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
+#endif
+
 	LOG_INF("Woken up from PSM.");
 }
 
@@ -502,8 +510,8 @@ static void psm_ind_callback(const struct device *dev,
 	psm_ind.edge = gpio_pin_get(dev, pins);
 	k_work_submit_to_queue(&modem_workq, &psm_ind.work);
 }
-
 static struct gpio_callback psm_ind_gpio_callback;
+#endif
 
 static int setup_psm_ind_interrupt()
 {
@@ -1133,6 +1141,10 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 	quectel_bg95_set_connected(false);
 	setup_psm_ind_interrupt();
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
+#endif
+
 	modem_event_callback(MODEM_API_PSM_ENTERED_EVT);
 
 	return 0;
@@ -1203,6 +1215,7 @@ error:
 	return ret;
 }
 
+#if 0 // Uncomment when we need to use
 static int quectel_bg95_set_cereg(uint8_t n)
 {
 	char buf[sizeof("AT+CEREG=#")];
@@ -1223,6 +1236,7 @@ static int quectel_bg95_set_cereg(uint8_t n)
 
 	return ret;
 }
+#endif
 
 /**
  * @brief Set the PSM requested active and periodic TAU timer values.
@@ -1971,11 +1985,13 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("PSM POWER DOWN", on_cmd_psm_power_down, 0U, ""),
 };
 
+#if CONFIG_MODEM_QUECTEL_BG95_PSM
 static const struct setup_cmd psm_wakeup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
 	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
 };
+#endif
 
 /* Commands sent to the modem to set it up at boot time. */
 static const struct setup_cmd setup_cmds[] = {
@@ -2000,6 +2016,7 @@ static const struct setup_cmd setup_cmds[] = {
 };
 
 
+#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 /* Func: modem_rssi_query_work
  * Desc: Routine to get Modem RSSI.
  */
@@ -2018,6 +2035,7 @@ static void modem_psm_wakeup_work(struct k_work *work)
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    K_NO_WAIT);
 }
+#endif
 
 /* Func: modem_setup
  * Desc: This function is used to setup the modem from zero. The idea
@@ -2404,9 +2422,25 @@ static int modem_init(const struct device *dev)
 	}
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
-	ret = gpio_pin_configure_dt(&pon_trig_gpio, GPIO_OUTPUT_LOW);
+	ret = gpio_pin_configure_dt(&pon_trig_gpio, GPIO_OUTPUT_ACTIVE);
 	if (ret < 0) {
 		LOG_ERR("Failed to configure %s pin", "pon_trig");
+		goto error;
+	}
+#endif
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	ret = gpio_pin_configure_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "uart_oe");
+		goto error;
+	}
+#endif
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
+	ret = gpio_pin_configure_dt(&wdisable_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "wdisable");
 		goto error;
 	}
 #endif
@@ -2557,6 +2591,10 @@ static int quectel_bg95_pm_suspend(void)
 		return -EAGAIN;
 	}
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
+#endif
+
 	uart_irq_rx_disable(mctx.iface.dev);
 	uart_irq_tx_disable(mctx.iface.dev);
 	// uart doesn't have a shutdown mode only suspend
@@ -2574,6 +2612,11 @@ static int quectel_bg95_pm_resume(void)
 {
 	int ret = 0;
 	LOG_INF("PM_DEVICE_ACTION_RESUME");
+
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
+#endif
+
 	uart_irq_rx_enable(mctx.iface.dev);
 	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_RESUME);
 	if (ret)

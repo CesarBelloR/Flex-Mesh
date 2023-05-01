@@ -1,0 +1,17 @@
+/ {
+	chosen {
+		nordic,pm-ext-flash = &mx25r1635;
+		zephyr,shell-uart = &cdc_acm_uart0;
+		zephyr,console = &cdc_acm_uart0;
+	};
+
+	board-control {
+		modem_uart_oe: modem-uart-oe {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
+
+		
+	};
+};

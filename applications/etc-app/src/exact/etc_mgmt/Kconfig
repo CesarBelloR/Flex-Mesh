@@ -1,0 +1,8 @@
+menuconfig MCUMGR_CMD_ETC_MGMT
+	bool "Custom MCUMgrs Commands for the ETC"
+	help
+	  Enable custom commands for the ETC Monitor via/MCUMgr
+
+module = ETC_MGMT
+module-str = etc_mgmt
+source "subsys/logging/Kconfig.template.log_config"
