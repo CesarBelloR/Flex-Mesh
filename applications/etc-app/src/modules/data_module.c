@@ -327,7 +327,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) &&
-	    etc_get_radio_mode() == ETC_RADIO_MODE_LTE) {
+	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		data_encode();
 		return;
 	}
