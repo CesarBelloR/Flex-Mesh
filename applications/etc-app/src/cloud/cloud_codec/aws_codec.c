@@ -30,7 +30,7 @@ static inline bool is_digit(char in) {
 	return false;
 }
 
-int data_codec_init(struct cloud_data_cfg *cfg, cloud_codec_evt_handler_t event_handler)
+int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_handler)
 {
 	ARG_UNUSED(cfg);
 	

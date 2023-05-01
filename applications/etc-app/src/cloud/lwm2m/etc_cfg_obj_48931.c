@@ -2,6 +2,8 @@
  * Copyright (c) 2022 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ * 
+ * Copyright (c) 2023 EXACT Technology
  */
 
 #define LOG_MODULE_NAME net_lwm2m_obj_configuration
@@ -15,44 +17,37 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include "lwm2m_object.h"
 #include "lwm2m_engine.h"
+#include "etc_cfg_obj_48931.h"
 
 #define OBJECT_ID 48931
 #define OBJECT_VERSION_MAJOR 1
 #define OBJECT_VERSION_MINOR 0
 
-/* Configuration object resource IDs */
-#define RESOURCE_DEVICE_MODE		1
-#define RESOURCE_POWER_MODE			2
-#define RESOURCE_TX_INTERVAL		3
-#define RESOURCE_LOG_INTERVAL		4
-#define RESOURCE_LOG_INTERVAL_ALARM	5
-#define RESOURCE_TX_DELAY			6
-#define RESOURCE_WAKE_EARLY			7
-#define RESOURCE_RX_DURATION		8
-
-#define RESOURCES_MAX_ID			8
-#define RESOURCE_INSTANCE_COUNT	(RESOURCES_MAX_ID)
+#define RESOURCES_MAX_ID			9
+#define RESOURCE_INSTANCE_COUNT			(RESOURCES_MAX_ID)
 
 /* Storage variables to hold configuration values. */
 static uint8_t device_mode;
 static uint8_t power_mode;
-static uint16_t tx_interval;
-static uint16_t log_interval;
-static uint16_t log_interval_alarm;
+static uint32_t tx_interval;
+static uint32_t tx_interval_alarm;
+static uint32_t log_interval;
+static uint32_t log_interval_alarm;
 static uint16_t tx_delay;
 static uint16_t wake_early;
 static uint16_t rx_duration;
 
 static struct lwm2m_engine_obj object;
 static struct lwm2m_engine_obj_field fields[] = {
-	OBJ_FIELD_DATA(RESOURCE_DEVICE_MODE, RW, U8),
-	OBJ_FIELD_DATA(RESOURCE_POWER_MODE, RW, U8),
-	OBJ_FIELD_DATA(RESOURCE_TX_INTERVAL, RW, U16),
-	OBJ_FIELD_DATA(RESOURCE_LOG_INTERVAL, RW, U16),
-	OBJ_FIELD_DATA(RESOURCE_LOG_INTERVAL_ALARM, RW, U16),
-	OBJ_FIELD_DATA(RESOURCE_TX_DELAY, RW, U16),
-	OBJ_FIELD_DATA(RESOURCE_WAKE_EARLY, RW, U16),
-	OBJ_FIELD_DATA(RESOURCE_RX_DURATION, RW, U16)
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_DEVICE_MODE, RW, U8),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_POWER_MODE, RW, U8),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_TX_INTERVAL, RW, U32),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_LOG_INTERVAL, RW, U32),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM, RW, U32),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_TX_DELAY, RW, U16),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_WAKE_EARLY, RW, U16),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_RX_DURATION, RW, U16),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_TX_INTERVAL_ALARM, RW, U32),
 };
 
 static struct lwm2m_engine_obj_inst inst;
@@ -66,22 +61,24 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 	init_res_instance(res_inst, ARRAY_SIZE(res_inst));
 
 	/* Initialize object instance resource data */
-	INIT_OBJ_RES_DATA(RESOURCE_DEVICE_MODE, res, i, res_inst, j,
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_DEVICE_MODE, res, i, res_inst, j,
 			  &device_mode, sizeof(device_mode));
-	INIT_OBJ_RES_DATA(RESOURCE_POWER_MODE, res, i, res_inst, j,
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_POWER_MODE, res, i, res_inst, j,
 			  &power_mode, sizeof(power_mode));
-	INIT_OBJ_RES_DATA(RESOURCE_TX_INTERVAL, res, i, res_inst, j,
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_TX_INTERVAL, res, i, res_inst, j,
 			  &tx_interval, sizeof(tx_interval));
-	INIT_OBJ_RES_DATA(RESOURCE_LOG_INTERVAL, res, i, res_inst, j,
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_LOG_INTERVAL, res, i, res_inst, j,
 			  &log_interval, sizeof(log_interval));
-	INIT_OBJ_RES_DATA(RESOURCE_LOG_INTERVAL_ALARM, res, i, res_inst, j,
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_LOG_INTERVAL_ALARM, res, i, res_inst, j,
 			  &log_interval_alarm, sizeof(log_interval_alarm));
-	INIT_OBJ_RES_DATA(RESOURCE_TX_DELAY, res, i, res_inst, j,
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_TX_DELAY, res, i, res_inst, j,
 			  &tx_delay, sizeof(tx_delay));
-	INIT_OBJ_RES_DATA(RESOURCE_WAKE_EARLY, res, i, res_inst, j,
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_WAKE_EARLY, res, i, res_inst, j,
 			  &wake_early, sizeof(wake_early));
-	INIT_OBJ_RES_DATA(RESOURCE_RX_DURATION, res, i, res_inst, j,
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_RX_DURATION, res, i, res_inst, j,
 			  &rx_duration, sizeof(rx_duration));
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_TX_INTERVAL_ALARM, res, i, res_inst, j,
+			  &tx_interval_alarm, sizeof(tx_interval_alarm));
 
 	inst.resources = res;
 	inst.resource_count = i;
