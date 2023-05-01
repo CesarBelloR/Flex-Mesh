@@ -317,7 +317,7 @@ static int module_lora_wait_packet(void)
 						      ? strlen(response.logger_id)
 						      : strlen(buf_tmp));
 			/* Compare the logger_id from ACK and current logger ID */
-			if (strstr(buf_tmp, response.logger_id, length_compare) != 0) {
+			if (strncmp(buf_tmp, response.logger_id, length_compare) != 0) {
 				return -1;
 			}
 
