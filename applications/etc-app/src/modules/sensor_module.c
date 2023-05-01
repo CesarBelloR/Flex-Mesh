@@ -8,8 +8,9 @@
 #include "adc.h"
 #include "etc_date_time.h"
 #include "etc_settings.h"
+#include "etc_device.h"
+#include "watchdog_app.h"
 #define MODULE sensor_module
-#define MODULE_SENSOR_THREAD_STACK_SIZE 2048
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -45,19 +46,16 @@ static struct sensor_data static_sensor_data;
 #define SENSOR_QUEUE_ENTRY_COUNT	10
 #define SENSOR_QUEUE_BYTE_ALIGNMENT	4
 
-#define SENSOR_GPIO_SENSE_ENABLE_PIN (13)
-#define SENSOR_GPIO_S0_PIN (9)
-#define SENSOR_GPIO_S1_PIN (10)
-
 /* Sensor Analog constant information */
 #define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
 #define SENSOR_NTC_NOMINAL_TEMP 25.0
 #define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
 #define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
-#define SENSOR_RAW_ADC_MAX 4095
+#define SENSOR_NTC_REFERENCE_VOLTAGE (float)(DT_PROP(DT_PATH(ntc), reference_voltage_mv) / 1000.0f)
 
-#define SENSOR_BATTERY_ADC_MAX SENSOR_RAW_ADC_MAX
 #define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
+
+#define SENSOR_HANDLER_MAX_WAIT_S 10
 
 /* Battery constant information */
 const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
@@ -96,7 +94,7 @@ static void sensor_adc_hw_init(void) {
 		return;
 	}
 	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+	/* Note: pin s0 is configured by watchdog module. */
 	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 }
 
@@ -197,9 +195,9 @@ static int setup(void)
 	return 0;
 }
 
-static float sensor_ntc_converter(int data) {
-	float raw_data = ((float)(data) * 3.6 / 3.3);
-	float tmp_value = (float)SENSOR_RAW_ADC_MAX / (float)raw_data - 1.0;
+static float sensor_ntc_converter(int data, float full_scale_v, int full_scale_count) {
+	float raw_data = ((float)(data) * full_scale_v / SENSOR_NTC_REFERENCE_VOLTAGE);
+	float tmp_value = (float)full_scale_count / (float)raw_data - 1.0;
 	tmp_value = SENSOR_NTC_RESISTOR_REF / tmp_value;
 	tmp_value = tmp_value / SENSOR_NTC_NOMINAL_RESISTANCE;
 	tmp_value = logf(tmp_value);
@@ -210,19 +208,32 @@ static float sensor_ntc_converter(int data) {
 	return tmp_value;
 }
 
-static void sensor_poll_handler(void) {
-	if (sensor_is_processing) return;
+static int sensor_poll_handler(void) {
+	if (sensor_is_processing) {
+		return 0;
+	}
+	if (watchdog_sens_sel0_wdt_sem_take(K_SECONDS(SENSOR_HANDLER_MAX_WAIT_S)) != 0) {
+		LOG_WRN("Could not take watchdog_sens_sel0 semaphore");
+		return -EAGAIN;
+	}
+
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
 	data->timestamp = date_time_now_second();
-	data->temperature[SENSOR_INPUT_AMBIENT] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB));
+	data->temperature[SENSOR_INPUT_AMBIENT] = 
+			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB),
+			  (float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
+			  adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
 	if (fabs(data->temperature[SENSOR_INPUT_AMBIENT] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 		LOG_DBG("Ambient temp %2.2f", data->temperature[0]);
 	}
 	for (int8_t i = SENSOR_INPUT_IN1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		sensor_adc_switch_channel(i - 1);
 		k_msleep(50);
-		data->temperature[i] = sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR));
+		data->temperature[i] = 
+			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR),
+				(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) / 1000.0f,
+				adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
 		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
 			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
 		} else {
@@ -236,6 +247,10 @@ static void sensor_poll_handler(void) {
 	data->battery_mV = adc_mv_battery;
 	sensor_module_send_sensor(data);
 	sensor_is_processing = false;
+
+	watchdog_sens_sel0_wdt_sem_give();
+
+	return 0;
 }
 
 /* Message handler for STATE_INIT. */
@@ -254,7 +269,7 @@ static void on_state_running(struct sensor_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct sensor_msg_data *msg)
 {
-	if (IS_EVENT(msg, app, APP_EVT_DATA_GET_ALL)) {
+	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
 		LOG_INF("APP_EVT_DATA_GET");
 		sensor_poll_handler();
 		return;
@@ -280,16 +295,18 @@ static void on_all_states(struct sensor_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		/* In boot-up, device connected to cloud, start a sensor poll to get data */
 		static bool is_send = false;
-		if (!is_send) {
-			LOG_DBG("Device is online. Collecting and sending first sensor data");
-			is_send = true;
-			sensor_poll_handler();
+		if (etc_device_is_logger_lora() == false) {
+			if (!is_send) {
+				LOG_DBG("Device is online. Collecting and sending first sensor data");
+				is_send = true;
+				sensor_poll_handler();
+			}
 		}
 		return;
 	}
 }
 
-static void module_thread_fn(void)
+void sensor_module_thread_fn(void)
 {
 	int err;
 	struct sensor_msg_data msg = { 0 };
@@ -331,10 +348,6 @@ static void module_thread_fn(void)
 		on_all_states(&msg);
 	}
 }
-
-K_THREAD_DEFINE(sensor_module_thread, MODULE_SENSOR_THREAD_STACK_SIZE,
-		module_thread_fn, NULL, NULL, NULL,
-		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);

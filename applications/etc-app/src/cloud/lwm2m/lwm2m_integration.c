@@ -2,6 +2,8 @@
  * Copyright (c) 2022 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ * 
+ * Copyright (c) 2023 EXACT Technology
  */
 
 #include <zephyr/kernel.h>
@@ -13,6 +15,8 @@
 #include <hw_id.h>
 #include <zephyr/net/lwm2m_path.h>
 #include <zephyr/net/lwm2m.h>
+
+#include "etc_lwm2m_client_utils.h"
 
 #include "cloud/cloud_wrapper.h"
 
@@ -45,6 +49,7 @@ static enum lwm2m_integration_state_type {
 	DISCONNECTED,
 	CONNECTING,
 	CONNECTED,
+	PAUSED,
 } state;
 
 static cloud_wrap_evt_handler_t wrapper_evt_handler;
@@ -340,6 +345,7 @@ static int lwm2m_init_security(struct lwm2m_ctx *client, const char *ep_name)
 	char *server_url;
 	uint16_t server_url_len;
 	uint8_t client_psk[CONFIG_LWM2M_SECURITY_KEY_SIZE];
+	size_t psk_len;
 
 	/* Server URL */
 	ret = lwm2m_get_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_SECURITY_ID, 0,
@@ -360,11 +366,15 @@ static int lwm2m_init_security(struct lwm2m_ctx *client, const char *ep_name)
 		     IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT) ? 0 : 3);
 
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
-	hex2bin(CONFIG_LWM2M_INTEGRATION_PSK, sizeof(CONFIG_LWM2M_INTEGRATION_PSK) - 1,
-			client_psk, sizeof(client_psk));
-	lwm2m_set_string(&LWM2M_OBJ(0, 0, 3), CONFIG_LWM2M_INTEGRATION_PSK_ID);
+	psk_len = hex2bin(CONFIG_LWM2M_INTEGRATION_PSK, 
+			  sizeof(CONFIG_LWM2M_INTEGRATION_PSK) - 1,
+			  client_psk, sizeof(client_psk));
+	if (psk_len == 0) {
+		LOG_WRN("Error converting DTLS PSK to binary. Is it too long?");
+	}
+	lwm2m_set_string(&LWM2M_OBJ(0, 0, 3), ep_name);
 	lwm2m_set_opaque(&LWM2M_OBJ(0, 0, 5),
-			 (void *)client_psk, sizeof(client_psk));
+			 (void *)client_psk, psk_len);
 #endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 #if CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP
 	/* Mark 1st instance of security object as a bootstrap server */
@@ -378,6 +388,13 @@ static int lwm2m_init_security(struct lwm2m_ctx *client, const char *ep_name)
 	lwm2m_set_u16(&LWM2M_OBJ(0, 0, 10), CONFIG_LWM2M_SERVER_DEFAULT_SSID);
 	lwm2m_set_u16(&LWM2M_OBJ(1, 0, 0), CONFIG_LWM2M_SERVER_DEFAULT_SSID);
 #endif
+
+	ret = lwm2m_load_credentials_to_modem(client);
+	if (ret < 0) {
+		LOG_ERR("Error loading credentials to modem: %d", ret);
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -464,6 +481,46 @@ int cloud_wrap_disconnect(void)
 	cloud_wrapper_notify_event(&event);
 	
 	state = DISCONNECTED;
+	return 0;
+}
+
+int cloud_wrap_pause(void)
+{
+	int err;
+	struct cloud_wrap_event event = { 0 };
+
+	if (state != CONNECTED) {
+		return -ENOTSUP;
+	}
+
+	err = lwm2m_engine_pause();
+	if (err) {
+		LOG_ERR("lwm2m_engine_pause, error: %d", err);
+		return err;
+	}	
+	event.type = CLOUD_WRAP_EVT_PAUSED;
+
+	cloud_wrapper_notify_event(&event);
+	
+	state = PAUSED;
+	return 0;
+}
+
+int cloud_wrap_resume(void)
+{
+	int err;
+
+	if (state != PAUSED) {
+		return -ENOTSUP;
+	}
+
+	err = lwm2m_engine_resume();
+	if (err) {
+		LOG_ERR("lwm2m_engine_resume, error: %d", err);
+		return err;
+	}	
+
+	state = CONNECTING;
 	return 0;
 }
 

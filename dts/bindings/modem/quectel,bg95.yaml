@@ -15,6 +15,18 @@ properties:
     mdm-power-gpios:
       type: phandle-array
       required: false
+    
+    mdm-pon-trig-gpios:
+      type: phandle-array
+      required: false
+
+    mdm-psm-ind-gpios:
+      type: phandle-array
+      required: false
+
+    mdm-uart-oe-gpios:
+      type: phandle-array
+      required: false
 
     mdm-reset-gpios:
       type: phandle-array

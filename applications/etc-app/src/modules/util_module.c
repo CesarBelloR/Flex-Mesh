@@ -50,16 +50,12 @@ static enum state_type {
 
 /* Forward declarations. */
 static void reboot_work_fn(struct k_work *work);
-static void wakeup_work_fn(struct k_work *work);
 static void message_handler(struct util_msg_data *msg);
 static void send_reboot_request(enum shutdown_reason reason);
 
 /* Delayed work that is used to trigger a reboot. */
 static K_WORK_DELAYABLE_DEFINE(reboot_work, reboot_work_fn);
 
-
-/* Delayed work that is used to trigger a wakeup. */
-static K_WORK_DELAYABLE_DEFINE(wakeup_work, wakeup_work_fn);
 
 static struct module_data self = {
 	.name = "util",

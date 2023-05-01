@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LWM2M xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.openmobilealliance.org/tech/profiles/LWM2M.xsd">
+	<Object ObjectType="MODefinition">
+		<Name>EXACT Configuration</Name>
+		<Description1 />
+		<ObjectID>48931</ObjectID>
+		<ObjectURN>urn:oma:lwm2m:x:48931:1.0</ObjectURN>
+		<LWM2MVersion>1.1</LWM2MVersion>
+		<ObjectVersion>1.0</ObjectVersion>
+		<MultipleInstances>Single</MultipleInstances>
+		<Mandatory>Optional</Mandatory>
+		<Resources>
+			<Item ID="1">
+				<Name>DEVICE_MODE</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0..2</RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Selection between:
+- 0: Relay mode
+- 1: LoRa Logger mode
+- 2: LTE Logger mode]]></Description>
+			</Item>
+			<Item ID="2">
+				<Name>POWER_MODE</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0..1</RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Selection between:
+- 0: Always On (AO) mode
+- 1: Hibernate mode]]></Description>
+			</Item>
+			<Item ID="3">
+				<Name>TX_INTERVAL</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>60..86400</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Frequency device wakes up, takes readings, and stores to flash.
+Interval is always synched to the clock. E.g. interval of 900 seconds (15 mintues) will log readings at 12:00:00, 12:15:00, 12:30:00, etc. Interval of 1 at 12:00:00, 12:01:00, 12:02:00, etc.
+]]></Description>
+			</Item>
+			<Item ID="4">
+				<Name>LOG_INTERVAL</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>60..86400</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Frequency device wakes up, takes readings, and stores to flash.
+Interval is always synched to the clock. E.g. interval of 900 seconds (15 mintues) will log readings at 12:00:00, 12:15:00, 12:30:00, etc. Interval of 1 at 12:00:00, 12:01:00, 12:02:00, etc.]]></Description>
+			</Item>
+			<Item ID="5">
+				<Name>LOG_INTERVAL_ALARM</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>60..86400</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Frequency readings are recorded when an ALARM_THRESHOLD is crossed.]]></Description>
+			</Item>
+			
+			<Item ID="6">
+				<Name>TX_DELAY</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0..29500</RangeEnumeration>
+				<Units>ms</Units>
+				<Description><![CDATA[Random value between 0 - 29500, rounded to closest 200 ms.
+Number of ms after TX_INTERVAL, for transmitting data. Minimizes LoRa collisions and server load. For a logger, random value between 0 and 29500, rounded to closest 200 ms. Random value determined at first transmit, then saved if transit was successful, resets again if ACK not immediately received.]]></Description>
+			</Item>
+			<Item ID="7">
+				<Name>WAKE_EARLY</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0..840</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[How much earlier than TX_INTERVAL a 
+Relay wakes up to listen for loggers. Helps catch logger with clocks that are slightly fast.  Only valid for DEVICE_MODE= 0]]></Description>
+			</Item><Item ID="8">
+				<Name>RX_DURATION</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>30..300</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Default value: 120
+How long Relay stays in RX mode.  Only valid for DEVICE_MODE = 0.]]></Description>
+			</Item>
+			<Item ID="9">
+				<Name>TX_INTERVAL_ALARM</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>60..86400</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Frequency readings are recorded and reported when an ALARM_THRESHOLD is crossed.]]></Description>
+			</Item>
+		</Resources>
+		<Description2 />
+	</Object>
+</LWM2M>

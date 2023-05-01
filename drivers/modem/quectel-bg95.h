@@ -95,6 +95,9 @@ struct modem_data {
 	/* RSSI work */
 	struct k_work_delayable rssi_query_work;
 
+	/* PSM wakeup work */
+	struct k_work psm_wakeup_work;
+
 	/* modem data */
 	char mdm_manufacturer[MDM_MANUFACTURER_LENGTH];
 	char mdm_model[MDM_MODEL_LENGTH];
@@ -135,8 +138,14 @@ struct modem_data {
 	/* Modem status */
 	bool is_connected;
 
+	bool psm_active;
+
 	/* Modem API */
 	modem_api_evt_handler_t evt_callback;
+
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK)
+	struct modem_psk psk;
+#endif
 
 	/* Semaphore(s) */
 	struct k_sem sem_response;

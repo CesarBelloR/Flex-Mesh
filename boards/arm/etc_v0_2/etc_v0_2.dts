@@ -1,0 +1,326 @@
+/dts-v1/;
+#include <nordic/nrf52840_qiaa.dtsi>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include "etc_v0_2_pinctrl.dtsi"
+
+/ {
+	model = "ETC Core v0.2";
+        compatible = "nordic,nrf52840-dk-nrf52840";
+
+	chosen {
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+		zephyr,uart-mcumgr = &uart0;
+		zephyr,bt-mon-uart = &uart0;
+		zephyr,bt-c2h-uart = &uart0;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
+	};
+
+	vbatt {
+		compatible = "voltage-divider";
+		output-ohms = <2000000>;
+		full-ohms = <(2000000 + 2000000)>;
+		io-channels = <&adc 3>;
+	};
+
+	ntc {
+		compatible = "temp,ntc";
+		b-value-k = <3434>;
+		norminal-25c-ohms = <10000>;
+		reference-res-ohms = <10000>;
+		reference-voltage-mv = <3000>;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		led0: led_0 {
+			gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
+			label = "Red LED";
+		};
+		led1: led_1 {
+			gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
+			label = "Green LED";
+		};
+		led2: led_2 {
+			gpios = <&gpio1 10 GPIO_ACTIVE_LOW>;
+			label = "Blue LED";
+		};
+	};
+
+	pwmleds {
+		compatible = "pwm-leds";
+		pwm_led0: pwm_led_0 {
+			pwms = <&pwm0 0 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+		};
+		pwm_led1: pwm_led_1 {
+			pwms = <&pwm0 1 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+		};
+		pwm_led2: pwm_led_2 {
+			pwms = <&pwm0 2 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+		};
+	};
+
+	board-control {
+		sense_enable: sense-enable {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		vsens_enable: vsens-enable {
+			compatible = "etc,output";
+			control-gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		sens_sel0: sens-sel0 {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		sens_sel1: sens-sel1 {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		rtc_int: rtc-int {
+			compatible = "etc,input";
+			control-gpios = <&gpio0 3 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
+		hall_int: hall-int {
+			compatible = "etc,input";
+			control-gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
+	};
+	
+	/* These aliases are provided for compatibility with samples */
+	aliases {
+		led0 = &led0;
+		led1 = &led1;
+		led2 = &led2;
+		lora0 = &lora;
+		pwm-led0 = &pwm_led0;
+		pwm-led1 = &pwm_led1;
+		pwm-led2 = &pwm_led2;
+	};
+};
+
+/* A7 = P0.31 = AIN7 - ADC_AMB */ 
+/* A3 = P0.5  = AIN3 - ADC_BATT*/
+/* A2 = P0.4 = AIN2 - ADC_TH*/
+/* A2 = P0.29 = AIN5 - HW_VER*/
+/ {
+	zephyr,user {
+		/* adjust channel number according to pinmux in board.dts */
+		io-channels = <&adc 7>, <&adc 3>, <&adc 2>, <&adc 5>;
+	};
+};
+
+&gpiote {
+	status = "okay";
+};
+
+&gpio0 {
+	status = "okay";
+	label = "GPIO_0";
+};
+
+&gpio1 {
+	status = "okay";
+	label = "GPIO_1";
+};
+
+&i2c0 {
+	compatible = "nordic,nrf-twim";
+	status = "okay"; 
+	label = "I2C_0";
+	pinctrl-0 = <&i2c0_default>;
+	pinctrl-1 = <&i2c0_sleep>;
+	pinctrl-names = "default", "sleep";
+
+        bq25618: bq25618@6a {
+                compatible = "ti,bq25618";
+                reg = <0x6a>;
+                min-voltage = <4400>;
+                max-current = <2000>;
+                charge-current = <1500>;
+                charge-voltage = <4200>;
+                int-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+        };
+};
+
+&adc {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@7 {
+		reg = <7>;
+		zephyr,gain = "ADC_GAIN_1_5";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN7>; 
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <8>;
+	};
+
+	channel@3 {
+		reg = <3>;
+		zephyr,gain = "ADC_GAIN_1_5";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN3>;
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <8>;
+	};
+
+	channel@2 {
+		reg = <2>;
+		zephyr,gain = "ADC_GAIN_1_5";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN2>;
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <8>;
+	};
+
+	/* HW_VER analog input */
+	channel@5 {
+		reg = <5>;
+		zephyr,gain = "ADC_GAIN_1_5";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN5>;
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <8>;
+	};
+};
+
+&pwm0 {
+	status = "okay";
+	label = "PWM_0";
+	pinctrl-0 = <&pwm0_default>;
+	pinctrl-1 = <&pwm0_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+&spi1 {
+	compatible = "nordic,nrf-spi";
+	status = "okay";
+	label = "SPI_1";
+	pinctrl-0 = <&spi1_default>;
+	pinctrl-1 = <&spi1_sleep>;
+	pinctrl-names = "default", "sleep";
+	cs-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
+
+	lora: sx1276@0 {
+		compatible = "semtech,sx1276";
+		reg = <0>;
+		label = "sx1276";
+		reset-gpios = <&gpio1 11 GPIO_ACTIVE_LOW>;
+		dio-gpios = <&gpio1 15 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+		tcxo-power-startup-delay-ms = <5>;
+		spi-max-frequency = <1000000>;
+		power-amplifier-output = "pa-boost";
+	};
+};
+
+&spi2 {
+	compatible = "nordic,nrf-spim";
+	label = "SPI_2";
+	status = "okay";
+	pinctrl-0 = <&spi2_default>;
+	pinctrl-1 = <&spi2_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
+	mx25r1635: mx25r1635@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-max-frequency = <8000000>;
+		label = "MX25R16";
+		jedec-id = [ C2 28 15 ];
+		size = <16777216>;
+		wp-gpios = < &gpio0 17 GPIO_ACTIVE_LOW >;
+		hold-gpios = < &gpio0 19 GPIO_ACTIVE_LOW >;
+	};
+};
+
+&uart0 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart0_default>;
+	pinctrl-1 = <&uart0_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+&uart1 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart1_default>;
+	pinctrl-1 = <&uart1_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	quectel_bg95: quectel_bg95 {
+		compatible = "quectel,bg95";
+		label      = "quectel-bg95";
+		status     = "okay";
+		mdm-power-gpios = <&gpio0 25 0>;
+		mdm-on-off-gpios = <&gpio1 1 0>;
+		mdm-pon-trig-gpios = <&gpio1 13 0>;
+		mdm-psm-ind-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
+		mdm-uart-oe-gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 0x00010000>;
+		};
+		slot0_partition: partition@10000 {
+			label = "image-0";
+			reg = <0x00010000 0x00070000>;
+		};
+	};
+};
+
+&mx25r1635 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		slot1_partition: partition@0 {
+			label = "image-1";
+			reg = <0x00000000 0x00070000>;
+		};
+		storage_partition: partition@1F0000 {
+			label = "storage";
+			reg = <0x001F0000 0x00005000>;
+		};
+		nvs_partition: partition@1F5000 {
+			label = "nvs-storage";
+			reg = <0x001F5000 0x00005000>;
+		};
+	};
+};
+
+zephyr_udc0: &usbd {
+	compatible = "nordic,nrf-usbd";
+	status = "okay";
+
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_0";
+	};
+};

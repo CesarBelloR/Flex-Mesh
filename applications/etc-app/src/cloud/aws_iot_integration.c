@@ -209,6 +209,17 @@ int cloud_wrap_disconnect(void)
 	return 0;
 }
 
+
+int cloud_wrap_pause(void)
+{
+	return cloud_wrap_disconnect();
+}
+
+int cloud_wrap_resume(void)
+{
+	return cloud_wrap_connect();
+}
+
 int cloud_wrap_state_get(bool ack, uint32_t id)
 {
 	int err;
