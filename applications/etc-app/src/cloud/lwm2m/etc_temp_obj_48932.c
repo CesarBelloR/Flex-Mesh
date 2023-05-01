@@ -14,6 +14,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "lwm2m_object.h"
 #include "lwm2m_engine.h"
 #include "lwm2m_resource_ids.h"
+#include "etc_temp_obj_48932.h"
 
 #define OBJECT_ID 48932
 #define TEMP_VERSION_MAJOR 1
@@ -21,10 +22,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define TEMP_MAX_ID 9
 
 #define MAX_INSTANCE_COUNT	CONFIG_LWM2M_INTEGRATION_MAX_TEMP_SENSOR_INSTANCE_COUNT
-
-#define RESOURCE_TYPE		1
-#define RESOURCE_PORT		2
-#define RESOURCE_UID		3
 
 #define UNIT_STR_MAX_SIZE	8
 #define UID_STR_MAX_SIZE	16
@@ -52,9 +49,9 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(MAX_RANGE_VALUE_RID, R_OPT, FLOAT),
 	OBJ_FIELD_DATA(TIMESTAMP_RID, R_OPT, TIME),
 	OBJ_FIELD_DATA(FRACTIONAL_TIMESTAMP_RID, R_OPT, FLOAT),
-	OBJ_FIELD_DATA(RESOURCE_TYPE, R, U8),
-	OBJ_FIELD_DATA(RESOURCE_PORT, R, U8),
-	OBJ_FIELD_DATA(RESOURCE_UID, R_OPT, STRING),
+	OBJ_FIELD_DATA(ETC_TEMP_OBJ_R_TYPE, R, U8),
+	OBJ_FIELD_DATA(ETC_TEMP_OBJ_R_PORT, R, U8),
+	OBJ_FIELD_DATA(ETC_TEMP_OBJ_R_UID, R_OPT, STRING),
 };
 
 static struct lwm2m_engine_obj_inst inst[MAX_INSTANCE_COUNT];
@@ -110,11 +107,11 @@ static struct lwm2m_engine_obj_inst *temp_sensor_create(uint16_t obj_inst_id)
 	INIT_OBJ_RES_DATA(MAX_RANGE_VALUE_RID, res[index], i,
 			  res_inst[index], j, &max_range_value[index],
 			  sizeof(*max_range_value));
-	INIT_OBJ_RES_DATA(RESOURCE_TYPE, res[index], i, res_inst[index], j, 
+	INIT_OBJ_RES_DATA(ETC_TEMP_OBJ_R_TYPE, res[index], i, res_inst[index], j, 
 			  &type[index], sizeof(*type));
-	INIT_OBJ_RES_DATA(RESOURCE_PORT, res[index], i, res_inst[index], j,
+	INIT_OBJ_RES_DATA(ETC_TEMP_OBJ_R_PORT, res[index], i, res_inst[index], j,
 			  &port[index], sizeof(*port));
-	INIT_OBJ_RES_DATA(RESOURCE_UID, res[index], i, res_inst[index], j, 
+	INIT_OBJ_RES_DATA(ETC_TEMP_OBJ_R_UID, res[index], i, res_inst[index], j, 
 			  uid[index], UID_STR_MAX_SIZE);
 	INIT_OBJ_RES_OPTDATA(TIMESTAMP_RID, res[index], i, res_inst[index], j);
 	INIT_OBJ_RES_OPTDATA(FRACTIONAL_TIMESTAMP_RID, res[index], i,
