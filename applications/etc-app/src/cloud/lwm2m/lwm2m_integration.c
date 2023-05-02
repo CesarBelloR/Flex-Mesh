@@ -467,7 +467,7 @@ int cloud_wrap_disconnect(void)
 	int err;
 	struct cloud_wrap_event event = { 0 };
 
-	if (state != CONNECTED) {
+	if ((state != CONNECTED) || (state != CONNECTING)) {
 		return -ENOTSUP;
 	}
 

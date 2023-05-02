@@ -336,7 +336,8 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		return;
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
 	}
