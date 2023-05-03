@@ -250,8 +250,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static void connect_check_work_fn(struct k_work *work)
 {
-	if ((state == STATE_LTE_CONNECTED && sub_state_lte_connected == SUB_STATE_CLOUD_CONNECTED) ||
-	    (state == STATE_LTE_DISCONNECTED))
+	if ((state == STATE_LTE_CONNECTED && sub_state_lte_connected == SUB_STATE_CLOUD_CONNECTED))
 	{
 		return;
 	}
@@ -377,12 +376,7 @@ static void connect_cloud(void)
 	}
 
 	if (cloud_wrap_connect() < 0) {
-		connect_retries = 0;
-		LOG_WRN("Connecting failed. Disconnecting and trying to reconnect "
-		        "in %u seconds.", 10);
-		cloud_wrap_disconnect();
-		k_work_reschedule(&connect_check_work, K_SECONDS(10));
-		return;
+		LOG_WRN("Connecting failed.");
 	}
 
 	connect_retries++;
@@ -409,8 +403,6 @@ static void pause_cloud(void)
 	connect_retries = 0;
 	
 	cloud_wrap_pause();
-
-	k_work_cancel_delayable(&connect_check_work);
 }
 
 static void resume_cloud(void)
@@ -455,6 +447,11 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 		 */
 		disconnect_cloud();
 	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+		state_set(STATE_LTE_DISCONNECTED);
+		sub_state_lte_disconnected_set(SUB_STATE_LTE_PSM);
+	}
 }
 
 /* Message handler for STATE_LTE_DISCONNECTED. */
@@ -490,12 +487,6 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
 		pause_cloud();
 	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
-		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
-		state_set(STATE_LTE_DISCONNECTED);
-		sub_state_lte_disconnected_set(SUB_STATE_LTE_PSM);
-	}
 }
 
 /* Message handler for SUB_STATE_CLOUD_DISCONNECTED. */
@@ -506,6 +497,10 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_CONNECTED);
 		connect_retries = 0;
 		k_work_cancel_delayable(&connect_check_work);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+		pause_cloud();
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT))
@@ -548,6 +543,10 @@ static void on_all_states(struct cloud_msg_data *msg)
 #if !defined(CONFIG_APP_AWS_IOT)
 		SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
 #endif
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
 	}
 }
 

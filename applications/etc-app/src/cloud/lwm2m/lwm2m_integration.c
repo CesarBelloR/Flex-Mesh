@@ -189,6 +189,11 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
 		notify = true;
 		break;
+	case LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED:
+		LOG_DBG("LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED");
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_PAUSED;
+		notify = true;
+		break;
 	default:
 		LOG_ERR("Unknown event: %d", client_event);
 		break;
@@ -448,6 +453,9 @@ int cloud_wrap_connect(void)
 	if (state != DISCONNECTED) {
 		return -EINPROGRESS;
 	}
+	if ((state == CONNECTED) || (state == CONNECTING)) {
+		lwm2m_rd_client_update();
+	}
 
 	err = lwm2m_rd_client_start(
 			&client, endpoint_name,
@@ -489,18 +497,11 @@ int cloud_wrap_pause(void)
 	int err;
 	struct cloud_wrap_event event = { 0 };
 
-	if (state != CONNECTED) {
-		return -ENOTSUP;
-	}
-
 	err = lwm2m_engine_pause();
 	if (err) {
 		LOG_ERR("lwm2m_engine_pause, error: %d", err);
 		return err;
 	}	
-	event.type = CLOUD_WRAP_EVT_PAUSED;
-
-	cloud_wrapper_notify_event(&event);
 	
 	state = PAUSED;
 	return 0;
