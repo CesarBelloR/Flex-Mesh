@@ -23,3 +23,7 @@ target_sources_ifdef(CONFIG_LWM2M app
                      PRIVATE 
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_cfg_obj_48931.c)
 
+target_sources_ifdef(CONFIG_LWM2M app
+                     PRIVATE 
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_temp_obj_48932.c)
+

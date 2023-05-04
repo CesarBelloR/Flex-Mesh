@@ -70,7 +70,7 @@
 		};
 		vsens_enable: vsens-enable {
 			compatible = "etc,output";
-			control-gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+			control-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
 			status = "okay";
 		};
 		sens_sel0: sens-sel0 {

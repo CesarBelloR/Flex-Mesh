@@ -5,6 +5,8 @@
 #ifndef CONFIGURATION_OBJECT_H__
 #define CONFIGURATION_OBJECT_H__
 
+#define ETC_CFG_OBJECT_ID	48931
+
 /* Configuration object resource IDs */
 #define ETC_CFG_OBJ_R_DEVICE_MODE		1U
 #define ETC_CFG_OBJ_R_POWER_MODE		2U

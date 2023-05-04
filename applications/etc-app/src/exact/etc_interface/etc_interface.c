@@ -61,8 +61,8 @@ static int etc_interface_init(const struct device *unused)
 
 	LOG_INF("Initialized the ETC Interface successfully");
 
-	gpio_pin_configure_dt(&hall_sensor_dt, GPIO_INPUT | GPIO_PULL_UP);
-    	gpio_pin_interrupt_configure_dt(&hall_sensor_dt, GPIO_INT_LEVEL_LOW);
+	gpio_pin_configure_dt(&hall_sensor_dt, GPIO_INPUT);
+    	gpio_pin_interrupt_configure_dt(&hall_sensor_dt, GPIO_INT_EDGE_TO_ACTIVE);
 	gpio_init_callback(&hall_sensor_event_data.callback, hall_sensor_callback_handler, BIT(hall_sensor_dt.pin));
 	gpio_add_callback(hall_sensor_dt.port, &hall_sensor_event_data.callback);
 
