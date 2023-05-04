@@ -265,7 +265,7 @@ static void app_peripheral_on(bool is_rtc)
 			SEND_EVENT(app, APP_EVT_DATA_GET);
 		} else {
 			LOG_DBG("Unknown task - set default job to log");
-			etc_device_set_job(ETC_LOGGER_JOB_LOG);
+			etc_device_set_job(ETC_LOGGER_JOB_BOTH);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
 		}
 #endif
