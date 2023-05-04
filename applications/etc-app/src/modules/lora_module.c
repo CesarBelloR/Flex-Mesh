@@ -313,11 +313,8 @@ static int module_lora_wait_packet(void)
 		etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
 		struct logger_lora_response response = lora_module_get_sync_data(decoded_buf);
 		if (response.is_okay) {
-			int length_compare = (strlen(buf_tmp) >= strlen(response.logger_id)
-						      ? strlen(response.logger_id)
-						      : strlen(buf_tmp));
 			/* Compare the logger_id from ACK and current logger ID */
-			if (strncmp(buf_tmp, response.logger_id, length_compare) != 0) {
+			if (strncmp(buf_tmp, response.logger_id, strlen(buf_tmp)) != 0) {
 				return -1;
 			}
 
