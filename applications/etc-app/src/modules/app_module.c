@@ -343,9 +343,9 @@ static void app_set_wakeup_time(void)
 	gmtime_r(&next_sleep, &tm_next_time);
 	
 	LOG_DBG("      Now: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
-	LOG_DBG("Wakeup at: %02d:%02d:%02d", tm_next_time.tm_hour, tm_next_time.tm_min, 0);
+	LOG_DBG("Wakeup at: %02d:%02d:%02d", tm_next_time.tm_hour, tm_next_time.tm_min, tm_time.tm_sec);
 	pcf85263a_alarm_type_1_config_t config = {
-		.seconds = 0,
+		.seconds = tm_time.tm_sec,
 		.minutes = tm_next_time.tm_min,
 		.hours = tm_next_time.tm_hour,
 		.days = 0,
@@ -353,7 +353,7 @@ static void app_set_wakeup_time(void)
 	};
 
 	pcf85263a_alarm_type_1_flag_t flag = {
-		.enable_seconds = 0,
+		.enable_seconds = 1,
 		.enable_minutes = 1,
 		.enable_hours = 1,
 		.enable_days = 0,
