@@ -271,7 +271,7 @@ static void app_peripheral_on(bool is_rtc)
 #endif
 	} else {
 		LOG_DBG("Wakeup from external HALL sensor");
-		etc_device_set_job(ETC_LOGGER_JOB_LOG);
+		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
 		SEND_EVENT(app, APP_EVT_DATA_GET);
 	}
 }
