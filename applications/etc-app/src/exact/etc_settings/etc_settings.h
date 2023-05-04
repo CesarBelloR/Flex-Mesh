@@ -12,14 +12,6 @@ void etc_settings_refresh();
 void etc_set_hw_version(const char *hw_version);
 void etc_set_fw_version(const char *fw_version);
 void etc_set_device_id(const char *device_id);
-void etc_set_time_last_log(int time);
-void etc_set_time_last_tx(int time);
-void etc_set_interval_last_log(int time);
-void etc_set_interval_last_tx(int time);
-int etc_get_time_last_log(void);
-int etc_get_time_last_tx(void);
-int etc_get_interval_last_log(void);
-int etc_get_interval_last_tx(void);
 
 /**
  * @brief Copy the current configuration into config.
@@ -65,4 +57,6 @@ uint16_t etc_get_tx_delay_msec(void);
 uint16_t etc_get_rx_duration_secs(void);
 uint16_t etc_get_alarm_threshold(void);
 
+int etc_set_device_next_job(enum etc_logger_job job);
+enum etc_logger_job etc_get_device_next_job(void);
 #endif /* ETC_SETTINGS_H__ */

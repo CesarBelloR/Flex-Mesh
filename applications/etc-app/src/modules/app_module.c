@@ -247,25 +247,27 @@ static void app_peripheral_on(void)
 #if defined(CONFIG_PCF85263)
 	time_t now = 0;
 	pcf85263a_rtc_get_time(&now);
-	int last_sample = etc_get_time_last_log();  // Get the last wakeup time for sample
-	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
-	LOG_DBG("Sample %d - Transmit %d - UTC time %d", last_sample, last_transmit, (int)now);
-	if (now >= last_sample && now < last_transmit) {
-		LOG_DBG("Doing sample");
-		etc_device_set_job(ETC_LOGGER_JOB_LOG);
-		SEND_EVENT(app, APP_EVT_DATA_GET);
-	} else if (now >= last_transmit && now < last_sample) {
-		LOG_DBG("Doing transmit");
-		etc_device_set_job(ETC_LOGGER_JOB_TX);
-		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
-	} else if (now >= last_transmit && now >= last_sample) {
-		LOG_DBG("Doing both job");
-		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
-		SEND_EVENT(app, APP_EVT_DATA_GET);
-	} else {
-		LOG_DBG("Unknown task - set default job to log");
-		etc_device_set_job(ETC_LOGGER_JOB_LOG);
-		SEND_EVENT(app, APP_EVT_DATA_GET);
+	enum etc_logger_job job = etc_get_device_next_job();
+	LOG_DBG("UTC time %d - Job %d", (int)now, job);
+	switch (job) {
+		case ETC_LOGGER_JOB_LOG: {
+			LOG_DBG("Doing log");
+			etc_device_set_job(ETC_LOGGER_JOB_LOG);
+			SEND_EVENT(app, APP_EVT_DATA_GET);
+			break;
+		}
+		case ETC_LOGGER_JOB_TX: {
+			LOG_DBG("Doing transmit");
+			etc_device_set_job(ETC_LOGGER_JOB_TX);
+			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+			break;
+		}
+		case ETC_LOGGER_JOB_BOTH: {
+			LOG_DBG("Doing both job");
+			etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+			SEND_EVENT(app, APP_EVT_DATA_GET);
+			break;
+		}
 	}
 #endif
 }
@@ -297,56 +299,26 @@ static void app_set_wakeup_time(void)
 	pcf85263a_rtc_get_time(&now);
 	int wakeup_for_log = etc_device_get_log_interval_second();
 	int wakeup_for_transmit = etc_device_get_tx_interval_second();
-	int last_wakeup_for_log = etc_get_interval_last_log();
-	int last_wakeup_for_transmit = etc_get_interval_last_tx();
-	int last_log = etc_get_time_last_log();  // Get the last wakeup time for log
-	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
 	int next_log = 0;
 	int next_transmit = 0;
 	int sleep_time = 0;
 
-	if (last_wakeup_for_log == -1 && last_wakeup_for_transmit == -1) {
-		last_wakeup_for_log = wakeup_for_log;
-		last_wakeup_for_transmit = last_wakeup_for_transmit;
-	} 
-
-	if ((last_log == -1) && (last_transmit == -1)) {
-		// Setup the wakeup time for next sample and transmit
-		next_log = now + wakeup_for_log;
-		next_transmit = now + wakeup_for_transmit;
-	} else {
-		if (last_transmit <= now) {
-			next_transmit = now + wakeup_for_transmit;
-		} else {
-			if (last_wakeup_for_transmit != wakeup_for_transmit) {
-				next_transmit = now + wakeup_for_transmit;
-			} else {
-				next_transmit = last_transmit;
-			}
-		}
-		if (last_log <= now) {
-			next_log = now + wakeup_for_log;
-		} else {
-			if (last_wakeup_for_log != wakeup_for_log) {
-				next_log = now + wakeup_for_log;
-			} else {
-				next_log = last_log;
-			}
-		}
-	}
+	// Setup the wakeup time for next sample and transmit
+	next_log = now + wakeup_for_log;
+	next_transmit = now + wakeup_for_transmit;
 
 	if (next_log < next_transmit) {
 		sleep_time = next_log - now;
+		etc_set_device_next_job(ETC_LOGGER_JOB_LOG);
+	} else if (next_log > next_transmit) {
+		sleep_time = next_transmit - now;
+		etc_set_device_next_job(ETC_LOGGER_JOB_TX);
 	} else {
 		sleep_time = next_transmit - now;
+		etc_set_device_next_job(ETC_LOGGER_JOB_BOTH);
 	}
-	LOG_DBG("Sample %d (%d) - Transmit %d (%d) - Sleep time %d", next_log, last_log,
-		next_transmit, last_transmit, sleep_time);
-	// Update for next sleep and configuration for last log/tx interval
-	etc_set_time_last_log(next_log);
-	etc_set_time_last_tx(next_transmit);
-	etc_set_interval_last_log(wakeup_for_log);
-	etc_set_interval_last_tx(wakeup_for_transmit);
+
+	LOG_DBG("Sample %d - Transmit %d - Sleep time %d", next_log, next_transmit, sleep_time);
 	struct tm tm_time = {0};
 	struct tm tm_next_time = {0};
 	gmtime_r(&now, &tm_time);
