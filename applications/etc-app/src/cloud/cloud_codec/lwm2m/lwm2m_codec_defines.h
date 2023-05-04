@@ -8,6 +8,7 @@
 #define LWM2M_CODEC_DEFINES_H__
 
 #include "etc_cfg_obj_48931.h"
+#include "etc_temp_obj_48932.h"
 
 /* LwM2M read-write flag. */
 #define LWM2M_RES_DATA_FLAG_RW 0
@@ -34,7 +35,6 @@
 #define MANUFACTURER_RID		0
 #define HARDWARE_VERSION_RID		18
 
-#define CONFIGURATION_OBJECT_ID			48931
 #define DEVICE_MODE_RID		1
 #define POWER_MODE_RID		2
 #define TX_INTERVAL_RID		3
@@ -52,17 +52,12 @@
 /* Temperature sensor metadata. */
 #define TEMP_MIN_RANGE_VALUE -40.0
 #define TEMP_MAX_RANGE_VALUE 120.0
-#define TEMP_UNIT "deg C"
+#define TEMP_UNIT "Cel"
 
 /* Humidity sensor metadata. */
 #define HUMID_MIN_RANGE_VALUE 0.0
 #define HUMID_MAX_RANGE_VALUE 100.0
 #define HUMID_UNIT "%"
 
-/* Button object. */
-#define BUTTON1_OBJ_INST_ID 0
-#define BUTTON1_APP_NAME "Push button 1"
-#define BUTTON2_OBJ_INST_ID 1
-#define BUTTON2_APP_NAME "Push button 2"
 
 #endif /* LWM2M_CODEC_DEFINES_H */

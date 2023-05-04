@@ -342,7 +342,6 @@ static int module_lora_wait_packet(void)
 			}
 			return 0;
 		}
-		return 1;
 	}
 
 	return -EINVAL;
@@ -401,9 +400,6 @@ retry:
 		rc = module_lora_wait_packet();
 		if (rc == 0) {
 			return 0;
-		} else if (rc == 1) {
-			// Got invalid Lora message
-			goto retry;
 		} else {
 			if (cnt++ >= LORA_RETRY_MAX_TIME) {
 				return rc;
