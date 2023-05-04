@@ -7,6 +7,7 @@
 #
 
 target_include_directories(app PRIVATE .)
+target_include_directories(app PRIVATE lwm2m)
 
 add_subdirectory(cloud_codec)
 
@@ -20,5 +21,9 @@ target_sources_ifdef(CONFIG_LWM2M app
 
 target_sources_ifdef(CONFIG_LWM2M app
                      PRIVATE 
-                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/configuration_object.c)
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_cfg_obj_48931.c)
+
+target_sources_ifdef(CONFIG_LWM2M app
+                     PRIVATE 
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_temp_obj_48932.c)
 

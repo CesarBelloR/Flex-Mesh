@@ -353,9 +353,8 @@ int bq25618_set_input_current_limit(const struct device *dev, uint16_t current_m
 	}
 
 	uint8_t mask = reg & ~0x1F;
-	/* Round to the nearest 100 mA */
-	current_val = round_int(current_ma, 100);
-	current_val /= 100U;
+	/* Round to the nearest 100 mA and subtract offset */
+	current_val = (round_int(current_ma, 100) - 100U) / 100U;
 
 	if (current_val > 0x1F) {
 		current_val = 0x1F;

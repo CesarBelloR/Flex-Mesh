@@ -27,11 +27,44 @@ LOG_MODULE_REGISTER(cloud_codec, CONFIG_CLOUD_CODEC_LOG_LEVEL);
 static cloud_codec_evt_handler_t module_evt_handler;
 
 
-int data_codec_init(struct cloud_data_cfg *cfg, cloud_codec_evt_handler_t event_handler)
+/* Function that is called whenever the configuration object is written to. */
+static int config_update_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst_id,
+			    uint8_t *data, uint16_t data_len, bool last_block, size_t total_size)
+{
+	/* Because we are dependent on providing all configurations in the
+	 * CLOUD_CODEC_EVT_CONFIG_UPDATE event, all configuration is retrieved whenever the
+	 * configuration object changes.
+	 */
+	ARG_UNUSED(obj_inst_id);
+	ARG_UNUSED(res_id);
+	ARG_UNUSED(res_inst_id);
+	ARG_UNUSED(data);
+	ARG_UNUSED(data_len);
+	ARG_UNUSED(last_block);
+	ARG_UNUSED(total_size);
+
+	int err;
+	struct etc_config cfg;
+	memset(&cfg, 0, sizeof(cfg));
+	struct cloud_codec_evt evt = {
+		.type = CLOUD_CODEC_EVT_CONFIG_UPDATE,
+	};
+
+	err = lwm2m_codec_helpers_get_configuration_object(&cfg);
+	if (err) {
+		LOG_ERR("lwm2m_codec_helpers_get_configuration_object, error: %d",
+			err);
+		return err;
+	}
+
+	evt.config_update = cfg;
+	module_evt_handler(&evt);
+	return 0;
+}
+
+int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_handler)
 {
 	int err;
-
-	ARG_UNUSED(cfg);
 
 	err = lwm2m_codec_helpers_create_objects_and_resources();
 	if (err) {
@@ -42,6 +75,13 @@ int data_codec_init(struct cloud_data_cfg *cfg, cloud_codec_evt_handler_t event_
 	err = lwm2m_codec_helpers_setup_resources();
 	if (err) {
 		LOG_ERR("lwm2m_codec_helpers_setup_resources, error: %d", err);
+		return err;
+	}
+
+	err = lwm2m_codec_helpers_setup_configuration_object(cfg, config_update_cb);
+	if (err) {
+		LOG_ERR("lwm2m_codec_helpers_setup_configuration_object, error: %d",
+			err);
 		return err;
 	}
 
@@ -66,16 +106,16 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 	err = lwm2m_codec_helpers_set_sensor_data(&sensor_buffer[0]);
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 0, TIMESTAMP_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 0, SENSOR_VALUE_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 1, TIMESTAMP_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 1, SENSOR_VALUE_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 2, TIMESTAMP_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 2, SENSOR_VALUE_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 3, TIMESTAMP_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 3, SENSOR_VALUE_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 4, TIMESTAMP_RID),
-			LWM2M_OBJ(IPSO_OBJECT_TEMP_SENSOR_ID, 4, SENSOR_VALUE_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, TIMESTAMP_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, SENSOR_VALUE_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 1, TIMESTAMP_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 1, SENSOR_VALUE_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 2, TIMESTAMP_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 2, SENSOR_VALUE_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 3, TIMESTAMP_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 3, SENSOR_VALUE_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 4, TIMESTAMP_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 4, SENSOR_VALUE_RID),
 			LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID)
 		};
 

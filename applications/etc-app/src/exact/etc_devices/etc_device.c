@@ -162,10 +162,18 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 
 void etc_device_init(void)
 {
+	char *dev_str = "Unknown";
+	enum etc_device_mode dev_mode = etc_get_device_mode();
 	logger_job = ETC_LOGGER_JOB_TX;
-	LOG_INF("Device is %s with radio %s",
-		etc_get_device_mode() == ETC_DEVICE_MODE_RELAY ? "Relay" : "Logger",
-		etc_get_radio_mode() == ETC_RADIO_MODE_LTE ? "LTE" : "Lora");
+
+	if (dev_mode == ETC_DEVICE_MODE_RELAY) {
+		dev_str = "Relay";
+	} else if (dev_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
+		dev_str = "LoRa Logger";
+	} else if (dev_mode == ETC_DEVICE_MODE_LTE_LOGGER) {
+		dev_str = "LTE Logger";
+	}
+	LOG_INF("Device is %s", dev_str);
 }
 
 bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length)
@@ -418,7 +426,7 @@ enum etc_device_mode etc_device_get_mode(void)
 
 bool etc_device_is_logger_lora(void)
 {
-	return ((etc_get_device_mode() == ETC_DEVICE_MODE_LOGGER) && (etc_get_radio_mode() == ETC_RADIO_MODE_LORA));
+	return (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER);
 }
 
 int etc_device_get_rx_timeout(void)

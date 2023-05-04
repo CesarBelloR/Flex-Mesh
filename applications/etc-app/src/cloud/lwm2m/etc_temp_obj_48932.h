@@ -1,0 +1,10 @@
+#ifndef ETC_TEMP_OBJ_48932_H__
+#define ETC_TEMP_OBJ_48932_H__
+
+#define ETC_TEMP_OBJECT_ID      48932
+
+#define ETC_TEMP_OBJ_R_TYPE		1
+#define ETC_TEMP_OBJ_R_PORT		2
+#define ETC_TEMP_OBJ_R_UID		3
+
+#endif // ETC_TEMP_OBJ_48932_H__
