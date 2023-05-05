@@ -191,8 +191,6 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 		break;
 	case LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED:
 		LOG_DBG("LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED");
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_PAUSED;
-		notify = true;
 		break;
 	default:
 		LOG_ERR("Unknown event: %d", client_event);
@@ -502,6 +500,9 @@ int cloud_wrap_pause(void)
 		LOG_ERR("lwm2m_engine_pause, error: %d", err);
 		return err;
 	}	
+
+	event.type = CLOUD_WRAP_EVT_PAUSED;
+	cloud_wrapper_notify_event(&event);
 	
 	state = PAUSED;
 	return 0;

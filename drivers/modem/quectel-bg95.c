@@ -1756,6 +1756,11 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	ret = modem_cmd_handler_get_error(&mdata.cmd_handler_data);
 	if (ret != 0) {
 		LOG_ERR("Closing the socket!!! error %d", ret);
+		if (ret == 569) {
+			ret = -ETIMEDOUT;
+		} else {
+			ret = -ret;
+		}
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 		socket_close(sock);
 		goto exit;

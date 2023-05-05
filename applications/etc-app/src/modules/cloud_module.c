@@ -408,10 +408,10 @@ static void pause_cloud(void)
 static void resume_cloud(void)
 {
 	if (cloud_wrap_resume() != 0) {
-		LOG_WRN("resuming failed. Re-connecting instead.");
-		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
-		connect_cloud();
+		LOG_WRN("resuming failed.");
 	}
+
+	sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
 
 	int backoff_sec = backoff_delay[connect_retries].delay;
 	connect_retries++;
@@ -451,6 +451,34 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
 		state_set(STATE_LTE_DISCONNECTED);
 		sub_state_lte_disconnected_set(SUB_STATE_LTE_PSM);
+	}
+
+
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) {
+		if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
+			int err;
+
+			struct lwm2m_obj_path paths[CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX];
+
+			__ASSERT(ARRAY_SIZE(paths) ==
+				 ARRAY_SIZE(msg->module.data.data.buffer.paths),
+				 "Path object list not the same size");
+
+			for (int i = 0; i < ARRAY_SIZE(paths); i++) {
+				paths[i] = msg->module.data.data.buffer.paths[i];
+			}
+
+			err = cloud_wrap_data_send(NULL,
+						   msg->module.data.data.buffer.valid_object_paths,
+						   true,
+						   0,
+						   paths);
+			if (err) {
+				LOG_ERR("cloud_wrap_data_send, err: %d", err);
+			}
+
+			return;
+		}
 	}
 }
 
