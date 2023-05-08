@@ -1391,6 +1391,10 @@ int quectel_bg95_file_download(const char* file_name, const uint8_t* data, const
 	};
 
 	k_sem_reset(&mdata.sem_data_ready);
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+		LOG_ERR("Error taking semaphore");
+		return -EAGAIN;
+	}
 
 	/* Send the Modem command. */
 	int ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
@@ -1427,6 +1431,7 @@ int quectel_bg95_file_download(const char* file_name, const uint8_t* data, const
 		goto exit;
 	}
 exit:
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	return ret;
 }
 
@@ -1740,6 +1745,8 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	/* set command handlers */
 	ret = modem_cmd_handler_update_cmds(&mdata.cmd_handler_data, cmd, ARRAY_SIZE(cmd), true);
 	if (ret < 0) {
+		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
+		socket_close(sock);
 		goto exit;
 	}
 
