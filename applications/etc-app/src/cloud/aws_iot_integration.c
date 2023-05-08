@@ -137,7 +137,7 @@ void aws_iot_event_handler(const struct aws_iot_evt *const evt)
 	case AWS_IOT_EVT_PUBACK:
 	{
 		LOG_DBG("AWS_IOT_EVT_PUBACK %d", evt->data.message_id);
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_DATA_ACK;
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_DATA_SEND_ACK;
 		cloud_wrap_evt.message_id = evt->data.message_id;
 		notify = true;
 		break;

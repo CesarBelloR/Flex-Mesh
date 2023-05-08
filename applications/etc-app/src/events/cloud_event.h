@@ -45,8 +45,11 @@ enum cloud_event_type {
 	/** User association request received from cloud. */
 	CLOUD_EVT_USER_ASSOCIATION_REQUEST,
 
-	/** User association completed. */
-	CLOUD_EVT_USER_ASSOCIATED,
+	/** Acknowledgement for last send was received. */
+	CLOUD_EVT_DATA_SEND_ACK,
+
+	/** Last data send failed. */
+	CLOUD_EVT_DATA_SEND_FAIL,
 
 	/** Reboot requested from cloud. */
 	CLOUD_EVT_REBOOT_REQUEST,

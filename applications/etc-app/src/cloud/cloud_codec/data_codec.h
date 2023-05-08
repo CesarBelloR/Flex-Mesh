@@ -159,10 +159,6 @@ void data_codec_populate_sensor_internal_buffer(
 				size_t buffer_count);
 
 int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
-				struct data_lora_sensors *lora_buffer, 
-				size_t lora_buf_count,
-				struct data_sensors *sensor_buffer,
-				size_t sensor_buf_count,
-				struct data_modem_static *modem_data,
-				struct data_battery *batt_data);
+				    union etc_device_record *record,
+				    struct data_modem_static *modem_data);
 #endif /* DATA_CODEC_H__ */

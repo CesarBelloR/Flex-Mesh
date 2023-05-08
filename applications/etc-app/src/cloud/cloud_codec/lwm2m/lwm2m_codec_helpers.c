@@ -645,52 +645,31 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 }
 
 
-int lwm2m_codec_helpers_set_sensor_data(struct data_sensors *sensor)
+int lwm2m_codec_helpers_set_sensor_data(union etc_device_record *record)
 {
 	int err;
 
-	if (!sensor->queued) {
-		return -ENODATA;
-	}
-
 	err = lwm2m_set_s32(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID),
-			   sensor->data.battery_mV);
+			   record->battery);
 	if (err) {
 		return err;
 	}
 
 	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
 		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, TIMESTAMP_RID),
-				(time_t)(sensor->data.timestamp));
+				(time_t)(record->timestamp));
 		if (err) {
 			return err;
 		}
 	}
-
-#if 0
-	err = lwm2m_set_time(&LWM2M_OBJ(IPSO_OBJECT_HUMIDITY_SENSOR_ID, 0, TIMESTAMP_RID),
-			     (int32_t)(sensor->data.timestamp / MSEC_PER_SEC));
-	if (err) {
-		return err;
-	}
-#endif
 
 	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
 		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, SENSOR_VALUE_RID),
-				    sensor->data.temperature[i]);
+				    record->sensor[i]);
 		if (err) {
 			return err;
 		}
 	}
-
-#if 0
-	err = lwm2m_engine_set_float(LWM2M_PATH(IPSO_OBJECT_HUMIDITY_SENSOR_ID, 0,
-						SENSOR_VALUE_RID),
-				     &sensor->humidity);
-	if (err) {
-		return err;
-	}
-#endif
 
 	return 0;
 }

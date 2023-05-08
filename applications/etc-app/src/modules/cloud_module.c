@@ -329,15 +329,21 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		SEND_EVENT(cloud, CLOUD_EVT_FOTA_ERROR);
 		break;
 	}
-	case CLOUD_WRAP_EVT_DATA_ACK:
+	case CLOUD_WRAP_EVT_DATA_SEND_ACK:
 	{
-		LOG_DBG("CLOUD_WRAP_EVT_PUBACK %d", evt->message_id);
+		LOG_DBG("CLOUD_WRAP_EVT_DATA_SEND_ACK %d", evt->message_id);
 		if ((evt->message_id == last_message_id) ||
 		    (evt->message_id == 0)) {
-			/* Cloud receives data, sleep modem */
-			SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
+			/* Cloud received data */
+			SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_ACK);
 		}
 		break;
+	}
+	case CLOUD_WRAP_EVT_DATA_SEND_FAIL:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_DATA_SEND_FAIL %d", evt->message_id);
+		/* Cloud did not receive data */
+		SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_FAIL);
 	}
 	case CLOUD_WRAP_EVT_REBOOT_REQUEST:
 	{
@@ -509,7 +515,7 @@ static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 /* Message handler for SUB_STATE_CLOUD_CONNECTED. */
 static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
@@ -569,7 +575,7 @@ static void on_all_states(struct cloud_msg_data *msg)
 		last_message_id = msg->module.data.data.message_id;
 		LOG_INF("Last data send message id %d", last_message_id);
 #if !defined(CONFIG_APP_AWS_IOT)
-		SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
+		SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_ACK);
 #endif
 	}
 

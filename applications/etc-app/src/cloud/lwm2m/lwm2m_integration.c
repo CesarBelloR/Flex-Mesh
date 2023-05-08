@@ -230,19 +230,20 @@ static int device_reboot_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_l
 	return 0;
 }
 
-static void send_cb (enum lwm2m_send_status status)
+static void send_cb(enum lwm2m_send_status status)
 {
 	struct cloud_wrap_event cloud_wrap_evt = { 0 };
 	bool notify = false;
 
 	switch (status) {
 		case LWM2M_SEND_STATUS_SUCCESS:
-		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_ACK;
+		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_SEND_ACK;
 		notify = true;
 		break;
 
 		case LWM2M_SEND_STATUS_FAILURE:
 		case LWM2M_SEND_STATUS_TIMEOUT:
+		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_SEND_FAIL;
 		break;
 	}
 
