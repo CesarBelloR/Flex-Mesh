@@ -232,4 +232,18 @@ void pcf85263a_interrupt_enable(pcf85263a_interrupt_flag_t flag);
  * @retval None
  */
 void pcf85263a_set_interrupt_io(bool enable);
+
+/** @brief Check if alarm 1 is triggered
+ * 
+ * @param None
+ * @retval True if Alarm 1 is active
+ */
+bool pcf85263a_is_alarm_1_flags(void);
+
+/** @brief Check if alarm 2 is triggered
+ * 
+ * @param None
+ * @retval True if Alarm 2 is active
+ */
+bool pcf85263a_is_alarm_2_flags(void);
 #endif /* PCF85263A_H_ */

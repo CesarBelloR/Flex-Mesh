@@ -49,7 +49,6 @@ static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
-static enum etc_logger_job logger_job;
 static int flag_etc_config_load;
 struct etc_config etc_cfg;
 
@@ -61,7 +60,6 @@ void etc_settings_refresh()
 	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
 	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
 	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
-	logger_job = ETC_LOGGER_JOB_BOTH;
 	etc_device_read_setting(SETTINGS_HW_VERSION, saved_hw_version, ETC_SETTING_HW_VER_LEN);
 	etc_device_read_setting(SETTINGS_FW_VERSION, saved_fw_version, ETC_SETTING_FW_VER_LEN);
 	etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
@@ -219,13 +217,6 @@ int etc_settings_init(void)
 				      sizeof(etc_cfg.alarm_threshold));
 	if (ret) {
 		etc_set_alarm_threshold(ETC_SETTING_ALARM_THRESHOLD_DEFAULT);
-	}
-	
-	ret = etc_device_read_setting(ETC_SETTING_DEVICE_NEXT_JOB_ID, &logger_job,
-				      sizeof(logger_job));
-	if (ret) {
-		logger_job = ETC_LOGGER_JOB_BOTH;
-		etc_set_device_next_job(logger_job);
 	}
 
 	LOG_DBG("Load setting successfully");
@@ -563,27 +554,6 @@ uint16_t etc_get_alarm_threshold(void)
 	threshold = etc_cfg.alarm_threshold;
 	k_mutex_unlock(&setting_mutex);
 	return threshold;
-}
-
-int etc_set_device_next_job(enum etc_logger_job job) {
-	int rc = 0;
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	logger_job = job;
-	rc = etc_device_write_setting(ETC_SETTING_DEVICE_NEXT_JOB_ID, &logger_job,
-				      sizeof(logger_job));
-	if (rc == 0) {
-		LOG_DBG("set job %u", logger_job);
-	}
-	k_mutex_unlock(&setting_mutex);
-	return rc;
-}
-
-enum etc_logger_job etc_get_device_next_job(void) {
-	enum etc_logger_job job = 0;
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	job = logger_job;
-	k_mutex_unlock(&setting_mutex);
-	return job;
 }
 
 #ifdef CONFIG_SHELL

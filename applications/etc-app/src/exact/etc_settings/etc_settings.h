@@ -57,6 +57,4 @@ uint16_t etc_get_tx_delay_msec(void);
 uint16_t etc_get_rx_duration_secs(void);
 uint16_t etc_get_alarm_threshold(void);
 
-int etc_set_device_next_job(enum etc_logger_job job);
-enum etc_logger_job etc_get_device_next_job(void);
 #endif /* ETC_SETTINGS_H__ */
