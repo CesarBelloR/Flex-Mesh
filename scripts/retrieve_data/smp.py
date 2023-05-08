@@ -129,7 +129,7 @@ class SimpleMgmtProtocol:
         """ """
         msg_byte_array = bytearray()
         # Generate cbor that will be used
-        cbormsg = cbor2.dumps(data)
+        cbormsg = cbor2.dumps(data, canonical=True)
         cbormsg_length = len(cbormsg)
         logger.debug("SMP Message info")
         logger.debug(
