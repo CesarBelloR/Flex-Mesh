@@ -226,7 +226,7 @@ static void app_peripheral_off(void)
 	gpio_pin_configure(gpio_0, 4, GPIO_DISCONNECTED);
 }
 
-static void app_peripheral_on(void)
+static void app_peripheral_on(bool is_rtc)
 {
 	const struct gpio_dt_spec vsen_en_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
@@ -242,38 +242,48 @@ static void app_peripheral_on(void)
 #ifdef CONFIG_PM_DEVICE
 	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
 #endif
-	LOG_DBG("Wakeup from sleep");
-	etc_interface_disable_rtc_event();
+	if (is_rtc) {
+		LOG_DBG("Wakeup from sleep");
+		etc_interface_disable_rtc_event();
 #if defined(CONFIG_PCF85263)
-	time_t now = 0;
-	pcf85263a_rtc_get_time(&now);
-	int last_sample = etc_get_time_last_log();  // Get the last wakeup time for sample
-	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
-	LOG_DBG("Sample %d - Transmit %d - UTC time %d", last_sample, last_transmit, (int)now);
-	if (now >= last_sample && now < last_transmit) {
-		LOG_DBG("Doing sample");
-		etc_device_set_job(ETC_LOGGER_JOB_LOG);
-		SEND_EVENT(app, APP_EVT_DATA_GET);
-	} else if (now >= last_transmit && now < last_sample) {
-		LOG_DBG("Doing transmit");
-		etc_device_set_job(ETC_LOGGER_JOB_TX);
-		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
-	} else if (now >= last_transmit && now >= last_sample) {
-		LOG_DBG("Doing both job");
+		time_t now = 0;
+		pcf85263a_rtc_get_time(&now);
+		int last_sample = etc_get_time_last_log();  // Get the last wakeup time for sample
+		int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
+		LOG_DBG("Sample %d - Transmit %d - UTC time %d", last_sample, last_transmit, (int)now);
+		if (now >= last_sample && now < last_transmit) {
+			LOG_DBG("Doing sample");
+			etc_device_set_job(ETC_LOGGER_JOB_LOG);
+			SEND_EVENT(app, APP_EVT_DATA_GET);
+		} else if (now >= last_transmit && now < last_sample) {
+			LOG_DBG("Doing transmit");
+			etc_device_set_job(ETC_LOGGER_JOB_TX);
+			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+		} else if (now >= last_transmit && now >= last_sample) {
+			LOG_DBG("Doing both job");
+			etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+			SEND_EVENT(app, APP_EVT_DATA_GET);
+		} else {
+			LOG_DBG("Unknown task - set default job to log");
+			etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+			SEND_EVENT(app, APP_EVT_DATA_GET);
+		}
+#endif
+	} else {
+		LOG_DBG("Wakeup from external HALL sensor");
 		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
 		SEND_EVENT(app, APP_EVT_DATA_GET);
-	} else {
-		LOG_DBG("Unknown task - set default job to log");
-		etc_device_set_job(ETC_LOGGER_JOB_LOG);
-		SEND_EVENT(app, APP_EVT_DATA_GET);
 	}
-#endif
 }
 
 static void app_input_handler(enum etc_interface_event_type type)
 {
 	if (type == ETC_INTERFACE_EVENT_RTC) {
-		app_peripheral_on();
+		app_peripheral_on(true);
+	} else if (type == ETC_INTERFACE_EVENT_HALL) {
+		app_peripheral_on(false);
+	} else {
+		/* No action required */
 	}
 }
 
