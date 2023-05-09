@@ -73,17 +73,24 @@ static struct module_data self = {
 	.supports_shutdown = true,
 };
 
-static const struct gpio_dt_spec sense_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
-static const struct gpio_dt_spec s0_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
-static const struct gpio_dt_spec s1_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
+static const struct gpio_dt_spec vsen_en_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+static const struct gpio_dt_spec sense_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+static const struct gpio_dt_spec s0_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 
-static void sensor_adc_switch_channel(int8_t channel) {
+static void sensor_adc_switch_channel(int8_t channel) 
+{
 	gpio_pin_set_dt(&sense_dt, 0U);
 	gpio_pin_set_dt(&s0_dt, channel & 0x01);
 	gpio_pin_set_dt(&s1_dt, (channel >> 1) & 0x01);
 }
 
-static void sensor_adc_hw_init(void) {
+static void sensor_adc_hw_init(void) 
+{
 	if (!device_is_ready(sense_dt.port)) {
 		return;
 	}
@@ -93,9 +100,10 @@ static void sensor_adc_hw_init(void) {
 	if (!device_is_ready(s1_dt.port)) {
 		return;
 	}
-	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
-	/* Note: pin s0 is configured by watchdog module. */
-	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+	if (!device_is_ready(vsen_en_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_INACTIVE);
 }
 
 /* Convenience functions used in internal state handling. */
@@ -208,6 +216,22 @@ static float sensor_ntc_converter(int data, float full_scale_v, int full_scale_c
 	return tmp_value;
 }
 
+static void sensor_gpios_enable(void)
+{
+	gpio_pin_set_dt(&vsen_en_dt, 1U);
+	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
+	/* Note: pin s0 is configured by watchdog module. */
+	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+}
+
+static void sensor_gpios_disable(void)
+{
+	gpio_pin_set_dt(&vsen_en_dt, 0U);
+	gpio_pin_configure_dt(&sense_dt, GPIO_DISCONNECTED);
+	/* Note: pin s0 is configured by watchdog module. */
+	gpio_pin_configure_dt(&s1_dt, GPIO_DISCONNECTED);
+}
+
 static int sensor_poll_handler(void) {
 	if (sensor_is_processing) {
 		return 0;
@@ -216,6 +240,9 @@ static int sensor_poll_handler(void) {
 		LOG_WRN("Could not take watchdog_sens_sel0 semaphore");
 		return -EAGAIN;
 	}
+
+	sensor_gpios_enable();
+	k_msleep(100);
 
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
@@ -247,6 +274,8 @@ static int sensor_poll_handler(void) {
 	data->battery_mV = adc_mv_battery;
 	sensor_module_send_sensor(data);
 	sensor_is_processing = false;
+	
+	sensor_gpios_disable();
 
 	watchdog_sens_sel0_wdt_sem_give();
 

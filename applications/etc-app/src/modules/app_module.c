@@ -197,13 +197,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static void app_peripheral_off(void)
 {
-	const struct gpio_dt_spec vsen_en_dt =
-		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
-	if (!device_is_ready(vsen_en_dt.port)) {
-		return;
-	}
-	gpio_pin_configure_dt(&vsen_en_dt, GPIO_DISCONNECTED);
-
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (!device_is_ready(cons)) {
 		LOG_ERR("%s: device not ready.", cons->name);
@@ -213,27 +206,10 @@ static void app_peripheral_off(void)
 #ifdef CONFIG_PM_DEVICE
 	pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
 #endif
-
-	/* Disconnect all ADC pin */
-	const struct device *gpio_0 = device_get_binding("GPIO_0");
-	if (!device_is_ready(gpio_0)) {
-		LOG_ERR("%s: device not ready.", gpio_0->name);
-		return;
-	}
-
-	gpio_pin_configure(gpio_0, 31, GPIO_DISCONNECTED);
-	gpio_pin_configure(gpio_0, 5, GPIO_DISCONNECTED);
-	gpio_pin_configure(gpio_0, 4, GPIO_DISCONNECTED);
 }
 
 static void app_peripheral_on(bool is_rtc)
-{
-	const struct gpio_dt_spec vsen_en_dt =
-		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
-	if (!device_is_ready(vsen_en_dt.port)) {
-		return;
-	}
-	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_ACTIVE);
+{	
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (!device_is_ready(cons)) {
 		LOG_ERR("%s: device not ready.", cons->name);
