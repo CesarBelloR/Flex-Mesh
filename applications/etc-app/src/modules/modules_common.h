@@ -32,8 +32,8 @@ extern "C" {
  * @return true if the event matches the event checked for, otherwise false.
  */
 #define IS_EVENT(_ptr, _mod, _evt) \
-		is_ ## _mod ## _event(&_ptr->module._mod.header) &&		\
-		_ptr->module._mod.type == _evt
+		(is_ ## _mod ## _event(&_ptr->module._mod.header) &&		\
+		_ptr->module._mod.type == _evt)
 
 /** @brief Macro used to submit an event.
  *

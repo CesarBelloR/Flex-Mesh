@@ -48,11 +48,17 @@ static enum state_type {
 } state;
 
 /* Cloud module sub states. */
-static enum sub_state_type {
+static enum sub_state_lte_connected {
 	SUB_STATE_CLOUD_DISCONNECTED,
 	SUB_STATE_CLOUD_CONNECTED,
-	SUB_STATE_CLOUD_PAUSED,
-} sub_state;
+	SUB_STATE_CLOUD_PAUSED
+} sub_state_lte_connected;
+
+/* Cloud module sub states. */
+static enum sub_state_lte_disconnected {
+	SUB_STATE_LTE_OFF,
+	SUB_STATE_LTE_PSM
+} sub_state_lte_disconnected;
 
 struct cloud_backoff_delay_lookup
 {
@@ -107,7 +113,7 @@ static char *state2str(enum state_type state)
 	}
 }
 
-static char *sub_state2str(enum sub_state_type new_state)
+static char *sub_state_lte_connected2str(enum sub_state_lte_connected new_state)
 {
 	switch (new_state)
 	{
@@ -117,6 +123,19 @@ static char *sub_state2str(enum sub_state_type new_state)
 		return "SUB_STATE_CLOUD_CONNECTED";
 	case SUB_STATE_CLOUD_PAUSED:
 		return "SUB_STATE_CLOUD_PAUSED";
+	default:
+		return "Unknown";
+	}
+}
+
+static char *sub_state_lte_disconnected2str(enum sub_state_lte_disconnected new_state)
+{
+	switch (new_state)
+	{
+	case SUB_STATE_LTE_OFF:
+		return "SUB_STATE_LTE_OFF";
+	case SUB_STATE_LTE_PSM:
+		return "SUB_STATE_LTE_PSM";
 	default:
 		return "Unknown";
 	}
@@ -137,19 +156,36 @@ static void state_set(enum state_type new_state)
 	state = new_state;
 }
 
-static void sub_state_set(enum sub_state_type new_state)
+static void sub_state_lte_connected_set(enum sub_state_lte_connected new_state)
 {
-	if (new_state == sub_state)
+	if (new_state == sub_state_lte_connected)
 	{
-		LOG_DBG("Sub state: %s", sub_state2str(sub_state));
+		LOG_DBG("Sub state: %s", 
+			sub_state_lte_connected2str(sub_state_lte_connected));
 		return;
 	}
 
 	LOG_DBG("Sub state transition %s --> %s",
-		sub_state2str(sub_state),
-		sub_state2str(new_state));
+		sub_state_lte_connected2str(sub_state_lte_connected),
+		sub_state_lte_connected2str(new_state));
 
-	sub_state = new_state;
+	sub_state_lte_connected = new_state;
+}
+
+static void sub_state_lte_disconnected_set(enum sub_state_lte_disconnected new_state)
+{
+	if (new_state == sub_state_lte_disconnected)
+	{
+		LOG_DBG("Sub state: %s", 
+			sub_state_lte_disconnected2str(sub_state_lte_disconnected));
+		return;
+	}
+
+	LOG_DBG("Sub state transition %s --> %s",
+		sub_state_lte_disconnected2str(sub_state_lte_disconnected),
+		sub_state_lte_disconnected2str(new_state));
+
+	sub_state_lte_disconnected = new_state;
 }
 
 /* Handlers */
@@ -214,8 +250,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static void connect_check_work_fn(struct k_work *work)
 {
-	if ((state == STATE_LTE_CONNECTED && sub_state == SUB_STATE_CLOUD_CONNECTED) ||
-	    (state == STATE_LTE_DISCONNECTED))
+	if ((state == STATE_LTE_CONNECTED && sub_state_lte_connected == SUB_STATE_CLOUD_CONNECTED))
 	{
 		return;
 	}
@@ -256,9 +291,12 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	case CLOUD_WRAP_EVT_DISCONNECTED:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_DISCONNECTED");
-		SEND_EVENT(cloud, CLOUD_EVT_DISCONNECTED);
 		break;
 	}
+	case CLOUD_WRAP_EVT_PAUSED:
+		LOG_DBG("CLOUD_WRAP_EVT_PAUSED");
+		SEND_EVENT(cloud, CLOUD_EVT_PAUSED);
+		break;
 	case CLOUD_WRAP_EVT_DATA_RECEIVED:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_DATA_RECEIVED");
@@ -337,7 +375,9 @@ static void connect_cloud(void)
 		return;
 	}
 
-	cloud_wrap_connect();
+	if (cloud_wrap_connect() < 0) {
+		LOG_WRN("Connecting failed.");
+	}
 
 	connect_retries++;
 
@@ -363,13 +403,15 @@ static void pause_cloud(void)
 	connect_retries = 0;
 	
 	cloud_wrap_pause();
-
-	k_work_cancel_delayable(&connect_check_work);
 }
 
 static void resume_cloud(void)
 {
-	cloud_wrap_resume();
+	if (cloud_wrap_resume() != 0) {
+		LOG_WRN("resuming failed.");
+	}
+
+	sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
 
 	int backoff_sec = backoff_delay[connect_retries].delay;
 	connect_retries++;
@@ -386,7 +428,7 @@ static void on_state_init(struct cloud_msg_data *msg)
 		int err;
 
 		state_set(STATE_LTE_DISCONNECTED);
-		sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
 		err = setup();
 		__ASSERT(err == 0, "setp() failed");
 	}
@@ -397,13 +439,46 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED))
 	{
-		sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
 		state_set(STATE_LTE_DISCONNECTED);
 
 		/* Explicitly disconnect cloud when you receive an LTE disconnected event.
 		 * This is to clear up the cloud library state.
 		 */
 		disconnect_cloud();
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+		state_set(STATE_LTE_DISCONNECTED);
+		sub_state_lte_disconnected_set(SUB_STATE_LTE_PSM);
+	}
+
+
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) {
+		if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
+			int err;
+
+			struct lwm2m_obj_path paths[CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX];
+
+			__ASSERT(ARRAY_SIZE(paths) ==
+				 ARRAY_SIZE(msg->module.data.data.buffer.paths),
+				 "Path object list not the same size");
+
+			for (int i = 0; i < ARRAY_SIZE(paths); i++) {
+				paths[i] = msg->module.data.data.buffer.paths[i];
+			}
+
+			err = cloud_wrap_data_send(NULL,
+						   msg->module.data.data.buffer.valid_object_paths,
+						   true,
+						   0,
+						   paths);
+			if (err) {
+				LOG_ERR("cloud_wrap_data_send, err: %d", err);
+			}
+
+			return;
+		}
 	}
 }
 
@@ -414,8 +489,12 @@ static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 	{
 		state_set(STATE_LTE_CONNECTED);
 
-		/* LTE is now connected, cloud connection can be attempted */
-		connect_cloud();
+		if (sub_state_lte_connected == SUB_STATE_CLOUD_PAUSED) {
+			resume_cloud();
+		} else {
+			/* LTE is now connected, cloud connection can be attempted */
+			connect_cloud();
+		}
 	}
 
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
@@ -435,7 +514,6 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
 		pause_cloud();
-		sub_state_set(SUB_STATE_CLOUD_PAUSED);
 	}
 }
 
@@ -444,9 +522,13 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED))
 	{
-		sub_state_set(SUB_STATE_CLOUD_CONNECTED);
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_CONNECTED);
 		connect_retries = 0;
 		k_work_cancel_delayable(&connect_check_work);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+		pause_cloud();
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT))
@@ -458,13 +540,9 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 /* Message handler for SUB_STATE_CLOUD_PAUSED. */
 static void on_sub_state_cloud_paused(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
-		resume_cloud();
-	}
-
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED))
 	{
-		sub_state_set(SUB_STATE_CLOUD_CONNECTED);
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_CONNECTED);
 		connect_retries = 0;
 		k_work_cancel_delayable(&connect_check_work);
 	}
@@ -493,6 +571,10 @@ static void on_all_states(struct cloud_msg_data *msg)
 #if !defined(CONFIG_APP_AWS_IOT)
 		SEND_EVENT(cloud, CLOUD_EVT_USER_ASSOCIATED);
 #endif
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
 	}
 }
 
@@ -584,7 +666,7 @@ void cloud_module_thread_fn(void)
 	}
 
 	state_set(STATE_LTE_INIT);
-	sub_state_set(SUB_STATE_CLOUD_DISCONNECTED);
+	sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
 
 	k_work_init_delayable(&connect_check_work, connect_check_work_fn);
 
@@ -598,8 +680,7 @@ void cloud_module_thread_fn(void)
 			on_state_init(&msg);
 			break;
 		case STATE_LTE_CONNECTED:
-			switch (sub_state)
-			{
+			switch (sub_state_lte_connected) {
 			case SUB_STATE_CLOUD_CONNECTED:
 				on_sub_state_cloud_connected(&msg);
 				break;
@@ -618,6 +699,15 @@ void cloud_module_thread_fn(void)
 			break;
 		case STATE_LTE_DISCONNECTED:
 			on_state_lte_disconnected(&msg);
+			switch (sub_state_lte_disconnected) {
+			case SUB_STATE_LTE_OFF:
+				break;
+			case SUB_STATE_LTE_PSM:
+				break;
+			default:
+				LOG_ERR("Unknown Cloud module sub state");
+				break;
+			}
 			break;
 		case STATE_SHUTDOWN:
 			on_state_shutdown(&msg);

@@ -55,6 +55,14 @@ config MODEM_QUECTEL_BG95_M3_PASSWORD
 	  context.  This value is specific to the network provider and may
 	  need to be changed.
 
+config MODEM_QUECTEL_BG95_M3_SSL_NEGOTIATION_TIMEOUT
+	int "SSL Negotiation Timeout in seconds"
+	default 20
+	help
+	  The SSL negotiation timeout that the modem uses for every DTLS context.
+	  The valid range is 10 to 300 seconds. The timeout is being set by the
+	  driver through the AT+QSSLCFG="negotiatetime" command.
+
 config MODEM_QUECTEL_BG95_M3_INIT_PRIORITY
 	int "Quectel BG95 M3 driver init priority"
 	default 95

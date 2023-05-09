@@ -52,13 +52,6 @@ void main(void)
 		k_sleep(K_MSEC(100));
 	}
 
-#ifdef CONFIG_MCUMGR_CMD_OS_MGMT
-	os_mgmt_register_group();
-#endif
-
-#ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
-	shell_mgmt_register_group();
-#endif
 	app_driver_init();
 	while(1) {
 		k_sleep(K_MSEC(100));

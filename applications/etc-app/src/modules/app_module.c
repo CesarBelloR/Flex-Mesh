@@ -431,7 +431,7 @@ static void on_all_events(struct app_msg_data *msg)
 
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
 		enum etc_logger_job job = etc_device_get_job();
-		if (job == ETC_LOGGER_JOB_BOTH) {
+		if ((job == ETC_LOGGER_JOB_BOTH) || (job == ETC_LOGGER_JOB_TX)) {
 			LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
 			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
 		} else if (job == ETC_LOGGER_JOB_LOG) {
