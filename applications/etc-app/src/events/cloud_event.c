@@ -20,6 +20,8 @@ static char *get_evt_type_str(enum cloud_event_type type)
 		return "CLOUD_EVT_USER_ASSOCIATION_REQUEST";
 	case CLOUD_EVT_DATA_SEND_ACK:
 		return "CLOUD_EVT_DATA_SEND_ACK";
+	case CLOUD_EVT_DATA_SEND_FAIL:
+		return "CLOUD_EVT_DATA_SEND_FAIL";
 	case CLOUD_EVT_REBOOT_REQUEST:
 		return "CLOUD_EVT_REBOOT_REQUEST";
 	case CLOUD_EVT_CONFIG_RECEIVED:

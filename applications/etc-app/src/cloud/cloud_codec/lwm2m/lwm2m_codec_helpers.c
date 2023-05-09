@@ -10,6 +10,7 @@
 #include <date_time.h>
 #include <lwm2m_resource_ids.h>
 #include <string.h>
+#include <math.h>
 
 #include "lwm2m_codec_defines.h"
 #include "lwm2m_codec_helpers.h"
@@ -649,8 +650,9 @@ int lwm2m_codec_helpers_set_sensor_data(union etc_device_record *record)
 {
 	int err;
 
+	/* Set battery voltage in mV (required by resource spec) */
 	err = lwm2m_set_s32(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID),
-			   record->battery);
+			    (int32_t)roundf(record->battery * 1000.0));
 	if (err) {
 		return err;
 	}
