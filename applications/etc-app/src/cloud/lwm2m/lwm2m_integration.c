@@ -451,9 +451,6 @@ int cloud_wrap_connect(void)
 	if (state != DISCONNECTED) {
 		return -EINPROGRESS;
 	}
-	if ((state == CONNECTED) || (state == CONNECTING)) {
-		lwm2m_rd_client_update();
-	}
 
 	err = lwm2m_rd_client_start(
 			&client, endpoint_name,
