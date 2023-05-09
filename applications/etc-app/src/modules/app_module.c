@@ -197,8 +197,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static void app_peripheral_off(void)
 {
-	LOG_DBG("System off!!!");
-	k_msleep(500);
 	const struct gpio_dt_spec vsen_en_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 	if (!device_is_ready(vsen_en_dt.port)) {
@@ -256,7 +254,10 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	struct tm tm_time = {0};
 	gmtime_r(&now, &tm_time);
 	if (next_log != 0) {
-		next_log += 60; // Increase a minute
+		if (tm_time.tm_sec >= 30) {
+			next_log += 60; // Increase a minute
+		}
+
 		struct tm tm_log_time = {0};
 		gmtime_r(&next_log, &tm_log_time);
 
@@ -337,7 +338,6 @@ static void app_peripheral_on(void)
 	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
 #endif
 	LOG_DBG("Wakeup from sleep");
-	// etc_interface_disable_rtc_event();
 #if defined(CONFIG_PCF85263)
 	time_t now = 0;
 	pcf85263a_rtc_get_time(&now);
