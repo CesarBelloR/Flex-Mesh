@@ -73,6 +73,9 @@ static int head_sensor_buf = 0;
 static int head_modem_dyn_buf = 0;
 static int head_bat_buf = 0;
 
+/** Current record id */
+uint16_t record_id;
+
 /* Initialize publish timeout for data publish as forever */
 static k_timeout_t data_publish_timeout = K_FOREVER; 
 
@@ -297,42 +300,27 @@ static void data_send(enum data_event_type event,
 static void data_encode(void) 
 {
 	struct cloud_codec_data codec = { 0 };
+	union etc_device_record record;
 	int ret;
 
-	if (head_sensor_buf == 0) {
+	if (record_id != 0) {
+		LOG_WRN("Not sending new record."
+			"Record ID %u is already being sent.", record_id);
 		return;
 	}
 
-	LOG_INF("Head sensor buf %d", head_sensor_buf);
-	ret = data_codec_prepare_cloud_packet(&codec, NULL, 0, 
-					sensors_buf, head_sensor_buf,
-					&modem_stat, NULL);
+	record_id = etc_device_read_record(&record);
+	if (record_id == 0) {
+		LOG_INF("No record found");
+		return;
+	}
+	ret = data_codec_prepare_cloud_packet(&codec, &record, NULL);
 	if (ret != 0) {
 		LOG_WRN("No message to publish");
 		return;
 	}
 
 	data_send(DATA_EVT_DATA_SEND, &codec);
-
-	head_lora_buf = 0;
-	head_sensor_buf = 0;
-#if 0
-	uint16_t message_id = (uint16_t)k_uptime_get_32();
-
-	if (codec.buf != NULL) {
-		LOG_INF("Publishing: %s", codec.buf);
-	}
-	if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
-		codec.len = codec.valid_object_paths;
-	}
-
-	cloud_wrap_data_send(codec.buf, codec.len, true,
-			     message_id, codec.paths);
-
-	head_lora_buf = 0;
-	head_sensor_buf = 0;
-	data_module_send_message_id(message_id);
-#endif
 }
 
 static void data_send_work_fn(struct k_work *work)
@@ -361,6 +349,12 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		data_encode();
 		return;
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
+		/* Send latest record on fail */
+		record_id = 0;
+		data_encode();
 	}
 
 	if (IS_EVENT(msg, app, APP_EVT_CONFIG_GET)) {
@@ -426,6 +420,15 @@ static void on_all_states(struct data_msg_data *msg)
 			/* Unknown mode ? */
 		}
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
+		/* Acknowledge record and encode more data, if connected to cloud */
+		etc_device_set_ack_record(record_id);
+		record_id = 0;
+		if (state == STATE_CLOUD_CONNECTED) {
+			data_encode();
+		}
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED)) {

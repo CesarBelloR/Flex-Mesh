@@ -441,7 +441,7 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 	
 	if ((IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) ||
-	    (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED))) {
+	    (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK))) {
 		app_set_wakeup_time();
 		return;
 	}
