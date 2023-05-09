@@ -86,6 +86,16 @@ SMP_DICT = {
             "response": {"op_code": MGMT_OP_WRITE_RSP, "json_keys": ["off", "rc"]},
         },
     },
+    "shell_mgmt": {
+        "group_id": 9,
+        "shell": {
+            "cmd_id": 0,
+            "request": {
+                "op_code": MGMT_OP_WRITE,
+            },
+            "response": {"op_code": MGMT_OP_WRITE_RSP, "json_keys": ["off", "rc"]},
+        },
+    },
     "etc": {
         "group_id": 65,
         "status": {
