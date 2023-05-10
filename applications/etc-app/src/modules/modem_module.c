@@ -53,7 +53,7 @@ static enum state_type {
 } state;
 
 /* Cloud module sub states. */
-static enum sub_state_type {
+static enum sub_state_lte_connected {
 	SUB_STATE_MODEM_OFF,
 	SUB_STATE_MODEM_PSM,
 } sub_state;
@@ -134,7 +134,7 @@ static void state_set(enum state_type new_state)
 	state = new_state;
 }
 
-static void sub_state_set(enum sub_state_type new_state)
+static void sub_state_lte_connected_set(enum sub_state_lte_connected new_state)
 {
 	if (new_state == sub_state)
 	{
@@ -234,7 +234,7 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 	}
 	case MODEM_API_PSM_ENTERED_EVT: {
 		state_set(STATE_DISCONNECTED);
-		sub_state_set(SUB_STATE_MODEM_PSM);
+		sub_state_lte_connected_set(SUB_STATE_MODEM_PSM);
 		SEND_EVENT(modem, MODEM_EVT_PSM_ENTERED);
 	}
 	}
@@ -357,7 +357,8 @@ static void on_sub_state_modem_off(struct modem_msg_data *msg)
 /* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_PSM. */
 static void on_sub_state_modem_psm(struct modem_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
 		modem_psm_cmd(modem_dev, MODEM_API_PSM_CMD_WAKEUP, NULL);
 	}
 }

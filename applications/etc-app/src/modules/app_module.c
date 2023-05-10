@@ -321,7 +321,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 #endif
 }
 
-static void app_peripheral_on(void)
+static void app_peripheral_on(bool is_rtc)
 {
 	const struct gpio_dt_spec vsen_en_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
@@ -337,7 +337,9 @@ static void app_peripheral_on(void)
 #ifdef CONFIG_PM_DEVICE
 	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
 #endif
-	LOG_DBG("Wakeup from sleep");
+
+	if (is_rtc) {
+		LOG_DBG("Wakeup from sleep");
 #if defined(CONFIG_PCF85263)
 	time_t now = 0;
 	pcf85263a_rtc_get_time(&now);
@@ -378,12 +380,21 @@ static void app_peripheral_on(void)
 		}
 	}
 #endif
+	} else {
+		LOG_DBG("Wakeup from external HALL sensor");
+		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+		SEND_EVENT(app, APP_EVT_DATA_GET);
+	}
 }
 
 static void app_input_handler(enum etc_interface_event_type type)
 {
 	if (type == ETC_INTERFACE_EVENT_RTC) {
-		app_peripheral_on();
+		app_peripheral_on(true);
+	} else if (type == ETC_INTERFACE_EVENT_HALL) {
+		app_peripheral_on(false);
+	} else {
+		/* No action required */
 	}
 }
 
@@ -442,7 +453,7 @@ static void on_all_events(struct app_msg_data *msg)
 
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
 		enum etc_logger_job job = etc_device_get_job();
-		if (job == ETC_LOGGER_JOB_BOTH) {
+		if ((job == ETC_LOGGER_JOB_BOTH) || (job == ETC_LOGGER_JOB_TX)) {
 			LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
 			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
 		} else if (job == ETC_LOGGER_JOB_LOG) {
@@ -452,8 +463,8 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 	
 	if ((IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) ||
-	    (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED))) {
-		app_peripheral_off();
+		(IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK))) {
+			app_peripheral_off();
 		return;
 	}
 }

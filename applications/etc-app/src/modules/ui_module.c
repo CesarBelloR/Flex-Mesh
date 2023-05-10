@@ -248,7 +248,7 @@ static void ui_input_handler(enum etc_interface_event_type type) {
 	k_msleep(100);	
 	if (type == ETC_INTERFACE_EVENT_RTC) {
 		LOG_INF("UI -> ETC_INTERFACE_EVENT_RTC");
-	} else if ((type == ETC_INTERFACE_EVENT_RTC) || (type == ETC_INTERFACE_EVENT_BUTTON)) {
+	} else if ((type == ETC_INTERFACE_EVENT_RTC) || (type == ETC_INTERFACE_EVENT_HALL)) {
 		ui_module_send();
 	} else {
 		/* No action required */
@@ -339,7 +339,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
@@ -349,7 +349,7 @@ static void on_state_running(struct ui_msg_data *msg)
 /* Message handler for STATE_CLOUD_CONNECTING. */
 static void on_state_cloud_connecting(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_CLOUD_ASSOCIATED, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
@@ -360,7 +360,7 @@ static void on_state_cloud_connecting(struct ui_msg_data *msg)
 /* Message handler for STATE_CLOUD_ASSOCIATING. */
 static void on_state_cloud_associating(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED)) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_CLOUD_ASSOCIATED, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);

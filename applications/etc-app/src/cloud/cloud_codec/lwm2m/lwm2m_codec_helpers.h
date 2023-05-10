@@ -69,7 +69,7 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg);
  *  @retval 0 If successful, otherwise a negative value indicating the reason of failure.
  *  @return -ENODATA if the queued flag present in the input structure is false.
  */
-int lwm2m_codec_helpers_set_sensor_data(struct data_sensors *sensor);
+int lwm2m_codec_helpers_set_sensor_data(union etc_device_record *record);
 
 /** @brief Set modem dynamic data.
  *

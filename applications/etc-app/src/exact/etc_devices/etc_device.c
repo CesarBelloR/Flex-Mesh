@@ -227,11 +227,12 @@ int etc_device_write_record(union etc_device_record *record)
 
 	if (etc_device_buffer_is_erased(buf, ETC_DEVICE_RECORD_SIZE) == false) {
 		/* Need to erase flash */
-		LOG_WRN("Data in address is not empty");
+		LOG_WRN("Data in address is not empty 0x%08x", record_addr);
 		LOG_HEXDUMP_DBG(buf, ETC_DEVICE_RECORD_SIZE, "DUMP");
-		rc = flash_erase(record_fs.flash_device, record_addr, record_fs.sector_size);
+		uint32_t offset_sector = record_addr - record_addr % ETC_DEVICE_RECORD_SIZE;
+		rc = flash_erase(record_fs.flash_device, offset_sector, record_fs.sector_size);
 		if (rc != 0) {
-			LOG_ERR("Error in erasing flash err %d", rc);
+			LOG_ERR("Error in erasing flash err %d 0x%08x", rc, offset_sector);
 			return rc;
 		}
 	}

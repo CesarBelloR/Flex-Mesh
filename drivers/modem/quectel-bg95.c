@@ -293,6 +293,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 	}
 
 	LOG_INF("RSSI: %d", mdata.mdm_rssi);
+
 	return 0;
 }
 
@@ -1140,6 +1141,12 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 	mdata.psm_active = true;
 	quectel_bg95_set_connected(false);
 	setup_psm_ind_interrupt();
+	for(int i = 0; i < MDM_MAX_SOCKETS; i++) {
+		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_num) {
+			LOG_DBG("invalidating socket: %u", mdata.sockets[i].id);
+			modem_socket_put(&mdata.socket_config, mdata.sockets[i].sock_fd);
+		}
+	}
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
 	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
@@ -1175,10 +1182,15 @@ static int quectel_bg95_power_down() {
 		MODEM_CMD("POWERED DOWN", on_cmd_power_down, 0U, ""),
 	};
 
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+		LOG_ERR("Error taking semaphore");
+		return -EAGAIN;
+	}
+
 	k_sem_reset(&mdata.sem_shutdown);
 #if 1
 	do {
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
+		ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler, 
 				NULL, 0U, pw_dwn, &mdata.sem_response,
 				MDM_CMD_TIMEOUT);
 		retries++;
@@ -1204,6 +1216,7 @@ static int quectel_bg95_power_down() {
 	/* unset handler commands and ignore any errors */
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
 				      NULL, 0U, false);
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	LOG_INF("Modem powered down");
 
 	return 0;
@@ -1212,6 +1225,7 @@ error:
 	/* unset handler commands */
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
 				      NULL, 0U, false);
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	return ret;
 }
 
@@ -1327,6 +1341,10 @@ int quectel_bg95_file_upload(const char* file_name) {
 	};
 
 	k_sem_reset(&mdata.sem_data_ready);
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+		LOG_ERR("Error taking semaphore");
+		return -EAGAIN;
+	}
 
 	/* Send the Modem command. */
 	int ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
@@ -1359,6 +1377,7 @@ int quectel_bg95_file_upload(const char* file_name) {
 		goto exit;
 	}
 exit:
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	return ret;
 }
 
@@ -1372,6 +1391,10 @@ int quectel_bg95_file_download(const char* file_name, const uint8_t* data, const
 	};
 
 	k_sem_reset(&mdata.sem_data_ready);
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+		LOG_ERR("Error taking semaphore");
+		return -EAGAIN;
+	}
 
 	/* Send the Modem command. */
 	int ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
@@ -1408,6 +1431,7 @@ int quectel_bg95_file_download(const char* file_name, const uint8_t* data, const
 		goto exit;
 	}
 exit:
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	return ret;
 }
 
@@ -1467,6 +1491,16 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 	}
 		
 	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->sock_fd, 1);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for DTLS enable");
+		return -1;
+	}
+
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "negotiatetime", 
+		 sock->sock_fd, CONFIG_MODEM_QUECTEL_BG95_M3_SSL_NEGOTIATION_TIMEOUT);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1690,21 +1724,29 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 			ip_str, dst_port);
 	}
 
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+		LOG_ERR("Error taking semaphore");
+		errno = EAGAIN;
+		return -1;
+	}
+
 	/* Send out the command. */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
 			     NULL, 0U, buf,
 			     &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", buf, ret);
 		LOG_ERR("Closing the socket!!!");
+		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 		socket_close(sock);
-		errno = -ret;
-		return -1;
+		goto exit;
 	}
 
 	/* set command handlers */
 	ret = modem_cmd_handler_update_cmds(&mdata.cmd_handler_data, cmd, ARRAY_SIZE(cmd), true);
 	if (ret < 0) {
+		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
+		socket_close(sock);
 		goto exit;
 	}
 
@@ -1713,6 +1755,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (ret < 0) {
 		LOG_ERR("Timeout waiting for socket open");
 		LOG_ERR("Closing the socket!!!");
+		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 		socket_close(sock);
 		goto exit;
 	}
@@ -1720,9 +1763,17 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	ret = modem_cmd_handler_get_error(&mdata.cmd_handler_data);
 	if (ret != 0) {
 		LOG_ERR("Closing the socket!!! error %d", ret);
+		if (ret == 569) {
+			ret = -ETIMEDOUT;
+		} else {
+			ret = -ret;
+		}
+		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 		socket_close(sock);
 		goto exit;
 	}
+
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 
 	/* Connected successfully. */
 	sock->is_connected = true;
@@ -2044,12 +2095,12 @@ static void modem_psm_wakeup_work(struct k_work *work)
  */
 static int modem_setup(void)
 {
-	int ret = 0, counter;
+	int ret = 0;
+	int counter = 0;
 
+retry:
 	/* Setup the pins to ensure that Modem is enabled. */
 	pin_init();
-
-	counter = 0;
 
 	/* stop RSSI delay work */
 	k_work_cancel_delayable(&mdata.rssi_query_work);
@@ -2059,6 +2110,11 @@ static int modem_setup(void)
 	ret = k_sem_take(&mdata.sem_response, MDM_MAX_BOOT_TIME);
 	if (ret < 0) {
 		LOG_ERR("Timeout waiting for RDY");
+		if (counter < 4) {
+			counter++;
+			LOG_INF("Retrying...");
+			goto retry;
+		}
 		goto error;
 	}
 
@@ -2422,7 +2478,7 @@ static int modem_init(const struct device *dev)
 	}
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_pon_trig_gpios)
-	ret = gpio_pin_configure_dt(&pon_trig_gpio, GPIO_OUTPUT_ACTIVE);
+	ret = gpio_pin_configure_dt(&pon_trig_gpio, GPIO_OUTPUT_INACTIVE);
 	if (ret < 0) {
 		LOG_ERR("Failed to configure %s pin", "pon_trig");
 		goto error;
