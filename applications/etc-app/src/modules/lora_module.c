@@ -336,6 +336,8 @@ static int module_lora_wait_packet(void)
 					"%d",
 					response.relay_id, response.reclaim_start_time,
 					response.reclaim_end_time);
+				etc_device_reclaim_record(response.reclaim_start_time,
+							  response.reclaim_end_time);
 			}
 			return 0;
 		}

@@ -70,6 +70,7 @@ typedef int (*etc_device_record_reading_callback)(uint16_t record_id, void* user
 enum {
 	ETC_CONFIG_ID = 0x01,
 	ETC_RECORD_STAT = 0x02,
+	ETC_RECORD_RECLAIM = 0x03,
 	ETC_SETTING_HW_VERSION_ID = 0x100,
 	ETC_SETTING_FW_VERSION_ID,
 	ETC_SETTING_DEVICE_ID,
@@ -143,4 +144,5 @@ size_t etc_device_get_record_max_sector_index(void);
 size_t etc_device_get_record_element_size(void);
 struct etc_device_record_table etc_device_get_record_status(void);
 int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_device_record_header *header);
+int etc_device_reclaim_record(int start_time, int stop_time);
 #endif /* ETC_DEVICE_H_ */
