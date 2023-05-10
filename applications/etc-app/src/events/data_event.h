@@ -3,6 +3,7 @@
 
 #include <app_event_manager.h>
 #include <app_event_manager_profiler_tracer.h>
+#include <zephyr/net/lwm2m.h>
 #include "compiler.h"
 
 #ifdef __cplusplus
@@ -88,12 +89,22 @@ enum data_event_type {
 	DATA_EVT_ERROR
 };
 
+/** @brief Structure that contains a pointer to encoded data. */
+struct data_module_data_buffers {
+	char *buf;
+	size_t len;
+	/** Object paths used in lwM2M. */
+	struct lwm2m_obj_path paths[CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX];
+	uint8_t valid_object_paths;
+};
 
 struct data_event {
 	struct app_event_header header;
 
 	enum data_event_type type;
 	union {
+		/** Variable that carries a pointer to data encoded by the module. */
+		struct data_module_data_buffers buffer;
 		/** Code signifying the cause of error. */
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */

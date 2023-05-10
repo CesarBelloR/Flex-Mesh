@@ -18,8 +18,6 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
-static int saved_last_log_time;
-static int saved_last_tx_time;
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
 static int flag_etc_config_load;
 struct etc_config etc_cfg;
@@ -29,8 +27,6 @@ K_MUTEX_DEFINE(setting_mutex);
 void etc_settings_refresh()
 {
 	k_mutex_lock(&setting_mutex, K_FOREVER);
-	saved_last_log_time = -1;
-	saved_last_tx_time = -1;
 	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
 	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
 	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
@@ -125,20 +121,6 @@ int etc_settings_init(void)
 		etc_set_device_id(tmp_saved_value);
 	}
 
-	ret = etc_device_read_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time,
-				      sizeof(int));
-	if (ret) {
-		saved_last_log_time = -1;
-		etc_set_time_last_log(-1);
-	}
-
-	ret = etc_device_read_setting(ETC_SETTING_LAST_TX_TIME_ID, (char *)&saved_last_tx_time,
-				      sizeof(int));
-	if (ret) {
-		saved_last_tx_time = -1;
-		etc_set_time_last_tx(-1);
-	}
-
 	ret = etc_device_read_setting(ETC_SETTING_DEVICE_MODE_ID, &etc_cfg.device_mode,
 				      sizeof(etc_cfg.device_mode));
 	if (ret) {
@@ -211,42 +193,6 @@ int etc_settings_init(void)
 	return 0;
 }
 
-void etc_set_time_last_log(int time)
-{
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	saved_last_log_time = time;
-	etc_device_write_setting(ETC_SETTING_LAST_LOG_TIME_ID, (char *)&saved_last_log_time,
-				 sizeof(int));
-	k_mutex_unlock(&setting_mutex);
-}
-
-void etc_set_time_last_tx(int time)
-{
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	saved_last_tx_time = time;
-	etc_device_write_setting(ETC_SETTING_LAST_TX_TIME_ID, (char *)&saved_last_tx_time,
-				 sizeof(int));
-	k_mutex_unlock(&setting_mutex);
-}
-
-int etc_get_time_last_log(void)
-{
-	int time = 0;
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	time = saved_last_log_time;
-	k_mutex_unlock(&setting_mutex);
-	return time;
-}
-
-int etc_get_time_last_tx(void)
-{
-	int time = 0;
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	time = saved_last_tx_time;
-	k_mutex_unlock(&setting_mutex);
-	return time;
-}
-
 int etc_settings_get_config(struct etc_config *config)
 {
 	if (config == NULL) {
@@ -300,6 +246,10 @@ int etc_set_device_mode(enum etc_device_mode mode)
 {
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.device_mode == mode) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.device_mode = mode;
 	rc = etc_device_write_setting(ETC_SETTING_DEVICE_MODE_ID, &etc_cfg.device_mode,
 				      sizeof(etc_cfg.device_mode));
@@ -314,6 +264,10 @@ int etc_set_power_mode(enum etc_power_mode_e power)
 {
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.power_mode == power) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.power_mode = power;
 	rc = etc_device_write_setting(ETC_SETTING_POWER_MODE_ID, &etc_cfg.power_mode,
 				      sizeof(etc_cfg.power_mode));
@@ -328,6 +282,10 @@ int etc_set_alarm_direction(enum etc_alarm_direction alarm)
 {
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.alarm_direction == alarm) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.alarm_direction = alarm;
 	rc = etc_device_write_setting(ETC_SETTING_ALARM_DIRECTION_ID, &etc_cfg.alarm_direction,
 				      sizeof(etc_cfg.alarm_direction));
@@ -346,6 +304,10 @@ int etc_set_log_interval_secs(uint32_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.log_interval_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.log_interval_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_LOG_INTERVAL_SECS_ID, &etc_cfg.log_interval_secs,
 				      sizeof(etc_cfg.log_interval_secs));
@@ -364,6 +326,10 @@ int etc_set_log_interval_alarm_secs(uint32_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.log_interval_alarm_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.log_interval_alarm_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_LOG_INTERVAL_ALARM_SECS_ID,
 				      &etc_cfg.log_interval_alarm_secs,
@@ -383,7 +349,10 @@ int etc_set_tx_interval_secs(uint32_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
-
+	if (etc_cfg.tx_interval_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.tx_interval_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_TX_INTERVAL_SECS_ID, &etc_cfg.tx_interval_secs,
 				      sizeof(etc_cfg.tx_interval_secs));
@@ -402,6 +371,10 @@ int etc_set_tx_interval_alarm_secs(uint32_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.tx_interval_alarm_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.tx_interval_alarm_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_TX_INTERVAL_ALARMS_SECS_ID,
 				      &etc_cfg.tx_interval_alarm_secs,
@@ -421,6 +394,10 @@ int etc_set_wake_early_secs(uint16_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.wake_early_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.wake_early_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
 				      sizeof(etc_cfg.wake_early_secs));
@@ -439,6 +416,10 @@ int etc_set_tx_delay_msec(uint16_t msecond)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.tx_delay_msec == msecond) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.tx_delay_msec = msecond;
 	rc = etc_device_write_setting(ETC_SETTING_TX_DELAY_MSEC_ID, &etc_cfg.tx_delay_msec,
 				      sizeof(etc_cfg.tx_delay_msec));
@@ -457,6 +438,10 @@ int etc_set_rx_duration_secs(uint16_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.rx_duration_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.rx_duration_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_RX_DURATION_SECS_ID, &etc_cfg.rx_duration_secs,
 				      sizeof(etc_cfg.rx_duration_secs));
@@ -471,6 +456,10 @@ int etc_set_alarm_threshold(uint16_t threshold)
 {
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.alarm_threshold == threshold) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.alarm_threshold = threshold;
 	rc = etc_device_write_setting(ETC_SETTING_ALARM_THRESHOLD_ID, &etc_cfg.alarm_threshold,
 				      sizeof(etc_cfg.alarm_threshold));

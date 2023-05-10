@@ -189,6 +189,9 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
 		notify = true;
 		break;
+	case LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED:
+		LOG_DBG("LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED");
+		break;
 	default:
 		LOG_ERR("Unknown event: %d", client_event);
 		break;
@@ -227,19 +230,20 @@ static int device_reboot_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_l
 	return 0;
 }
 
-static void send_cb (enum lwm2m_send_status status)
+static void send_cb(enum lwm2m_send_status status)
 {
 	struct cloud_wrap_event cloud_wrap_evt = { 0 };
 	bool notify = false;
 
 	switch (status) {
 		case LWM2M_SEND_STATUS_SUCCESS:
-		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_ACK;
+		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_SEND_ACK;
 		notify = true;
 		break;
 
 		case LWM2M_SEND_STATUS_FAILURE:
 		case LWM2M_SEND_STATUS_TIMEOUT:
+		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_SEND_FAIL;
 		break;
 	}
 
@@ -467,7 +471,7 @@ int cloud_wrap_disconnect(void)
 	int err;
 	struct cloud_wrap_event event = { 0 };
 
-	if (state != CONNECTED) {
+	if ((state != CONNECTED) || (state != CONNECTING)) {
 		return -ENOTSUP;
 	}
 
@@ -489,17 +493,13 @@ int cloud_wrap_pause(void)
 	int err;
 	struct cloud_wrap_event event = { 0 };
 
-	if (state != CONNECTED) {
-		return -ENOTSUP;
-	}
-
 	err = lwm2m_engine_pause();
 	if (err) {
 		LOG_ERR("lwm2m_engine_pause, error: %d", err);
 		return err;
 	}	
-	event.type = CLOUD_WRAP_EVT_PAUSED;
 
+	event.type = CLOUD_WRAP_EVT_PAUSED;
 	cloud_wrapper_notify_event(&event);
 	
 	state = PAUSED;

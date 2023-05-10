@@ -16,6 +16,7 @@
 #include <zephyr/net/lwm2m.h>
 #include <date_time.h>
 
+#include "etc_device.h"
 #include "data_codec.h"
 #include "lwm2m_codec_defines.h"
 #include "lwm2m_codec_helpers.h"
@@ -89,21 +90,15 @@ int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_hand
 	return 0;
 }
 
-int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
-				struct data_lora_sensors *lora_buffer, 
-				size_t lora_buf_count,
-				struct data_sensors *sensor_buffer,
-				size_t sensor_buf_count,
-				struct data_modem_static *modem_data,
-				struct data_battery *batt_data)
+int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
+				     union etc_device_record *record)
 {
-	int err;
-
-	if (cloud_data == NULL || sensor_buffer == NULL || sensor_buf_count == 0) {
+	int err = 0;
+	if (cloud_data == NULL || record == NULL) {
 		return -ENOMEM;
 	}
 
-	err = lwm2m_codec_helpers_set_sensor_data(&sensor_buffer[0]);
+	err = lwm2m_codec_helpers_set_sensor_data(record);
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
 			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, TIMESTAMP_RID),
@@ -127,6 +122,23 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 			return err;
 		}
 	}
+
+	return err;
+}				     
+
+int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
+				    union etc_device_record *record,
+				    struct data_modem_static *modem_data)
+{
+	int err = 0;
+
+	if (cloud_data == NULL) {
+		return -ENOMEM;
+	}
+
+	if (record != NULL) {
+		data_codec_prepare_record_packet(cloud_data, record);
+	}
 	
 	if (modem_data != NULL) {
 		err = lwm2m_codec_helpers_set_modem_static_data(modem_data);
@@ -148,5 +160,5 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 		}
 	}
 
-	return 0;
+	return err;
 }

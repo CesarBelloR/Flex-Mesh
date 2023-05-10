@@ -28,13 +28,7 @@ pipelines:
             - west update
             # Apply patches
             - ./scripts/apply_patches.sh
-            - west build -b etc_v0_0_1 -s applications/etc-app -p -- -DOVERLAY_CONFIG="aws-overlay.conf"
             - mkdir -p .out
-            - cp build/zephyr/zephyr.hex .out/etc_v0_0_1_etc-app_aws.hex
-            - west build -b etc_v0_0_1 -s applications/etc-app -p -- -DOVERLAY_CONFIG="lwm2m-overlay.conf"
-            - cp build/zephyr/zephyr.hex .out/etc_v0_0_1_etc-app_lwm2m.hex
-            - west build -b etc_v0_2 -s applications/etc-app -p -- -DOVERLAY_CONFIG="aws-overlay.conf"
-            - cp build/zephyr/zephyr.hex .out/etc_v0_2_etc-app_aws.hex
             - west build -b etc_v0_2 -s applications/etc-app -p -- -DOVERLAY_CONFIG="lwm2m-overlay.conf"
             - cp build/zephyr/zephyr.hex .out/etc_v0_2_etc-app_lwm2m.hex
           artifacts:
