@@ -371,6 +371,12 @@ int date_time_local_second(uint32_t *local_time_s)
 	int ret = date_time_now(&unix_time_ms);
 	if (ret == 0) {
 		*local_time_s = (unix_time_ms/ 1000) + date_time_get_timezone();
+	} else {
+		time_t now = 0;
+		ret = pcf85263a_rtc_get_time(&now);
+		if (ret == 0) {
+			*local_time_s = (uint32_t)now;
+		}
 	}
 	return ret;
 }
@@ -382,6 +388,12 @@ int date_time_utc_second(uint32_t *utc_time_s)
 	int ret = date_time_now(&unix_time_ms);
 	if (ret == 0) {
 		*utc_time_s = (unix_time_ms/ 1000);
+	} else {
+		time_t now = 0;
+		ret = pcf85263a_rtc_get_time(&now);
+		if (ret == 0) {
+			*utc_time_s = (uint32_t)now;
+		}
 	}
 	return ret;
 }
@@ -392,6 +404,12 @@ int date_time_now_second(void)
 	int ret = date_time_now(&unix_time_ms);
 	if (ret == 0) {
 		return unix_time_ms/ 1000;
+	} else {
+		time_t now = 0;
+		ret = pcf85263a_rtc_get_time(&now);
+		if (ret == 0) {
+			return (int)now;
+		}
 	}
 	return -1;
 }
