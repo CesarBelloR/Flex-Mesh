@@ -453,7 +453,6 @@ int pcf85263a_alarm_config_type_1(pcf85263a_alarm_type_1_config_t info)
 
     uint8_t reg_read[16] = {0x00};
     rc = read_registers(PCF85263A_RTC_MODE_SECOND_ALARM1_REG, reg_read, num_reg);
-    LOG_HEXDUMP_INF(reg_read, num_reg, "ALARM");
     LOG_DBG("Configured Alarm Type 1 successful");
     return rc;
 }
@@ -538,7 +537,6 @@ int pcf85263a_alarm_config_type_2(pcf85263a_alarm_type_2_config_t config) {
         LOG_ERR("Failed to set Alarm Type 2");
         return rc;
     }
-
     LOG_DBG("Configured Alarm Type 2 successful");
     return rc;
 }
@@ -662,4 +660,34 @@ uint8_t pcf85263a_get_alarm_min_type_1(void) {
     }
 
     return 0;
+}
+
+bool pcf85263a_is_alarm_1_flags(void) {
+    uint8_t buf[1] = {0x00};
+    int rc = read_register(PCF85263A_FLAGS_REG, buf);
+    if (rc == 0) {
+        pcf85263a_flags_reg_t flags;
+        flags.byte = buf[0];
+        if (flags.a1f == 1) {
+            flags.a1f = 0;
+            write_register(PCF85263A_FLAGS_REG, flags.byte);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool pcf85263a_is_alarm_2_flags(void) {
+    uint8_t buf[1] = {0x00};
+    int rc = read_register(PCF85263A_FLAGS_REG, buf);
+    if (rc == 0) {
+        pcf85263a_flags_reg_t flags;
+        flags.byte = buf[0];
+        if (flags.a2f == 1) {
+            flags.a2f = 0;
+            write_register(PCF85263A_FLAGS_REG, flags.byte);
+            return true;
+        }
+    }
+    return false;
 }
