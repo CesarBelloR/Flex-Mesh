@@ -400,8 +400,9 @@ retry:
 		etc_set_tx_delay_msec(new_tx_delay_msec);
 		k_msleep(new_tx_delay_msec);
 	} else {
-		/* In first try, reload the tx delay and make a small sleep in mseconds */
-		uint16_t tx_delay_remain = etc_get_tx_delay_msec() / 1000;
+		/* On first try, reload the tx delay and sleep the remaining ms that
+		 * are not accounted for by the RTC (only has seconds resolution) */
+		uint16_t tx_delay_remain = etc_get_tx_delay_msec() % 1000;
 		k_msleep(tx_delay_remain);
 	}
 
