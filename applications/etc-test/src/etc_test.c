@@ -999,7 +999,7 @@ static int lora_rx(void)
 	int8_t snr;
 	uint8_t rx_buf[128] = {0x00};
 	LOG_INF("Start receiving LoRa messages");
-	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 60UL)) {
+	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 240UL)) {
 		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
 		if (ret < 0) {
 			continue;
@@ -1049,7 +1049,7 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 	int8_t snr;
 	uint8_t rx_buf[128] = {0x00};
 	uint8_t counter = 0;
-	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 2UL)) {
+	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 3UL)) {
 		//shell_print(shell, "Send to Relay");
 		counter++;
 		ret = send_lora_message();
@@ -1063,13 +1063,13 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 		}
 		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
 		if (ret < 0) {
-			continue;
+			//continue;
 		} else {
 			char RXString[128] = {0};
   			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
 			RXString[ret] = '\0';
 			if (strstr(RXString, "99984")) {									//placeholder device ID 99984
-				shell_print(shell, "Relay%d: %s,%d,%d", counter, RXString, rssi, snr);
+				shell_print(shell, "Rel,%d,%s,%d,%d", counter, RXString, rssi, snr);
 			}
 		}
 		k_sleep(K_SECONDS(1));
@@ -1085,16 +1085,17 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 		}
 		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
 		if (ret < 0) {
-			continue;
+			//continue;
 		} else {
 			char RXString[128] = {0};
   			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
 			RXString[ret] = '\0';
 			if (strstr(RXString, "99984")) {									//placeholder device ID 99984
-				shell_print(shell, "Monitor%d: %s,%d,%d", counter, RXString, rssi, snr);
+				shell_print(shell, "Mon,%d,%s%d,%d", counter, RXString, rssi, snr);
 			}
 		}
 		k_sleep(K_SECONDS(1));
+		if (counter >= 60) break;
 	}
 	k_mutex_unlock(&lora_mutex);
 	return 0;
