@@ -481,6 +481,7 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 						   paths);
 			if (err) {
 				LOG_ERR("cloud_wrap_data_send, err: %d", err);
+				SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_FAIL);
 			}
 
 			return;

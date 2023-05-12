@@ -381,7 +381,7 @@ static int setup(void)
 	etc_interface_enable_rtc_event();
 	etc_interface_register_event_handler(app_input_handler);
 	static bool is_send = false;
-	if ((etc_device_is_logger_lora() == true) && (is_send == false)) {
+	if (is_send == false) {
 		LOG_DBG("Request to transmit records");
 		is_send = true;
 		app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
