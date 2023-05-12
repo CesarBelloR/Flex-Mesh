@@ -261,6 +261,8 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	}
 
 	if (next_transmit != 0) {
+		uint16_t tx_delay_msec = etc_get_tx_delay_msec();
+		next_transmit = next_transmit + (tx_delay_msec / 1000);
 		struct tm tm_transmit_time = {0};
 		gmtime_r(&next_transmit, &tm_transmit_time);
 		pcf85263a_alarm_type_1_config_t config_1 = {

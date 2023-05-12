@@ -3,6 +3,7 @@
 #include <app_event_manager.h>
 #include <zephyr/drivers/lora.h>
 #include <zephyr/kernel.h>
+#include <zephyr/random/rand32.h>
 #include "etc_date_time.h"
 #include "etc_device.h"
 #include "etc_settings.h"
@@ -392,6 +393,19 @@ static int module_lora_process_packet(union etc_device_record record)
 	int rc = 0;
 	uint8_t cnt = 0;
 retry:
+	if (cnt != 0) {
+		/* Generate new TX_DELAY */
+		uint16_t new_tx_delay_msec =
+			(uint16_t)(sys_rand32_get() % ETC_SETTING_TX_DELAY_MSEC_MAX);
+		etc_set_tx_delay_msec(new_tx_delay_msec);
+		k_msleep(new_tx_delay_msec);
+	} else {
+		/* On first try, reload the tx delay and sleep the remaining ms that
+		 * are not accounted for by the RTC (only has seconds resolution) */
+		uint16_t tx_delay_remain = etc_get_tx_delay_msec() % 1000;
+		k_msleep(tx_delay_remain);
+	}
+
 	rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc == 0) {
 		rc = module_lora_wait_packet();
@@ -418,7 +432,6 @@ static void on_all_states(struct lora_msg_data *msg)
 	if (etc_device_is_logger_lora()) {
 		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
 			LOG_INF("Logger sending data");
-			k_sleep(K_MSEC(100));
 			int rc = 0;
 			do {
 				union etc_device_record record;
