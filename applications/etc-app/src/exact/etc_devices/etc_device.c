@@ -489,6 +489,11 @@ int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_devi
 	uint16_t record_id = sector * ETC_RECORD_MAX_PER_SECTOR + element + ETC_RECORD_HEADER;
 	return etc_nvs_read(record_id, header, sizeof(union etc_device_record_header));
 }
+
+int etc_device_erase_cfg(void) {
+	return nvs_clear(&etc_fs);
+}
+
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
 
