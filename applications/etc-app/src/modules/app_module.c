@@ -226,7 +226,102 @@ static void app_peripheral_off(void)
 	gpio_pin_configure(gpio_0, 4, GPIO_DISCONNECTED);
 }
 
-static void app_peripheral_on(void)
+static void app_set_next_wakeup_time_for_job(enum etc_logger_job job) 
+{
+#if defined(CONFIG_PCF85263)
+	time_t now = 0;
+	bool flag_add_offset = false;
+	pcf85263a_rtc_get_time(&now);
+	int wakeup_for_log = etc_device_get_log_interval_second();
+	int wakeup_for_transmit = etc_device_get_tx_interval_second();
+	time_t next_log = 0;
+	time_t next_transmit = 0;
+	switch (job) {
+		case ETC_LOGGER_JOB_LOG: {
+			next_log = now + wakeup_for_log;
+			break;
+		}
+		case ETC_LOGGER_JOB_TX: {
+			next_transmit = now + wakeup_for_transmit;
+			break;
+		}
+		case ETC_LOGGER_JOB_BOTH: {
+			next_log = now + wakeup_for_log;
+			next_transmit = now + wakeup_for_transmit;
+			break;
+		}
+	}
+	struct tm tm_time = {0};
+	gmtime_r(&now, &tm_time);
+	if (next_log != 0) {
+		if (tm_time.tm_sec >= 30) {
+			next_log += 60; // Increase a minute
+		}
+
+		struct tm tm_log_time = {0};
+		gmtime_r(&next_log, &tm_log_time);
+
+
+		pcf85263a_alarm_type_2_config_t config_2 = {
+			.minutes = tm_log_time.tm_min,
+			.hours = tm_log_time.tm_hour,
+		};
+
+		pcf85263a_alarm_type_2_flag_t flag_2 = {
+			.enable_minutes = 1,
+			.enable_hours = 1,
+			.enable_weekdays = 0,
+		};
+
+		pcf85263a_alarm_config_type_2(config_2);
+		pcf85263a_alarm_enable_type_2(flag_2);
+		LOG_DBG("Next wakeup for logging at: %02d:%02d:%02d", tm_log_time.tm_hour, tm_log_time.tm_min, 0);
+	}
+
+	if (next_transmit != 0) {
+		struct tm tm_transmit_time = {0};
+		gmtime_r(&next_transmit, &tm_transmit_time);
+		pcf85263a_alarm_type_1_config_t config_1 = {
+			.seconds = tm_transmit_time.tm_sec,
+			.minutes = tm_transmit_time.tm_min,
+			.hours = tm_transmit_time.tm_hour,
+			.days = 0,
+			.months = 0,
+		};
+
+		pcf85263a_alarm_type_1_flag_t flag_1 = {
+			.enable_seconds = 1,
+			.enable_minutes = 1,
+			.enable_hours = 1,
+			.enable_days = 0,
+			.enable_months = 0,
+		};
+
+		pcf85263a_alarm_config_type_1(config_1);
+		pcf85263a_alarm_enable_type_1(flag_1);
+		LOG_DBG("Next wakeup for transmitting at: %02d:%02d:%02d", tm_transmit_time.tm_hour, tm_transmit_time.tm_min, tm_transmit_time.tm_sec);
+	}
+
+	LOG_DBG("Now at: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
+	LOG_DBG("Log %lld - Transmit %lld", next_log, next_transmit);
+
+	pcf85263a_interrupt_flag_t interrupt_flag = {
+		.enable_level_pulse = 0,
+		.enable_periodic = 0,
+		.enable_offset_correction = 0,
+		.enable_alarm_1 = 1,
+		.enable_alarm_2 = 1,
+		.enable_timestamp = 0,
+		.enable_battery_switch = 0,
+		.enable_wdg = 0,
+	};
+
+	pcf85263a_interrupt_enable(interrupt_flag);
+	pcf85263a_set_interrupt_io(true);
+#endif
+}
+
+static void app_peripheral_on(bool is_rtc)
 {
 	const struct gpio_dt_spec vsen_en_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
@@ -242,142 +337,79 @@ static void app_peripheral_on(void)
 #ifdef CONFIG_PM_DEVICE
 	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
 #endif
-	LOG_DBG("Wakeup from sleep");
-	etc_interface_disable_rtc_event();
+
+	if (is_rtc) {
+		LOG_DBG("Wakeup from sleep");
 #if defined(CONFIG_PCF85263)
 	time_t now = 0;
 	pcf85263a_rtc_get_time(&now);
-	int last_sample = etc_get_time_last_log();  // Get the last wakeup time for sample
-	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
-	LOG_DBG("Sample %d - Transmit %d - UTC time %d", last_sample, last_transmit, (int)now);
-	if (now >= last_sample && now < last_transmit) {
-		LOG_DBG("Doing sample");
-		etc_device_set_job(ETC_LOGGER_JOB_LOG);
-		SEND_EVENT(app, APP_EVT_DATA_GET);
-	} else if (now >= last_transmit && now < last_sample) {
-		LOG_DBG("Doing transmit");
-		etc_device_set_job(ETC_LOGGER_JOB_TX);
-		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
-	} else if (now >= last_transmit && now >= last_sample) {
-		LOG_DBG("Doing both job");
-		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
-		SEND_EVENT(app, APP_EVT_DATA_GET);
-	} else {
-		LOG_DBG("Unknown task - set default job to log");
-		etc_device_set_job(ETC_LOGGER_JOB_LOG);
-		SEND_EVENT(app, APP_EVT_DATA_GET);
+	bool flag_1 = pcf85263a_is_alarm_1_flags();
+	bool flag_2 = pcf85263a_is_alarm_2_flags();
+	
+	enum etc_logger_job job = ETC_LOGGER_JOB_BOTH;
+	if (flag_1 && flag_2) {
+		job = ETC_LOGGER_JOB_BOTH;
+	} else if (flag_1) {
+		job = ETC_LOGGER_JOB_TX;
+	} else if (flag_2) {
+		job = ETC_LOGGER_JOB_LOG;
+	} 
+
+	LOG_DBG("UTC time %d - Job %d", (int)now, job);
+	switch (job) {
+		case ETC_LOGGER_JOB_LOG: {
+			LOG_DBG("Doing log");
+			etc_device_set_job(ETC_LOGGER_JOB_LOG);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_LOG);
+			SEND_EVENT(app, APP_EVT_DATA_GET);
+			break;
+		}
+		case ETC_LOGGER_JOB_TX: {
+			LOG_DBG("Doing transmit");
+			etc_device_set_job(ETC_LOGGER_JOB_TX);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_TX);
+			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+			break;
+		}
+		case ETC_LOGGER_JOB_BOTH: {
+			LOG_DBG("Doing both job");
+			etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
+			SEND_EVENT(app, APP_EVT_DATA_GET);
+			break;
+		}
 	}
 #endif
+	} else {
+		LOG_DBG("Wakeup from external HALL sensor");
+		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+		SEND_EVENT(app, APP_EVT_DATA_GET);
+	}
 }
 
 static void app_input_handler(enum etc_interface_event_type type)
 {
 	if (type == ETC_INTERFACE_EVENT_RTC) {
-		app_peripheral_on();
+		app_peripheral_on(true);
+	} else if (type == ETC_INTERFACE_EVENT_HALL) {
+		app_peripheral_on(false);
+	} else {
+		/* No action required */
 	}
 }
 
 static int setup(void)
 {
+	etc_interface_enable_rtc_event();
 	etc_interface_register_event_handler(app_input_handler);
 	static bool is_send = false;
 	if ((etc_device_is_logger_lora() == true) && (is_send == false)) {
 		LOG_DBG("Request to transmit records");
 		is_send = true;
+		app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
 		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
 	}
 	return 0;
-}
-
-static void app_set_wakeup_time(void)
-{
-#if defined(CONFIG_PCF85263)
-	time_t now = 0;
-	bool flag_add_offset = false;
-	pcf85263a_rtc_get_time(&now);
-	int wakeup_for_sample = etc_device_get_log_interval_second();
-	int wakeup_for_transmit = etc_device_get_tx_interval_second();
-	int last_sample = etc_get_time_last_log();  // Get the last wakeup time for sample
-	int last_transmit = etc_get_time_last_tx(); // Get the last wakeup time for transmit
-	int next_sample = 0;
-	int next_transmit = 0;
-	int sleep_time = 0;
-	if ((last_sample == -1) && (last_transmit == -1)) {
-		// Setup the wakeup time for next sample and transmit
-		next_sample = now + wakeup_for_sample;
-		next_transmit = now + wakeup_for_transmit;
-	} else {
-		if (last_transmit <= now) {
-			next_transmit = now + wakeup_for_transmit;
-		} else {
-			next_transmit = last_transmit;
-		}
-		if (last_sample <= now) {
-			next_sample = now + wakeup_for_sample;
-		} else {
-			next_sample = last_sample;
-		}
-	}
-
-	if (next_sample < next_transmit) {
-		sleep_time = next_sample - now;
-	} else {
-		sleep_time = next_transmit - now;
-	}
-	LOG_DBG("Sample %d (%d) - Transmit %d (%d) - Sleep time %d", next_sample, last_sample,
-		next_transmit, last_transmit, sleep_time);
-	// Update for next sleep
-	etc_set_time_last_log(next_sample);
-	etc_set_time_last_tx(next_transmit);
-	struct tm tm_time = {0};
-	struct tm tm_next_time = {0};
-	gmtime_r(&now, &tm_time);
-
-	if ((sleep_time < 60) || (60 - tm_time.tm_sec < 30)) {
-		// Increase alarm to 1 minutes because the sleep time is not enough
-		sleep_time += 60;
-	}
-
-	time_t next_sleep = now + sleep_time;
-	gmtime_r(&next_sleep, &tm_next_time);
-	
-	LOG_DBG("      Now: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
-	LOG_DBG("Wakeup at: %02d:%02d:%02d", tm_next_time.tm_hour, tm_next_time.tm_min, 0);
-	pcf85263a_alarm_type_1_config_t config = {
-		.seconds = 0,
-		.minutes = tm_next_time.tm_min,
-		.hours = tm_next_time.tm_hour,
-		.days = 0,
-		.months = 0,
-	};
-
-	pcf85263a_alarm_type_1_flag_t flag = {
-		.enable_seconds = 0,
-		.enable_minutes = 1,
-		.enable_hours = 1,
-		.enable_days = 0,
-		.enable_months = 0,
-	};
-
-	pcf85263a_interrupt_flag_t interrupt_flag = {
-		.enable_level_pulse = 0,
-		.enable_periodic = 0,
-		.enable_offset_correction = 0,
-		.enable_alarm_1 = 1,
-		.enable_alarm_2 = 0,
-		.enable_timestamp = 0,
-		.enable_battery_switch = 0,
-		.enable_wdg = 0,
-	};
-
-	pcf85263a_interrupt_enable(interrupt_flag);
-	pcf85263a_set_interrupt_io(true);
-	pcf85263a_alarm_config_type_1(config);
-	pcf85263a_alarm_enable_type_1(flag);
-#endif
-	k_sleep(K_SECONDS(1)); // Wait for print out LOG
-	etc_interface_enable_rtc_event();
-	app_peripheral_off();
 }
 
 /* Message handler for STATE_INIT. */
@@ -421,18 +453,18 @@ static void on_all_events(struct app_msg_data *msg)
 
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
 		enum etc_logger_job job = etc_device_get_job();
-		if (job == ETC_LOGGER_JOB_BOTH) {
+		if ((job == ETC_LOGGER_JOB_BOTH) || (job == ETC_LOGGER_JOB_TX)) {
 			LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
 			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
 		} else if (job == ETC_LOGGER_JOB_LOG) {
-			app_set_wakeup_time();
+			app_peripheral_off();
 		}
 		return;
 	}
 	
 	if ((IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) ||
-	    (IS_EVENT(msg, cloud, CLOUD_EVT_USER_ASSOCIATED))) {
-		app_set_wakeup_time();
+		(IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK))) {
+			app_peripheral_off();
 		return;
 	}
 }

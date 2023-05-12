@@ -248,7 +248,7 @@ static void on_state_init(struct util_msg_data *msg)
 	    (IS_EVENT(msg, ui, UI_EVT_ERROR))		||
 	    (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_REBOOT_REQUEST)) ||
 	    (IS_EVENT(msg, cloud, CLOUD_EVT_REBOOT_REQUEST))) {
-		send_reboot_request(REASON_GENERIC);
+		//send_reboot_request(REASON_GENERIC);
 		return;
 	}
 }

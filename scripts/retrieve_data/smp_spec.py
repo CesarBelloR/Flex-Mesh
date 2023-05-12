@@ -113,5 +113,13 @@ SMP_DICT = {
             },
             "response": {"op_code": MGMT_OP_READ_RSP, "json_keys": []},
         },
+        "clean": {
+            "cmd_id": 2,
+            "request": {
+                "op_code": MGMT_OP_READ,
+                "json": {},
+            },
+            "response": {"op_code": MGMT_OP_READ_RSP, "json_keys": []},
+        },
     },
 }

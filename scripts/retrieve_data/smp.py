@@ -272,6 +272,11 @@ class SimpleMgmtProtocol:
         smp_response = self.read_smp_data()[0]
         return smp_response
 
+    def get_clean(self):
+        self.send_generic_smp_smg("etc", "clean", "request")
+        smp_response = self.read_smp_data()[0]
+        return smp_response
+    
     def get_record(self, offset, length, element, sector, num_element):
         json_msg = {"off": offset, "length": length, "element": element, "sector": sector, "num_element": num_element}
         self.send_generic_smp_smg("etc", "record", "request", json_msg)

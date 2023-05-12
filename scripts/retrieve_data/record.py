@@ -132,10 +132,17 @@ if __name__ == "__main__":
                     
                     for element in struct_list:
                         csv_writer.writerow([element.timestamp, round(element.battery, 2), round(element.sensor[0], 2), round(element.sensor[1], 2), round(element.sensor[2], 2), round(element.sensor[3], 2), round(element.sensor[4], 2), round(element.sensor[5], 2), element.ack])
+        elif args.cmd == "erase":
+            status = mgr.get_clean()
+            response_status = status["rc"]
+            if response_status != 0:
+                logger.error(mgr.get_report(response_status))
+                exit(0)
+            logger.info(status)
         elif args.cmd == "shell":
             shell_args = args.arg
             logger.info(shell_args)
-            status = mgr.get_shell(shell_args)
+            status = mgr.get_clean(shell_args)
             response_status = status["rc"]
             if response_status != 0:
                 logger.error(mgr.get_report(response_status))
