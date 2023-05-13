@@ -246,4 +246,20 @@ bool pcf85263a_is_alarm_1_flags(void);
  * @retval True if Alarm 2 is active
  */
 bool pcf85263a_is_alarm_2_flags(void);
+
+/** @brief Write a data to RAM of RTC
+ * 
+ * @param value to write 
+ * @retval True if write data success
+ * 
+ */
+bool pcf85263a_write_ram(uint8_t value);
+
+/** @brief Read a data from RAM of RTC
+ * 
+ * @param None
+ * @retval value from RAM
+ * 
+ */
+uint8_t pcf85263a_read_ram(void);
 #endif /* PCF85263A_H_ */

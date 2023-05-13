@@ -107,6 +107,7 @@ enum {
 
 #define UNIX_YEAR_OFFSET		(69)
 #define MAX_WRITE_SIZE          (64)
+#define PCF85263A_FLAG_RTC_SYNCED (0xCA)
 #define PCF85263A_REGISTER_COUNT(a,b) (b - a + 1)
 
 struct pcf85263_config {
@@ -330,6 +331,12 @@ int pcf85263a_rtc_set_time(time_t unix_time)
         goto out;
     }
 
+    /* Write SYNCED data to RAM */
+    if (pcf85263a_write_ram(PCF85263A_FLAG_RTC_SYNCED) == false) {
+        LOG_ERR("Failed to write SYNC To RAM");
+        rc = -EINVAL;
+        goto out;
+    }
 out:
 
 	return rc;
@@ -344,6 +351,11 @@ int pcf85263a_rtc_get_time(time_t* unix_time) {
         return 0;
     }
     
+
+    if (pcf85263a_read_ram() != PCF85263A_FLAG_RTC_SYNCED) {
+        return -EINVAL;
+    }
+
 	int rc = i2c_write_read(cfg->i2c_dev, cfg->addr,
 				&addr, sizeof(addr),
 				&data->rtc_registers, PCF85263A_REGISTER_COUNT(PCF85263A_RTC_MODE_100TH_SECONDS_REG, 
@@ -690,4 +702,15 @@ bool pcf85263a_is_alarm_2_flags(void) {
         }
     }
     return false;
+}
+
+bool pcf85263a_write_ram(uint8_t value) {
+    int rc = write_register(PCF85263A_RAM_BYTE_REG, value);
+    return rc == 0;
+}
+
+uint8_t pcf85263a_read_ram(void) {
+    uint8_t buf[1] = {0x00};
+    read_register(PCF85263A_RAM_BYTE_REG, buf);
+    return buf[0];
 }
