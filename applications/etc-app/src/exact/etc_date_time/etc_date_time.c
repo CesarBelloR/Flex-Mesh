@@ -357,8 +357,14 @@ int date_time_now(int64_t *unix_time_ms)
 
 	err = date_time_uptime_to_unix_time_ms(unix_time_ms);
 	if (err) {
-		LOG_WRN("date_time_uptime_to_unix_time_ms, error: %d", err);
-		*unix_time_ms = unix_time_ms_prev;
+		time_t now = 0;
+		err = pcf85263a_rtc_get_time(&now);
+		if (err == 0) {
+			return (int)(now * 1000);
+		} else {
+			LOG_WRN("date_time_uptime_to_unix_time_ms, error: %d", err);
+			*unix_time_ms = unix_time_ms_prev;
+		}
 	}
 
 	return err;
