@@ -15,36 +15,6 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #define SETTINGS_FW_VERSION	   ETC_SETTING_FW_VERSION_ID
 #define SETTINGS_DEVICE_ID	   ETC_SETTING_DEVICE_ID
 
-#define ETC_SETTING_DEVICE_MODE_DEFAULT		    	ETC_DEVICE_MODE_LTE_LOGGER
-#define ETC_SETTING_POWER_MODE_DEFAULT		    	ETC_POWER_MODE_POWER_SAVER
-#define ETC_SETTING_ALARM_DIRECTION_DEFAULT	    	ETC_ALARM_DIR_GREATER
-#define ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT	    	900
-#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT 	900
-#define ETC_SETTING_TX_INTERVAL_SECS_DEFAULT	    	900
-#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT 	86400
-#define ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT	    	840
-#define ETC_SETTING_TX_DELAY_MSEC_DEFAULT	    	29500
-#define ETC_SETTING_RX_DURATION_SECS_DEFAULT	    	120
-#define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    	0
-
-#define ETC_SETTING_LOG_INTERVAL_SECS_MAX		86400
-#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MAX		86400
-#define ETC_SETTING_TX_INTERVAL_SECS_MAX		86400
-#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MAX		86400
-#define ETC_SETTING_WAKEUP_EARLY_SECS_MAX		840
-#define ETC_SETTING_TX_DELAY_MSEC_MAX			29500
-#define ETC_SETTING_RX_DURATION_SECS_MAX		120
-#define ETC_SETTING_ALARM_THRESHOLD_MAX			120
-
-#define ETC_SETTING_LOG_INTERVAL_SECS_MIN		60
-#define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MIN		60
-#define ETC_SETTING_TX_INTERVAL_SECS_MIN		60
-#define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MIN		60
-#define ETC_SETTING_WAKEUP_EARLY_SECS_MIN		0
-#define ETC_SETTING_TX_DELAY_MSEC_MIN			0
-#define ETC_SETTING_RX_DURATION_SECS_MIN		30
-#define ETC_SETTING_ALARM_THRESHOLD_MIN			-20
-
 static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
@@ -276,6 +246,10 @@ int etc_set_device_mode(enum etc_device_mode mode)
 {
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.device_mode == mode) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.device_mode = mode;
 	rc = etc_device_write_setting(ETC_SETTING_DEVICE_MODE_ID, &etc_cfg.device_mode,
 				      sizeof(etc_cfg.device_mode));
@@ -290,6 +264,10 @@ int etc_set_power_mode(enum etc_power_mode_e power)
 {
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.power_mode == power) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.power_mode = power;
 	rc = etc_device_write_setting(ETC_SETTING_POWER_MODE_ID, &etc_cfg.power_mode,
 				      sizeof(etc_cfg.power_mode));
@@ -304,6 +282,10 @@ int etc_set_alarm_direction(enum etc_alarm_direction alarm)
 {
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.alarm_direction == alarm) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.alarm_direction = alarm;
 	rc = etc_device_write_setting(ETC_SETTING_ALARM_DIRECTION_ID, &etc_cfg.alarm_direction,
 				      sizeof(etc_cfg.alarm_direction));
@@ -322,6 +304,10 @@ int etc_set_log_interval_secs(uint32_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.log_interval_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.log_interval_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_LOG_INTERVAL_SECS_ID, &etc_cfg.log_interval_secs,
 				      sizeof(etc_cfg.log_interval_secs));
@@ -340,6 +326,10 @@ int etc_set_log_interval_alarm_secs(uint32_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.log_interval_alarm_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.log_interval_alarm_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_LOG_INTERVAL_ALARM_SECS_ID,
 				      &etc_cfg.log_interval_alarm_secs,
@@ -359,7 +349,10 @@ int etc_set_tx_interval_secs(uint32_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
-
+	if (etc_cfg.tx_interval_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.tx_interval_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_TX_INTERVAL_SECS_ID, &etc_cfg.tx_interval_secs,
 				      sizeof(etc_cfg.tx_interval_secs));
@@ -378,6 +371,10 @@ int etc_set_tx_interval_alarm_secs(uint32_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.tx_interval_alarm_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.tx_interval_alarm_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_TX_INTERVAL_ALARMS_SECS_ID,
 				      &etc_cfg.tx_interval_alarm_secs,
@@ -397,6 +394,10 @@ int etc_set_wake_early_secs(uint16_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.wake_early_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.wake_early_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
 				      sizeof(etc_cfg.wake_early_secs));
@@ -415,6 +416,10 @@ int etc_set_tx_delay_msec(uint16_t msecond)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.tx_delay_msec == msecond) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.tx_delay_msec = msecond;
 	rc = etc_device_write_setting(ETC_SETTING_TX_DELAY_MSEC_ID, &etc_cfg.tx_delay_msec,
 				      sizeof(etc_cfg.tx_delay_msec));
@@ -433,6 +438,10 @@ int etc_set_rx_duration_secs(uint16_t second)
 	}
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.rx_duration_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.rx_duration_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_RX_DURATION_SECS_ID, &etc_cfg.rx_duration_secs,
 				      sizeof(etc_cfg.rx_duration_secs));
@@ -447,6 +456,10 @@ int etc_set_alarm_threshold(uint16_t threshold)
 {
 	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.alarm_threshold == threshold) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
 	etc_cfg.alarm_threshold = threshold;
 	rc = etc_device_write_setting(ETC_SETTING_ALARM_THRESHOLD_ID, &etc_cfg.alarm_threshold,
 				      sizeof(etc_cfg.alarm_threshold));
