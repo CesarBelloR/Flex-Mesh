@@ -70,6 +70,8 @@ static struct module_data self = {
 	.supports_shutdown = true,
 };
 
+/* Store the last now in setup wakeup */
+static int last_now = 0;
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type new_state)
 {
@@ -214,6 +216,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	time_t now = 0;
 	bool flag_add_offset = false;
 	pcf85263a_rtc_get_time(&now);
+	last_now = (int)now;
 	int wakeup_for_log = etc_device_get_log_interval_second();
 	int wakeup_for_transmit = etc_device_get_tx_interval_second();
 	time_t next_log = 0;
@@ -287,7 +290,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	}
 
 	LOG_DBG("Now at: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
-	LOG_DBG("Log %lld - Transmit %lld", next_log, next_transmit);
+	LOG_DBG("Log %u - Transmit %u", (uint32_t)next_log, (uint32_t)next_transmit);
 
 	pcf85263a_interrupt_flag_t interrupt_flag = {
 		.enable_level_pulse = 0,
@@ -376,10 +379,37 @@ static void app_input_handler(enum etc_interface_event_type type)
 	}
 }
 
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+void date_time_handler(const struct date_time_evt *evt)
+{
+	static enum date_time_evt_type last_type = DATE_TIME_NOT_OBTAINED;
+	if (last_type == evt->type) {
+		return;
+	}
+	last_type = evt->type;
+	switch (evt->type) {
+		case DATE_TIME_OBTAINED_MODEM:
+		case DATE_TIME_OBTAINED_EXT: {
+			int now = date_time_now_second();
+			if ((now != -1) && (abs(now - last_now) > ETC_SETTING_LOG_INTERVAL_SECS_MAX)) {
+				LOG_INF("Update wakeup time after date/time synced");
+				app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
+			}
+			break;
+		}
+		case DATE_TIME_NOT_OBTAINED: 
+			break;
+	}
+}
+#endif
+
 static int setup(void)
 {
 	etc_interface_enable_rtc_event();
 	etc_interface_register_event_handler(app_input_handler);
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+	date_time_register_handler(date_time_handler);
+#endif
 	static bool is_send = false;
 	if ((etc_device_is_logger_lora() == true) && (is_send == false)) {
 		LOG_DBG("Request to transmit records");
@@ -409,6 +439,7 @@ static void on_sub_state_passive(struct app_msg_data *msg)
 static void on_sub_state_active(struct app_msg_data *msg)
 {
 }
+
 
 /* Message handler for all states. */
 static void on_all_events(struct app_msg_data *msg)
