@@ -7,7 +7,7 @@ import os
 import hashlib
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # SMP_CONSTANTS
