@@ -252,19 +252,19 @@ static int sensor_poll_handler(void) {
 			  (float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
 			  adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
 	if (fabs(data->temperature[SENSOR_INPUT_AMBIENT] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
-		LOG_DBG("Ambient temp %2.2f", data->temperature[0]);
+		LOG_DBG("Ambient temp %2.2f", data->temperature[SENSOR_INPUT_AMBIENT]);
 	}
-	for (int8_t i = SENSOR_INPUT_IN1; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
-		sensor_adc_switch_channel(i - 1);
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		sensor_adc_switch_channel(i);
 		k_msleep(50);
 		data->temperature[i] = 
 			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR),
 				(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) / 1000.0f,
 				adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
 		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
-			LOG_DBG("Channel %d temp %f", i - 1, data->temperature[i]);
+			LOG_DBG("Channel %d temp %f", i, data->temperature[i]);
 		} else {
-			LOG_DBG("Channel %d isn't available", i - 1);
+			LOG_DBG("Channel %d isn't available", i);
 		}
 	}
 
