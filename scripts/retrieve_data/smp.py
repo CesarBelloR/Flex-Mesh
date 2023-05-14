@@ -244,6 +244,12 @@ class SimpleMgmtProtocol:
         smp_response = self.read_smp_data()[0]
         return smp_response
 
+    def get_reclaim(self, start, stop):
+        json_msg = {"start": start, "stop": stop}
+        self.send_generic_smp_smg("etc", "reclaim", "request", json_msg)
+        smp_response = self.read_smp_data()[0]
+        return smp_response
+
     def upload_image_chunk(
         self, first_chunk, data_byte_str, offset, image_num=None, len=None, sha=None
     ):

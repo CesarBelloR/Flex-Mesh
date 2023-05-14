@@ -145,4 +145,5 @@ size_t etc_device_get_record_element_size(void);
 struct etc_device_record_table etc_device_get_record_status(void);
 int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_device_record_header *header);
 int etc_device_reclaim_record(int start_time, int stop_time);
+int etc_device_reclaim_work(int start_time, int stop_time);
 #endif /* ETC_DEVICE_H_ */

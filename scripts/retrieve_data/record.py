@@ -66,6 +66,8 @@ if __name__ == "__main__":
     parser.add_argument("--conn", help="Serial connection for Monitor Devices")
     parser.add_argument("--cmd", help="Command to execute over MCUMGR")
     parser.add_argument("--file", help="Save record to file")
+    parser.add_argument("--start", help="Start time to reclaim")
+    parser.add_argument("--stop", help="Stop time to reclaim")
     args = parser.parse_args()
     conn_port = args.conn
     if conn_port is None:
@@ -127,6 +129,11 @@ if __name__ == "__main__":
                     
                     for element in struct_list:
                         csv_writer.writerow([element.timestamp, round(element.battery, 2), round(element.sensor[0], 2), round(element.sensor[1], 2), round(element.sensor[2], 2), round(element.sensor[3], 2), round(element.sensor[4], 2), round(element.sensor[5], 2), element.ack])
-                        
+        elif args.cmd == "reclaim":
+            start_time = int(args.start)
+            stop_time = int(args.stop)
+            status = mgr.get_reclaim(start_time, stop_time)
+            # Logger the status to know about the record information
+            logger.info(status)
         else:
             logger.warning(f"No support command {args.cmd}")

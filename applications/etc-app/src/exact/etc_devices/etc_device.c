@@ -292,46 +292,15 @@ int etc_device_write_record(union etc_device_record *record)
 	return 0;
 }
 
-int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void *data)
-{
-	int rc = 0;
-	int newest_id = etc_device_record_table.newest.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
-			etc_device_record_table.newest.element_idx + ETC_RECORD_HEADER;
+static int etc_device_reclaim_data(etc_device_record_reading_callback reading_callback, void *data) {
 	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
 	uint16_t min_id = ETC_RECORD_HEADER;
-	uint16_t last_id = ram_nack_record_id;
-
-	if (last_id == newest_id) {
-		return 0;
-	}
-
-	uint16_t check_id = last_id == 0 ? min_id : last_id + 1;
-	if (check_id > max_id) {
-		check_id = min_id;
-	}
-
-	LOG_DBG("Last ID %u - Check ID %d - New ID %d", last_id, check_id, newest_id);
-
-	rc = etc_nvs_read(check_id, &etc_device_record_header, sizeof(etc_device_record_header));
-	if (rc == 0) {
-		if (etc_device_record_header.ack == 0) {
-			if (reading_callback) {
-				rc = reading_callback(check_id, data);
-				if (rc > 0) { // Return record_id;
-					return rc;
-				} else {
-					/* No action required */
-				}
-			}
-		}
-	} else {
-		LOG_WRN("Error id %d - error %d", check_id, rc);
-	}
-
+	int rc = 0;
 	if (etc_reclaim_info.flag_in_process == 1) {
 		if (etc_reclaim_info.start_index <= etc_reclaim_info.stop_index) {
 			if ((etc_reclaim_info.current_index >= etc_reclaim_info.start_index) &&
 			    (etc_reclaim_info.stop_index >= etc_reclaim_info.current_index)) {
+				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
 				rc = reading_callback(etc_reclaim_info.current_index, data);
 				if (rc > 0) { // Return record_id;
 					etc_reclaim_info.current_index += 1;
@@ -354,6 +323,7 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 			if (etc_reclaim_info.current_index >= etc_reclaim_info.start_index &&
 			    etc_reclaim_info.current_index <= max_id) {
 				rc = reading_callback(etc_reclaim_info.current_index, data);
+				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
 				if (rc > 0) { // Return record_id;
 					if (etc_reclaim_info.current_index == max_id) {
 						etc_reclaim_info.current_index = min_id;
@@ -369,6 +339,7 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 			if (etc_reclaim_info.current_index >= min_id &&
 			    etc_reclaim_info.current_index <= etc_reclaim_info.stop_index) {
 				rc = reading_callback(etc_reclaim_info.current_index, data);
+				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
 				if (rc > 0) { // Return record_id;
 					if (etc_reclaim_info.current_index ==
 					    etc_reclaim_info.stop_index) {
@@ -400,6 +371,54 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 	return -ENOENT;
 }
 
+int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void *data)
+{
+	int rc = 0;
+	int newest_id = etc_device_record_table.newest.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
+			etc_device_record_table.newest.element_idx + ETC_RECORD_HEADER;
+	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
+	uint16_t min_id = ETC_RECORD_HEADER;
+	uint16_t last_id = ram_nack_record_id;
+
+	LOG_INF("Reclaim is running %d", etc_reclaim_info.flag_in_process);
+
+	if (etc_reclaim_info.flag_in_process == 1) {
+		return etc_device_reclaim_data(reading_callback, data);
+	}
+
+	if (last_id == newest_id) {
+		return 0;
+	}
+
+	uint16_t check_id = last_id == 0 ? min_id : last_id + 1;
+	if (check_id > max_id) {
+		check_id = min_id;
+	}
+
+	LOG_DBG("Last ID %u - Check ID %d - New ID %d", last_id, check_id, newest_id);
+
+	rc = etc_nvs_read(check_id, &etc_device_record_header, sizeof(etc_device_record_header));
+	if (rc == 0) {
+		if (etc_device_record_header.ack == 0) {
+			if (reading_callback) {
+				rc = reading_callback(check_id, data);
+				if (rc > 0) { // Return record_id;
+					return rc;
+				} else {
+					/* No action required */
+				}
+			}
+		}
+	} else {
+		LOG_WRN("Error id %d - error %d", check_id, rc);
+	}
+
+	if (rc == 0) {
+		return rc;
+	}
+	return -ENOENT;
+}
+
 static int etc_device_record_reading(uint16_t record_id, void *data)
 {
 	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
@@ -410,8 +429,8 @@ static int etc_device_record_reading(uint16_t record_id, void *data)
 		(record_id - ETC_RECORD_HEADER) - index.sector_idx * ETC_RECORD_MAX_PER_SECTOR;
 	uint32_t record_addr = (record_fs.offset) + index.sector_idx * record_fs.sector_size +
 			       index.element_idx * ETC_DEVICE_RECORD_SIZE;
-	LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
-		index.element_idx);
+	// LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
+	// 	index.element_idx);
 	int rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
 	if (rc != 0) {
 		LOG_ERR("Error in reading flash err %d", rc);
@@ -522,7 +541,7 @@ bool etc_device_is_logger_lora(void)
 
 int etc_device_get_rx_timeout(void)
 {
-	int rx_duration = etc_get_rx_duration_secs();
+	int rx_duration = 5;
 	return rx_duration == 0 ? ETC_RECORD_DEFAULT_RX_DURATION_SECONDS
 				: rx_duration;
 }
@@ -609,7 +628,9 @@ int etc_device_reclaim_record(int start_time, int stop_time) {
 	}
 
 	int rc = 0;
-
+	LOG_DBG("Request to reclaim %d %d", start_time, stop_time);
+	etc_reclaim_info.start_index = 0;
+	etc_reclaim_info.stop_index = 0;
 	uint16_t oldest_id = ETC_RECORD_MAX_SECTOR * etc_device_record_table.oldest.sector_idx +
 			  etc_device_record_table.oldest.element_idx + ETC_RECORD_HEADER;
 	uint16_t newest_id = ETC_RECORD_MAX_SECTOR * etc_device_record_table.newest.sector_idx +
@@ -649,10 +670,14 @@ int etc_device_reclaim_record(int start_time, int stop_time) {
 		if (rc != 0) {
 			LOG_ERR("Failed to write reclaim info");
 		} else {
-			LOG_INF("Updated the reclaim info successful");
+			LOG_INF("Updated the reclaim info successful %d %d", etc_reclaim_info.start_index, etc_reclaim_info.stop_index);
 		}
 	}
 	return rc;
+}
+
+int etc_device_reclaim_work(int start_time, int stop_time) {
+	return 0;
 }
 
 #ifdef CONFIG_SHELL
