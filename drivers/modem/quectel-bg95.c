@@ -2057,7 +2057,7 @@ static const struct setup_cmd setup_cmds[] = {
 	/* Commands to read info from the modem (things like IMEI, Model etc). */
 	SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
 	SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
-	SETUP_CMD("AT+CGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
+	SETUP_CMD("AT+QGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
 	SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
 #if defined(CONFIG_MODEM_SIM_NUMBERS)
 	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
@@ -2374,12 +2374,35 @@ static int quectel_bg95_psm_cmd(const struct device *dev,
 	return -EINVAL;
 }
 
+static int modem_get_static_info(const struct device *dev,
+				 struct modem_static_info *info)
+{
+	struct modem_data *data = dev->data;
+
+	if (info == NULL) {
+		return -EINVAL;
+	}
+
+	memcpy(info->manufacturer, data->mdm_manufacturer,
+	       sizeof(info->manufacturer));
+	memcpy(info->model, data->mdm_model, sizeof(info->model));
+	memcpy(info->revision, data->mdm_revision, sizeof(info->revision));
+	memcpy(info->imei, data->mdm_imei, sizeof(info->imei));
+#if defined(CONFIG_MODEM_SIM_NUMBERS)
+	memcpy(info->imsi, data->mdm_imsi, sizeof(info->imsi));
+	memcpy(info->iccid, data->mdm_iccid, sizeof(info->iccid));
+#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
+
+	return 0;
+}
+
 static struct modem_api api_funcs = {
 	.iface_api.init = modem_net_iface_init,
 
 	.evt_handler_init = quectel_bg95_evt_handler_init,
 	.set_credentials = quectel_bg95_set_credentials,
 	.psm_cmd = quectel_bg95_psm_cmd,
+	.get_static_info = modem_get_static_info,
 };
 
 static bool offload_is_supported(int family, int type, int proto)

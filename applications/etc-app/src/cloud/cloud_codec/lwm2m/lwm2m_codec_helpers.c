@@ -597,18 +597,12 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 	return 0;
 }
 
-int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_static)
+int lwm2m_codec_helpers_set_device_data(void)
 {
-	int err;
-
-	if (!modem_static->queued) {
-		return -ENODATA;
-	}
-
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
-				modem_static->brdv,
-				(uint16_t)strlen(modem_static->brdv),
-				(uint16_t)strlen(modem_static->brdv),
+				modem_static->model,
+				(uint16_t)strlen(modem_static->model),
+				(uint16_t)strlen(modem_static->model),
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
@@ -623,7 +617,16 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 		return err;
 	}
 
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, SOFTWARE_VERSION_RID),
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, FIRMWARE_VERSION_RID),
+				modem_static->fw,
+				(uint16_t)strlen(modem_static->fw),
+				(uint16_t)strlen(modem_static->fw),
+				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
+	
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, HARDWARE_VERSION_RID),
 				modem_static->fw,
 				(uint16_t)strlen(modem_static->fw),
 				(uint16_t)strlen(modem_static->fw),
@@ -638,6 +641,33 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 				(uint16_t)strlen(modem_static->imei),
 				(uint16_t)strlen(modem_static->imei),
 				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
+}
+
+int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_static)
+{
+	int err;
+
+	if (!modem_static->queued) {
+		return -ENODATA;
+	}
+
+	err = lwm2m_set_string(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_IMEI),
+			       modem_static->imei);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_string(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_MODEM_REV),
+			       modem_static->fw);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_string(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_IMSI),
+			       modem_static->imsi);
 	if (err) {
 		return err;
 	}
@@ -658,14 +688,16 @@ int lwm2m_codec_helpers_set_sensor_data(union etc_device_record *record)
 	}
 
 	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
+		if (!data_codec_compare_temperature_is_valid(record->sensor[i])) {
+			continue;
+		}
+
 		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, TIMESTAMP_RID),
 				(time_t)(record->timestamp));
 		if (err) {
 			return err;
 		}
-	}
 
-	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
 		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, SENSOR_VALUE_RID),
 				    record->sensor[i]);
 		if (err) {

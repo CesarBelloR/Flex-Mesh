@@ -9,6 +9,7 @@
 
 #include "etc_cfg_obj_48931.h"
 #include "etc_temp_obj_48932.h"
+#include "etc_info_obj_48933.h"
 
 /* LwM2M read-write flag. */
 #define LWM2M_RES_DATA_FLAG_RW 0

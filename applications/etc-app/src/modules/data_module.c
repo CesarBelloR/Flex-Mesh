@@ -385,18 +385,22 @@ static void on_all_states(struct data_msg_data *msg)
 		modem_stat.ts = msg->module.modem.data.modem_static.timestamp;
 		modem_stat.queued = true;
 
-		BUILD_ASSERT(sizeof(modem_stat.brdv) >=
+		BUILD_ASSERT(sizeof(modem_stat.manufacturer) >=
+			     sizeof(msg->module.modem.data.modem_static.manufacturer));
+		BUILD_ASSERT(sizeof(modem_stat.model) >=
 			     sizeof(msg->module.modem.data.modem_static.board_version));
-
 		BUILD_ASSERT(sizeof(modem_stat.fw) >=
 			     sizeof(msg->module.modem.data.modem_static.modem_fw));
-
 		BUILD_ASSERT(sizeof(modem_stat.imei) >=
 			     sizeof(msg->module.modem.data.modem_static.imei));
+		BUILD_ASSERT(sizeof(modem_stat.imsi) >=
+			     sizeof(msg->module.modem.data.modem_static.imsi));
 
-		strcpy(modem_stat.brdv, msg->module.modem.data.modem_static.board_version);
+		strcpy(modem_stat.manufacturer, msg->module.modem.data.modem_static.manufacturer);
+		strcpy(modem_stat.model, msg->module.modem.data.modem_static.board_version);
 		strcpy(modem_stat.fw, msg->module.modem.data.modem_static.modem_fw);
 		strcpy(modem_stat.imei, msg->module.modem.data.modem_static.imei);
+		strcpy(modem_stat.imsi, msg->module.modem.data.modem_static.imsi);
 
 	}
 

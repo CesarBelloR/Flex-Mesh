@@ -124,7 +124,23 @@ int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 	}
 
 	return err;
-}				     
+}
+
+int data_codec_prepare_modem_packet(struct cloud_codec_data *cloud_data,
+				    struct data_modem_static *modem_data)
+{
+	int err = 0;
+	if (cloud_data == NULL || modem_data == NULL) {
+		return -EINVAL;
+	}
+
+	err = lwm2m_codec_helpers_set_modem_static_data(modem_data);
+	if (err == 0) {
+		static const struct lwm2m_obj_path path_list[] = {
+			
+		};
+	}
+}				    
 
 int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 				    union etc_device_record *record,

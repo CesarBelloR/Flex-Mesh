@@ -36,12 +36,15 @@ struct data_sensors {
 struct data_modem_static {
 	/** Static modem data timestamp. UNIX milliseconds. */
 	int64_t ts;
+	char manufacturer[10];
 	/** Device board version. */
-	char brdv[30];
+	char model[16];
 	/** Modem firmware. */
-	char fw[40];
+	char fw[64];
 	/** Device IMEI. */
 	char imei[16];
+	/** SIM IMSI */
+	char imsi[16];
 	/** Flag signifying that the data entry is to be encoded. */
 	bool queued : 1;
 };
