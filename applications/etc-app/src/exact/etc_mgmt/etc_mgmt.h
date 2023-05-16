@@ -7,6 +7,7 @@
  */
 #define ETC_MGMT_ID_RECORD_STATUS       0
 #define ETC_MGMT_ID_RECORD_READ         1
+#define ETC_MGMT_ID_RECORD_CLEAN        2
 
 void etc_mgmt_register_group(void);
 

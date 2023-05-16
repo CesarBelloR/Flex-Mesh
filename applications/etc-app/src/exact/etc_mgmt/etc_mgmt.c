@@ -133,12 +133,32 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
 
+/**
+ * Command handler: etc record
+ */
+static int etc_mgmt_record_clean(struct smp_streamer *ctxt) {
+	
+	zcbor_state_t *zse = ctxt->writer->zs;
+	zcbor_state_t *zsd = ctxt->reader->zs;
+	bool ok;
+
+	int rc = etc_device_erase_cfg();
+
+	/* Encode the response. */
+	ok = etc_mgmt_rsp(zse, rc != 0 ? MGMT_ERR_EUNKNOWN : MGMT_ERR_EOK);
+
+	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
+}
+
 static const struct mgmt_handler etc_mgmt_handlers[] = {
 	[ETC_MGMT_ID_RECORD_STATUS] = {
 		.mh_read = etc_mgmt_record_status,
 	},
 	[ETC_MGMT_ID_RECORD_READ] = {
 		.mh_read = etc_mgmt_record_read,
+	},
+	[ETC_MGMT_ID_RECORD_CLEAN] = {
+		.mh_read = etc_mgmt_record_clean,
 	}
 };
 
