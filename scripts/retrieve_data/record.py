@@ -66,12 +66,9 @@ if __name__ == "__main__":
     parser.add_argument("--conn", help="Serial connection for Monitor Devices")
     parser.add_argument("--cmd", help="Command to execute over MCUMGR")
     parser.add_argument("--file", help="Save record to file")
-<<<<<<< HEAD
     parser.add_argument("--start", help="Start time to reclaim")
     parser.add_argument("--stop", help="Stop time to reclaim")
-=======
     parser.add_argument("--arg", help="Argument parameter for shell interface")
->>>>>>> dev
     args = parser.parse_args()
     conn_port = args.conn
     if conn_port is None:
