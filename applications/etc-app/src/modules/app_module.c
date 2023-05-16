@@ -70,8 +70,8 @@ static struct module_data self = {
 	.supports_shutdown = true,
 };
 
-/* Store the last now in setup wakeup */
-static int last_now = 0;
+/* Store the next wakup */
+static int next_wakeup = 0;
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type new_state)
 {
@@ -216,7 +216,6 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	time_t now = 0;
 	bool flag_add_offset = false;
 	pcf85263a_rtc_get_time(&now);
-	last_now = (int)now;
 	int wakeup_for_log = etc_device_get_log_interval_second();
 	int wakeup_for_transmit = etc_device_get_tx_interval_second();
 	time_t next_log = 0;
@@ -224,15 +223,18 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	switch (job) {
 		case ETC_LOGGER_JOB_LOG: {
 			next_log = now + wakeup_for_log;
+			next_wakeup = next_log;
 			break;
 		}
 		case ETC_LOGGER_JOB_TX: {
 			next_transmit = now + wakeup_for_transmit;
+			next_wakeup = next_transmit;
 			break;
 		}
 		case ETC_LOGGER_JOB_BOTH: {
 			next_log = now + wakeup_for_log;
 			next_transmit = now + wakeup_for_transmit;
+			next_wakeup = next_log > next_transmit ? next_transmit : next_log;
 			break;
 		}
 	}
@@ -391,7 +393,7 @@ void date_time_handler(const struct date_time_evt *evt)
 		case DATE_TIME_OBTAINED_MODEM:
 		case DATE_TIME_OBTAINED_EXT: {
 			int now = date_time_now_second();
-			if ((now != -1) && (abs(now - last_now) > ETC_SETTING_LOG_INTERVAL_SECS_MAX)) {
+			if ((now != -1) && (now > next_wakeup)) {
 				LOG_INF("Update wakeup time after date/time synced");
 				app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
 			}
