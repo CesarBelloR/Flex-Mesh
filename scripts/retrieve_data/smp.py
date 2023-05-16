@@ -129,7 +129,7 @@ class SimpleMgmtProtocol:
         """ """
         msg_byte_array = bytearray()
         # Generate cbor that will be used
-        cbormsg = cbor2.dumps(data)
+        cbormsg = cbor2.dumps(data, canonical=True)
         cbormsg_length = len(cbormsg)
         logger.debug("SMP Message info")
         logger.debug(
@@ -221,7 +221,35 @@ class SimpleMgmtProtocol:
 
     def get_seq_num(self):
         return self.sequence_num
-
+    
+    def get_report(self, status):
+        if status == 0:
+            return "No error."
+        elif status == 1:
+            return "Unknown error."
+        elif status == 2:
+            return "Insufficient memory."
+        elif status == 3:
+            return "Error in input value."
+        elif status == 4:
+            return "Operation timed out."
+        elif status == 5:
+            return "No such file/entry."
+        elif status == 6:
+            return "Current state disallows command."
+        elif status == 7:
+            return "Response too large."
+        elif status == 8:
+            return "Command not supported."
+        elif status == 9:
+            return "Corrupt."
+        elif status == 10:
+            return "Command blocked by processing of other command."
+        elif status == 11:
+            return "Access to specific function, command or resource denied."
+        elif status == 12:
+            return "User errors defined from 256 onwards"
+    
     def get_image_state(self):
         smp_msg = self.get_json_msg("image_mgmt", "state", "get_request", "images")
         logger.debug(f"Current image state {smp_msg}")
@@ -233,11 +261,22 @@ class SimpleMgmtProtocol:
         smp_response = self.read_smp_data()[0]
         return smp_response
 
+    def get_shell(self, command):
+        json_msg = {"argv": command}
+        self.send_generic_smp_smg("shell_mgmt", "shell", "request", json_msg)
+        smp_response = self.read_smp_data()[0]
+        return smp_response
+
     def get_status(self):
         self.send_generic_smp_smg("etc", "status", "request")
         smp_response = self.read_smp_data()[0]
         return smp_response
 
+    def get_clean(self):
+        self.send_generic_smp_smg("etc", "clean", "request")
+        smp_response = self.read_smp_data()[0]
+        return smp_response
+    
     def get_record(self, offset, length, element, sector, num_element):
         json_msg = {"off": offset, "length": length, "element": element, "sector": sector, "num_element": num_element}
         self.send_generic_smp_smg("etc", "record", "request", json_msg)

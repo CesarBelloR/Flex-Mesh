@@ -363,6 +363,8 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) ||
 	    IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
+		/* Reset record_id to allow future sends. */
+		record_id = 0;
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
 	}

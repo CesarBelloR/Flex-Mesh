@@ -680,6 +680,10 @@ int etc_device_reclaim_work(int start_time, int stop_time) {
 	return 0;
 }
 
+int etc_device_erase_cfg(void) {
+	return nvs_clear(&etc_fs);
+}
+
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
 

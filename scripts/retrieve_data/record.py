@@ -59,15 +59,19 @@ def record_dump(record):
     logger.info(
             f"Battery: {round(record.battery, 2)} - Sensor: {round(record.sensor[0], 2)} {round(record.sensor[1], 2)} {round(record.sensor[2], 2)} {round(record.sensor[3], 2)} {round(record.sensor[4], 2)} {round(record.sensor[5], 2)} - Timestamp {record.timestamp} - Status {record.ack}"
         )
-    
+     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Add the argument for connection string (COM port)
     parser.add_argument("--conn", help="Serial connection for Monitor Devices")
     parser.add_argument("--cmd", help="Command to execute over MCUMGR")
     parser.add_argument("--file", help="Save record to file")
+<<<<<<< HEAD
     parser.add_argument("--start", help="Start time to reclaim")
     parser.add_argument("--stop", help="Stop time to reclaim")
+=======
+    parser.add_argument("--arg", help="Argument parameter for shell interface")
+>>>>>>> dev
     args = parser.parse_args()
     conn_port = args.conn
     if conn_port is None:
@@ -78,6 +82,10 @@ if __name__ == "__main__":
             status = mgr.get_status()
             # Logger the status to know about the record information
             logger.info(status)
+            response_status = status["rc"]
+            if response_status != 0:
+                logger.error(mgr.get_report(response_status))
+                exit(0)
             current_record = status["record"]
             # Get maximum element in sector, maximum sector for record and maximum range of records
             max_element_in_sector = status["info"]["max_index"]
@@ -134,6 +142,26 @@ if __name__ == "__main__":
             stop_time = int(args.stop)
             status = mgr.get_reclaim(start_time, stop_time)
             # Logger the status to know about the record information
+            response_status = status["rc"]
+            if response_status != 0:
+                logger.error(mgr.get_report(response_status))
+                exit(0)
+            logger.info(status)
+        elif args.cmd == "erase":
+            status = mgr.get_clean()
+            response_status = status["rc"]
+            if response_status != 0:
+                logger.error(mgr.get_report(response_status))
+                exit(0)
+            logger.info(status)
+        elif args.cmd == "shell":
+            shell_args = args.arg
+            logger.info(shell_args)
+            status = mgr.get_clean(shell_args)
+            response_status = status["rc"]
+            if response_status != 0:
+                logger.error(mgr.get_report(response_status))
+                exit(0)
             logger.info(status)
         else:
             logger.warning(f"No support command {args.cmd}")
