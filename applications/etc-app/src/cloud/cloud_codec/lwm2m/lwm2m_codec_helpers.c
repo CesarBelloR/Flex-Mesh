@@ -657,15 +657,25 @@ int lwm2m_codec_helpers_set_sensor_data(union etc_device_record *record)
 		return err;
 	}
 
-	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
+	/* Set ambient temperature and timestamp */
+	err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, TIMESTAMP_RID),
+			(time_t)(record->timestamp));
+	if (err) {
+		return err;
+	}
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, SENSOR_VALUE_RID),
+			    record->sensor[SENSOR_INPUT_AMBIENT]);
+	if (err) {
+		return err;
+	}
+
+	/* Set external sensor temperature and timestamp */
+	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, TIMESTAMP_RID),
 				(time_t)(record->timestamp));
 		if (err) {
 			return err;
 		}
-	}
-
-	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
 		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, SENSOR_VALUE_RID),
 				    record->sensor[i]);
 		if (err) {

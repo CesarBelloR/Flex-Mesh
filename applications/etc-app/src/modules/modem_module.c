@@ -357,8 +357,9 @@ static void on_sub_state_modem_off(struct modem_msg_data *msg)
 /* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_PSM. */
 static void on_sub_state_modem_psm(struct modem_msg_data *msg)
 {
-	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
-	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
+	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	     IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
+	     etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		modem_psm_cmd(modem_dev, MODEM_API_PSM_CMD_WAKEUP, NULL);
 	}
 }
