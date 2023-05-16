@@ -1,0 +1,39 @@
+From 482837fc1bf9002858330a8b3194bb69ca8479c6 Mon Sep 17 00:00:00 2001
+From: Kien Bui <kien.bui@exacttechnology.com>
+Date: Mon, 8 May 2023 13:22:25 +0700
+Subject: [PATCH] HW-731: Support CANONICAL in MCUMGR
+
+---
+ include/zephyr/mgmt/mcumgr/smp/smp.h | 2 +-
+ subsys/mgmt/mcumgr/smp/src/smp.c     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/include/zephyr/mgmt/mcumgr/smp/smp.h b/include/zephyr/mgmt/mcumgr/smp/smp.h
+index 0c7b970c8b..0e11fe6c79 100644
+--- a/include/zephyr/mgmt/mcumgr/smp/smp.h
++++ b/include/zephyr/mgmt/mcumgr/smp/smp.h
+@@ -46,7 +46,7 @@ struct cbor_nb_reader {
+ 
+ struct cbor_nb_writer {
+ 	struct net_buf *nb;
+-	zcbor_state_t zs[2];
++	zcbor_state_t zs[CONFIG_MGMT_MAX_DECODING_LEVELS + 2];
+ };
+ 
+ /**
+diff --git a/subsys/mgmt/mcumgr/smp/src/smp.c b/subsys/mgmt/mcumgr/smp/src/smp.c
+index 32900214d7..0a31f8eb59 100644
+--- a/subsys/mgmt/mcumgr/smp/src/smp.c
++++ b/subsys/mgmt/mcumgr/smp/src/smp.c
+@@ -40,7 +40,7 @@ static void cbor_nb_writer_init(struct cbor_nb_writer *cnw, struct net_buf *nb)
+ 	net_buf_reset(nb);
+ 	cnw->nb = nb;
+ 	cnw->nb->len = sizeof(struct smp_hdr);
+-	zcbor_new_encode_state(cnw->zs, 2, nb->data + sizeof(struct smp_hdr),
++	zcbor_new_encode_state(cnw->zs, ARRAY_SIZE(cnw->zs), nb->data + sizeof(struct smp_hdr),
+ 			       net_buf_tailroom(nb), 0);
+ }
+ 
+-- 
+2.40.0.windows.1
+
