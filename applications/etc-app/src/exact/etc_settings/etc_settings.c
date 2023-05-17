@@ -103,7 +103,7 @@ int etc_settings_init(void)
 	ret = etc_device_read_setting(SETTINGS_HW_VERSION, saved_hw_version,
 				      ETC_SETTING_HW_VER_LEN);
 	if (ret) {
-		etc_set_hw_version("0.0.0");
+		etc_set_hw_version(CONFIG_BOARD_VERSION);
 	}
 
 	ret = etc_device_read_setting(SETTINGS_FW_VERSION, saved_fw_version,

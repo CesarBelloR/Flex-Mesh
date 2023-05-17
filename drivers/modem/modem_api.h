@@ -15,7 +15,7 @@
 #define MDM_REVISION_LENGTH		  64
 #define MDM_IMEI_LENGTH			  16
 #define MDM_IMSI_LENGTH			  16
-#define MDM_ICCID_LENGTH		  32
+#define MDM_ICCID_LENGTH		  23
 
 enum modem_api_evt_type {
 	MODEM_API_CONNECTED_EVT,
@@ -59,7 +59,7 @@ typedef int(*modem_api_psm_t)(const struct device *dev,
 			      enum modem_api_psm_cmd cmd,
 			      void *psm_data);
 
-typedef int*(modem_api_get_static_info_t)(const struct device *dev,
+typedef int(*modem_api_get_static_info_t)(const struct device *dev,
 					  struct modem_static_info *info);
 
 struct modem_api {
@@ -168,5 +168,6 @@ char* quectel_bg95_get_sim_number(void);
 bool quectel_bg95_is_ready(void);
 int quectel_bg95_get_time(char* time_buf);
 int quectel_bg95_get_rssi(void);
+int quectel_bg95_get_qual(void);
 
 #endif // MODEM_API_H

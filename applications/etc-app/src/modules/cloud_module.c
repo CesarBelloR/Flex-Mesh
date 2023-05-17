@@ -586,7 +586,6 @@ static void on_all_states(struct cloud_msg_data *msg)
 }
 
 static void shadow_work_fn(struct k_work *work) {
-	shadow_update(true);
 }
 
 void cloud_module_thread_fn(void)

@@ -72,6 +72,10 @@ config MODEM_QUECTEL_BG95_M3_INIT_PRIORITY
 	  Note that the priority needs to be lower than the net stack
 	  so that it can start before the networking sub-system.
 
+config MODEM_QUECTEL_BG95_M3_SIM_NUMBERS
+	bool "Read IMSI and ICCID from modem"
+	default y
+
 config MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK
 	bool "Allow the use of non-static PSK credentials"
 	default y

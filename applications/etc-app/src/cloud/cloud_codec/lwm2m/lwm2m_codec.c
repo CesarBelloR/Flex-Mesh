@@ -86,6 +86,13 @@ int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_hand
 		return err;
 	}
 
+	err = lwm2m_codec_helpers_set_device_data();
+	if (err) {
+		LOG_ERR("lwm2m_codec_helpers_set_device_data, error: %d",
+			err);
+		return err;
+	}
+
 	module_evt_handler = event_handler;
 	return 0;
 }
@@ -98,19 +105,10 @@ int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 		return -ENOMEM;
 	}
 
-	err = lwm2m_codec_helpers_set_sensor_data(record);
+	err = lwm2m_codec_helpers_set_sensor_data(cloud_data, record);
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, TIMESTAMP_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, SENSOR_VALUE_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 1, TIMESTAMP_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 1, SENSOR_VALUE_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 2, TIMESTAMP_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 2, SENSOR_VALUE_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 3, TIMESTAMP_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 3, SENSOR_VALUE_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 4, TIMESTAMP_RID),
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 4, SENSOR_VALUE_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0),
 			LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID)
 		};
 
@@ -126,7 +124,7 @@ int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 	return err;
 }
 
-int data_codec_prepare_modem_packet(struct cloud_codec_data *cloud_data,
+int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_static *modem_data)
 {
 	int err = 0;
@@ -137,14 +135,32 @@ int data_codec_prepare_modem_packet(struct cloud_codec_data *cloud_data,
 	err = lwm2m_codec_helpers_set_modem_static_data(modem_data);
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
-			
+			LWM2M_OBJ(ETC_INFO_OBJECT_ID),
 		};
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							       path_list,
+							       ARRAY_SIZE(path_list));
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			return err;
+		}
 	}
-}				    
+	return 0;
+}
+
+int data_codec_clear_data(struct cloud_codec_data *cloud_data)
+{
+	if (cloud_data == NULL) {
+		return -EINVAL;
+	}
+
+	lwm2m_codec_helpers_object_path_list_clear(cloud_data);
+	return 0;
+}
 
 int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 				    union etc_device_record *record,
-				    struct data_modem_static *modem_data)
+				    struct data_modem_dynamic *modem_data)
 {
 	int err = 0;
 
@@ -157,14 +173,11 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 	}
 	
 	if (modem_data != NULL) {
-		err = lwm2m_codec_helpers_set_modem_static_data(modem_data);
+		err = lwm2m_codec_helpers_set_modem_dynamic_data(modem_data);
 		if (err == 0) {
 			static const struct lwm2m_obj_path path_list[] = {
-				LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
-				LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MANUFACTURER_RID),
-				LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, SOFTWARE_VERSION_RID),
-				LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
-					  DEVICE_SERIAL_NUMBER_ID)
+				LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+				LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, QUAL),
 			};
 			err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
 								path_list,
@@ -175,6 +188,18 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 			}
 		}
 	}
+
+	/* Add paths currently required by software */
+	static const struct lwm2m_obj_path path_list[] = {
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_SERIAL_NUMBER_ID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, FIRMWARE_VERSION_RID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_TYPE_RID),
+		LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0),
+	};
+	err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+						path_list,
+						ARRAY_SIZE(path_list));
 
 	return err;
 }

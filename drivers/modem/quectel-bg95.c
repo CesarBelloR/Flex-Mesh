@@ -282,6 +282,7 @@ MODEM_CMD_DEFINE(on_cmd_exterror)
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 {
 	int rssi = ATOI(argv[0], 0, "signal_power");
+	int qual = ATOI(argv[1], 0, "qual");
 
 	/* Check the RSSI value. */
 	if (rssi == 31) {
@@ -291,8 +292,9 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 	} else {
 		mdata.mdm_rssi = MDM_RSSI_INVALID;
 	}
+	mdata.mdm_qual = qual;
 
-	LOG_INF("RSSI: %d", mdata.mdm_rssi);
+	LOG_INF("RSSI: %d, qual: %d", mdata.mdm_rssi, mdata.mdm_qual);
 
 	return 0;
 }
@@ -371,7 +373,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imei)
 	return 0;
 }
 
-#if defined(CONFIG_MODEM_SIM_NUMBERS)
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
 /* Handler: <IMSI> */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imsi)
 {
@@ -389,25 +391,34 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imsi)
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_iccid)
 {
 	size_t out_len;
+	char iccid_buf[32];
 	char   *p;
 
-	out_len = net_buf_linearize(mdata.mdm_iccid, sizeof(mdata.mdm_iccid) - 1,
+	out_len = net_buf_linearize(iccid_buf, sizeof(iccid_buf) - 1,
 				    data->rx_buf, 0, len);
-	mdata.mdm_iccid[out_len] = '\0';
+	iccid_buf[out_len] = '\0';
 
 	/* Skip over the +CCID bit, which modems omit. */
-	if (mdata.mdm_iccid[0] == '+') {
-		p = strchr(mdata.mdm_iccid, ' ');
+	if (iccid_buf[0] == '+') {
+		p = strchr(iccid_buf, ' ');
 		if (p) {
 			out_len = strlen(p + 1);
-			memmove(mdata.mdm_iccid, p + 1, len + 1);
+			if (out_len < sizeof(mdata.mdm_iccid)) {
+				memcpy(mdata.mdm_iccid, p + 1, out_len);
+				mdata.mdm_iccid[out_len] = '\0';
+			}
+		}
+	} else {
+		if (out_len < sizeof(mdata.mdm_iccid)) {
+			memcpy(mdata.mdm_iccid, iccid_buf, out_len);
+			mdata.mdm_iccid[out_len] = '\0';
 		}
 	}
 
 	LOG_INF("ICCID: %s", mdata.mdm_iccid);
 	return 0;
 }
-#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
+#endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */
 
 /* Handler: TX Ready */
 MODEM_CMD_DIRECT_DEFINE(on_cmd_tx_ready)
@@ -2059,10 +2070,10 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
 	SETUP_CMD("AT+QGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
 	SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
-#if defined(CONFIG_MODEM_SIM_NUMBERS)
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
 	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
 	SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
-#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
+#endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */
 	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
 };
 
@@ -2374,7 +2385,7 @@ static int quectel_bg95_psm_cmd(const struct device *dev,
 	return -EINVAL;
 }
 
-static int modem_get_static_info(const struct device *dev,
+static int quectel_bg95_get_static_info(const struct device *dev,
 				 struct modem_static_info *info)
 {
 	struct modem_data *data = dev->data;
@@ -2388,10 +2399,10 @@ static int modem_get_static_info(const struct device *dev,
 	memcpy(info->model, data->mdm_model, sizeof(info->model));
 	memcpy(info->revision, data->mdm_revision, sizeof(info->revision));
 	memcpy(info->imei, data->mdm_imei, sizeof(info->imei));
-#if defined(CONFIG_MODEM_SIM_NUMBERS)
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
 	memcpy(info->imsi, data->mdm_imsi, sizeof(info->imsi));
 	memcpy(info->iccid, data->mdm_iccid, sizeof(info->iccid));
-#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
+#endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */
 
 	return 0;
 }
@@ -2402,7 +2413,7 @@ static struct modem_api api_funcs = {
 	.evt_handler_init = quectel_bg95_evt_handler_init,
 	.set_credentials = quectel_bg95_set_credentials,
 	.psm_cmd = quectel_bg95_psm_cmd,
-	.get_static_info = modem_get_static_info,
+	.get_static_info = quectel_bg95_get_static_info,
 };
 
 static bool offload_is_supported(int family, int type, int proto)
@@ -2480,11 +2491,10 @@ static int modem_init(const struct device *dev)
 	mctx.data_model	       = mdata.mdm_model;
 	mctx.data_revision     = mdata.mdm_revision;
 	mctx.data_imei	       = mdata.mdm_imei;
-#if defined(CONFIG_MODEM_SIM_NUMBERS)
-	mctx.data_imsi	       = mdata.mdm_imsi;
-	mctx.data_iccid	       = mdata.mdm_iccid;
-#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
-	mctx.data_rssi		   = &mdata.mdm_rssi;
+	mctx.data_rssi	       = &mdata.mdm_rssi;
+
+	/* Set qual to 99 (means not known) */
+	mdata.mdm_qual = 99;
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 	ret = gpio_pin_configure_dt(&on_off_gpio, GPIO_OUTPUT_LOW);
@@ -2758,7 +2768,7 @@ char* quectel_bg95_get_revision(void) {
 }
 
 char* quectel_bg95_get_sim_number(void) {
-#if defined(CONFIG_MODEM_SIM_NUMBERS)
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
 	return mdata.mdm_iccid;
 #endif
 	return "N.A";
@@ -2800,4 +2810,9 @@ bool quectel_bg95_is_ready(void) {
 int quectel_bg95_get_rssi(void)
 {
 	return mdata.mdm_rssi;
+}
+
+int quectel_bg95_get_qual(void)
+{
+	return mdata.mdm_qual;
 }

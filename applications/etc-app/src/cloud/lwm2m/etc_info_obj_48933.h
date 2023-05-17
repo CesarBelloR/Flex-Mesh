@@ -11,9 +11,11 @@
 #define ETC_INFO_OBJ_R_IMEI		        1U
 #define ETC_INFO_OBJ_R_MODEM_REV		2U
 #define ETC_INFO_OBJ_R_IMSI		        3U
+#define ETC_INFO_OBJ_R_ICCID		        4U
 
 #define ETC_INFO_IMEI_SIZE                      16U
 #define ETC_INFO_MODEM_REV_SIZE                 64U
 #define ETC_INFO_IMSI_SIZE                      16U
+#define ETC_INFO_ICCID_SIZE                     23U
 
 #endif /* ETC_INF_OBJ_48933_H__ */
