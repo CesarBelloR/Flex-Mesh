@@ -89,6 +89,8 @@ void main(void)
 	if (rc < 0) {
 		LOG_ERR("Error initializing stats system [%d]", rc);
 	}
+
+	LOG_INF("EXACT Monitor 2.0 version %s", APP_VERSION_STR);
 #ifdef CONFIG_MCUMGR_CMD_ETC_MGMT
 	etc_mgmt_register_group();
 #endif
