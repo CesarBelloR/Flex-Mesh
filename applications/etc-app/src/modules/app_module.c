@@ -32,6 +32,9 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "events/modem_event.h"
 #include "modules_common.h"
 
+#define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
+#define MINIMUM_TIME_TO_WAKEUP_S   65
+
 struct app_msg_data {
 	union {
 		struct cloud_event cloud;
@@ -228,6 +231,26 @@ static void app_peripheral_off(void)
 #endif
 }
 
+static time_t align_wakeup(time_t now, int interval_s) 
+{
+	time_t wakeup_time;
+	int time_diff;
+
+	wakeup_time = now + interval_s;
+
+	if ((DEFAULT_PUBLISH_INTERVAL_S % interval_s) == 0 ||
+	    (interval_s % DEFAULT_PUBLISH_INTERVAL_S) == 0) {
+		time_diff = wakeup_time % interval_s;
+		if ((wakeup_time - time_diff - now) < MINIMUM_TIME_TO_WAKEUP_S) {
+			wakeup_time = wakeup_time + (interval_s - time_diff);
+		} else {
+			wakeup_time = wakeup_time - time_diff;
+		}
+	}
+
+	return wakeup_time;
+}
+
 static void app_set_next_wakeup_time_for_job(enum etc_logger_job job) 
 {
 #if defined(CONFIG_PCF85263)
@@ -241,16 +264,16 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	int wakeup = 0;
 	switch (job) {
 		case ETC_LOGGER_JOB_LOG: {
-			next_log = now + wakeup_for_log;
+			next_log = align_wakeup(now, wakeup_for_log);
 			break;
 		}
 		case ETC_LOGGER_JOB_TX: {
-			next_transmit = now + wakeup_for_transmit;
+			next_transmit = align_wakeup(now, wakeup_for_transmit);
 			break;
 		}
 		case ETC_LOGGER_JOB_BOTH: {
-			next_log = now + wakeup_for_log;
-			next_transmit = now + wakeup_for_transmit;
+			next_log = align_wakeup(now, wakeup_for_log);
+			next_transmit = align_wakeup(now, wakeup_for_transmit);
 			break;
 		}
 	}
@@ -259,12 +282,12 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	gmtime_r(&now, &tm_time);
 
 	if (next_log != 0) {
-		if (tm_time.tm_sec >= 30) {
-			next_log += 60; // Increase a minute
-		}
-
 		struct tm tm_log_time = {0};
 		gmtime_r(&next_log, &tm_log_time);
+		if (tm_log_time.tm_sec >= 30) {
+			/* Round up wake up time to the next minute */
+			tm_log_time.tm_min++;
+		}
 
 		/* Calculated actual next wakeup */
 		tm_log_time.tm_sec = 0;
