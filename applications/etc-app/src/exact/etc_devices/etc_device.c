@@ -273,6 +273,7 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR +
 			  ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
 	uint16_t min_id = ETC_RECORD_HEADER;
+next_id:
 	uint16_t last_id = ram_nack_record_id;
 
 	if (last_id == newest_id) {
@@ -293,10 +294,12 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 				rc = reading_callback(check_id, data);
 				if (rc > 0) { // Return record_id;
 					return rc;
-				} else if (rc == 0) {
-					/* Continue reading*/
 				} else {
-					/* No action required */
+					if (newest_id > check_id) {
+						/* Increase the ram_nack_record_id */
+						ram_nack_record_id += 1;
+						goto next_id;
+					}
 				}
 			}
 		}
