@@ -70,6 +70,26 @@ static struct module_data self = {
 	.supports_shutdown = true,
 };
 
+/* Store the next wakup */
+static int next_wakeup = 0;
+
+K_MUTEX_DEFINE(next_wakeup_mutex);
+
+/* Defind functions for set/get next wake up */
+static void app_set_next_wakekup(int wakeup) {
+	k_mutex_lock(&next_wakeup_mutex, K_FOREVER);
+	next_wakeup = wakeup;
+	k_mutex_unlock(&next_wakeup_mutex);
+}
+
+static int app_get_next_wakeup(void) {
+	int wakeup = 0;
+	k_mutex_lock(&next_wakeup_mutex, K_FOREVER);
+	wakeup = next_wakeup;
+	k_mutex_unlock(&next_wakeup_mutex);
+	return wakeup;
+}
+
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type new_state)
 {
@@ -218,6 +238,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	int wakeup_for_transmit = etc_device_get_tx_interval_second();
 	time_t next_log = 0;
 	time_t next_transmit = 0;
+	int wakeup = 0;
 	switch (job) {
 		case ETC_LOGGER_JOB_LOG: {
 			next_log = now + wakeup_for_log;
@@ -233,8 +254,10 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 			break;
 		}
 	}
+
 	struct tm tm_time = {0};
 	gmtime_r(&now, &tm_time);
+
 	if (next_log != 0) {
 		if (tm_time.tm_sec >= 30) {
 			next_log += 60; // Increase a minute
@@ -243,6 +266,9 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 		struct tm tm_log_time = {0};
 		gmtime_r(&next_log, &tm_log_time);
 
+		/* Calculated actual next wakeup */
+		tm_log_time.tm_sec = 0;
+		wakeup = (int)timeutil_timegm(&tm_log_time);
 
 		pcf85263a_alarm_type_2_config_t config_2 = {
 			.minutes = tm_log_time.tm_min,
@@ -284,10 +310,16 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 		pcf85263a_alarm_config_type_1(config_1);
 		pcf85263a_alarm_enable_type_1(flag_1);
 		LOG_DBG("Next wakeup for transmitting at: %02d:%02d:%02d", tm_transmit_time.tm_hour, tm_transmit_time.tm_min, tm_transmit_time.tm_sec);
+		
+		if ((wakeup == 0) || (wakeup > next_transmit)) {
+			wakeup = next_transmit;
+		}
 	}
 
+	app_set_next_wakekup(wakeup);
+	
 	LOG_DBG("Now at: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
-	LOG_DBG("Log %lld - Transmit %lld", next_log, next_transmit);
+	LOG_DBG("Log %u - Transmit %u", (uint32_t)next_log, (uint32_t)next_transmit);
 
 	pcf85263a_interrupt_flag_t interrupt_flag = {
 		.enable_level_pulse = 0,
@@ -376,10 +408,38 @@ static void app_input_handler(enum etc_interface_event_type type)
 	}
 }
 
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+void date_time_handler(const struct date_time_evt *evt)
+{
+	static enum date_time_evt_type last_type = DATE_TIME_NOT_OBTAINED;
+	if (last_type == evt->type) {
+		return;
+	}
+	last_type = evt->type;
+	switch (evt->type) {
+		case DATE_TIME_OBTAINED_MODEM:
+		case DATE_TIME_OBTAINED_EXT: {
+			int now = date_time_now_second();
+			int wakeup = app_get_next_wakeup();
+			if ((now != -1) && (now > wakeup)) {
+				LOG_INF("Update wakeup time after date/time synced");
+				app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
+			}
+			break;
+		}
+		case DATE_TIME_NOT_OBTAINED: 
+			break;
+	}
+}
+#endif
+
 static int setup(void)
 {
 	etc_interface_enable_rtc_event();
 	etc_interface_register_event_handler(app_input_handler);
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+	date_time_register_handler(date_time_handler);
+#endif
 	static bool is_send = false;
 	if (is_send == false) {
 		LOG_DBG("Request to transmit records");
@@ -409,6 +469,7 @@ static void on_sub_state_passive(struct app_msg_data *msg)
 static void on_sub_state_active(struct app_msg_data *msg)
 {
 }
+
 
 /* Message handler for all states. */
 static void on_all_events(struct app_msg_data *msg)
