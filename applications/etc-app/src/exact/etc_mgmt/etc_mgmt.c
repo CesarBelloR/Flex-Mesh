@@ -133,8 +133,8 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
 
-/**
- * Command handler: etc record
+/*
+ * Command handler: etc record clean
  */
 static int etc_mgmt_record_clean(struct smp_streamer *ctxt) {
 	
@@ -150,6 +150,39 @@ static int etc_mgmt_record_clean(struct smp_streamer *ctxt) {
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
 
+/**
+ * Command handler: etc record reclaim
+ */
+static int etc_mgmt_record_reclaim(struct smp_streamer *ctxt)
+{
+	uint32_t start = -1;
+	uint32_t stop = -1;
+	int rc;
+	zcbor_state_t *zse = ctxt->writer->zs;
+	zcbor_state_t *zsd = ctxt->reader->zs;
+	bool ok;
+	size_t decoded;
+
+	struct zcbor_map_decode_key_val record_read_decode[] = {
+		ZCBOR_MAP_DECODE_KEY_VAL(start, zcbor_uint32_decode, &start),
+		ZCBOR_MAP_DECODE_KEY_VAL(stop, zcbor_uint32_decode, &stop)
+	};
+
+	ok = zcbor_map_decode_bulk(zsd, record_read_decode,
+		ARRAY_SIZE(record_read_decode), &decoded) == 0;
+
+	if (!ok || start == -1 || stop == -1) {
+		return MGMT_ERR_EINVAL;
+	}
+
+	etc_device_reclaim_record(start, stop);
+
+	/* Encode the response. */
+	ok = etc_mgmt_rsp(zse, MGMT_ERR_EOK);
+
+	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
+}
+
 static const struct mgmt_handler etc_mgmt_handlers[] = {
 	[ETC_MGMT_ID_RECORD_STATUS] = {
 		.mh_read = etc_mgmt_record_status,
@@ -159,7 +192,11 @@ static const struct mgmt_handler etc_mgmt_handlers[] = {
 	},
 	[ETC_MGMT_ID_RECORD_CLEAN] = {
 		.mh_read = etc_mgmt_record_clean,
-	}
+	},
+	[ETC_MGMT_ID_RECORD_RECLAIM] = {
+		.mh_read = etc_mgmt_record_reclaim,
+	},
+
 };
 
 #define ETC_MGMT_HANDLER_CNT ARRAY_SIZE(etc_mgmt_handlers)

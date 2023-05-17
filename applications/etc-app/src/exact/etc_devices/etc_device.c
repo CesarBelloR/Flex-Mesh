@@ -47,6 +47,13 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS (60)
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
 
+struct etc_device_reclaim_info {
+	uint16_t current_index;
+	uint16_t start_index;
+	uint16_t stop_index;
+	uint16_t flag_in_process;
+};
+
 static union etc_device_record_header etc_device_record_header;
 static struct etc_device_record_table etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
@@ -56,6 +63,7 @@ static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
 static uint16_t ram_nack_record_id;
 static enum etc_logger_job logger_job = ETC_LOGGER_JOB_LOG;
+static struct etc_device_reclaim_info etc_reclaim_info = {0x00};
 
 void etc_device_nvs_init(void)
 {
@@ -118,6 +126,21 @@ void etc_device_nvs_init(void)
 		ram_nack_record_id = etc_device_record_table.last_nack_record_id;
 	}
 
+	rc = etc_nvs_read(ETC_RECORD_RECLAIM, &etc_reclaim_info, sizeof(etc_reclaim_info));
+	if (rc != 0) {
+		etc_reclaim_info.current_index = 0;
+		etc_reclaim_info.start_index = 0;
+		etc_reclaim_info.stop_index = 0;
+		etc_reclaim_info.flag_in_process = 0;
+		rc = etc_nvs_write(ETC_RECORD_RECLAIM, &etc_reclaim_info,
+				   sizeof(etc_reclaim_info));
+		if (rc != 0) {
+			LOG_ERR("Failed to write reclaim info");
+		} else {
+			LOG_INF("Initialized the reclaim info successful");
+		}
+	}
+
 	LOG_DBG("Last record stat as below: ");
 	LOG_DBG("\tNewest record (%d,%d)", etc_device_record_table.newest.sector_idx,
 		etc_device_record_table.newest.element_idx);
@@ -125,6 +148,10 @@ void etc_device_nvs_init(void)
 		etc_device_record_table.oldest.element_idx);
 	LOG_DBG("\tTotal record %d - last ack %d", etc_device_record_table.total,
 		etc_device_record_table.last_nack_record_id);
+	
+	LOG_DBG("Reclaim information: %d %d", etc_reclaim_info.current_index, etc_reclaim_info.flag_in_process);
+	LOG_DBG("\tStart index: %d", etc_reclaim_info.start_index);
+	LOG_DBG("\tStop index %d", etc_reclaim_info.stop_index);
 }
 
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len)
@@ -229,7 +256,7 @@ int etc_device_write_record(union etc_device_record *record)
 		/* Need to erase flash */
 		LOG_WRN("Data in address is not empty 0x%08x", record_addr);
 		LOG_HEXDUMP_DBG(buf, ETC_DEVICE_RECORD_SIZE, "DUMP");
-		uint32_t offset_sector = record_addr - record_addr % ETC_DEVICE_RECORD_SIZE;
+		uint32_t offset_sector = record_addr - record_addr % record_fs.sector_size;
 		rc = flash_erase(record_fs.flash_device, offset_sector, record_fs.sector_size);
 		if (rc != 0) {
 			LOG_ERR("Error in erasing flash err %d 0x%08x", rc, offset_sector);
@@ -265,15 +292,99 @@ int etc_device_write_record(union etc_device_record *record)
 	return 0;
 }
 
+static int etc_device_reclaim_data(etc_device_record_reading_callback reading_callback, void *data) {
+	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
+	uint16_t min_id = ETC_RECORD_HEADER;
+	int rc = 0;
+	if (etc_reclaim_info.flag_in_process == 1) {
+		if (etc_reclaim_info.start_index <= etc_reclaim_info.stop_index) {
+			if ((etc_reclaim_info.current_index >= etc_reclaim_info.start_index) &&
+			    (etc_reclaim_info.stop_index >= etc_reclaim_info.current_index)) {
+				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
+				rc = reading_callback(etc_reclaim_info.current_index, data);
+				if (rc > 0) { // Return record_id;
+					etc_reclaim_info.current_index += 1;
+					return rc;
+				} else {
+					/* No action required */
+				}
+			} else {
+				etc_reclaim_info.flag_in_process = 0;
+				etc_reclaim_info.current_index = 0;
+				rc = etc_nvs_write(ETC_RECORD_RECLAIM, &etc_reclaim_info,
+						   sizeof(etc_reclaim_info));
+				if (rc != 0) {
+					LOG_ERR("Failed to write reclaim info");
+				} else {
+					LOG_INF("Initialized the reclaim info successful");
+				}
+			}
+		} else {
+			if (etc_reclaim_info.current_index >= etc_reclaim_info.start_index &&
+			    etc_reclaim_info.current_index <= max_id) {
+				rc = reading_callback(etc_reclaim_info.current_index, data);
+				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
+				if (rc > 0) { // Return record_id;
+					if (etc_reclaim_info.current_index == max_id) {
+						etc_reclaim_info.current_index = min_id;
+					} else {
+						etc_reclaim_info.current_index += 1;
+					}
+					return rc;
+				} else {
+					/* No action required */
+				}
+			}
+
+			if (etc_reclaim_info.current_index >= min_id &&
+			    etc_reclaim_info.current_index <= etc_reclaim_info.stop_index) {
+				rc = reading_callback(etc_reclaim_info.current_index, data);
+				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
+				if (rc > 0) { // Return record_id;
+					if (etc_reclaim_info.current_index ==
+					    etc_reclaim_info.stop_index) {
+						etc_reclaim_info.flag_in_process = 0;
+						etc_reclaim_info.current_index = 0;
+						rc = etc_nvs_write(ETC_RECORD_RECLAIM,
+								   &etc_reclaim_info,
+								   sizeof(etc_reclaim_info));
+						if (rc != 0) {
+							LOG_ERR("Failed to write reclaim info");
+						} else {
+							LOG_INF("Initialized the reclaim info "
+								"successful");
+						}
+					} else {
+						etc_reclaim_info.current_index += 1;
+					}
+					return rc;
+				} else {
+					/* No action required */
+				}
+			}
+		}
+	}
+
+	if (rc == 0) {
+		return rc;
+	}
+	return -ENOENT;
+}
+
 int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void *data)
 {
 	int rc = 0;
 	int newest_id = etc_device_record_table.newest.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
 			etc_device_record_table.newest.element_idx + ETC_RECORD_HEADER;
-	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR +
-			  ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
+	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
 	uint16_t min_id = ETC_RECORD_HEADER;
 	uint16_t last_id = ram_nack_record_id;
+
+	LOG_INF("Reclaim is running %d", etc_reclaim_info.flag_in_process);
+
+	if (etc_reclaim_info.flag_in_process == 1) {
+		return etc_device_reclaim_data(reading_callback, data);
+	}
 
 	if (last_id == newest_id) {
 		return 0;
@@ -293,8 +404,6 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 				rc = reading_callback(check_id, data);
 				if (rc > 0) { // Return record_id;
 					return rc;
-				} else if (rc == 0) {
-					/* Continue reading*/
 				} else {
 					/* No action required */
 				}
@@ -320,8 +429,8 @@ static int etc_device_record_reading(uint16_t record_id, void *data)
 		(record_id - ETC_RECORD_HEADER) - index.sector_idx * ETC_RECORD_MAX_PER_SECTOR;
 	uint32_t record_addr = (record_fs.offset) + index.sector_idx * record_fs.sector_size +
 			       index.element_idx * ETC_DEVICE_RECORD_SIZE;
-	LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
-		index.element_idx);
+	// LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
+	// 	index.element_idx);
 	int rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
 	if (rc != 0) {
 		LOG_ERR("Error in reading flash err %d", rc);
@@ -389,7 +498,7 @@ static struct etc_device_record_index etc_device_get_next_index(void)
 		}
 	}
 
-	if (etc_device_record_table.total < ETC_RECORD_MAX_RECORD - 1) {
+	if (etc_device_record_table.total < ETC_RECORD_MAX_RECORD) {
 		etc_device_record_table.oldest.element_idx = 0;
 		etc_device_record_table.oldest.sector_idx = 0;
 		etc_device_record_table.total += 1;
@@ -489,6 +598,86 @@ struct etc_device_record_table etc_device_get_record_status(void) {
 int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_device_record_header *header) {
 	uint16_t record_id = sector * ETC_RECORD_MAX_PER_SECTOR + element + ETC_RECORD_HEADER;
 	return etc_nvs_read(record_id, header, sizeof(union etc_device_record_header));
+}
+
+static int etc_device_update_reclaim(uint16_t record_id, int start_time, int stop_time) {
+	int rc = 0;
+	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
+	memset(&etc_device_record_header, 0, sizeof(etc_device_record_header));
+	union etc_device_record record;
+	rc = etc_device_record_reading(record_id, buf);
+	if (rc == record_id) {
+		memcpy(record.data, buf, ETC_DEVICE_RECORD_SIZE);
+		if ((start_time <= record.timestamp) && (record.timestamp <= stop_time)) {
+			if (etc_reclaim_info.start_index == 0) {
+				etc_reclaim_info.start_index = record_id;
+				etc_reclaim_info.stop_index = record_id;
+			} else {
+				etc_reclaim_info.stop_index = record_id;
+			}
+		}
+	} else {
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int etc_device_reclaim_record(int start_time, int stop_time) {
+	if (start_time > stop_time) {
+		return -EINVAL;
+	}
+
+	int rc = 0;
+	LOG_DBG("Request to reclaim %d %d", start_time, stop_time);
+	etc_reclaim_info.start_index = 0;
+	etc_reclaim_info.stop_index = 0;
+	uint16_t oldest_id = ETC_RECORD_MAX_SECTOR * etc_device_record_table.oldest.sector_idx +
+			  etc_device_record_table.oldest.element_idx + ETC_RECORD_HEADER;
+	uint16_t newest_id = ETC_RECORD_MAX_SECTOR * etc_device_record_table.newest.sector_idx +
+			  etc_device_record_table.newest.element_idx + ETC_RECORD_HEADER;
+	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
+	uint16_t min_id = ETC_RECORD_HEADER;
+	if (oldest_id < newest_id) {
+		for (int i = oldest_id; i < newest_id; i++) {
+			rc = etc_device_update_reclaim(i, start_time, stop_time);
+			if (rc != 0) {
+				LOG_ERR("Failed to find and update ACK based on reclaim information");
+				return rc;
+			}
+		}
+	} else {
+		for (int i = oldest_id; i < max_id; i++) {
+			rc = etc_device_update_reclaim(i, start_time, stop_time);
+			if (rc != 0) {
+				LOG_ERR("Failed to find and update ACK based on reclaim information");
+				return rc;
+			}
+		}
+		for (int i = min_id; i < newest_id; i++) {
+			rc = etc_device_update_reclaim(i, start_time, stop_time);
+			if (rc != 0) {
+				LOG_ERR("Failed to find and update ACK based on reclaim information");
+				return rc;
+			}
+		}
+	}
+
+	if ((rc == 0) && (etc_reclaim_info.start_index != 0) && (etc_reclaim_info.stop_index != 0)) {
+		etc_reclaim_info.flag_in_process = 1U;
+		etc_reclaim_info.current_index = etc_reclaim_info.start_index;
+		rc = etc_nvs_write(ETC_RECORD_RECLAIM, &etc_reclaim_info,
+				   sizeof(etc_reclaim_info));
+		if (rc != 0) {
+			LOG_ERR("Failed to write reclaim info");
+		} else {
+			LOG_INF("Updated the reclaim info successful %d %d", etc_reclaim_info.start_index, etc_reclaim_info.stop_index);
+		}
+	}
+	return rc;
+}
+
+int etc_device_reclaim_work(int start_time, int stop_time) {
+	return 0;
 }
 
 int etc_device_erase_cfg(void) {
@@ -614,6 +803,25 @@ static int cmd_parser_hex_record(const struct shell *shell, size_t argc, char **
 	return 0;
 }
 
+static int cmd_reclaim_record(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc == 3) {
+		int start_time = atoi(argv[1]);
+		int stop_time = atoi(argv[2]);
+		int rc = etc_device_reclaim_record(start_time, stop_time);
+		if (rc != 0) {
+			shell_error(shell, "Failed to reclaim record");
+		} else {
+			shell_info(shell, "Reclaimed record success");
+			shell_info(shell, "Start ID %d - Stop %d", etc_reclaim_info.start_index, etc_reclaim_info.stop_index);
+		}
+	} else {
+		shell_error(shell, "Invalid input parameter for reclaim record");
+	}
+
+	return 0;
+}
+
 static int cmd_erase_configuration(const struct shell *shell, size_t argc, char **argv)
 {
 	int rc = nvs_clear(&etc_fs);
@@ -623,6 +831,7 @@ static int cmd_erase_configuration(const struct shell *shell, size_t argc, char 
 		shell_print(shell, "Erased configuration successfully");
 		shell_print(shell, "Please reboot the device after erasing the configuration");
 	}
+	return 0;
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
@@ -632,6 +841,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(nack_id, NULL, "Get nack record by id", cmd_get_nack_id),
 	SHELL_CMD(clean, NULL, "Clean the records", cmd_clean_records),
 	SHELL_CMD(parser, NULL, "Parser the hex record", cmd_parser_hex_record),
+	SHELL_CMD(reclaim, NULL, "Reclaim ", cmd_reclaim_record),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(record, &sub_record, "ETC Record Management", NULL);
 
