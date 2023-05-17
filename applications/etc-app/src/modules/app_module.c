@@ -287,6 +287,13 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 		if (tm_log_time.tm_sec >= 30) {
 			/* Round up wake up time to the next minute */
 			tm_log_time.tm_min++;
+			if (tm_log_time.tm_min >= 60) {
+				tm_log_time.tm_min = 0;
+				tm_log_time.tm_hour++;
+				if (tm_log_time.tm_hour >= 24) {
+					tm_log_time.tm_hour = 0;
+				}
+			}
 		}
 
 		/* Calculated actual next wakeup */
