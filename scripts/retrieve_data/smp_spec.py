@@ -121,5 +121,12 @@ SMP_DICT = {
             },
             "response": {"op_code": MGMT_OP_READ_RSP, "json_keys": []},
         },
+        "reclaim": {
+            "cmd_id": 3,
+            "request": {
+                "op_code": MGMT_OP_READ,
+            },
+            "response": {"op_code": MGMT_OP_READ_RSP, "json_keys": []},
+        },
     },
 }
