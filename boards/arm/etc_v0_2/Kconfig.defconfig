@@ -3,6 +3,10 @@ if BOARD_ETC_V0_2
 config BOARD
 	default "ETC Core v0.2 with nRF52840 and BG95x"
 
+config BOARD_VERSION
+	string
+	default "0.2.0"
+
 config BT_CTLR
 	default BT
 

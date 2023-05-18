@@ -64,12 +64,14 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg);
 
 /** @brief Set environmental sensor data.
  *
- *  @param[in] sensor Pointer to structure that contains environmental sensor data.
+ *  @param[in] cloud_data Pointer to structure that contains the path list.
+ *  @param[in] record Pointer to structure that contains sensor measurement record.
  *
  *  @retval 0 If successful, otherwise a negative value indicating the reason of failure.
  *  @return -ENODATA if the queued flag present in the input structure is false.
  */
-int lwm2m_codec_helpers_set_sensor_data(union etc_device_record *record);
+int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
+					union etc_device_record *record);
 
 /** @brief Set modem dynamic data.
  *
@@ -89,6 +91,16 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
  */
 int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_static);
 
+/** @brief Clear the LwM2M path list from the provided struct cloud_codec_data.
+ * 
+ * @param[out] output Pointer to structure that contains the LwM2M path list 
+ * 		      that will be cleared.
+ * 
+ * @return 0 If successful, otherwise a negative value indicating the reason of failure.
+ * 
+*/
+int lwm2m_codec_helpers_object_path_list_clear(struct cloud_codec_data *output);
+
 /** @brief Generate path lists with reference to objects.
  *	   This function outputs a list of paths that can be used to reference objects that should
  *	   be updated (sent to server) when calling the lwm2m_engine_send() function.
@@ -104,6 +116,13 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 					     const struct lwm2m_obj_path path[],
 					     size_t path_size);
+
+/**
+ * @brief Set the static device data LwM2M object values, such as manufacturer, model,
+ *       firmware version, etc.
+ * @return 0 If successful, otherwise a negative value indicating the reason of failure.
+*/
+int lwm2m_codec_helpers_set_device_data(void);
 
 #ifdef __cplusplus
 }

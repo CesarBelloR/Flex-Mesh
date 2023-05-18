@@ -17,13 +17,8 @@ target_sources_ifdef(CONFIG_AWS_IOT app
 
 target_sources_ifdef(CONFIG_LWM2M app
                      PRIVATE 
-                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/lwm2m_integration.c)
-
-target_sources_ifdef(CONFIG_LWM2M app
-                     PRIVATE 
-                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_cfg_obj_48931.c)
-
-target_sources_ifdef(CONFIG_LWM2M app
-                     PRIVATE 
-                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_temp_obj_48932.c)
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/lwm2m_integration.c
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_cfg_obj_48931.c
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_temp_obj_48932.c
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_info_obj_48933.c)
 

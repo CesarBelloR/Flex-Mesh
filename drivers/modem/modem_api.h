@@ -10,6 +10,12 @@
 #include <zephyr/net/net_if.h>
 #include <errno.h>
 
+#define MDM_MANUFACTURER_LENGTH		  10
+#define MDM_MODEL_LENGTH		  16
+#define MDM_REVISION_LENGTH		  64
+#define MDM_IMEI_LENGTH			  16
+#define MDM_IMSI_LENGTH			  16
+#define MDM_ICCID_LENGTH		  23
 
 enum modem_api_evt_type {
 	MODEM_API_CONNECTED_EVT,
@@ -31,6 +37,15 @@ enum modem_api_psm_cmd {
 	MODEM_API_PSM_CMD_WAKEUP,
 };
 
+struct modem_static_info {
+	char manufacturer[MDM_MANUFACTURER_LENGTH];
+	char model[MDM_MODEL_LENGTH];
+	char revision[MDM_REVISION_LENGTH];
+	char imei[MDM_IMEI_LENGTH];
+	char imsi[MDM_IMSI_LENGTH];
+	char iccid[MDM_ICCID_LENGTH];
+};
+
 typedef void(*modem_api_evt_handler_t)(const struct modem_api_evt *const evt);
 
 typedef int(*modem_api_evt_handler_init_t)(const struct device *dev,
@@ -43,6 +58,9 @@ typedef int(*modem_api_set_credentials_t)(const struct device *dev,
 typedef int(*modem_api_psm_t)(const struct device *dev,
 			      enum modem_api_psm_cmd cmd,
 			      void *psm_data);
+
+typedef int(*modem_api_get_static_info_t)(const struct device *dev,
+					  struct modem_static_info *info);
 
 struct modem_api {
 	/**
@@ -62,6 +80,8 @@ struct modem_api {
 	modem_api_set_credentials_t set_credentials;	
 	/* Send a PSM command, e.g. wakeup */
 	modem_api_psm_t psm_cmd;
+	/* Get static information about the modem */
+	modem_api_get_static_info_t get_static_info;
 };
 
 struct modem_psk {
@@ -129,11 +149,25 @@ inline static int modem_psm_cmd(const struct device *dev,
 	return api->psm_cmd(dev, cmd, psm_data);
 }
 
+inline static int modem_get_static_info(const struct device *dev,
+					struct modem_static_info *info)
+{
+	const struct modem_api *api =
+		(const struct modem_api *)dev->api;
+
+	if (api->get_static_info == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->get_static_info(dev, info);
+}
+
 char* quectel_bg95_get_imei(void);
 char* quectel_bg95_get_revision(void);
 char* quectel_bg95_get_sim_number(void);
 bool quectel_bg95_is_ready(void);
 int quectel_bg95_get_time(char* time_buf);
 int quectel_bg95_get_rssi(void);
+int quectel_bg95_get_qual(void);
 
 #endif // MODEM_API_H

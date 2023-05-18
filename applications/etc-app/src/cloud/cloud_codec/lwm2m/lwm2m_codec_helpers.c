@@ -14,7 +14,9 @@
 
 #include "lwm2m_codec_defines.h"
 #include "lwm2m_codec_helpers.h"
+#include "app_version.h"
 #include "etc_util.h"
+#include "etc_settings.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lwm2m_codec_helpers, CONFIG_CLOUD_CODEC_LOG_LEVEL);
@@ -23,6 +25,9 @@ LOG_MODULE_REGISTER(lwm2m_codec_helpers, CONFIG_CLOUD_CODEC_LOG_LEVEL);
 static uint8_t bearers[2] = { LTE_FDD_BEARER, NB_IOT_BEARER };
 static int battery_voltage;
 static time_t button_ts;
+
+static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
+static char hardware_version[ETC_SETTING_HW_VER_LEN];
 
 /* Timestamps, minimum, and maximum values for the BME680 present on the Thingy:91. */
 static double temp_min_range_val = TEMP_MIN_RANGE_VALUE;
@@ -144,15 +149,9 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 	if (err) {
 		return err;
 	}
-#if 0
+	
 	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
 						AVAIL_NETWORK_BEARER_ID, 0));
-	if (err) {
-		return err;
-	}
-
-	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
-						AVAIL_NETWORK_BEARER_ID, 1));
 	if (err) {
 		return err;
 	}
@@ -168,7 +167,6 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 	if (err) {
 		return err;
 	}
-#endif
 
 	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
 						POWER_SOURCE_VOLTAGE_RID, 0));
@@ -517,44 +515,12 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 	} else {
 		return -EINVAL;
 	}
-#endif
-
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID,
-					   0, AVAIL_NETWORK_BEARER_ID, 0),
-				&bearers[0], sizeof(bearers[0]), sizeof(bearers[0]),
-				LWM2M_RES_DATA_FLAG_RO);
-	if (err) {
-		return err;
-	}
-
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID,
-					   0, AVAIL_NETWORK_BEARER_ID, 1),
-				&bearers[1], sizeof(bearers[1]), sizeof(bearers[1]),
-				LWM2M_RES_DATA_FLAG_RO);
-	if (err) {
-		return err;
-	}
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID,
 					   0, IP_ADDRESSES, 0),
 				modem_dynamic->ip, (uint16_t)strlen(modem_dynamic->ip),
 				(uint16_t)strlen(modem_dynamic->ip),
 				LWM2M_RES_DATA_FLAG_RO);
-	if (err) {
-		return err;
-	}
-
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID,
-					   0, APN, 0),
-				modem_dynamic->apn, (uint16_t)strlen(modem_dynamic->apn),
-				(uint16_t)strlen(modem_dynamic->apn),
-				LWM2M_RES_DATA_FLAG_RO);
-	if (err) {
-		return err;
-	}
-
-	err = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
-			   (int8_t)modem_dynamic->rsrp);
 	if (err) {
 		return err;
 	}
@@ -583,6 +549,17 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 		return err;
 	}
 
+#endif
+
+	err = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+			   (int8_t)modem_dynamic->rsrp);
+	if (err) {
+		return err;
+	}
+	
+	err = lwm2m_set_u8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, QUAL),
+			   modem_dynamic->qual);
+
 	err = date_time_now(&current_time);
 	if (err) {
 		return err;
@@ -590,6 +567,72 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 
 	err = lwm2m_set_time(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, CURRENT_TIME_RID),
 			     (current_time / MSEC_PER_SEC));
+	if (err) {
+		return err;
+	}
+
+	return 0;
+}
+
+int lwm2m_codec_helpers_set_device_data(void)
+{
+	int err;
+
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
+				CONFIG_CLOUD_CODEC_MODEL,
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MODEL),
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MODEL),
+				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MANUFACTURER_RID),
+				CONFIG_CLOUD_CODEC_MANUFACTURER,
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MANUFACTURER),
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MANUFACTURER),
+				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_TYPE_RID),
+				CONFIG_CLOUD_CODEC_DEVICE_TYPE,
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_DEVICE_TYPE),
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_DEVICE_TYPE),
+				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, FIRMWARE_VERSION_RID),
+				APP_VERSION_STR,
+				(uint16_t)strlen(APP_VERSION_STR),
+				(uint16_t)strlen(APP_VERSION_STR),
+				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
+	
+	etc_get_hw_version(hardware_version, sizeof(hardware_version));
+
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, HARDWARE_VERSION_RID),
+				hardware_version,
+				(uint16_t)strlen(hardware_version),
+				(uint16_t)strlen(hardware_version),
+				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
+
+	etc_get_device_id(device_id, sizeof(device_id));
+
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
+				DEVICE_SERIAL_NUMBER_ID),
+				device_id,
+				(uint16_t)strlen(device_id),
+				(uint16_t)strlen(device_id),
+				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
 	}
@@ -605,39 +648,26 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 		return -ENODATA;
 	}
 
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
-				modem_static->brdv,
-				(uint16_t)strlen(modem_static->brdv),
-				(uint16_t)strlen(modem_static->brdv),
-				LWM2M_RES_DATA_FLAG_RO);
+	err = lwm2m_set_string(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_IMEI),
+			       modem_static->imei);
 	if (err) {
 		return err;
 	}
 
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MANUFACTURER_RID),
-				CONFIG_CLOUD_CODEC_MANUFACTURER,
-				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MANUFACTURER),
-				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MANUFACTURER),
-				LWM2M_RES_DATA_FLAG_RO);
+	err = lwm2m_set_string(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_MODEM_REV),
+			       modem_static->fw);
 	if (err) {
 		return err;
 	}
 
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, SOFTWARE_VERSION_RID),
-				modem_static->fw,
-				(uint16_t)strlen(modem_static->fw),
-				(uint16_t)strlen(modem_static->fw),
-				LWM2M_RES_DATA_FLAG_RO);
+	err = lwm2m_set_string(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_IMSI),
+			       modem_static->imsi);
 	if (err) {
 		return err;
 	}
 
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
-					    DEVICE_SERIAL_NUMBER_ID),
-				modem_static->imei,
-				(uint16_t)strlen(modem_static->imei),
-				(uint16_t)strlen(modem_static->imei),
-				LWM2M_RES_DATA_FLAG_RO);
+	err = lwm2m_set_string(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_ICCID),
+			       modem_static->iccid);
 	if (err) {
 		return err;
 	}
@@ -646,7 +676,8 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 }
 
 
-int lwm2m_codec_helpers_set_sensor_data(union etc_device_record *record)
+int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
+					union etc_device_record *record)
 {
 	int err;
 
@@ -671,17 +702,44 @@ int lwm2m_codec_helpers_set_sensor_data(union etc_device_record *record)
 
 	/* Set external sensor temperature and timestamp */
 	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
-		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, TIMESTAMP_RID),
+		if (!data_codec_compare_temperature_is_valid(record->sensor[i])) {
+			continue;
+		}
+		
+		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i + 1, TIMESTAMP_RID),
 				(time_t)(record->timestamp));
 		if (err) {
 			return err;
 		}
-		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i, SENSOR_VALUE_RID),
+		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i + 1, SENSOR_VALUE_RID),
 				    record->sensor[i]);
 		if (err) {
 			return err;
 		}
+
+		const struct lwm2m_obj_path path_list[] = {
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i),
+		};
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							       path_list,
+							       ARRAY_SIZE(path_list));
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			return err;
+		}
 	}
+
+	return 0;
+}
+
+int lwm2m_codec_helpers_object_path_list_clear(struct cloud_codec_data *output)
+{
+	if (output == NULL) {
+		return -EINVAL;
+	}
+
+	memset(output->paths, 0, sizeof(output->paths));
+	output->valid_object_paths = 0;
 
 	return 0;
 }

@@ -36,12 +36,17 @@ struct data_sensors {
 struct data_modem_static {
 	/** Static modem data timestamp. UNIX milliseconds. */
 	int64_t ts;
+	char manufacturer[10];
 	/** Device board version. */
-	char brdv[30];
+	char model[16];
 	/** Modem firmware. */
-	char fw[40];
+	char fw[64];
 	/** Device IMEI. */
 	char imei[16];
+	/** SIM IMSI */
+	char imsi[16];
+	/** SIM ICCID */
+	char iccid[23];
 	/** Flag signifying that the data entry is to be encoded. */
 	bool queued : 1;
 };
@@ -61,6 +66,8 @@ struct data_modem_dynamic {
 	uint32_t cell;
 	/** Reference Signal Received Power. */
 	int16_t rsrp;
+	/** Signal quality*/
+	uint8_t qual;
 	/** Internet Protocol Address. */
 	char ip[INET6_ADDRSTRLEN];
 	/** Access Point Name. */
@@ -160,5 +167,17 @@ void data_codec_populate_sensor_internal_buffer(
 
 int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 				    union etc_device_record *record,
+				    struct data_modem_dynamic *modem_data);
+
+int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_static *modem_data);
+
+/** 
+ * @brief Clear the data saved in the cloud_data struct. This should be done
+ *        after the data has been sent to the cloud, if the struct is to be reused.
+ * 
+ * @param cloud_data Pointer to the cloud_data struct.
+*/
+int data_codec_clear_data(struct cloud_codec_data *cloud_data);
+
 #endif /* DATA_CODEC_H__ */

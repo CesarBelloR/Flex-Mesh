@@ -121,7 +121,7 @@ static struct lwm2m_engine_obj_inst *temp_sensor_create(uint16_t obj_inst_id)
 
 	inst[index].resources = res[index];
 	inst[index].resource_count = i;
-	LOG_DBG("Create IPSO Temperature Sensor instance: %d", obj_inst_id);
+	LOG_DBG("Create EXACT Temperature Sensor instance: %d", obj_inst_id);
 	return &inst[index];
 }
 
