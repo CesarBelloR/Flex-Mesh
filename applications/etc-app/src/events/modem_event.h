@@ -15,6 +15,7 @@
 #include <app_event_manager.h>
 #include <app_event_manager_profiler_tracer.h>
 #include "compiler.h"
+#include "modem_api.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -139,10 +140,12 @@ enum modem_event_type {
 
 struct modem_static_modem_data {
 	int64_t timestamp;
-	char iccid[23];
-	char board_version[30];
-	char modem_fw[40];
-	char imei[16];
+	char manufacturer[MDM_MANUFACTURER_LENGTH];
+	char iccid[MDM_ICCID_LENGTH];
+	char imsi[MDM_IMSI_LENGTH];
+	char board_version[MDM_MODEL_LENGTH];
+	char modem_fw[MDM_REVISION_LENGTH];
+	char imei[MDM_IMEI_LENGTH];
 };
 
 /** @brief Modem event. */

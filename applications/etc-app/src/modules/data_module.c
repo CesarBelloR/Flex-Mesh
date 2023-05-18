@@ -56,7 +56,6 @@ static enum state_type {
 	STATE_SHUTDOWN
 } state;
 
-static struct data_sensors sensors_buf[MODULE_DATA_SENSOR_BUFFER_COUNT];
 static struct data_battery bat_buf[MODULE_DATA_BATTERY_BUFFER_COUNT];
 static struct data_lora_sensors lora_buf[MODULE_LORA_SENSOR_BUFFER_COUNT];
 
@@ -72,6 +71,8 @@ static int head_lora_buf = 0;
 static int head_sensor_buf = 0;
 static int head_modem_dyn_buf = 0;
 static int head_bat_buf = 0;
+
+struct cloud_codec_data codec = { 0 };
 
 /** Current record id */
 uint16_t record_id;
@@ -292,15 +293,13 @@ static void data_send(enum data_event_type event,
 	}
 
 	APP_EVENT_SUBMIT(module_event);
-
-	/* Reset buffer */
-	memset(data, 0, sizeof(struct cloud_codec_data));
+	data_codec_clear_data(data);
 }
 
 static void data_encode(void) 
 {
-	struct cloud_codec_data codec = { 0 };
 	union etc_device_record record;
+	struct data_modem_dynamic modem_data = {0};
 	int ret;
 
 	if (record_id != 0) {
@@ -314,7 +313,12 @@ static void data_encode(void)
 		LOG_INF("No record found");
 		return;
 	}
-	ret = data_codec_prepare_cloud_packet(&codec, &record, NULL);
+	
+	modem_data.rsrp = quectel_bg95_get_rssi();
+	modem_data.qual = quectel_bg95_get_qual();
+	modem_data.queued = 1;
+
+	ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_data);
 	if (ret != 0) {
 		LOG_WRN("No message to publish");
 		return;
@@ -334,10 +338,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) &&
 	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		state_set(STATE_CLOUD_CONNECTED);	
-		if ((head_sensor_buf != 0) ||
-		    (head_lora_buf != 0)) {
-			data_encode();
-		}
+		data_encode();
 		return;
 	}
 }
@@ -385,42 +386,32 @@ static void on_all_states(struct data_msg_data *msg)
 		modem_stat.ts = msg->module.modem.data.modem_static.timestamp;
 		modem_stat.queued = true;
 
-		BUILD_ASSERT(sizeof(modem_stat.brdv) >=
+		BUILD_ASSERT(sizeof(modem_stat.manufacturer) >=
+			     sizeof(msg->module.modem.data.modem_static.manufacturer));
+		BUILD_ASSERT(sizeof(modem_stat.model) >=
 			     sizeof(msg->module.modem.data.modem_static.board_version));
-
 		BUILD_ASSERT(sizeof(modem_stat.fw) >=
 			     sizeof(msg->module.modem.data.modem_static.modem_fw));
-
 		BUILD_ASSERT(sizeof(modem_stat.imei) >=
 			     sizeof(msg->module.modem.data.modem_static.imei));
+		BUILD_ASSERT(sizeof(modem_stat.imsi) >=
+			     sizeof(msg->module.modem.data.modem_static.imsi));
+		BUILD_ASSERT(sizeof(modem_stat.iccid) >=
+			     sizeof(msg->module.modem.data.modem_static.iccid));
 
-		strcpy(modem_stat.brdv, msg->module.modem.data.modem_static.board_version);
+		strcpy(modem_stat.manufacturer, msg->module.modem.data.modem_static.manufacturer);
+		strcpy(modem_stat.model, msg->module.modem.data.modem_static.board_version);
 		strcpy(modem_stat.fw, msg->module.modem.data.modem_static.modem_fw);
 		strcpy(modem_stat.imei, msg->module.modem.data.modem_static.imei);
+		strcpy(modem_stat.imsi, msg->module.modem.data.modem_static.imsi);
+		strcpy(modem_stat.iccid, msg->module.modem.data.modem_static.iccid);
 
+		data_codec_prepare_modem_static_packet(&codec, &modem_stat);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
-		enum etc_device_mode mode = etc_device_get_mode();
-		if ((mode == ETC_DEVICE_MODE_LTE_LOGGER) || (mode == ETC_DEVICE_MODE_LORA_LOGGER)) {
-			struct data_sensors new_sensor_data = {
-				.queued = true
-			};
-			memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
-			data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
-		} else if (mode == ETC_DEVICE_MODE_RELAY) {
-			/* Update relay function */
-			struct data_sensors new_sensor_data = {
-				.queued = true
-			};
 
-			memcpy(&new_sensor_data.data, msg->module.sensor.data.sensors, sizeof(struct sensor_data));
-			data_codec_populate_sensor_internal_buffer(sensors_buf, &new_sensor_data, &head_sensor_buf, ARRAY_SIZE(sensors_buf));
-			/* Send data to cloud right now after they were taken */
-		} else {
-			/* Unknown mode ? */
-		}
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 

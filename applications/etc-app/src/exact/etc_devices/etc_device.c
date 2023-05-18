@@ -379,6 +379,7 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
 	uint16_t min_id = ETC_RECORD_HEADER;
 	uint16_t last_id = ram_nack_record_id;
+	uint16_t check_id = 0;
 
 	LOG_INF("Reclaim is running %d", etc_reclaim_info.flag_in_process);
 
@@ -390,11 +391,12 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 		return 0;
 	}
 
-	uint16_t check_id = last_id == 0 ? min_id : last_id + 1;
+	check_id = last_id == 0 ? min_id : last_id + 1;
 	if (check_id > max_id) {
 		check_id = min_id;
 	}
 
+next_id:
 	LOG_DBG("Last ID %u - Check ID %d - New ID %d", last_id, check_id, newest_id);
 
 	rc = etc_nvs_read(check_id, &etc_device_record_header, sizeof(etc_device_record_header));
@@ -405,7 +407,14 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 				if (rc > 0) { // Return record_id;
 					return rc;
 				} else {
-					/* No action required */
+					if (newest_id != check_id) {
+						/* Increase the ram_nack_record_id */
+						check_id += 1;
+						if (check_id > max_id) {
+							check_id = min_id;
+						}
+						goto next_id;
+					}
 				}
 			}
 		}

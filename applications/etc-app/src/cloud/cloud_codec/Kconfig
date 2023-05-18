@@ -38,7 +38,15 @@ config CLOUD_CODEC_APN_LEN_MAX
 
 config CLOUD_CODEC_MANUFACTURER
 	string "Manufacturer name"
-	default "Quectel"
+	default "EXACT Technology"
+
+config CLOUD_CODEC_MODEL
+	string "Model name"
+	default "Monitor 2.0"
+
+config CLOUD_CODEC_DEVICE_TYPE
+	string "Model name"
+	default "M2"
 
 if LWM2M_IPSO_HUMIDITY_SENSOR
 choice LWM2M_IPSO_HUMIDITY_SENSOR_VERSION

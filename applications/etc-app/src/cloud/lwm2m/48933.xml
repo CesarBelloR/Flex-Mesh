@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LWM2M xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.openmobilealliance.org/tech/profiles/LWM2M-v1_1.xsd">
+	<Object ObjectType="MODefinition">
+		<Name>EXACT Info</Name>
+		<Description1><![CDATA[EXACT device-specific information object]]></Description1>
+		<ObjectID>48933</ObjectID>
+		<ObjectURN>urn:oma:lwm2m:x:48933:1.0</ObjectURN>
+		<LWM2MVersion>1.1</LWM2MVersion>
+		<ObjectVersion>1.0</ObjectVersion>
+		<MultipleInstances>Single</MultipleInstances>
+		<Mandatory>Optional</Mandatory>
+		<Resources>
+			
+			<Item ID="1">
+				<Name>IMEI</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[The modem's IMEI in string format.]]></Description>
+			</Item><Item ID="2">
+				<Name>Modem Revision</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[The modem's revision string, for example:
+BG95M3LAR02A03_01.012.01.012]]></Description>
+			</Item><Item ID="3">
+				<Name>IMSI</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[The device's SIM's IMSI read by the modem.]]></Description>
+			</Item>
+			<Item ID="4">
+				<Name>ICCID</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[The device's SIM's ICCID read by the modem.]]></Description>
+			</Item>
+			
+		</Resources>
+		<Description2 />
+	</Object>
+</LWM2M>
