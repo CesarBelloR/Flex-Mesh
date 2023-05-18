@@ -243,24 +243,37 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 static int static_modem_data_get(void)
 {	
 	int err;
-
 	struct modem_event *modem_event = new_modem_event();
+	struct modem_static_info modem_info = {0};
+
+	modem_get_static_info(modem_dev, &modem_info);
+
+	strncpy(modem_event->data.modem_static.manufacturer,
+		modem_info.manufacturer,
+		sizeof(modem_event->data.modem_static.manufacturer) - 1);
 
 	strncpy(modem_event->data.modem_static.board_version,
-		quectel_bg95_get_revision(),
+		modem_info.model,
 		sizeof(modem_event->data.modem_static.board_version) - 1);
 
 	strncpy(modem_event->data.modem_static.modem_fw,
-		quectel_bg95_get_revision(),
+		modem_info.revision,
 		sizeof(modem_event->data.modem_static.modem_fw) - 1);
 
 	strncpy(modem_event->data.modem_static.iccid,
-		quectel_bg95_get_sim_number(),
+		modem_info.iccid,
 		sizeof(modem_event->data.modem_static.iccid) - 1);
 
 	strncpy(modem_event->data.modem_static.imei,
-		quectel_bg95_get_imei(),
+		modem_info.imei,
 		sizeof(modem_event->data.modem_static.imei) - 1);
+	
+	strncpy(modem_event->data.modem_static.imsi,
+		modem_info.imsi,
+		sizeof(modem_event->data.modem_static.imsi) - 1);
+
+	modem_event->data.modem_static.manufacturer
+		[sizeof(modem_event->data.modem_static.manufacturer) - 1] = '\0';
 
 	modem_event->data.modem_static.board_version
 		[sizeof(modem_event->data.modem_static.board_version) - 1] = '\0';
@@ -273,6 +286,9 @@ static int static_modem_data_get(void)
 
 	modem_event->data.modem_static.imei
 		[sizeof(modem_event->data.modem_static.imei) - 1] = '\0';
+
+	modem_event->data.modem_static.imsi
+		[sizeof(modem_event->data.modem_static.imsi) - 1] = '\0';
 
 	modem_event->data.modem_static.timestamp = k_uptime_get();
 	modem_event->type = MODEM_EVT_MODEM_STATIC_DATA_READY;

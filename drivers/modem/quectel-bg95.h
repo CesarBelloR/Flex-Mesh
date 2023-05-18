@@ -56,13 +56,7 @@
 #define MDM_TLS_CLIENT_CERT_FILE_NAME "iot_clientcert.pem"
 
 /* Default lengths of certain things. */
-#define MDM_MANUFACTURER_LENGTH		  10
-#define MDM_MODEL_LENGTH		  16
-#define MDM_REVISION_LENGTH		  64
-#define MDM_IMEI_LENGTH			  16
-#define MDM_IMSI_LENGTH			  16
-#define MDM_ICCID_LENGTH		  32
-#define MDM_TIME_LENGTH           32
+#define MDM_TIME_LENGTH           	  32
 #define MDM_APN_LENGTH			  32
 #define RSSI_TIMEOUT_SECS		  30
 #define MDM_WAIT_FOR_RSSI_TIMEOUT	  K_SECONDS(2)
@@ -104,12 +98,13 @@ struct modem_data {
 	char mdm_model[MDM_MODEL_LENGTH];
 	char mdm_revision[MDM_REVISION_LENGTH];
 	char mdm_imei[MDM_IMEI_LENGTH];
-#if defined(CONFIG_MODEM_SIM_NUMBERS)
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
 	char mdm_imsi[MDM_IMSI_LENGTH];
 	char mdm_iccid[MDM_ICCID_LENGTH];
-#endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
+#endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */
 	char mdm_time[MDM_TIME_LENGTH];
 	int mdm_rssi;
+	uint8_t mdm_qual;
 
 	/* bytes written to socket in last transaction */
 	int sock_written;

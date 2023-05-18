@@ -9,6 +9,7 @@
 
 #include "etc_cfg_obj_48931.h"
 #include "etc_temp_obj_48932.h"
+#include "etc_info_obj_48933.h"
 
 /* LwM2M read-write flag. */
 #define LWM2M_RES_DATA_FLAG_RW 0
@@ -18,6 +19,8 @@
 #define AVAIL_NETWORK_BEARER_ID		1
 /* Radio Signal Strength */
 #define RSS				2
+/* Radio signal quality */
+#define QUAL                            3
 #define IP_ADDRESSES			4
 #define APN				7
 #define CELLID				8
@@ -32,6 +35,7 @@
 #define CURRENT_TIME_RID		13
 #define POWER_SOURCE_VOLTAGE_RID	7
 #define MODEL_NUMBER_RID		1
+#define DEVICE_TYPE_RID                 17
 #define MANUFACTURER_RID		0
 #define HARDWARE_VERSION_RID		18
 

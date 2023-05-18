@@ -585,77 +585,7 @@ static void on_all_states(struct cloud_msg_data *msg)
 	}
 }
 
-char shadow_msg[256] = {0x00};
-
-static int shadow_update(bool version_number_include)
-{
-	int err;
-	char *message;
-	time_t message_ts = 0;
-	int16_t bat_voltage = 0;
-	int16_t temp = 0;
-	int16_t humid = 0;
-
-	cJSON *root_obj = cJSON_CreateObject();;
-	cJSON *state_obj = cJSON_CreateObject();
-	cJSON *reported_obj = cJSON_CreateObject();
-	cJSON *device_obj = cJSON_CreateObject();
-	cJSON *data_obj = cJSON_CreateObject();
-
-	if (root_obj == NULL || state_obj == NULL || reported_obj == NULL || device_obj == NULL 
-		|| data_obj == NULL) {
-		cJSON_Delete(root_obj);
-		cJSON_Delete(state_obj);
-		cJSON_Delete(reported_obj);
-		cJSON_Delete(device_obj);
-		cJSON_Delete(data_obj);
-		err = -ENOMEM;
-		return err;
-	}
-
-	if (version_number_include) {
-		err = json_add_str(reported_obj, "version",
-				    APP_VERSION_STR);
-	} else {
-		err = 0;
-	}
-	extern char* quectel_bg95_get_imei(void);
-	extern char* quectel_bg95_get_revision(void);
-	extern char* quectel_bg95_get_sim_number(void);
-
-	err += json_add_str(device_obj, "imei",  (const char*)quectel_bg95_get_imei());
-	err += json_add_str(device_obj, "sim",  (const char*)quectel_bg95_get_sim_number());
-	err += json_add_str(device_obj, "revision", (const char*)quectel_bg95_get_revision());
-	err += json_add_obj(reported_obj, "device", device_obj);
-	
-	err += json_add_number(data_obj, "ts", message_ts);
-	err += json_add_obj(reported_obj, "status", data_obj);
-	err += json_add_obj(state_obj, "reported", reported_obj);
-	err += json_add_obj(root_obj, "state", state_obj);
-
-	if (err) {
-		LOG_ERR("Failed to Json Add, error: %d", err);
-		goto cleanup;
-	}
-
-	cJSON_bool ret = cJSON_PrintPreallocated(root_obj, shadow_msg, sizeof(shadow_msg), false);
-	if (ret == false) {
-		LOG_ERR("cJSON_Print, error: returned NULL");
-		err = -ENOMEM;
-		goto cleanup;
-	}
-
-	LOG_INF("Publishing: %s to Cloud", shadow_msg);
-
-	cloud_wrap_state_send(shadow_msg, strlen(shadow_msg), false, 0);
-
-cleanup:
-	cJSON_Delete(root_obj);
-	return err;
-}
-
 static void shadow_work_fn(struct k_work *work) {
-	shadow_update(true);
 }
 
 void cloud_module_thread_fn(void)
