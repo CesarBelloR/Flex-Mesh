@@ -30,9 +30,9 @@ pipelines:
             - ./scripts/apply_patches.sh
             - mkdir -p .out
             - west build -b etc_v0_2 -s applications/etc-app -p
-            - cp build/zephyr/zephyr.hex .out/etc_v0_2_etc-app_lwm2m.hex
+            - cp build/zephyr/merged.hex .out/etc_v0_2_etc-app_lwm2m.hex
             - west build -b etc_v0_2 -s applications/etc-app -p -- -DOVERLAY_CONFIG="debug.conf rtt.conf"
-            - cp build/zephyr/zephyr.hex .out/etc_v0_2_etc-app_lwm2m_debug.hex
+            - cp build/zephyr/merged.hex .out/etc_v0_2_etc-app_lwm2m_debug.hex
           artifacts:
             - .out/**
 
