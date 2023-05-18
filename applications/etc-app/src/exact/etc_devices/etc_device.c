@@ -406,7 +406,7 @@ next_id:
 				if (rc > 0) { // Return record_id;
 					return rc;
 				} else {
-					if (newest_id > check_id) {
+					if (newest_id != check_id) {
 						/* Increase the ram_nack_record_id */
 						ram_nack_record_id += 1;
 						goto next_id;
