@@ -409,10 +409,9 @@ next_id:
 				} else {
 					if (newest_id != check_id) {
 						/* Increase the ram_nack_record_id */
+						check_id += 1;
 						if (check_id > max_id) {
 							check_id = min_id;
-						} else {
-							check_id += 1;
 						}
 						goto next_id;
 					}
