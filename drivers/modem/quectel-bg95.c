@@ -7,6 +7,7 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
 #include "quectel-bg95.h"
 #include "certificates.h"
+#include "memfault/http/root_certs.h"
 
 #ifdef CONFIG_PM_DEVICE
 #include <zephyr/kernel.h>
@@ -1601,43 +1602,25 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		}
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_CA_FILE_NAME, AWS_IOT_CA_CERTIFICATE, sizeof(AWS_IOT_CA_CERTIFICATE) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_CA_FILE_NAME, MEMFAULT_ROOT_CERTS_AMAZON_ROOT_CA1, sizeof(MEMFAULT_ROOT_CERTS_AMAZON_ROOT_CA1) - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download CA Certificate %d", ret);
 		return ret;
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_CLIENT_CERT_FILE_NAME, AWS_IOT_CLIENT_PUBLIC_CERTIFICATE, sizeof(AWS_IOT_CLIENT_PUBLIC_CERTIFICATE) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_CLIENT_CERT_FILE_NAME, "empty", sizeof("empty") - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download Client Certificate %d", ret);
 		return ret;
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_PRIV_KEY_FILE_NAME, AWS_IOT_CLIENT_PRIVATE_KEY, sizeof(AWS_IOT_CLIENT_PRIVATE_KEY) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_PRIV_KEY_FILE_NAME, "empty", sizeof("empty") - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download Private Key %d", ret);
 		return ret;
 	}
 
 	char buf[256];
-
-	snprintk(buf, sizeof(buf), "AT+QFLDS=\"UFS\"");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0)
-	{
-		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
-		return -1;
-	}
-
-	snprintk(buf, sizeof(buf), "AT+QFLDS=\"EUFS\"");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0)
-	{
-		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
-		return -1;
-	}
 
 	snprintk(buf, sizeof(buf), "AT+QFLST");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
@@ -1648,7 +1631,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XC02F", "ciphersuite", sock->sock_fd);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XFFFF", "ciphersuite", sock->sock_fd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1694,7 +1677,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->sock_fd, 2);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->sock_fd, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1718,6 +1701,16 @@ static int on_connect_tls_init(struct modem_socket *sock)
 	if (ret < 0)
 	{
 		LOG_DBG("Error to set QSSLCFG->ignorelocaltime");
+		return -1;
+	}
+
+	/* Disable DTLS when using TLS socket */
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->sock_fd, 0);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for DTLS enable");
 		return -1;
 	}
 	

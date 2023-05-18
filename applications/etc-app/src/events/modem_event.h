@@ -157,6 +157,7 @@ struct modem_event {
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
 		int err;
+		int64_t time_to_connect;
 	} data;
 };
 
