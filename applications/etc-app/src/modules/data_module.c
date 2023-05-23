@@ -352,12 +352,6 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		return;
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
-		/* Send latest record on fail */
-		record_id = 0;
-		data_encode();
-	}
-
 	if (IS_EVENT(msg, app, APP_EVT_CONFIG_GET)) {
 		return;
 	}
@@ -418,6 +412,14 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
 		/* Acknowledge record and encode more data, if connected to cloud */
 		etc_device_set_ack_record(record_id);
+		record_id = 0;
+		if (state == STATE_CLOUD_CONNECTED) {
+			data_encode();
+		}
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
+		/* Reset record ID on fail */
 		record_id = 0;
 		if (state == STATE_CLOUD_CONNECTED) {
 			data_encode();
