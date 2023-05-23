@@ -26,4 +26,7 @@
 /** Application version (string). */
 #define APP_VERSION_STR "${PROJECT_VERSION}"
 
+/** Numerical Application version string (MAJOR.MINOR.PATCH) without suffix (e.g. -rc) */
+#define APP_VERSION_NUM_STR "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}"
+
 #endif /* APP_VERSION_H_ */

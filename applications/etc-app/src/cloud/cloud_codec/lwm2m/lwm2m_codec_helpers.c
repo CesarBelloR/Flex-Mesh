@@ -606,9 +606,9 @@ int lwm2m_codec_helpers_set_device_data(void)
 	}
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, FIRMWARE_VERSION_RID),
-				APP_VERSION_STR,
-				(uint16_t)strlen(APP_VERSION_STR),
-				(uint16_t)strlen(APP_VERSION_STR),
+				APP_VERSION_NUM_STR,
+				(uint16_t)strlen(APP_VERSION_NUM_STR),
+				(uint16_t)strlen(APP_VERSION_NUM_STR),
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
