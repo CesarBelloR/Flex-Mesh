@@ -1,6 +1,7 @@
 / {
 	chosen {
 		nordic,pm-ext-flash = &mx25r1635;
-		zephyr,uart-mcumgr = &cdc_acm_uart0;
+		zephyr,uart-mcumgr = &cdc_acm_uart1;
+		zephyr,shell-uart = &cdc_acm_uart0;
 	};
 };
