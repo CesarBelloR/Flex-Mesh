@@ -24,6 +24,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define LORA_ACKUNCRYPT_LEN	128
 #define LORA_ACKCRYPT_LEN	128
+#define LORA_RETRY_RECV_TIMEOUT_MS	1000
 #define LORA_RETRY_MAX_TIME	5
 #define LORA_SYNC_TIME_DIFF_SEC 30
 #define LORA_LOGGER_ID_LEN	(sizeof("FFFFFFFFFFFFFFFF"))
@@ -296,6 +297,7 @@ static int module_lora_wait_packet(void)
 	int ret = 0;
 	int16_t rssi;
 	int8_t snr;
+	int64_t start_time = k_uptime_get();
 	memset(lora_rx_buf, 0, sizeof(lora_rx_buf));
 	memset(decoded_buf, 0, sizeof(decoded_buf));
 	ret = lora_config(lora_dev, &etc_lora_rx_config);
@@ -303,6 +305,8 @@ static int module_lora_wait_packet(void)
 		LOG_ERR("Lora_config failed error %d", ret);
 		return -EINVAL;
 	}
+
+retry_recv:
 	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf),
 			K_SECONDS(etc_device_get_rx_timeout()), &rssi, &snr);
 	if (ret < 0) {
@@ -313,12 +317,17 @@ static int module_lora_wait_packet(void)
 		LOG_DBG("Decoded buf %s", decoded_buf);
 		etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
 		struct logger_lora_response response = lora_module_get_sync_data(decoded_buf);
-		if (response.is_okay) {
-			/* Compare the logger_id from ACK and current logger ID */
-			if (strncmp(buf_tmp, response.logger_id, strlen(buf_tmp)) != 0) {
-				return -1;
+
+		/* Retry receiving if the response is invalid or if the ACK's logger id
+		 * does not match this logger's id */
+		if (!response.is_okay || 
+		    (strncmp(buf_tmp, response.logger_id, strlen(buf_tmp)) != 0)) {
+			if ((k_uptime_get() - start_time) < LORA_RETRY_RECV_TIMEOUT_MS) {
+				goto retry_recv;
 			}
-			
+			return -1;
+		} else {
+			/* Process ACK and ACK response parameters */
 			uint32_t my_time = 0;
 			date_time_utc_second(&my_time);
 			/* Update tx interval based on relay */
@@ -419,7 +428,6 @@ retry:
 			if (cnt++ >= LORA_RETRY_MAX_TIME) {
 				return rc;
 			}
-			k_sleep(K_SECONDS(1));
 			goto retry;
 		}
 	} else {
