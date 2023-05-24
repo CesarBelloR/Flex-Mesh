@@ -406,16 +406,16 @@ next_id:
 				rc = reading_callback(check_id, data);
 				if (rc > 0) { // Return record_id;
 					return rc;
-				} else {
-					if (newest_id != check_id) {
-						/* Increase the ram_nack_record_id */
-						check_id += 1;
-						if (check_id > max_id) {
-							check_id = min_id;
-						}
-						goto next_id;
-					}
 				}
+			}
+		} else {
+			if (newest_id != check_id) {
+				/* Increase the ram_nack_record_id */
+				check_id += 1;
+				if (check_id > max_id) {
+					check_id = min_id;
+				}
+				goto next_id;
 			}
 		}
 	} else {
