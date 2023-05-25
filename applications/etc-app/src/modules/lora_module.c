@@ -318,9 +318,11 @@ static int module_lora_wait_packet(void)
 			if (strncmp(buf_tmp, response.logger_id, strlen(buf_tmp)) != 0) {
 				return -1;
 			}
-
+			
 			uint32_t my_time = 0;
 			date_time_utc_second(&my_time);
+			/* Update tx interval based on relay */
+			etc_set_tx_interval_secs(response.tx_interval_in_mins * 60);
 			lora_parent_id = response.relay_id;
 			LOG_INF("Sync time %d %d %d", lora_parent_id, my_time,
 				response.current_time);
