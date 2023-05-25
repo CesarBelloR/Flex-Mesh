@@ -310,6 +310,11 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
+	/* Hold the LED OFF until next transition */
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
+		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
+	}
+
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_LTE_CONNECTED, 5);
