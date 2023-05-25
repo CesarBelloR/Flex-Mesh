@@ -393,8 +393,7 @@ static int module_lora_process_packet(union etc_device_record record)
 #endif
 	int rc = 0;
 	uint8_t cnt = 0;
-	char ack_id[sizeof("XXXX") + 1];
-
+	char ack_id[sizeof("XXXX")];
 retry:
 	if (lora_parent_id == 0 || cnt != 0) {
 		sprintf(ack_id, "OPEN");
@@ -402,7 +401,7 @@ retry:
 		sprintf(ack_id, "%04d", lora_parent_id);
 	}
 
-	strncpy(&decoded_buf[strlen("S,")], ack_id, strlen("XXXX"));
+	strncpy(&decoded_buf[sizeof("S,") - 1], ack_id, sizeof("XXXX") - 1);
 	LOG_DBG("Decoded length %d", decoded_buf_len);
 	LOG_DBG("Msg %s", decoded_buf);
 	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, 21);
@@ -423,7 +422,6 @@ retry:
 
 	rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc == 0) {
-		memset(encoded_buffer, 0, sizeof(encoded_buffer));
 		memcpy(encoded_buffer, decoded_buf, sizeof(encoded_buffer));
 		rc = module_lora_wait_packet();
 		if (rc == 0) {
