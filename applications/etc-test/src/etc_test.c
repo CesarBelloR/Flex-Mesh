@@ -170,9 +170,14 @@ static void adc_print_channel(const struct shell *shell, int channel)
 	float val;
 
 	if ((channel == ETC_ADC_CHANNEL_AMB) || (channel == ETC_ADC_CHANNEL_SENSOR)) {
+#if defined(CONFIG_NTC_USE_TABLE)
+		extern const float table_ntc_resistance_temp[];
+		extern const int table_offset;
+		extern const int table_length;
+		val =  sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, adc_raw);
+#else
 		val = sensor_ntc_converter(channel, adc_raw);
-		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
-			    channel, adc_raw, val);
+#endif
 	} else {
 		adc_get_raw_to_millivolts(channel, &adc_raw);
 		val = (float)adc_raw / 1000.0f;

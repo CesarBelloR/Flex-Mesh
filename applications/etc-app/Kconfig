@@ -16,6 +16,15 @@ config APP_AWS_IOT
 	bool "Enable/disable use of AWS IoT to connect to cloud"
 	default y
 
+config NTC_USE_TABLE
+	bool "Use NTC table to converter from raw ADC to temperature"
+	default y
+
+config NTC_USE_OFFSET_1
+	depends on NTC_USE_TABLE
+	bool "Use NTC table with offset 1 deg in C"
+	default y
+
 rsource "src/exact/Kconfig"
 rsource "src/cloud/Kconfig"
 rsource "src/cloud/Kconfig.lwm2m"
