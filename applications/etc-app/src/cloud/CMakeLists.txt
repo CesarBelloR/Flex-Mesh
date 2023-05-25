@@ -22,3 +22,7 @@ target_sources_ifdef(CONFIG_LWM2M app
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_temp_obj_48932.c
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_info_obj_48933.c)
 
+target_sources_ifdef(CONFIG_LWM2M_INTEGRATION_FIRMWARE_UPDATE_OBJ_SUPPORT app
+                     PRIVATE 
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/lwm2m_firmware.c)
+

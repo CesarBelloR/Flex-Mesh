@@ -254,6 +254,51 @@ static void send_cb(enum lwm2m_send_status status)
 	}
 }
 
+static int firmware_update_state_cb(uint8_t update_state)
+{
+	int err;
+	uint8_t update_result;
+	struct cloud_wrap_event cloud_wrap_evt = { 0 };
+
+	/* Get the firmware object update result code */
+	err = lwm2m_get_u8(&LWM2M_OBJ(5, 0, 5), &update_result);
+	if (err) {
+		LOG_ERR("Failed getting firmware result resource value");
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
+		cloud_wrap_evt.err = err;
+		cloud_wrapper_notify_event(&cloud_wrap_evt);
+		return 0;
+	}
+
+	switch (update_state) {
+	case STATE_IDLE:
+		LOG_DBG("STATE_IDLE, result: %d", update_result);
+
+		/* If the FOTA state returns to its base state STATE_IDLE, the FOTA failed. */
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_ERROR;
+		break;
+	case STATE_DOWNLOADING:
+		LOG_DBG("STATE_DOWNLOADING, result: %d", update_result);
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_START;
+		break;
+	case STATE_DOWNLOADED:
+		LOG_DBG("STATE_DOWNLOADED, result: %d", update_result);
+		return 0;
+	case STATE_UPDATING:
+		LOG_DBG("STATE_UPDATING, result: %d", update_result);
+		/* Disable further callbacks from FOTA */
+		lwm2m_firmware_set_update_state_cb(NULL);
+		return 0;
+	default:
+		LOG_ERR("Unknown state: %d", update_state);
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_ERROR;
+		break;
+	}
+
+	cloud_wrapper_notify_event(&cloud_wrap_evt);
+	return 0;
+}
+
 #if 0
 /* Callback handler triggered when the modem should be put in a certain functional mode.
  * Handler is called pre provisioning of DTLS credentials when the modem should be put in
@@ -432,6 +477,18 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 		return err;
 	}
 
+	err = lwm2m_init_firmware();
+	if (err) {
+		LOG_ERR("lwm2m_init_firmware, error: %d", err);
+		return err;
+	}
+
+	err = lwm2m_init_image();
+	if (err < 0) {
+		LOG_ERR("lwm2m_init_image, error: %d", err);
+		return err;
+	}
+
 	err = lwm2m_register_exec_callback(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID,
 						      0, DEVICE_OBJECT_REBOOT_RID),
 					   device_reboot_cb);
@@ -439,6 +496,8 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 		LOG_ERR("lwm2m_engine_register_exec_callback, error: %d", err);
 		return err;
 	}
+
+	lwm2m_firmware_set_update_state_cb(firmware_update_state_cb);
 
 	wrapper_evt_handler = event_handler;
 	state = DISCONNECTED;
