@@ -1000,7 +1000,8 @@ static int lora_rx(void)
 	int8_t snr;
 	uint8_t rx_buf[128] = {0x00};
 	LOG_INF("Start receiving LoRa messages");
-	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 240UL)) {
+	//while (k_uptime_get_32() - t0 < (1000UL * 60UL * 60UL)) {
+	while (1) {
 		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
 		if (ret < 0) {
 			continue;
