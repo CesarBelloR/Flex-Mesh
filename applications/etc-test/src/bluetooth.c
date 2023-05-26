@@ -78,3 +78,14 @@ void start_smp_bluetooth(void)
 	/* Initialize the Bluetooth mcumgr transport. */
 	smp_bt_register();
 }
+
+static void ble_cb(struct bt_conn *conn, void *data)
+{
+	bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_LOW_RESOURCES);
+}
+
+void stop_smp_bluetooth(void) {
+	bt_conn_foreach(BT_CONN_TYPE_ALL, ble_cb, NULL);
+	bt_le_adv_stop();
+	bt_disable();
+}
