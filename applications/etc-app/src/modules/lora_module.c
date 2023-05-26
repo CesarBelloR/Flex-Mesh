@@ -73,7 +73,7 @@ static char decoded_buf[LORA_ACKUNCRYPT_LEN] = {0x00};
 static char buf_tmp[ETC_SETTINGS_DEVICE_ID_LEN];
 static char encoded_buffer[LORA_ACKCRYPT_LEN] = {0};
 static uint8_t lora_rx_buf[LORA_ACKUNCRYPT_LEN] = {0x00};
-static int lora_parent_id = 0x00;
+static int lora_parent_id = -1;
 static uint8_t lora_pkt_counter = 0;
 static struct lora_modem_config etc_lora_rx_config = {
 	.frequency = 915000000,
@@ -367,16 +367,8 @@ static int module_lora_process_packet(union etc_device_record record)
 	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
 	int decoded_buf_len = 0;
 
-	if (lora_parent_id == 0) {
-		decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf),
-					    "S,OPEN,%s,%s,%1.2f,%d,%d,", APP_VERSION_STR, buf_tmp,
-					    record.battery, lora_pkt_counter, record.timestamp);
-	} else {
-		decoded_buf_len +=
-			snprintf(decoded_buf, sizeof(decoded_buf), "S,%04d,%s,%s,%1.2f,%d,%d,",
-				 lora_parent_id, APP_VERSION_STR, buf_tmp, record.battery,
-				 lora_pkt_counter, record.timestamp);
-	}
+	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "S,XXXX,%s,%s,%1.2f,%d,%d,", APP_VERSION_STR, buf_tmp, record.battery,
+		lora_pkt_counter, record.timestamp);
 
 	lora_pkt_counter += 1;
 	if (lora_pkt_counter >= LOGGER_MAXIMUM_COUNTER) {
@@ -395,17 +387,28 @@ static int module_lora_process_packet(union etc_device_record record)
 	}
 	decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 				    sizeof(decoded_buf) - decoded_buf_len, "*,");
-	LOG_DBG("Decoded length %d", decoded_buf_len);
-	LOG_DBG("Msg %s", decoded_buf);
-	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, 21);
-	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
 #if 0 // Test decrypt the message encoded
 	etc_cape_decrypt(encoded_buffer, decr_buf, decoded_buf_len + 1);
 	LOG_HEXDUMP_INF(decr_buf, sizeof(decr_buf), "DECRYPTED");
 #endif
 	int rc = 0;
 	uint8_t cnt = 0;
+	char ack_id[sizeof("XXXX")];
 retry:
+	if (lora_parent_id == -1 || cnt != 0) {
+		/* Reset parent ID on retry (or if it is already invalid) */
+		lora_parent_id = -1;
+		snprintf(ack_id, sizeof(ack_id), "OPEN");
+	} else {
+		snprintf(ack_id, sizeof(ack_id), "%04d", lora_parent_id);
+	}
+
+	strncpy(&decoded_buf[sizeof("S,") - 1], ack_id, sizeof("XXXX") - 1);
+	LOG_DBG("Decoded length %d", decoded_buf_len);
+	LOG_DBG("Msg %s", decoded_buf);
+	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, 21);
+	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
+
 	if (cnt != 0) {
 		/* Generate new TX_DELAY */
 		uint16_t new_tx_delay_msec =
@@ -421,6 +424,8 @@ retry:
 
 	rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc == 0) {
+		/* Backup decoded_buf before enter to wait packet API - erase decoded_buf */
+		memcpy(encoded_buffer, decoded_buf, sizeof(encoded_buffer));
 		rc = module_lora_wait_packet();
 		if (rc == 0) {
 			return 0;
@@ -428,6 +433,10 @@ retry:
 			if (cnt++ >= LORA_RETRY_MAX_TIME) {
 				return rc;
 			}
+			
+			/* In retry step, copy data back to decoded_buf for updating relay ID */
+			memcpy(decoded_buf, encoded_buffer, sizeof(decoded_buf));
+			k_sleep(K_SECONDS(1));
 			goto retry;
 		}
 	} else {
