@@ -422,6 +422,7 @@ retry:
 
 	rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc == 0) {
+		/* Backup decoded_buf before enter to wait packet API - erase decoded_buf */
 		memcpy(encoded_buffer, decoded_buf, sizeof(encoded_buffer));
 		rc = module_lora_wait_packet();
 		if (rc == 0) {
@@ -431,6 +432,7 @@ retry:
 				return rc;
 			}
 			
+			/* In retry step, copy data back to decoded_buf for updating relay ID */
 			memcpy(decoded_buf, encoded_buffer, sizeof(decoded_buf));
 			k_sleep(K_SECONDS(1));
 			goto retry;
