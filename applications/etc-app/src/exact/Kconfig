@@ -7,4 +7,5 @@ rsource "etc_devices/Kconfig"
 rsource "watchdog/Kconfig"
 rsource "etc_devices/Kconfig"
 rsource "etc_mgmt/Kconfig"
+rsource "etc_ntc_db/Kconfig"
 endmenu
