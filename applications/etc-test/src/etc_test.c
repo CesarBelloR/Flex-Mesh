@@ -65,15 +65,25 @@ static struct k_mutex lora_mutex;
 static struct gpio_callback hall_cb;
 static struct k_sem lora_sem;
 
-static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) ;
+volatile enum lora_action {
+	LORA_ACTION_HALL_TRIGGERED,
+	LORA_ACTION_RX,
+	LORA_ACTION_RX_TX,
+} lora_action;
+
+static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv);
+static int lora_rx(void);
 
 void lora_tx_rx_fn() {
 	k_sem_init(&lora_sem, 0, 1);
 
 	while (k_sem_take(&lora_sem, K_FOREVER) == 0) {
-		LOG_INF("Hall sensor triggered");
-		//shell_execute_cmd(shell_backend_uart_get_ptr(), "etc_lora_tx_rx");
-		//cmd_lora_tx_rx(shell_backend_uart_get_ptr(), 0, NULL);
+		if (lora_action == LORA_ACTION_HALL_TRIGGERED) {
+			LOG_INF("Hall triggered");
+			shell_execute_cmd(shell_backend_uart_get_ptr(), "lora");
+		} else if (lora_action == LORA_ACTION_RX) {
+			lora_rx();
+		}
 	}
 }
 
@@ -82,6 +92,7 @@ K_THREAD_DEFINE(lora_tx_rx, 2048, lora_tx_rx_fn, NULL, NULL, NULL, 5, 0, 0);
 static void hall_cb_fn(const struct device *dev,
 		struct gpio_callback *cb, uint32_t pins)
 {
+	lora_action = LORA_ACTION_HALL_TRIGGERED;
 	k_sem_give(&lora_sem);
 }
 
@@ -857,7 +868,7 @@ static struct lora_modem_config etc_lora_tx_config  = {
 static int send_lora_message(void)
 {
 	int ret;
-	char msg_buf[sizeof("S,#####,MT1,99999,3.70,###,*,*,19.8,*,*,21.8,*,")];
+	char msg_buf[sizeof("S,#####,MT1,99984,3.70,###,*,*,19.8,*,*,21.8,*,")];
 	char encr_buf[sizeof(msg_buf) + 1];
 	uint8_t msg_len;
 	static uint8_t count = 0;
@@ -869,7 +880,7 @@ static int send_lora_message(void)
 	}
 
 	ret = snprintf(msg_buf, sizeof(msg_buf),
-		       "S,9970,MT1,99999,3.70,%u,*,*,19.8,*,*,21.8,*,", count);			//placeholder device ID 99999
+		       "S,9970,MT1,99984,3.70,%u,*,*,19.8,*,*,21.8,*,", count);			//placeholder device ID 99984
 	msg_len = ret > sizeof(msg_buf) ? sizeof(msg_buf) : ret;
 	etc_cape_encrypt(msg_buf, encr_buf, msg_len, 21);
 
@@ -883,6 +894,72 @@ static int send_lora_message(void)
 	count++;
 	if (count >= 100) {
 		count = 0;
+	}
+	return 0;
+}
+
+static int send_lora_message1(void)
+{
+	int ret;
+	char msg_buf[sizeof("S,#####,MT2,AAAA,3.70,###,*,*,19.8,*,*,21.8,*,")];
+	char encr_buf[sizeof(msg_buf) + 1];
+	uint8_t msg_len;
+	static uint8_t count = 0;
+
+	ret = lora_config(dev_lora, &etc_lora_tx_config);
+	if (ret < 0) {
+		LOG_ERR("lora_config failed error %d", ret);
+		return -1;
+	}
+
+	ret = snprintf(msg_buf, sizeof(msg_buf),
+		       "S,AAAA,MT2,99984,3.70,%u,*,*,19.8,*,*,21.8,*,", count);			//placeholder device ID 99984
+	msg_len = ret > sizeof(msg_buf) ? sizeof(msg_buf) : ret;
+	etc_cape_encrypt(msg_buf, encr_buf, msg_len, 21);
+
+	ret = lora_send(dev_lora, (uint8_t *)encr_buf, msg_len + 1);
+	if (ret < 0) {
+		LOG_ERR("lora_send failed error %d", ret);
+	} else {
+		LOG_DBG("Transmit data success, count %u", count);
+	}
+
+	count++;
+	if (count >= 100) {
+		count = 0;
+	}
+	return 0;
+}
+
+static int send_lora_message2(void)
+{
+	int ret;
+	char msg_buf[sizeof("99984,##,AAAA,1683136417,0,0,")];
+	char encr_buf[sizeof(msg_buf) + 1];
+	uint8_t msg_len;
+	static uint8_t count = 10;
+
+	ret = lora_config(dev_lora, &etc_lora_tx_config);
+	if (ret < 0) {
+		LOG_ERR("lora_config failed error %d", ret);
+		return -1;
+	}
+
+	ret = snprintf(msg_buf, sizeof(msg_buf),
+		       "99984,%u,AAAA,1683136417,0,0,", count);			//placeholder device ID 99984
+	msg_len = ret > sizeof(msg_buf) ? sizeof(msg_buf) : ret;
+	etc_cape_encrypt(msg_buf, encr_buf, msg_len, 21);
+
+	ret = lora_send(dev_lora, (uint8_t *)encr_buf, msg_len + 1);
+	if (ret < 0) {
+		LOG_ERR("lora_send failed error %d", ret);
+	} else {
+		LOG_DBG("Transmit data success, count %u", count);
+	}
+
+	count++;
+	if (count >= 100) {
+		count = 10;
 	}
 	return 0;
 }
@@ -911,17 +988,20 @@ SHELL_CMD_ARG_REGISTER(etc_lora_tx, NULL, "Transmit a message over Lora", cmd_lo
 
 #define ACKUNCRYPT 49 
 
-static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
+static int lora_rx(void)
+{
 	uint32_t t0 = k_uptime_get_32();
 	int ret = lora_config(dev_lora, &etc_lora_rx_config);
 	if (ret < 0) {
-		shell_error(shell, "lora_config failed error %d", ret);
+		LOG_ERR("lora_config failed error %d", ret);
 		return 0;
 	}
 	int16_t rssi;
 	int8_t snr;
 	uint8_t rx_buf[128] = {0x00};
-	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 2UL)) {
+	LOG_INF("Start receiving LoRa messages");
+	//while (k_uptime_get_32() - t0 < (1000UL * 60UL * 60UL)) {
+	while (1) {
 		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
 		if (ret < 0) {
 			continue;
@@ -929,10 +1009,29 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 			char RXString[128] = {0};
   			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
 			RXString[ret] = '\0';
-			shell_print(shell, "%s", RXString);
+			if (strstr(RXString, "AAAA")) {		//placeholder device ID 99984
+				LOG_INF("Monitor: %s,%d,%d", RXString, rssi, snr);
+				//shell_print(shell, "Send to another Monitor");
+				ret = send_lora_message2();
+				if (ret != 0) {
+					continue;
+				}
+				ret = lora_config(dev_lora, &etc_lora_rx_config);
+				if (ret < 0) {
+					LOG_INF("lora_config failed error %d", ret);
+				}
+			}
 		}
-		k_sleep(K_SECONDS(2));
+		k_sleep(K_SECONDS(1));
 	}
+	LOG_INF("lora_rx done.");
+}
+
+static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
+	shell_print(shell, "Starting LoRa rx thread if not already running.\n"
+		    "Log messages will report on the status.");
+	lora_action = LORA_ACTION_RX;
+	k_sem_give(&lora_sem);
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_lora_rx, NULL, "Receive message over Lora", cmd_lora_rx, 1, 0);
@@ -951,8 +1050,10 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 	int16_t rssi;
 	int8_t snr;
 	uint8_t rx_buf[128] = {0x00};
-
-	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 2UL)) {
+	uint8_t counter = 0;
+	while (k_uptime_get_32() - t0 < (1000UL * 60UL * 3UL)) {
+		//shell_print(shell, "Send to Relay");
+		counter++;
 		ret = send_lora_message();
 		if (ret != 0) {
 			continue;
@@ -962,18 +1063,41 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 			shell_error(shell, "lora_config failed error %d", ret);
 			goto exit;
 		}
-		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(5), &rssi, &snr);
+		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
 		if (ret < 0) {
-			continue;
+			//continue;
 		} else {
 			char RXString[128] = {0};
   			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
 			RXString[ret] = '\0';
-			if (strstr(RXString, "99999")) {									//placeholder device ID 99999
-				shell_print(shell, "%s,%d,%d", RXString, rssi, snr);
+			if (strstr(RXString, "99984")) {									//placeholder device ID 99984
+				shell_print(shell, "Rel,%d,%s,%d,%d", counter, RXString, rssi, snr);
 			}
 		}
-		k_sleep(K_SECONDS(2));
+		k_sleep(K_SECONDS(1));
+		//shell_print(shell, "Send to another Monitor");
+		ret = send_lora_message1();
+		if (ret != 0) {
+			continue;
+		}
+		ret = lora_config(dev_lora, &etc_lora_rx_config);
+		if (ret < 0) {
+			shell_error(shell, "lora_config failed error %d", ret);
+			goto exit;
+		}
+		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
+		if (ret < 0) {
+			//continue;
+		} else {
+			char RXString[128] = {0};
+  			etc_cape_decrypt(rx_buf, RXString, ret); //decrypt recevied data
+			RXString[ret] = '\0';
+			if (strstr(RXString, "99984")) {									//placeholder device ID 99984
+				shell_print(shell, "Mon,%d,%s%d,%d", counter, RXString, rssi, snr);
+			}
+		}
+		k_sleep(K_SECONDS(1));
+		if (counter >= 60) break;
 	}
 	k_mutex_unlock(&lora_mutex);
 	return 0;
@@ -981,7 +1105,7 @@ exit:
 	k_mutex_unlock(&lora_mutex);
 	return ret;
 }
-SHELL_CMD_ARG_REGISTER(etc_lora_tx_rx, NULL, "Receive message over Lora", cmd_lora_tx_rx, 1, 0);
+SHELL_CMD_ARG_REGISTER(lora, NULL, "Receive message over Lora", cmd_lora_tx_rx, 1, 0);
 
 static struct gpio_callback watchdog_cb_data;
 void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callback *cb,
