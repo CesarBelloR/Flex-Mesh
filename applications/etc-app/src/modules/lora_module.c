@@ -73,7 +73,7 @@ static char decoded_buf[LORA_ACKUNCRYPT_LEN] = {0x00};
 static char buf_tmp[ETC_SETTINGS_DEVICE_ID_LEN];
 static char encoded_buffer[LORA_ACKCRYPT_LEN] = {0};
 static uint8_t lora_rx_buf[LORA_ACKUNCRYPT_LEN] = {0x00};
-static int lora_parent_id = 0x00;
+static int lora_parent_id = -1;
 static uint8_t lora_pkt_counter = 0;
 static struct lora_modem_config etc_lora_rx_config = {
 	.frequency = 915000000,
@@ -395,10 +395,12 @@ static int module_lora_process_packet(union etc_device_record record)
 	uint8_t cnt = 0;
 	char ack_id[sizeof("XXXX")];
 retry:
-	if (lora_parent_id == 0 || cnt != 0) {
-		sprintf(ack_id, "OPEN");
+	if (lora_parent_id == -1 || cnt != 0) {
+		/* Reset parent ID on retry (or if it is already invalid) */
+		lora_parent_id = -1;
+		snprintf(ack_id, sizeof(ack_id), "OPEN");
 	} else {
-		sprintf(ack_id, "%04d", lora_parent_id);
+		snprintf(ack_id, sizeof(ack_id), "%04d", lora_parent_id);
 	}
 
 	strncpy(&decoded_buf[sizeof("S,") - 1], ack_id, sizeof("XXXX") - 1);
