@@ -404,28 +404,26 @@ next_id:
 		if (etc_device_record_header.ack == 0) {
 			if (reading_callback) {
 				rc = reading_callback(check_id, data);
-				if (rc > 0) { // Return record_id;
-					return rc;
-				}
-			}
-		} else {
-			if (newest_id != check_id) {
-				/* Increase the ram_nack_record_id */
-				check_id += 1;
-				if (check_id > max_id) {
-					check_id = min_id;
-				}
-				goto next_id;
 			}
 		}
 	} else {
 		LOG_WRN("Error id %d - error %d", check_id, rc);
 	}
 
-	if (rc == 0) {
+	if (rc <= 0) {
+		if (newest_id != check_id) {
+			/* Increase the ram_nack_record_id */
+			check_id += 1;
+			if (check_id > max_id) {
+				check_id = min_id;
+			}
+			goto next_id;
+		} else {
+			return rc;
+		}
+	} else {
 		return rc;
 	}
-	return -ENOENT;
 }
 
 static int etc_device_record_reading(uint16_t record_id, void *data)
