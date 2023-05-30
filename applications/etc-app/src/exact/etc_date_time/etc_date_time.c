@@ -306,6 +306,9 @@ int date_time_set_second(uint32_t new_date_time_sec) {
 	initial_valid_time = true;
 	time_aux.last_date_time_update = k_uptime_get();
 	time_aux.date_time_utc = (int64_t)new_date_time_sec * 1000;
+	initial_valid_time = true;
+	evt.type = DATE_TIME_OBTAINED_EXT;
+	date_time_notify_event(&evt);
 	return pcf85263a_rtc_set_time((time_t)new_date_time_sec);
 }
 
@@ -514,10 +517,13 @@ static int cmd_date_time_set(const struct shell *shell, size_t argc, char **argv
 	uint32_t utc_date_time_seconds = (uint32_t)atoi(argv[1]);
 	time_aux.date_time_utc = (int64_t)utc_date_time_seconds * 1000;
 	date_time_store(utc_date_time_seconds);
-	time_t rtc_time_set = utc_date_time_seconds + time_aux.time_zone;
-	pcf85263a_rtc_set_time((time_t)rtc_time_set);
-	shell_print(shell, "Set UTC date time: %u", utc_date_time_seconds);
-	shell_print(shell, "Set RTC local time: %u", (uint32_t)rtc_time_set);
+	time_t local_time = utc_date_time_seconds + time_aux.time_zone;
+	pcf85263a_rtc_set_time((time_t)utc_date_time_seconds);
+	initial_valid_time = true;
+	evt.type = DATE_TIME_OBTAINED_EXT;
+	date_time_notify_event(&evt);
+	shell_print(shell, "Set UTC time: %u", utc_date_time_seconds);
+	shell_print(shell, "Set local time: %u", (uint32_t)local_time);
 	return 0;
 }
 
