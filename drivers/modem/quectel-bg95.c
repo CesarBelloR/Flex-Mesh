@@ -17,6 +17,10 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
 #define PSM_TIMER_VAL_LEN	sizeof("00000011")
 
+#define MDM_TCP_ERROR_NO_MEMORY		553
+#define MDM_TCP_ERROR_TIMEOUT		569
+#define MDM_TCP_ERROR_SOCKET_IN_USE	563
+
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
@@ -175,7 +179,6 @@ static int on_cmd_sockread_common(int socket_fd,
 
 	/* check to make sure we have all of the data. */
 	if (net_buf_frags_len(data->rx_buf) < (socket_data_length + 2 + 4)) {
-		LOG_DBG("Not enough data -- wait!");
 		return -EAGAIN;
 	}
 
@@ -230,7 +233,7 @@ exit:
 /* Func: socket_close
  * Desc: Function to close the given socket descriptor.
  */
-static void socket_close(struct modem_socket *sock)
+static void socket_close(struct modem_socket *sock, bool force_close)
 {
 	char buf[sizeof("AT+Q###CLOSE=##")] = {0};
 	int  ret;
@@ -242,7 +245,7 @@ static void socket_close(struct modem_socket *sock)
 	
 	k_sem_reset(&mdata.sem_response);
 	/* Tell the modem to close the socket, if connected */
-	if (sock->is_connected) {
+	if (sock->is_connected || force_close) {
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				NULL, 0U, buf,
 				&mdata.sem_response, MDM_CMD_TIMEOUT);
@@ -463,6 +466,19 @@ MODEM_CMD_DEFINE(on_cmd_sock_getdatasize)
 	unread = ATOI(argv[2], 0, "unread");
 	LOG_DBG("recvd %d, read %d, unread %d", received, read, unread);
 	mdata.unread_size = unread;
+
+	return 0;
+}
+
+/* Handler: Read data size +QIGETERROR: <result>[0], <description>[1] */
+MODEM_CMD_DEFINE(on_cmd_tcp_geterror)
+{
+	int error;
+
+	error = ATOI(argv[0], 0, "error_code");
+
+	LOG_INF("TCP error %d: %s", error, argv[1]);
+	modem_cmd_handler_set_error(data, error);
 
 	return 0;
 }
@@ -688,7 +704,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_close)
 	LOG_INF("Socket Close Indication for socket: %d", sock_fd);
 
 	/* Tell the modem to close the socket. */
-	socket_close(sock);
+	socket_close(sock, false);
 	LOG_INF("Socket Closed: %d", sock_fd);
 	return 0;
 }
@@ -765,6 +781,31 @@ MODEM_CMD_DEFINE(on_cmd_dns)
 	return 0;
 }
 #endif
+
+
+static int get_tcp_error(struct modem_socket *sock)
+{
+	char   sendbuf[] = "AT+QIGETERROR";
+	int    ret;
+	/* Modem command to read the data. */
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("+QIGETERROR: ", on_cmd_tcp_geterror, 2U, ","),
+	};
+
+	k_sem_reset(&mdata.sem_response);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     cmd, ARRAY_SIZE(cmd), sendbuf, &mdata.sem_response,
+			     MDM_RECV_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Could not retrieve error details");
+		errno = -ret;
+		ret = -1;
+	} else {
+		ret = modem_cmd_handler_get_error(mctx.cmd_handler.cmd_handler_data);
+	}
+
+	return ret;
+}
 
 /* Func: send_socket_data
  * Desc: This function will send "binary" data over the socket object.
@@ -891,8 +932,15 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 	ret = send_socket_data(sock, to, cmd, ARRAY_SIZE(cmd), buf, len,
 			       MDM_CMD_TIMEOUT);
 	if (ret < 0) {
-		errno = -ret;
-		return -1;
+		ret = get_tcp_error(sock); 
+		/* Error EAGAIN memory allocation failed, ETIMEDOUT if timed out */
+		if (ret == MDM_TCP_ERROR_NO_MEMORY) {
+			ret = EAGAIN;
+		} else if (ret == MDM_TCP_ERROR_TIMEOUT) {
+			ret = ETIMEDOUT;
+		}
+		errno = ret;
+		return -ret;
 	}
 
 	/* Data was written successfully. */
@@ -912,7 +960,6 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	int    ret;
 	int	   next_packet_size;
 	struct socket_read_data sock_data;
-	LOG_DBG("");
 	/* Modem command to read the data. */
 	struct modem_cmd data_cmd[] = {
 		MODEM_CMD("+QIRD: ", on_cmd_sock_readdata, 1U, ""),
@@ -932,7 +979,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	next_packet_size = modem_socket_next_packet_size(&mdata.socket_config,
 							 sock);
 	if (!next_packet_size) {
-		if ((flags & ZSOCK_MSG_DONTWAIT) || mdata.sock_nonblock) {
+		if ((flags & ZSOCK_MSG_DONTWAIT) || (sock->flags & O_NONBLOCK)) {
 			errno = EAGAIN;
 			return -1;
 		}
@@ -956,7 +1003,12 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 				sock->sock_fd, len);
 	}
 
-retry:
+	/* Take tx semaphore to ensure only one socket at a time can receive
+	   and that semaphore is acquired before mdata.sock_fd is modified. */
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+		LOG_ERR("Error taking semaphore");
+		return -EAGAIN;
+	}
 	/* Socket read settings */
 	(void) memset(&sock_data, 0, sizeof(sock_data));
 	sock_data.recv_buf     = buf;
@@ -964,19 +1016,15 @@ retry:
 	sock_data.recv_addr    = from;
 	sock->data	       = &sock_data;
 	mdata.sock_fd	       = sock->sock_fd;
-	mdata.recvfrom_ready = false;
 	/* Tell the modem to give us data (AT+QIRD=sock_fd,data_len). */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
 			     data_cmd, ARRAY_SIZE(data_cmd), sendbuf, &mdata.sem_response,
 			     MDM_RECV_TIMEOUT);
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	if (ret < 0) {
 		errno = -ret;
 		ret = -1;
 		goto exit;
-	}
-
-	if (mdata.recvfrom_ready) {
-		goto retry;
 	}
 
 	/* HACK: use dst address as from */
@@ -1053,21 +1101,16 @@ static int offload_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 }
 
 static int offload_fcntl(void *obj, unsigned int request, va_list args) {
+	struct modem_socket *sock = (struct modem_socket *)obj;
 	int retval = 0;
 
 	switch (request) {
 	case F_GETFL:	
-		if (mdata.sock_nonblock) {
-			retval |= O_NONBLOCK;
-		}
+		retval = sock->flags;
 		break;
 
 	case F_SETFL:
-		if ((va_arg(args, int) & O_NONBLOCK) != 0) {
-			mdata.sock_nonblock = true;
-		} else {
-			mdata.sock_nonblock = false;
-		}
+		sock->flags = va_arg(args, int);
 		break;
 
 	default:
@@ -1724,7 +1767,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (ret != 0) {
 		LOG_ERR("Error formatting IP string %d", ret);
 		LOG_ERR("Closing the socket!!!");
-		socket_close(sock);
+		socket_close(sock, false);
 		errno = -ret;
 		return -1;
 	}
@@ -1756,7 +1799,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		LOG_ERR("%s ret:%d", buf, ret);
 		LOG_ERR("Closing the socket!!!");
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock);
+		socket_close(sock, false);
 		goto exit;
 	}
 
@@ -1764,7 +1807,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	ret = modem_cmd_handler_update_cmds(&mdata.cmd_handler_data, cmd, ARRAY_SIZE(cmd), true);
 	if (ret < 0) {
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock);
+		socket_close(sock, false);
 		goto exit;
 	}
 
@@ -1774,20 +1817,23 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		LOG_ERR("Timeout waiting for socket open");
 		LOG_ERR("Closing the socket!!!");
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock);
+		socket_close(sock, false);
 		goto exit;
 	}
 
 	ret = modem_cmd_handler_get_error(&mdata.cmd_handler_data);
 	if (ret != 0) {
+		bool force_close = false;
 		LOG_ERR("Closing the socket!!! error %d", ret);
-		if (ret == 569) {
+		if (ret == MDM_TCP_ERROR_TIMEOUT) {
 			ret = -ETIMEDOUT;
+		} else if (ret == MDM_TCP_ERROR_SOCKET_IN_USE) {
+			force_close = true;
 		} else {
 			ret = -ret;
 		}
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock);
+		socket_close(sock, force_close);
 		goto exit;
 	}
 
@@ -1819,7 +1865,7 @@ static int offload_close(void *obj)
 	}
 
 	/* Close the socket */
-	socket_close(sock);
+	socket_close(sock, false);
 
 	return 0;
 }
@@ -2066,6 +2112,9 @@ static const struct setup_cmd psm_wakeup_cmds[] = {
 static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("ATH"),
+	SETUP_CMD_NOHANDLE("AT+CFUN=0"),
+	SETUP_CMD_NOHANDLE("AT+QCFG=\"nwscanmode\",3,1"),
+	SETUP_CMD_NOHANDLE("AT+CFUN=1"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
 	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
@@ -2526,7 +2575,6 @@ static int modem_init(const struct device *dev)
 	if (ret < 0) {
 		goto error;
 	}
-	mdata.sock_nonblock = false;
 
 	/* cmd handler */
 	mdata.cmd_handler_data.cmds[CMD_RESP]	   = response_cmds;

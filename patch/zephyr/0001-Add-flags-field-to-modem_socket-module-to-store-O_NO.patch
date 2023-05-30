@@ -1,0 +1,39 @@
+From 42ba1c812afa01e9ff182c3ad3580fc209eff383 Mon Sep 17 00:00:00 2001
+From: Andi Gerl <andi.gerl@exacttechnology.com>
+Date: Tue, 30 May 2023 17:33:35 -0400
+Subject: [PATCH] Add flags field to modem_socket module to store O_NONBLOCK on
+ a per-socket basis.
+
+---
+ drivers/modem/modem_socket.c | 1 +
+ drivers/modem/modem_socket.h | 2 ++
+ 2 files changed, 3 insertions(+)
+
+diff --git a/drivers/modem/modem_socket.c b/drivers/modem/modem_socket.c
+index 7e992fd567..cac1a35850 100644
+--- a/drivers/modem/modem_socket.c
++++ b/drivers/modem/modem_socket.c
+@@ -244,6 +244,7 @@ void modem_socket_put(struct modem_socket_config *cfg, int sock_fd)
+ 	(void)memset(&sock->dst, 0, sizeof(struct sockaddr));
+ 	memset(&sock->packet_sizes, 0, sizeof(sock->packet_sizes));
+ 	sock->packet_count = 0;
++	sock->flags = 0;
+ 	k_sem_reset(&sock->sem_data_ready);
+ 	k_poll_signal_reset(&sock->sig_data_ready);
+ 
+diff --git a/drivers/modem/modem_socket.h b/drivers/modem/modem_socket.h
+index c330bf1ed5..f2a0b8194c 100644
+--- a/drivers/modem/modem_socket.h
++++ b/drivers/modem/modem_socket.h
+@@ -49,6 +49,8 @@ __net_socket struct modem_socket {
+ 	bool is_connected;
+ 	bool is_waiting;
+ 
++	int flags;
++
+ 	/** temporary socket data */
+ 	void *data;
+ };
+-- 
+2.34.1
+

@@ -112,9 +112,6 @@ struct modem_data {
 
 	/* Socket from which we are currently reading data. */
 	int sock_fd;
-
-	/* Socket's non-block flag */
-	bool sock_nonblock;
 	
 	/*  Flag to detect DNS is ready or not */
 	bool dns_ready;
