@@ -441,11 +441,6 @@ static void app_input_handler(enum etc_interface_event_type type)
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 void date_time_handler(const struct date_time_evt *evt)
 {
-	static enum date_time_evt_type last_type = DATE_TIME_NOT_OBTAINED;
-	if (last_type == evt->type) {
-		return;
-	}
-	last_type = evt->type;
 	switch (evt->type) {
 		case DATE_TIME_OBTAINED_MODEM:
 		case DATE_TIME_OBTAINED_EXT: {
