@@ -26,6 +26,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #define LORA_ACKCRYPT_LEN	128
 #define LORA_RETRY_MAX_TIME	5
 #define LORA_SYNC_TIME_DIFF_SEC 30
+#define LORA_LOGGER_ON_RECV_MODE_MSEC 1500
 #define LORA_LOGGER_ID_LEN	(sizeof("FFFFFFFFFFFFFFFF"))
 struct lora_msg_data {
 	union {
@@ -304,7 +305,7 @@ static int module_lora_wait_packet(void)
 		return -EINVAL;
 	}
 	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf),
-			K_SECONDS(etc_device_get_rx_timeout()), &rssi, &snr);
+			K_MSEC(LORA_LOGGER_ON_RECV_MODE_MSEC), &rssi, &snr);
 	if (ret < 0) {
 		LOG_DBG("Timeout");
 		return -ETIMEDOUT;
