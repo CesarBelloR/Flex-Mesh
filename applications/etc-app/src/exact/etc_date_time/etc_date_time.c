@@ -176,7 +176,6 @@ static void new_date_time_get(void)
 		err = current_time_check();
 		if (err == 0) {
 			LOG_DBG("Time successfully obtained");
-			initial_valid_time = true;
 			date_time_notify_event(&evt);
 			continue;
 		}
@@ -185,8 +184,6 @@ static void new_date_time_get(void)
 		err = time_modem_get();
 		if (err == 0) {
 			LOG_DBG("Time from cellular network obtained");
-			initial_valid_time = true;
-			date_time_store(time_aux.date_time_utc / 1000);
 			date_time_set_second(time_aux.date_time_utc / 1000);
 			evt.type = DATE_TIME_OBTAINED_MODEM;
 			date_time_notify_event(&evt);
