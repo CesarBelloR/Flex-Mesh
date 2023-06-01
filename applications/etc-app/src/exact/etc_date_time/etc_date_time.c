@@ -51,8 +51,8 @@ static void date_time_notify_event(const struct date_time_evt *evt)
 
 static void date_time_print_datetime(struct tm *tm_time)
 {
- LOG_DBG("Datetime: %4d-%02d-%02d (wday=%d)  TIME: %2d:%02d:%02d", tm_time->tm_year - 100,
-									tm_time->tm_mon + 1, tm_time->tm_mday, tm_time->tm_wday, tm_time->tm_hour, tm_time->tm_min,
+ LOG_DBG("Datetime: %4d-%02d-%02d TIME: %2d:%02d:%02d", tm_time->tm_year - 100,
+									tm_time->tm_mon + 1, tm_time->tm_mday, tm_time->tm_hour, tm_time->tm_min,
 									tm_time->tm_sec);
 }
 
@@ -72,7 +72,7 @@ static int time_modem_get(void)
 	buf[AT_CMD_MODEM_DATE_TIME_RESPONSE_LEN - 4] = '\0';
 
 	/* Example of modem time response:
-	 * "20/02/25,17:15:02+04"
+	 * "2023/05/23,06:29:17+28,0"
 	 */
 	LOG_DBG("Response from modem: %s", (buf));
 
@@ -89,7 +89,7 @@ static int time_modem_get(void)
 	char *ptr_end = NULL;
 	int base = 10;
 
-	date_time.tm_year = strtol(ptr_index, &ptr_end, base) + 2000 - 1900;
+	date_time.tm_year = strtol(ptr_index, &ptr_end, base) - 1900;
 	ptr_end += 1;
 	ptr_index = ptr_end;
 	date_time.tm_mon = strtol(ptr_index, &ptr_end, base) - 1;

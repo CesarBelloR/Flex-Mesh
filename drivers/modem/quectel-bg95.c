@@ -2777,6 +2777,10 @@ char* quectel_bg95_get_sim_number(void) {
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_clock)
 {
 	size_t out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 0, len);
+	if (out_len == 0) {
+		// Case AT+QLTS: "" -> Not sync yet
+		return -1;
+	}
 	mdata.mdm_time[out_len] = '\0';
 	LOG_DBG("Clock: %s", mdata.mdm_time);
 	return 0;
@@ -2787,15 +2791,15 @@ int quectel_bg95_get_time(char* time_buf) {
 		return -1;
 	}
 
-	static const struct modem_cmd cmd = MODEM_CMD("+CCLK: ", on_cmd_atcmdinfo_clock, 0, ",");
-	static char *send_cmd = "AT+CCLK?";
+	static const struct modem_cmd cmd = MODEM_CMD("+QLTS: ", on_cmd_atcmdinfo_clock, 0, ",");
+	static char *send_cmd = "AT+QLTS=1"; // Get UTC time - Query timezone based on return value.
 	int ret;
 
 	/* query modem clock */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, &cmd, 1U, send_cmd,
 			     &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0) {
-		LOG_ERR("AT+CCLK? ret:%d", ret);
+		LOG_ERR("AT+QLTS=1 ret:%d", ret);
 		return -1;
 	}
 
