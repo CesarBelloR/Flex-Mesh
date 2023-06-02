@@ -718,7 +718,7 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 		}
 
 		const struct lwm2m_obj_path path_list[] = {
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i + 1),
 		};
 		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
 							       path_list,
