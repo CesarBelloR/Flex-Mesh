@@ -177,7 +177,7 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 	if (read_len > len) {
 		LOG_ERR("Read length is higher than request read %d %d %d", element_id, len,
 			read_len);
-		return -EINVAL;
+		return -read_len;
 	}
 
 	if (read_len == len) {
@@ -380,7 +380,7 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 	uint16_t min_id = ETC_RECORD_HEADER;
 	uint16_t last_id = ram_nack_record_id;
 	uint16_t check_id = 0;
-
+	bool find_next = false;
 	LOG_INF("Reclaim is running %d", etc_reclaim_info.flag_in_process);
 
 	if (etc_reclaim_info.flag_in_process == 1) {
@@ -405,12 +405,18 @@ next_id:
 			if (reading_callback) {
 				rc = reading_callback(check_id, data);
 			}
+		} else {
+			find_next = true;
 		}
 	} else {
 		LOG_WRN("Error id %d - error %d", check_id, rc);
+		if (rc == -ENOENT) {
+			find_next = true;
+		}
 	}
 
-	if (rc <= 0) {
+	if (find_next) {
+		find_next = false;
 		if (newest_id != check_id) {
 			/* Increase the ram_nack_record_id */
 			check_id += 1;
@@ -418,12 +424,10 @@ next_id:
 				check_id = min_id;
 			}
 			goto next_id;
-		} else {
-			return rc;
-		}
-	} else {
-		return rc;
+		} 
 	}
+	// No ACK
+	return 0;
 }
 
 static int etc_device_record_reading(uint16_t record_id, void *data)
@@ -436,8 +440,8 @@ static int etc_device_record_reading(uint16_t record_id, void *data)
 		(record_id - ETC_RECORD_HEADER) - index.sector_idx * ETC_RECORD_MAX_PER_SECTOR;
 	uint32_t record_addr = (record_fs.offset) + index.sector_idx * record_fs.sector_size +
 			       index.element_idx * ETC_DEVICE_RECORD_SIZE;
-	// LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
-	// 	index.element_idx);
+	LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
+		index.element_idx);
 	int rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
 	if (rc != 0) {
 		LOG_ERR("Error in reading flash err %d", rc);
