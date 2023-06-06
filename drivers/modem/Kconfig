@@ -121,4 +121,10 @@ config MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT
 		See 3GPP 27.007 Ch. 7.38.
 		And 3GPP 24.008 Ch. 10.5.7.3 for data format.
 
+config MODEM_NTP_SERVER
+	string "NTP server to poll date/time"
+	default "time.aws.com"
+	help 
+		The NTP server for getting date/time when the modem is online
+
 endif

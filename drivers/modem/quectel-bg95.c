@@ -2447,6 +2447,7 @@ static int modem_init(const struct device *dev)
 	k_sem_init(&mdata.sem_dns_ready, 0, 1);
 	k_sem_init(&mdata.sem_data_ready, 0, 1);
 	k_sem_init(&mdata.sem_shutdown, 0, 1);
+	k_sem_init(&mdata.sem_ntp_ready, 0, 1);
 
 	k_work_queue_start(&modem_workq, modem_workq_stack,
 			   K_KERNEL_STACK_SIZEOF(modem_workq_stack),
@@ -2776,13 +2777,15 @@ char* quectel_bg95_get_sim_number(void) {
 
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_clock)
 {
-	size_t out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 0, len);
+#define QNTP_FORMAT_OFFSET ("#,")
+	size_t out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 
+		sizeof(QNTP_FORMAT_OFFSET) - 1, len - sizeof(QNTP_FORMAT_OFFSET));
 	if (out_len == 0) {
-		// Case AT+QLTS: "" -> Not sync yet
 		return -1;
 	}
 	mdata.mdm_time[out_len] = '\0';
 	LOG_DBG("Clock: %s", mdata.mdm_time);
+	k_sem_give(&mdata.sem_ntp_ready);
 	return 0;
 }
 
@@ -2791,15 +2794,17 @@ int quectel_bg95_get_time(char* time_buf) {
 		return -1;
 	}
 
-	static const struct modem_cmd cmd = MODEM_CMD("+QLTS: ", on_cmd_atcmdinfo_clock, 0, ",");
-	static char *send_cmd = "AT+QLTS=1"; // Get UTC time - Query timezone based on return value.
-	int ret;
+	char   sendbuf[sizeof("AT+QNTP=1,") + 64] = {0};
+	int    ret;
+	static const struct modem_cmd cmd = MODEM_CMD("+QNTP: ", on_cmd_atcmdinfo_clock, 0, ",");
+	snprintk(sendbuf, sizeof(sendbuf), "AT+QNTP=1,\"%s\"", CONFIG_MODEM_NTP_SERVER);
 
+	
 	/* query modem clock */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, &cmd, 1U, send_cmd,
-			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, &cmd, 1U, sendbuf,
+			     &mdata.sem_ntp_ready, MDM_NTP_TIMEOUT);
 	if (ret < 0) {
-		LOG_ERR("AT+QLTS=1 ret:%d", ret);
+		LOG_ERR("AT+QNTP ret:%d", ret);
 		return -1;
 	}
 

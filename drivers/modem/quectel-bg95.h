@@ -35,6 +35,7 @@
 #define MDM_SHUTDOWN_TIMEOUT		  K_SECONDS(60)
 #define MDM_TX_LOCK_TIMEOUT		  K_SECONDS(5)
 #define MDM_SENDMSG_SLEEP		  K_MSEC(1)
+#define MDM_NTP_TIMEOUT			  K_SECONDS(150)
 #define MDM_MAX_DATA_LENGTH		  1024
 #define MDM_RECV_MAX_BUF		  16
 #define MDM_RECV_BUF_SIZE		  256
@@ -151,6 +152,7 @@ struct modem_data {
 	struct k_sem sem_data_ready;
 	struct k_sem sem_shutdown;
 	struct k_sem sem_busy;
+	struct k_sem sem_ntp_ready;
 };
 
 /* Socket read callback data */
