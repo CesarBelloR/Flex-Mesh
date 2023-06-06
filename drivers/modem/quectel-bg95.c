@@ -2778,9 +2778,12 @@ char* quectel_bg95_get_sim_number(void) {
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_clock)
 {
 #define QNTP_FORMAT_OFFSET ("#,")
-	size_t out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 
+	int out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 
 		sizeof(QNTP_FORMAT_OFFSET) - 1, len - sizeof(QNTP_FORMAT_OFFSET));
-	if (out_len == 0) {
+	if (out_len <= 0) {
+		errno = -out_len;
+		mdata.mdm_time[0] = '\0';
+		modem_cmd_handler_set_error(data, -1);
 		return -1;
 	}
 	mdata.mdm_time[out_len] = '\0';
@@ -2805,7 +2808,7 @@ int quectel_bg95_get_time(char* time_buf) {
 			     &mdata.sem_ntp_ready, MDM_NTP_TIMEOUT);
 	if (ret < 0) {
 		LOG_ERR("AT+QNTP ret:%d", ret);
-		return -1;
+		return ret;
 	}
 
 	memcpy(time_buf, mdata.mdm_time, sizeof(mdata.mdm_time));
