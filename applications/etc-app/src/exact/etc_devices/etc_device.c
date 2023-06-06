@@ -405,6 +405,9 @@ next_id:
 			if (reading_callback) {
 				rc = reading_callback(check_id, data);
 			}
+			if (rc <= 0) {
+				find_next = true;
+			}
 		} else {
 			find_next = true;
 		}
@@ -426,8 +429,8 @@ next_id:
 			goto next_id;
 		} 
 	}
-	// No ACK
-	return 0;
+
+	return rc;
 }
 
 static int etc_device_record_reading(uint16_t record_id, void *data)
