@@ -11,7 +11,7 @@
 #include "etc_device.h"
 #include "watchdog_app.h"
 #define MODULE sensor_module
-
+#include "cloud/cloud_codec/data_codec.h"
 #include "modules_common.h"
 #include "events/app_event.h"
 #include "events/data_event.h"
@@ -51,7 +51,7 @@ static struct sensor_data static_sensor_data;
 #define SENSOR_NTC_NOMINAL_TEMP 25.0
 #define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
 #define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
-#define SENSOR_NTC_REFERENCE_VOLTAGE (float)(DT_PROP(DT_PATH(ntc), reference_voltage_mv) / 1000.0f)
+#define SENSOR_NTC_REFERENCE_VOLTAGE ((float)(DT_PROP(DT_PATH(ntc), reference_voltage_mv)) / 1000.0f)
 
 #define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
 
@@ -271,7 +271,7 @@ static int sensor_poll_handler(void) {
 			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB),
 			  (float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
 			  adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
-	if (fabs(data->temperature[SENSOR_INPUT_AMBIENT] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+	if (data_codec_compare_temperature_is_valid(data->temperature[SENSOR_INPUT_AMBIENT])) {
 		LOG_DBG("Ambient temp %2.2f", data->temperature[SENSOR_INPUT_AMBIENT]);
 	}
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
@@ -281,7 +281,7 @@ static int sensor_poll_handler(void) {
 			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR),
 				(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) / 1000.0f,
 				adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
-		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+		if (data_codec_compare_temperature_is_valid(data->temperature[i])) {
 			LOG_DBG("Channel %d temp %f", i, data->temperature[i]);
 		} else {
 			LOG_DBG("Channel %d isn't available", i);
