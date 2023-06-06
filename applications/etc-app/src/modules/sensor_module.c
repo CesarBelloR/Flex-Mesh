@@ -266,7 +266,8 @@ static int sensor_poll_handler(void) {
 
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
-	data->timestamp = date_time_now_second();
+	int utc_timestamp = date_time_now_second();
+	data->timestamp = utc_timestamp == -1 ? 0 : utc_timestamp;
 	data->temperature[SENSOR_INPUT_AMBIENT] = 
 			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB),
 			  (float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
