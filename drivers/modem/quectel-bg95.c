@@ -236,7 +236,7 @@ exit:
 static void socket_close(struct modem_socket *sock, bool force_close)
 {
 	char buf[sizeof("AT+Q###CLOSE=##")] = {0};
-	int  ret;
+	int  ret = 0;
 	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(buf, sizeof(buf), "AT+QSSLCLOSE=%d", sock->sock_fd);
 	} else {
@@ -254,7 +254,11 @@ static void socket_close(struct modem_socket *sock, bool force_close)
 		}
 	}
 
-	modem_socket_put(&mdata.socket_config, sock->sock_fd);
+	if (ret == 0) {
+		modem_socket_put(&mdata.socket_config, sock->sock_fd);
+	}
+
+	return ret;
 }
 
 /* Handler: OK */
@@ -1007,7 +1011,8 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	   and that semaphore is acquired before mdata.sock_fd is modified. */
 	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
 		LOG_ERR("Error taking semaphore");
-		return -EAGAIN;
+		errno = EAGAIN;
+		return -1;
 	}
 	/* Socket read settings */
 	(void) memset(&sock_data, 0, sizeof(sock_data));
@@ -1033,8 +1038,9 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 		memcpy(from, &sock->dst, *fromlen);
 	}
 
+#ifdef CONFIG_MODEM_CONTEXT_VERBOSE_DEBUG
 	LOG_HEXDUMP_DBG(sock_data.recv_buf, sock_data.recv_read_len, "RECV");
-
+#endif
 
 	/* Update data on socket with current size. */
 	int new_size = get_data_size(sock);
