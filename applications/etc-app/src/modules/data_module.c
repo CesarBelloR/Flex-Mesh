@@ -430,6 +430,12 @@ static void on_all_states(struct data_msg_data *msg)
 		}
 	}
 
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
+		if (record_id != 0) {
+			record_id = 0;
+		}
+	}
+
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED)) {
 	}
 

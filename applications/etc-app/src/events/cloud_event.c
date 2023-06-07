@@ -16,6 +16,10 @@ static char *get_evt_type_str(enum cloud_event_type type)
 		return "CLOUD_EVT_LTE_CONNECT";
 	case CLOUD_EVT_LTE_DISCONNECT:
 		return "CLOUD_EVT_LTE_DISCONNECT";
+	case CLOUD_EVT_PAUSED:
+		return "CLOUD_EVT_PAUSED";
+	case CLOUD_EVT_RX_OFF:
+		return "CLOUD_EVT_RX_OFF";
 	case CLOUD_EVT_USER_ASSOCIATION_REQUEST:
 		return "CLOUD_EVT_USER_ASSOCIATION_REQUEST";
 	case CLOUD_EVT_DATA_SEND_ACK:

@@ -294,9 +294,19 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		break;
 	}
 	case CLOUD_WRAP_EVT_PAUSED:
+	{
 		LOG_DBG("CLOUD_WRAP_EVT_PAUSED");
 		SEND_EVENT(cloud, CLOUD_EVT_PAUSED);
 		break;
+	}
+
+	case CLOUD_WRAP_EVT_RX_OFF:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_RX_OFF");
+		SEND_EVENT(cloud, CLOUD_EVT_RX_OFF);
+		break;
+	}
+
 	case CLOUD_WRAP_EVT_DATA_RECEIVED:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_DATA_RECEIVED");
