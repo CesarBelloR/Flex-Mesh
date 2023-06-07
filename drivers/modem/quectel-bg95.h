@@ -137,6 +137,9 @@ struct modem_data {
 
 	bool psm_active;
 
+	/* SIM initialization status reported by modem */
+	int8_t sim_ini_stat;
+
 	/* Modem API */
 	modem_api_evt_handler_t evt_callback;
 

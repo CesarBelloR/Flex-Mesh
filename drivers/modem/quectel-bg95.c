@@ -1174,6 +1174,13 @@ MODEM_CMD_DEFINE(on_cmd_power_down)
 	return 0;
 }
 
+MODEM_CMD_DEFINE(on_cmd_sim_ini_stat)
+{
+	mdata.sim_ini_stat = ATOI(argv[0], -1, "sim_ini_stat");
+	LOG_DBG("SIM ini stat %d", sim_ini_stat);
+	k_sem_give(&mdata.sem_response);
+}
+
 /** @brief Turn the modem on/off using PWRKEY.
  * 
 */
@@ -2070,13 +2077,8 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
 	SETUP_CMD("AT+QGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
 	SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
-#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
-	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
-	SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
-#endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */
 	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
 };
-
 
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 /* Func: modem_rssi_query_work
@@ -2098,6 +2100,67 @@ static void modem_psm_wakeup_work(struct k_work *work)
 				    K_NO_WAIT);
 }
 #endif
+
+/**
+ * Retrieve SIM initialization status from modem.
+ * 
+ * @return true if ready, false if not ready or error.
+*/
+static bool modem_get_sim_init_status(void)
+{
+	char buf[] = "AT+QINISTAT";
+	int ret;
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("+QINISTAT: ", on_cmd_sim_ini_stat, 1U, ""),
+	};
+
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0, buf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Failed to set retrieve SIM init status");
+		return false;
+	}
+
+	if (mdata.sim_ini_stat == 2) {
+		return true;
+	}
+
+	return false;
+}
+
+static void modem_retrieve_sim_numbers(void)
+{
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
+	static const struct setup_cmd sim_number_cmds[] = {
+		SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
+		SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
+	}
+
+	int cnt = 0;
+	bool ret_bool;
+	int ret;
+	
+	while (!(ret_bool = modem_get_sim_init_status()) ||
+		(cnt < 3)) {
+		cnt++;
+		k_sleep(K_MSEC(100));
+	}
+
+	if (!ret_bool) {
+		return;
+	}
+
+	/* Run SIM number setup commands on the modem. */
+	ret = modem_cmd_handler_setup_cmds(&mctx.iface, &mctx.cmd_handler,
+					   sim_number_cmds, ARRAY_SIZE(sim_number_cmds),
+					   &mdata.sem_response, MDM_REGISTRATION_TIMEOUT);
+	
+	if (ret < 0) {
+		LOG_WRN("Unable to read sim numbers");
+	}
+#endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */		   
+}
 
 /* Func: modem_setup
  * Desc: This function is used to setup the modem from zero. The idea
@@ -2136,6 +2199,8 @@ retry:
 	if (ret < 0) {
 		goto error;
 	}
+
+	modem_retrieve_sim_numbers();
 
 	/* Modem is ready - Start RSSI work in the background. */
 	LOG_INF("Modem is initialized.");
