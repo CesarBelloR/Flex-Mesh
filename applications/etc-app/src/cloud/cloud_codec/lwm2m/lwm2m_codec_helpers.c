@@ -687,7 +687,8 @@ static int invalidate_sensor_value(struct cloud_codec_data *cloud_data,
 
 	lwm2m_get_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, SENSOR_VALUE_RID),
 		      &val);
-	if (val != NAN) {
+		      
+	if (!isnan(val)) {
 		err = lwm2m_set_f64(
 			&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, SENSOR_VALUE_RID),
 			NAN);
