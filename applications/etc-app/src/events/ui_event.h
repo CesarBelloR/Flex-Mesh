@@ -16,6 +16,9 @@ enum ui_event_type {
 	 */
 	UI_EVT_INPUT_DATA_READY,
 
+	/** Create an event to trigger test data
+	 */
+	UI_EVT_TEST_DATA_READY,
 	/** The UI module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
 	 */

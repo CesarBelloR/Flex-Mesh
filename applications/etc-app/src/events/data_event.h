@@ -15,6 +15,8 @@ enum data_event_type {
 	/** All data has been received for a given sample request. */
 	DATA_EVT_DATA_READY,
 
+	/** The option to support fast sample request */
+	DATA_EVT_TEST_DATA_READY,
 	/** Send newly sampled data.
 	 *  The event has an associated payload of type @ref data_module_data_buffers in
 	 *  the `data.buffer` member.

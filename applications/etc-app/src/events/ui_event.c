@@ -6,6 +6,8 @@ static char *get_evt_type_str(enum ui_event_type type)
 	switch (type) {
 	case UI_EVT_INPUT_DATA_READY:
 		return "UI_EVT_INPUT_DATA_READY";
+	case UI_EVT_TEST_DATA_READY:
+		return "UI_EVT_TEST_DATA_READY";
 	case UI_EVT_SHUTDOWN_READY:
 		return "UI_EVT_SHUTDOWN_READY";
 	case UI_EVT_ERROR:

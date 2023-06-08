@@ -45,6 +45,8 @@ static enum sub_state_type {
 	SUB_STATE_PASSIVE,
 } sub_state;
 
+static int ui_module_gen_num_of_sample = 0;
+
 /* Forward declarations */
 static void led_pattern_update_work_fn(struct k_work *work);
 
@@ -414,6 +416,15 @@ static void on_all_states(struct ui_msg_data *msg)
 		extern void ui_leds_stop(void);	
 		ui_leds_stop();	
 	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_TEST_DATA_READY)) {
+		if (ui_module_gen_num_of_sample != 0) {
+			ui_module_gen_num_of_sample = ui_module_gen_num_of_sample - 1;
+			struct ui_event *event = new_ui_event();
+			event->type = UI_EVT_TEST_DATA_READY;
+			APP_EVENT_SUBMIT(event);
+		}
+	}
 }
 
 static void message_handler(struct ui_msg_data *msg)
@@ -434,6 +445,15 @@ static void message_handler(struct ui_msg_data *msg)
 	}
 
 	on_all_states(msg);
+}
+
+void ui_module_test_data_request(int num_of_sample)
+{
+	if (num_of_sample == 0) return;
+	struct ui_event *event = new_ui_event();
+	event->type = UI_EVT_TEST_DATA_READY;
+	ui_module_gen_num_of_sample = num_of_sample - 1;
+	APP_EVENT_SUBMIT(event);
 }
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);

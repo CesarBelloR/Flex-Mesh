@@ -836,6 +836,19 @@ static int cmd_reclaim_record(const struct shell *shell, size_t argc, char **arg
 	return 0;
 }
 
+static int cmd_generate_record(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc == 2) {
+		int num_of_sample = atoi(argv[1]);
+		extern void ui_module_test_data_request(int num_of_sample);
+		ui_module_test_data_request(num_of_sample);
+	} else {
+		shell_error(shell, "Invalid input parameter for generating record");
+	}
+
+	return 0;
+}
+
 static int cmd_erase_configuration(const struct shell *shell, size_t argc, char **argv)
 {
 	int rc = nvs_clear(&etc_fs);
@@ -856,6 +869,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(clean, NULL, "Clean the records", cmd_clean_records),
 	SHELL_CMD(parser, NULL, "Parser the hex record", cmd_parser_hex_record),
 	SHELL_CMD(reclaim, NULL, "Reclaim ", cmd_reclaim_record),
+	SHELL_CMD(generate, NULL, "Generate a certain number of samples to fill up the flash ", cmd_generate_record),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(record, &sub_record, "ETC Record Management", NULL);
 
