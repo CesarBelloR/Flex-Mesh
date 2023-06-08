@@ -284,10 +284,10 @@ static int bq25618_init(const struct device *dev)
 					cfg->min_voltage),
 		INIT_RETRIES, count, ret);
 	if (cfg->precharge_current != 0) {
-	RETRY_IF_FAIL(
-		bq25618_set_precharge_current(dev,
-					cfg->precharge_current),
-		INIT_RETRIES, count, ret);
+		RETRY_IF_FAIL(
+			bq25618_set_precharge_current(dev,
+						cfg->precharge_current),
+			INIT_RETRIES, count, ret);
 	}
 
 	bq25618_enable_disable_charge_timer(dev, cfg->charge_timer_en);
