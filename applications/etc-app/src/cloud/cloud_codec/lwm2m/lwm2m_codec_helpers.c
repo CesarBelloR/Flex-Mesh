@@ -58,6 +58,9 @@ static int lwm2m_codec_helpers_setup_sensor_obj_values(void)
 			return err;
 		}
 
+		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i,
+					       SENSOR_VALUE_RID), NAN);
+
 		err = lwm2m_set_u8(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i,
 					      ETC_TEMP_OBJ_R_TYPE), 0);
 
@@ -675,6 +678,40 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 	return 0;
 }
 
+static int invalidate_sensor_value(struct cloud_codec_data *cloud_data,
+				   int obj_inst_id, const struct lwm2m_obj_path *path,
+				   time_t timestamp)
+{
+	int err;
+	double val = NAN;
+
+	lwm2m_get_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, SENSOR_VALUE_RID),
+		      &val);
+		      
+	if (!isnan(val)) {
+		err = lwm2m_set_f64(
+			&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, SENSOR_VALUE_RID),
+			NAN);
+		if (err) {
+			return err;
+		}
+					
+		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, TIMESTAMP_RID),
+				     timestamp);
+		if (err) {
+			return err;
+		}
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+				path,
+				1);
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			return err;
+		}
+	}
+
+	return 0;
+}
 
 int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 					union etc_device_record *record)
@@ -702,24 +739,28 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 
 	/* Set external sensor temperature and timestamp */
 	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		int obj_inst_id = i + 1;
+		const struct lwm2m_obj_path path_list[] = {
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id),
+		};
+		
 		if (!data_codec_compare_temperature_is_valid(record->sensor[i])) {
+			invalidate_sensor_value(cloud_data, obj_inst_id, path_list,
+						(time_t)(record->timestamp));
 			continue;
 		}
 		
-		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i + 1, TIMESTAMP_RID),
+		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, TIMESTAMP_RID),
 				(time_t)(record->timestamp));
 		if (err) {
 			return err;
 		}
-		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i + 1, SENSOR_VALUE_RID),
+		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, SENSOR_VALUE_RID),
 				    record->sensor[i]);
 		if (err) {
 			return err;
 		}
 
-		const struct lwm2m_obj_path path_list[] = {
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i + 1),
-		};
 		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
 							       path_list,
 							       ARRAY_SIZE(path_list));
