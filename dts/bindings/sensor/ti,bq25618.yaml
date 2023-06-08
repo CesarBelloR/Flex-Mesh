@@ -20,6 +20,11 @@ properties:
       required: true
       description: Maximum current during fast charging (mA)
 
+    precharge-current:
+      type: int
+      required: false
+      description: The current during precharging (VBAT less than 3.0V) (mA)
+
     charge-voltage:
       type: int
       required: true
