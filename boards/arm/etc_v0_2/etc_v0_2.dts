@@ -147,6 +147,7 @@
                 max-current = <2000>;
                 charge-current = <1500>;
                 charge-voltage = <4200>;
+				precharge-current = <260>;
                 int-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
         };
 };
