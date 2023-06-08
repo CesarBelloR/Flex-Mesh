@@ -208,10 +208,11 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void sensor_module_send_sensor(struct sensor_data* sensor)
+static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 {
 	struct sensor_event *sensor_event = new_sensor_event();
-	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
+	sensor_event->type = is_test ? SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY : 
+		SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
 	sensor_event->data.sensors = sensor;
 	APP_EVENT_SUBMIT(sensor_event);
 }
@@ -252,7 +253,7 @@ static void sensor_gpios_disable(void)
 	gpio_pin_configure_dt(&s1_dt, GPIO_DISCONNECTED);
 }
 
-static int sensor_poll_handler(void) {
+static int sensor_poll_handler(bool is_test) {
 	if (sensor_is_processing) {
 		return 0;
 	}
@@ -293,7 +294,7 @@ static int sensor_poll_handler(void) {
 	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_adc_battery);
 	int adc_mv_battery = raw_adc_battery * (sFullOhms / sOutputOhms);
 	data->battery_mV = adc_mv_battery;
-	sensor_module_send_sensor(data);
+	sensor_module_send_sensor(data, is_test);
 	sensor_is_processing = false;
 	
 	sensor_gpios_disable();
@@ -321,7 +322,7 @@ static void on_all_states(struct sensor_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
 		LOG_INF("APP_EVT_DATA_GET");
-		sensor_poll_handler();
+		sensor_poll_handler(false);
 		return;
 	}
 
@@ -338,7 +339,12 @@ static void on_all_states(struct sensor_msg_data *msg)
 		LOG_INF("UI_EVT_INPUT_DATA_READY");
 		/* The UI input (HALL Sensor or Button) is triggered */
 		adc_init();
-		sensor_poll_handler();
+		sensor_poll_handler(false);
+		return;
+	}
+
+	if (IS_EVENT(msg, ui, UI_EVT_TEST_DATA_READY)) {
+		sensor_poll_handler(true);
 		return;
 	}
 
@@ -349,7 +355,7 @@ static void on_all_states(struct sensor_msg_data *msg)
 			if (!is_send) {
 				LOG_DBG("Device is online. Collecting and sending first sensor data");
 				is_send = true;
-				sensor_poll_handler();
+				sensor_poll_handler(false);
 			}
 		}
 		return;
