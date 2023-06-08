@@ -368,12 +368,6 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 
 static int setup(void)
 {
-#if defined(CONFIG_MCUBOOT_IMG_MANAGER)
-	/* After a successful initializaton, tell the bootloader that the
-	 * current image is confirmed to be working.
-	 */
-	boot_write_img_confirmed();
-#endif /* CONFIG_MCUBOOT_IMG_MANAGER */
 	cloud_wrap_init(cloud_wrap_event_handler);
 	return 0;
 }

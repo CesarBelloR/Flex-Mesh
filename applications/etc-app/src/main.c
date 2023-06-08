@@ -101,11 +101,6 @@ void main(void)
 	etc_cape_set_key(key, 10);
 
 #ifdef CONFIG_MCUMGR
-	rc = boot_write_img_confirmed();
-	if (rc) {
-		LOG_ERR("Img confirmed failed");
-	}
-
 	/* using __TIME__ ensure that a new binary will be built on every
 	 * compile which is convient when testing firmware upgrade.
 	 */
