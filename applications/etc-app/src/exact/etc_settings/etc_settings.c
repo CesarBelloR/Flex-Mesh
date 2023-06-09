@@ -508,7 +508,7 @@ uint32_t etc_get_log_interval_secs(void)
 
 uint16_t etc_get_log_interval_alarm_secs(void)
 {
-	uint16_t second = 0;
+	uint32_t second = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	second = etc_cfg.log_interval_alarm_secs;
 	k_mutex_unlock(&setting_mutex);
@@ -517,7 +517,7 @@ uint16_t etc_get_log_interval_alarm_secs(void)
 
 uint32_t etc_get_tx_interval_secs(void)
 {
-	uint16_t second = 0;
+	uint32_t second = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	second = etc_cfg.tx_interval_secs;
 	k_mutex_unlock(&setting_mutex);
@@ -526,7 +526,7 @@ uint32_t etc_get_tx_interval_secs(void)
 
 uint32_t etc_get_tx_interval_alarm_secs(void)
 {
-	uint16_t second = 0;
+	uint32_t second = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	second = etc_cfg.tx_interval_alarm_secs;
 	k_mutex_unlock(&setting_mutex);
