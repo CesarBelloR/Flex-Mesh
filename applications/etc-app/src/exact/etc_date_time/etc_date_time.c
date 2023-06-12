@@ -299,14 +299,22 @@ int date_time_set(const struct tm *new_date_time)
 	return 0;
 }
 
-int date_time_set_second(uint32_t new_date_time_sec) {
+int date_time_set_second(uint32_t new_date_time_sec) 
+{
+	int ret;
+
+	ret = pcf85263a_rtc_set_time((time_t)new_date_time_sec);
+	if (ret < 0) {
+		return -1;
+	}
 	initial_valid_time = true;
 	date_time_store(new_date_time_sec);
 	time_aux.last_date_time_update = k_uptime_get();
 	time_aux.date_time_utc = (int64_t)new_date_time_sec * 1000;
 	evt.type = DATE_TIME_OBTAINED_EXT;
 	date_time_notify_event(&evt);
-	return pcf85263a_rtc_set_time((time_t)new_date_time_sec);
+	
+	return ret;
 }
 
 int date_time_uptime_to_unix_time_ms(int64_t *uptime)
