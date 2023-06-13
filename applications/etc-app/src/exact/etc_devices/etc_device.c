@@ -167,17 +167,16 @@ static int etc_nvs_write(uint16_t element_id, const void *data, size_t len)
 
 static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 {
-	size_t read_len = 0;
+	ssize_t read_len = 0;
 	read_len = nvs_read(&etc_fs, element_id, data, len);
 	if (read_len < 0) {
 		LOG_ERR("Failed in reading NVS %d", read_len);
-		return -EINVAL;
+		return read_len;
 	}
 
 	if (read_len > len) {
 		LOG_ERR("Read length is higher than request read %d %d %d", element_id, len,
 			read_len);
-		// Return error code 
 		return read_len;
 	}
 
