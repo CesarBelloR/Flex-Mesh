@@ -4,10 +4,10 @@ app:
   region: flash_primary
   size: 0x67e00
 external_flash:
-  address: 0xe8000
+  address: 0
   end_address: 0x200000
   region: external_flash
-  size: 0x118000
+  size: 0x200000
 mcuboot:
   address: 0x0
   end_address: 0x10000
@@ -54,22 +54,25 @@ mcuboot_secondary:
   share_size:
   - mcuboot_primary
   size: 0xE8000
-nvs_storage:
+settings_storage:
   address: 0xE8000
   device: MX25R1635
   end_address: 0xF8000
   placement:
     before:
-    - settings_storage
+    - etc_settings_storage
   region: external_flash
   size: 0x10000
-settings_storage:
+etc_settings_storage:
   address: 0xF8000
   device: MX25R1635
   end_address: 0x108000
+  placement:
+    before:
+    - etc_settings_storage
   region: external_flash
   size: 0x10000
-record_storage:
+etc_records_storage:
   address: 0x108000
   device: MX25R1635
   end_address: 0x168000

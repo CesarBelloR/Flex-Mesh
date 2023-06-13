@@ -15,8 +15,8 @@
 #include "cloud/cloud_codec/data_codec.h"
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
-#define STORAGE_NODE_LABEL storage
-#define RECORD_NODE_LABEL  record_storage
+#define ETC_SETTINGS_NODE_LABEL etc_settings_storage
+#define ETC_RECORD_NODE_LABEL  etc_records_storage
 
 #if TEST
 #define ETC_RECORD_MAX_SECTOR	  (8)
@@ -69,20 +69,20 @@ void etc_device_nvs_init(void)
 {
 	int rc = 0;
 	struct flash_pages_info info;
-	etc_fs.flash_device = FLASH_AREA_DEVICE(STORAGE_NODE_LABEL);
+	etc_fs.flash_device = FLASH_AREA_DEVICE(ETC_SETTINGS_NODE_LABEL);
 	if (!device_is_ready(etc_fs.flash_device)) {
 		LOG_ERR("Flash device %s is not ready", etc_fs.flash_device->name);
 		return;
 	}
 
-	record_fs.flash_device = FLASH_AREA_DEVICE(RECORD_NODE_LABEL);
+	record_fs.flash_device = FLASH_AREA_DEVICE(ETC_RECORD_NODE_LABEL);
 	if (!device_is_ready(record_fs.flash_device)) {
 		LOG_ERR("Flash device %s is not ready", record_fs.flash_device->name);
 		return;
 	}
 
-	record_fs.offset = FLASH_AREA_OFFSET(RECORD_NODE_LABEL);
-	etc_fs.offset = FLASH_AREA_OFFSET(STORAGE_NODE_LABEL);
+	record_fs.offset = FLASH_AREA_OFFSET(ETC_RECORD_NODE_LABEL);
+	etc_fs.offset = FLASH_AREA_OFFSET(ETC_SETTINGS_NODE_LABEL);
 	rc = flash_get_page_info_by_offs(etc_fs.flash_device, etc_fs.offset, &info);
 	if (rc) {
 		LOG_DBG("Unable to get page info");
@@ -91,8 +91,8 @@ void etc_device_nvs_init(void)
 	etc_fs.sector_size = info.size;
 	record_fs.sector_size = info.size;
 
-	etc_fs.sector_count = (FLASH_AREA_SIZE(STORAGE_NODE_LABEL) / info.size);
-	record_fs.sector_count = (FLASH_AREA_SIZE(RECORD_NODE_LABEL) / info.size);
+	etc_fs.sector_count = (FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL) / info.size);
+	record_fs.sector_count = (FLASH_AREA_SIZE(ETC_RECORD_NODE_LABEL) / info.size);
 	rc = nvs_mount(&etc_fs);
 	if (rc) {
 		LOG_ERR("Flash Init failed");
@@ -100,9 +100,9 @@ void etc_device_nvs_init(void)
 	}
 
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
-		FLASH_AREA_SIZE(STORAGE_NODE_LABEL), info.size, etc_fs.sector_count);
+		FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL), info.size, etc_fs.sector_count);
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)record_fs.offset,
-		FLASH_AREA_SIZE(RECORD_NODE_LABEL), info.size, record_fs.sector_count);
+		FLASH_AREA_SIZE(ETC_RECORD_NODE_LABEL), info.size, record_fs.sector_count);
 	LOG_DBG("Initialised etc setting successfully");
 
 	rc = etc_nvs_read(ETC_RECORD_STAT, &etc_device_record_table,
@@ -586,7 +586,7 @@ const struct device* etc_device_get_record(void) {
 }
 
 size_t etc_device_get_record_size(void) {
-	return FLASH_AREA_SIZE(RECORD_NODE_LABEL);
+	return FLASH_AREA_SIZE(ETC_RECORD_NODE_LABEL);
 }
 
 off_t etc_device_get_record_offset(void) {
@@ -878,4 +878,5 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(erase, NULL, "Erase all configuration - development only", cmd_erase_configuration),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(config, &sub_config, "ETC Configuration Management", NULL);
+
 #endif
