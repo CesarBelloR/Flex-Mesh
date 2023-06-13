@@ -63,6 +63,31 @@ struct led_effect {
 		.loop_forever = true,					       \
 	}
 
+/**
+ * Flash an LED asymetrically, i.e. with different on and off periods.
+ * 
+ * @param _period_on On period in ms
+ * @param _period_off Off period in ms
+ * @param _color UI LED color when on
+*/
+#define LED_EFFECT_LED_BLINK_ASYM(_period_on, _period_off, _color)				       \
+	{								       \
+		.steps = ((struct led_effect_step[]) {		       \
+			{						       \
+				.color = _color,			       \
+				.substep_count = 1,			       \
+				.substep_time = (_period_on),		       \
+			},						       \
+			{						       \
+				.color = LED_NOCOLOR(),			       \
+				.substep_count = 1,			       \
+				.substep_time = (_period_off),		       \
+			},						       \
+		}),							       \
+		.step_count = 2,					       \
+		.loop_forever = true,					       \
+	}
+
 #define _BREATH_SUBSTEPS 15
 #define _BREATH_PAUSE_SUBSTEPS 1
 #define LED_EFFECT_LED_BREATHE(_period, _pause, _color)			       \

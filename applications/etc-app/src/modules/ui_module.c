@@ -36,6 +36,7 @@ struct ui_msg_data {
 static enum state_type {
 	STATE_INIT,
 	STATE_RUNNING,
+	STATE_FOTA_UPDATE,
 	STATE_SHUTDOWN
 } state;
 
@@ -206,6 +207,8 @@ static bool app_event_handler(const struct app_event_header *aeh)
 /* Static module functions. */
 static void update_led_pattern(enum led_state pattern)
 {
+	BUILD_ASSERT(UI_TURN_OFF == LED_STATE_TURN_OFF, 
+		     "ui_led_pattern and led_state incompatible");
 	LOG_DBG("Update the LED pattern %d", pattern);
 	ui_led_set_pattern((enum ui_led_pattern)pattern);
 }
@@ -351,6 +354,13 @@ static void on_state_running(struct ui_msg_data *msg)
 		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_FOTA_UPDATING, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+		state_set(STATE_FOTA_UPDATE);
+	}
 }
 
 /* Message handler for STATE_CLOUD_CONNECTING. */
@@ -400,8 +410,15 @@ static void on_state_lora_receiving(struct ui_msg_data *msg)
 /* Message handler for STATE_FOTA_UPDATING. */
 static void on_state_fota_update(struct ui_msg_data *msg)
 {
-	if ((IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DONE)) ||
-	    (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR))) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_FOTA_UPDATE_ERROR, 5);
+		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+		state_set(STATE_RUNNING);
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DONE)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
@@ -444,6 +461,8 @@ static void message_handler(struct ui_msg_data *msg)
 	case STATE_RUNNING:
 		on_state_running(msg);
 		break;
+	case STATE_FOTA_UPDATE:
+		on_state_fota_update(msg);
 	case STATE_SHUTDOWN:
 		/* The shutdown state has no transition. */
 		break;
