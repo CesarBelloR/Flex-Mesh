@@ -425,6 +425,14 @@ static void on_all_states(struct ui_msg_data *msg)
 			APP_EVENT_SUBMIT(event);
 		}
 	}
+	
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		SEND_SHUTDOWN_ACK(ui, UI_EVT_SHUTDOWN_READY, self.id);
+		state_set(STATE_SHUTDOWN);
+	}
 }
 
 static void message_handler(struct ui_msg_data *msg)

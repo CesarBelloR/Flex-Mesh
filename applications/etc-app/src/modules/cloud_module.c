@@ -357,7 +357,7 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	}
 	case CLOUD_WRAP_EVT_REBOOT_REQUEST:
 	{
-		// FIXME: Implement
+		SEND_EVENT(cloud, CLOUD_EVT_REBOOT_REQUEST);
 		break;
 	}
 	default:

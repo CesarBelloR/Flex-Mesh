@@ -478,6 +478,14 @@ static void on_all_states(struct lora_msg_data *msg)
 			SEND_EVENT(lora, LORA_EVT_RX_DATA_READY);
 		}
 	}
+
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		SEND_SHUTDOWN_ACK(lora, LORA_EVT_SHUTDOWN_READY, self.id);
+		state_set(STATE_SHUTDOWN);
+	}
 }
 
 /* Message handler for SUB_STATE_TRANSMIT_MODE. */

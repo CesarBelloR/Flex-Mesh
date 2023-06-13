@@ -17,6 +17,7 @@
 #include <zephyr/net/lwm2m.h>
 
 #include "etc_lwm2m_client_utils.h"
+#include "lwm2m_firmware.h"
 
 #include "cloud/cloud_wrapper.h"
 
@@ -298,97 +299,6 @@ static int firmware_update_state_cb(uint8_t update_state)
 	cloud_wrapper_notify_event(&cloud_wrap_evt);
 	return 0;
 }
-
-#if 0
-/* Callback handler triggered when the modem should be put in a certain functional mode.
- * Handler is called pre provisioning of DTLS credentials when the modem should be put in
- * offline mode, and when the modem should return to normal mode after
- * provisioning has been carried out.
- */
-static int modem_mode_request_cb(enum lte_lc_func_mode new_mode, void *user_data)
-{
-	ARG_UNUSED(user_data);
-
-	int err;
-	enum lte_lc_func_mode mode_current;
-	struct cloud_wrap_event cloud_wrap_evt = { 0 };
-
-	err = lte_lc_func_mode_get(&mode_current);
-	if (err) {
-		LOG_ERR("lte_lc_func_mode_get failed, error: %d", err);
-		return err;
-	}
-
-	/* Return success if the modem is in the required functional mode. */
-	if (mode_current == new_mode) {
-		return 0;
-	}
-
-	switch (new_mode) {
-	case LTE_LC_FUNC_MODE_OFFLINE:
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_LTE_DISCONNECT_REQUEST;
-		break;
-	case LTE_LC_FUNC_MODE_NORMAL:
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_LTE_CONNECT_REQUEST;
-		break;
-	default:
-		LOG_ERR("Non supported modem functional mode request.");
-		return -ENOTSUP;
-	}
-
-	cloud_wrapper_notify_event(&cloud_wrap_evt);
-
-	/* If the modem is not in the required functional mode,
-	 * return the time that the security object should wait before the handler is called again.
-	 * Set by CONFIG_LWM2M_INTEGRATION_MODEM_MODE_REQUEST_RETRY_SECONDS.
-	 */
-	return CONFIG_LWM2M_INTEGRATION_MODEM_MODE_REQUEST_RETRY_SECONDS;
-}
-
-static int firmware_update_state_cb(uint8_t update_state)
-{
-	int err;
-	uint8_t update_result;
-	struct cloud_wrap_event cloud_wrap_evt = { 0 };
-
-	/* Get the firmware object update result code */
-	err = lwm2m_engine_get_u8(FIRMWARE_UPDATE_RESULT_PATH, &update_result);
-	if (err) {
-		LOG_ERR("Failed getting firmware result resource value");
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
-		cloud_wrap_evt.err = err;
-		cloud_wrapper_notify_event(&cloud_wrap_evt);
-		return 0;
-	}
-
-	switch (update_state) {
-	case STATE_IDLE:
-		LOG_DBG("STATE_IDLE, result: %d", update_result);
-
-		/* If the FOTA state returns to its base state STATE_IDLE, the FOTA failed. */
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_ERROR;
-		break;
-	case STATE_DOWNLOADING:
-		LOG_DBG("STATE_DOWNLOADING, result: %d", update_result);
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_START;
-		break;
-	case STATE_DOWNLOADED:
-		LOG_DBG("STATE_DOWNLOADED, result: %d", update_result);
-		return 0;
-	case STATE_UPDATING:
-		LOG_DBG("STATE_UPDATING, result: %d", update_result);
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_DONE;
-		break;
-	default:
-		LOG_ERR("Unknown state: %d", update_state);
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_ERROR;
-		break;
-	}
-
-	cloud_wrapper_notify_event(&cloud_wrap_evt);
-	return 0;
-}
-#endif
 
 static int lwm2m_init_security(struct lwm2m_ctx *client, const char *ep_name)
 {

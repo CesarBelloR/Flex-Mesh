@@ -34,7 +34,7 @@ LOG_MODULE_REGISTER(lwm2m_firmware, CONFIG_CLOUD_INTEGRATION_LOG_LEVEL);
 
 #define LWM2M_FIRM_PREFIX "lwm2m:fir"
 
-#define FOTA_PULL_SUPPORTED_COUNT 4
+#define FOTA_PULL_SUPPORTED_COUNT 1
 #define FOTA_INSTANCE_COUNT 1
 #define ENABLED_LWM2M_FIRMWARE_OBJECT LWM2M_OBJECT_FIRMWARE_ID
 static struct lwm2m_engine_res_inst pull_protocol_buff[FOTA_PULL_SUPPORTED_COUNT];
@@ -45,13 +45,18 @@ static struct lwm2m_engine_res_inst pull_protocol_buff[FOTA_PULL_SUPPORTED_COUNT
 #define FOTA_PULL_HTTP 2
 #define FOTA_PULL_HTTPS 3
 
+enum fota_delivery_method {
+	FOTA_UPDATE_DELIV_METHOD_PULL_ONLY = 0,
+	FOTA_UPDATE_DELIV_METHOD_PUSH_ONLY = 1,
+	FOTA_UPDATE_DELIV_METHOD_BOTH	   = 2
+};
+
 static lwm2m_firmware_get_update_state_cb_t update_state_cb;
 static uint8_t firmware_buf[CONFIG_LWM2M_COAP_BLOCK_SIZE];
 
 /* Supported Protocols */
-static uint8_t pull_protocol_support[FOTA_PULL_SUPPORTED_COUNT] = { FOTA_PULL_COAP, FOTA_PULL_HTTP,
-								    FOTA_PULL_COAPS,
-								    FOTA_PULL_HTTPS };
+/* Only support HTTP for now. Certificate support on modem would be required for HTTPS */
+static uint8_t pull_protocol_support[FOTA_PULL_SUPPORTED_COUNT] = { FOTA_PULL_HTTP };
 
 #ifdef CONFIG_DFU_TARGET_MCUBOOT
 static uint8_t mcuboot_buf[CONFIG_LWM2M_INTEGRATION_MCUBOOT_FLASH_BUF_SIZE] __aligned(4);
@@ -915,6 +920,15 @@ static void firmware_object_state_check(void)
 	}
 }
 
+static void lwm2m_firmware_set_delivery_method(enum fota_delivery_method method)
+{
+	int ret;
+
+	ret = lwm2m_set_u8(&LWM2M_OBJ(ENABLED_LWM2M_FIRMWARE_OBJECT, 0,
+				      LWM2M_FOTA_UPDATE_DELIV_METHOD_ID),
+			   method);
+}
+
 int lwm2m_init_firmware(void)
 {
 	int ret;
@@ -951,6 +965,7 @@ int lwm2m_init_firmware(void)
 	application_obj_id = modem_obj_id = 0;
 	lwm2m_firmware_load_from_settings(application_obj_id);
 	lwm2m_firware_pull_protocol_support_resource_init(application_obj_id);
+	lwm2m_firmware_set_delivery_method(FOTA_UPDATE_DELIV_METHOD_PULL_ONLY);
 	lwm2m_firmware_register_write_callbacks(application_obj_id);
 	lwm2m_firmware_set_update_cb(firmware_update_cb);
 	lwm2m_firmware_set_write_cb(firmware_block_received_cb);

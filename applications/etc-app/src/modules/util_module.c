@@ -159,7 +159,7 @@ void bsd_recoverable_error_handler(uint32_t err)
 static void reboot(void)
 {
 	LOG_ERR("Rebooting!");
-#if !defined(CONFIG_DEBUG) && defined(CONFIG_REBOOT)
+#if 1 || (!defined(CONFIG_DEBUG) && defined(CONFIG_REBOOT))
 	LOG_PANIC();
 	sys_reboot(0);
 #else
@@ -171,7 +171,7 @@ static void reboot(void)
 
 static void reboot_work_fn(struct k_work *work)
 {
-	LOG_INF("System is sleeping!!!");
+	reboot();
 }
 
 static void send_reboot_request(enum shutdown_reason reason)
@@ -240,15 +240,8 @@ static void on_state_init(struct util_msg_data *msg)
 		send_reboot_request(REASON_SLEEP);
 	}
 
-	if ((IS_EVENT(msg, cloud, CLOUD_EVT_ERROR))	||
-	    (IS_EVENT(msg, modem, MODEM_EVT_ERROR))	||
-	    (IS_EVENT(msg, sensor, SENSOR_EVT_ERROR))	||
-	    (IS_EVENT(msg, data, DATA_EVT_ERROR))	||
-	    (IS_EVENT(msg, app, APP_EVT_ERROR))		||
-	    (IS_EVENT(msg, ui, UI_EVT_ERROR))		||
-	    (IS_EVENT(msg, modem, MODEM_EVT_CARRIER_REBOOT_REQUEST)) ||
-	    (IS_EVENT(msg, cloud, CLOUD_EVT_REBOOT_REQUEST))) {
-		//send_reboot_request(REASON_GENERIC);
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_REBOOT_REQUEST)) {
+		send_reboot_request(REASON_GENERIC);
 		return;
 	}
 }
