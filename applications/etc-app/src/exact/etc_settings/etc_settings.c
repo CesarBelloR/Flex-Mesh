@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include "app_version.h"
@@ -115,8 +115,12 @@ int etc_settings_init(void)
 	ret = etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id,
 				      ETC_SETTINGS_DEVICE_ID_LEN);
 	if (ret) {
-		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%08X%08X", NRF_FICR->DEVICEID[0],
-			 NRF_FICR->DEVICEID[1]);
+		uint8_t dev_id[16];
+		ssize_t length = hwinfo_get_device_id(dev_id, sizeof(dev_id));
+		int offset = 0;
+		for (int i = 0 ; i < length ; i++) {
+			offset += snprintf(tmp_saved_value + offset, sizeof(tmp_saved_value) - offset,"%02X", dev_id[i]);
+		}
 		LOG_INF("Set default device ID %s", tmp_saved_value);
 		etc_set_device_id(tmp_saved_value);
 	}
