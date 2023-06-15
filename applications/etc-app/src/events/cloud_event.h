@@ -23,6 +23,8 @@ enum cloud_event_type {
 	/** Cloud is paused (a form of disconnected) */
 	CLOUD_EVT_PAUSED,
 
+	CLOUD_EVT_RX_OFF,
+
 	/** Connection has timed out. */
 	CLOUD_EVT_CONNECTION_TIMEOUT,
 

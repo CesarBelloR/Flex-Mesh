@@ -183,6 +183,8 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 		break;
 	case LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF:
 		LOG_DBG("LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF");
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_RX_OFF;
+		notify = true;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR:
 		LOG_ERR("LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR");
