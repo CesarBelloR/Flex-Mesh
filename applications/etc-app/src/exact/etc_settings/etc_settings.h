@@ -3,10 +3,16 @@
 #include "etc_device.h"
 #include <stdint.h>
 
+enum etc_serial_number_types {
+    ETC_SERIAL_TYPE_HW_INFO = 0,
+    ETC_SERIAL_TYPE_EXACT_INFO
+};
+
 #define ETC_SETTINGS_DEVICE_ID_LEN (32)
 #define ETC_SETTING_FW_VER_LEN	   (8)
 #define ETC_SETTING_HW_VER_LEN	   (8)
 
+#define ETC_SETTING_SERIAL_NUMBER_DEFAULT       (enum etc_serial_number_types)CONFIG_SERIAL_NUMBER_TYPE
 #define ETC_SETTING_DEVICE_MODE_DEFAULT		    ETC_DEVICE_MODE_LTE_LOGGER
 #define ETC_SETTING_POWER_MODE_DEFAULT		    ETC_POWER_MODE_POWER_SAVER
 #define ETC_SETTING_ALARM_DIRECTION_DEFAULT	    ETC_ALARM_DIR_GREATER
@@ -71,10 +77,11 @@ int etc_set_wake_early_secs(uint16_t second);
 int etc_set_tx_delay_msec(uint16_t msecond);
 int etc_set_rx_duration_secs(uint16_t second);
 int etc_set_alarm_threshold(uint16_t threshold);
+int etc_set_serial_number_type(enum etc_serial_number_types type);
+
 int etc_get_hw_version(char *buf, int buf_len);
 int etc_get_fw_version(char *buf, int buf_len);
 int etc_get_device_id(char *buf, int buf_len);
-
 enum etc_device_mode etc_get_device_mode(void);
 enum etc_power_mode_e etc_get_power_mode(void);
 enum etc_alarm_direction etc_get_alarm_direction(void);

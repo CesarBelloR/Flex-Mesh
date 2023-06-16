@@ -20,6 +20,7 @@ static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
 static int flag_etc_config_load;
+static enum etc_serial_number_types saved_serial_number_type;
 struct etc_config etc_cfg;
 
 K_MUTEX_DEFINE(setting_mutex);
@@ -82,14 +83,34 @@ int etc_get_fw_version(char *buf, int buf_len)
 	return copy_size;
 }
 
+static int etc_get_device_from_hwinfo(char *buf, int buf_len) 
+{
+	uint8_t dev_id[16];
+	ssize_t length = hwinfo_get_device_id(dev_id, sizeof(dev_id));
+	int offset = 0;
+	for (int i = 0 ; i < length ; i++) {
+		offset += snprintf(buf + offset, buf_len - offset,"%02X", dev_id[i]);
+	}
+
+	if (offset < 0) {
+		LOG_ERR("Error: Out of memory for buffer get device id");
+		return -ENOMEM;
+	}
+
+	return offset;
+}
+
 int etc_get_device_id(char *buf, int buf_len)
 {
 	int copy_size;
-
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	copy_size = ETC_SETTINGS_DEVICE_ID_LEN < buf_len ? ETC_SETTINGS_DEVICE_ID_LEN : buf_len;
-	memcpy(buf, saved_device_id, copy_size);
-	k_mutex_unlock(&setting_mutex);
+	if (saved_serial_number_type == ETC_SERIAL_TYPE_HW_INFO) {
+		copy_size = etc_get_device_from_hwinfo(buf, buf_len);
+	} else {
+		k_mutex_lock(&setting_mutex, K_FOREVER);
+		copy_size = ETC_SETTINGS_DEVICE_ID_LEN < buf_len ? ETC_SETTINGS_DEVICE_ID_LEN : buf_len;
+		memcpy(buf, saved_device_id, copy_size);
+		k_mutex_unlock(&setting_mutex);
+	}
 	return copy_size;
 }
 
@@ -115,14 +136,14 @@ int etc_settings_init(void)
 	ret = etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id,
 				      ETC_SETTINGS_DEVICE_ID_LEN);
 	if (ret) {
-		uint8_t dev_id[16];
-		ssize_t length = hwinfo_get_device_id(dev_id, sizeof(dev_id));
-		int offset = 0;
-		for (int i = 0 ; i < length ; i++) {
-			offset += snprintf(tmp_saved_value + offset, sizeof(tmp_saved_value) - offset,"%02X", dev_id[i]);
-		}
-		LOG_INF("Set default device ID %s", tmp_saved_value);
+		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%08d", CONFIG_SERIAL_NUMBER_DEFAULT_VALUE);
 		etc_set_device_id(tmp_saved_value);
+	}
+
+	ret = etc_device_read_setting(ETC_SERIAL_NUMBER_TYPE, &saved_serial_number_type, 
+		sizeof(saved_serial_number_type));
+	if (ret) {
+		etc_set_serial_number_type(ETC_SETTING_SERIAL_NUMBER_DEFAULT);
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_DEVICE_MODE_ID, &etc_cfg.device_mode,
@@ -474,6 +495,24 @@ int etc_set_alarm_threshold(uint16_t threshold)
 	return rc;
 }
 
+int etc_set_serial_number_type(enum etc_serial_number_types type) 
+{
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (saved_serial_number_type == type) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	saved_serial_number_type = type;
+	rc = etc_device_write_setting(ETC_SERIAL_NUMBER_TYPE, &saved_serial_number_type,
+				      sizeof(saved_serial_number_type));
+	if (rc == 0) {
+		LOG_DBG("set %u", saved_serial_number_type);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 enum etc_device_mode etc_get_device_mode(void)
 {
 	enum etc_device_mode mode;
@@ -580,7 +619,11 @@ static int cmd_info(const struct shell *shell, size_t argc, char **argv)
 {
 	shell_print(shell, "Hardware: %s", saved_hw_version);
 	shell_print(shell, "Firmware: %s", saved_fw_version);
-	shell_print(shell, "Device ID: %s", saved_device_id);
+	shell_print(shell, "Device ID EXACT%s: %s", saved_serial_number_type == ETC_SERIAL_TYPE_EXACT_INFO 
+		? "[*] " : "", saved_device_id);
+	int rc = etc_get_device_from_hwinfo(tmp_saved_value, sizeof(tmp_saved_value));
+	shell_print(shell, "Device ID HW%s: %s", saved_serial_number_type == ETC_SERIAL_TYPE_HW_INFO 
+		? "[*] " : "", tmp_saved_value);
 	return 0;
 }
 
@@ -605,10 +648,32 @@ static int cmd_set_firmware_version(const struct shell *shell, size_t argc, char
 	return 0;
 }
 
+static int cmd_set_serial_type(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		int mode = atoi(argv[1]);
+		if (mode != ETC_SERIAL_TYPE_HW_INFO && mode != ETC_SERIAL_TYPE_EXACT_INFO) {
+			shell_error(shell, "Invalid serial number type");
+			return 0;
+		}
+
+		etc_set_serial_number_type((enum etc_serial_number_types)mode);
+	} else {
+		shell_error(shell, "Invalid serial number parameter");
+	}
+
+	return 0;
+}
+
 static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		etc_set_device_id(argv[1]);
+		if (strlen(argv[1]) != 6) {
+			shell_error(shell, "Device ID must be 6 digits");
+			return 0;
+		}
+		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%02d%s", CONFIG_PRODUCTION_GROUP_VALUE, argv[1]);
+		etc_set_device_id(tmp_saved_value);
 	} else {
 		shell_error(shell, "Invalid device id");
 	}
@@ -833,7 +898,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_settings, SHELL_CMD(info, NULL, "Get ETC settings.", cmd_info),
 	SHELL_CMD(hardware, NULL, "Set hardware version", cmd_set_hardware_version),
 	SHELL_CMD(firmware, NULL, "Set firmware version", cmd_set_firmware_version),
-	SHELL_CMD(device, NULL, "Set device ID", cmd_set_device_id),
+	SHELL_CMD(set_serial_type, NULL, "Set serial number type", cmd_set_serial_type),
+	SHELL_CMD(set_device_id, NULL, "Set device ID", cmd_set_device_id),
 	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),
 	SHELL_CMD(set_power, NULL, "Set power mode", cmd_set_power),
 	SHELL_CMD(set_alarm_direction, NULL, "Set alarm direction", cmd_set_alarm_direction),

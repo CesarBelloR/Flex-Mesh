@@ -59,7 +59,7 @@ static cloud_wrap_evt_handler_t wrapper_evt_handler;
 static struct lwm2m_ctx client;
 
 static char client_id_buf[ETC_SETTINGS_DEVICE_ID_LEN + 1];
-static char endpoint_name[sizeof("urn:dev:mac:") +
+static char endpoint_name[sizeof("urn:dev:os:60606-") +
 			  LWM2M_INTEGRATION_CLIENT_ID_LEN];
 
 /* Enable session lifetime check after initial boot. After bootstrapping, the bootstrap server

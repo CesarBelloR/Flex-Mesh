@@ -17,6 +17,24 @@ config INTERVAL_TIME_TRANSMISSION_IN_SECONDS
 	help
 		Setting the interval time for transmission in default
 
+config SERIAL_NUMBER_TYPE
+	int "Select serial number concept by using HWInfo or EXACT Serial Number"
+	default 0
+	help
+		Setting to select the serial from HW info (option 0) or EXACT Serial Number (1)
+
+config PRODUCTION_GROUP_VALUE
+	int "The production group value for the application"
+	default 10
+	help
+		The production group value to avoid collisions with prior products
+
+config SERIAL_NUMBER_DEFAULT_VALUE
+	int "The default serial number"
+	default 10000000
+	help
+		Default value for serial number when type is EXACT Serial Number
+
 module = ETC_SETTINGS
 module-str = etc settings
 source "subsys/logging/Kconfig.template.log_config"

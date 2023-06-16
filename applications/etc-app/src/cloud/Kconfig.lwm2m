@@ -17,7 +17,7 @@ menu "LwM2M integration library"
 
 config LWM2M_INTEGRATION_ENDPOINT_PREFIX
 	string "LwM2M endpoint prefix"
-	default "urn:dev:mac:"
+	default "urn:dev:os:60606-"
 
 config LWM2M_INTEGRATION_PSK_ID
 	string "LwM2M PSK"
