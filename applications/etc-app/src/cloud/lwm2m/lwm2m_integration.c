@@ -18,6 +18,7 @@
 
 #include "etc_lwm2m_client_utils.h"
 #include "lwm2m_firmware.h"
+#include "lwm2m/lwm2m_codec_helpers.h"
 
 #include "cloud/cloud_wrapper.h"
 
@@ -512,6 +513,8 @@ int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id,
 	ARG_UNUSED(id);
 
 	int err;
+
+	lwm2m_codec_helpers_path_list_log(path_list, len);
 
 	err = lwm2m_send_cb(&client, path_list, len, send_cb);
 	if (err) {

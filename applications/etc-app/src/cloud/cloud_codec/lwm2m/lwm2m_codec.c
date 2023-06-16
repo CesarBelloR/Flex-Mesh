@@ -97,6 +97,27 @@ int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_hand
 	return 0;
 }
 
+int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data)
+{
+	static const struct lwm2m_obj_path path_list[] = {
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MANUFACTURER_RID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_SERIAL_NUMBER_ID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, FIRMWARE_VERSION_RID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_TYPE_RID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, HARDWARE_VERSION_RID),
+		LWM2M_OBJ(ETC_CFG_OBJECT_ID),
+		LWM2M_OBJ(ETC_TEMP_OBJECT_ID),
+	};
+	int err;
+
+	err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+						       path_list,
+						       ARRAY_SIZE(path_list));
+	
+	return err;
+}
+
 int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 				     union etc_device_record *record)
 {
@@ -191,11 +212,7 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 
 	/* Add paths currently required by software */
 	static const struct lwm2m_obj_path path_list[] = {
-		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
 		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_SERIAL_NUMBER_ID),
-		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, FIRMWARE_VERSION_RID),
-		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_TYPE_RID),
-		LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0),
 	};
 	err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
 						path_list,

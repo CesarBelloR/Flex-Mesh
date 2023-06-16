@@ -172,6 +172,14 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_static *modem_data);
 
+/**
+ * Prepare a packet that reflects the current status of devices. This is
+ * used to update the server's data model when a device first turns on.
+ * 
+ * @param cloud_data Pointer to the cloud_data struct.
+*/
+int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data);
+
 /** 
  * @brief Clear the data saved in the cloud_data struct. This should be done
  *        after the data has been sent to the cloud, if the struct is to be reused.

@@ -61,6 +61,8 @@ static struct data_lora_sensors lora_buf[MODULE_LORA_SENSOR_BUFFER_COUNT];
 
 static struct data_modem_static modem_stat;
 
+static bool first_send = true;
+
 /* Size of the static modem (modem_stat) data structure.
  * Used to provide an array size when encoding batch data.
  */
@@ -293,7 +295,6 @@ static void data_send(enum data_event_type event,
 	}
 
 	APP_EVENT_SUBMIT(module_event);
-	data_codec_clear_data(data);
 }
 
 static void data_encode(void) 
@@ -306,6 +307,11 @@ static void data_encode(void)
 		LOG_WRN("Not sending new record."
 			"Record ID %u is already being sent.", record_id);
 		return;
+	}
+
+	if (first_send) {
+		data_codec_prepare_update_packet(&codec);
+		first_send = false;
 	}
 
 	record_id = etc_device_read_record(&record);
@@ -414,6 +420,7 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
+		data_codec_clear_data(&codec);
 		/* Acknowledge record and encode more data, if connected to cloud */
 		etc_device_set_ack_record(record_id);
 		record_id = 0;

@@ -773,6 +773,22 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 	return 0;
 }
 
+void lwm2m_codec_helpers_path_list_log(const struct lwm2m_obj_path path_list[],
+				       uint8_t path_list_size)
+{
+	__ASSERT_NO_MSG(path_list);
+	char buf[LWM2M_MAX_PATH_STR_SIZE];
+
+	LOG_INF("Path list:");
+	for (int i = 0; i < path_list_size; i++) {
+		if (path_list->level == 0) {
+			return;
+		}
+		lwm2m_path_log_buf(buf, &path_list[i]);
+		LOG_DBG("%s", buf);
+	}
+}
+
 int lwm2m_codec_helpers_object_path_list_clear(struct cloud_codec_data *output)
 {
 	if (output == NULL) {
@@ -790,26 +806,58 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 					     size_t path_size)
 {
 	bool path_added = false;
-	uint8_t j = 0;
+	int added_cnt = 0;
+	int new_paths_idx[path_size];
+	int new_paths_len = 0;
 
 	if (output == NULL || path == NULL || path_size == 0) {
 		return -EINVAL;
 	}
 
+	/* Loop through paths to find new paths that are already in the output
+	 * path list */
+	if (output->valid_object_paths > 0) {
+		for (int i = 0; i < path_size; i++) {
+			bool new_path = true;
+
+			for (int j = 0; j < output->valid_object_paths; j++) {
+				if (memcmp(&path[i], &output->paths[i], 
+					   sizeof(path[i])) == 0) {
+					new_path = false;
+					break;
+				}
+			}
+
+			/* Populate new path in index list */
+			if (new_path) {
+				new_paths_idx[new_paths_len] = i;
+				new_paths_len++;
+			}
+		}
+	} else {
+		/* Populate new_paths_idx with all new path indices */
+		for (int i = 0; i < path_size; i++) {
+			new_paths_idx[i] = i;
+		}
+		new_paths_len = path_size;
+	}
+
+	/* Add new paths to output paths */
 	for (int i = 0; i < ARRAY_SIZE(output->paths); i++) {
 		if (output->paths[i].level == 0) {
+			int path_idx = new_paths_idx[added_cnt];
 
-			output->paths[i].obj_id = path[j].obj_id;
-			output->paths[i].obj_inst_id = path[j].obj_inst_id;
-			output->paths[i].res_id = path[j].res_id;
-			output->paths[i].res_inst_id = path[j].res_inst_id;
-			output->paths[i].level = path[j].level;
+			output->paths[i].obj_id = path[path_idx].obj_id;
+			output->paths[i].obj_inst_id = path[path_idx].obj_inst_id;
+			output->paths[i].res_id = path[path_idx].res_id;
+			output->paths[i].res_inst_id = path[path_idx].res_inst_id;
+			output->paths[i].level = path[path_idx].level;
 
 			output->valid_object_paths++;
 			path_added = true;
-			j++;
+			added_cnt++;
 
-			if (j == path_size) {
+			if (added_cnt == new_paths_len) {
 				break;
 			}
 		}
@@ -818,7 +866,7 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 	/* This API can be called multiple times to populate the same path buffer. Due to this we
 	 * also check if all entries in the incoming path[] list was added.
 	 */
-	if (!path_added || (j != path_size)) {
+	if (!path_added || (added_cnt != new_paths_len)) {
 		return -ENOMEM;
 	}
 

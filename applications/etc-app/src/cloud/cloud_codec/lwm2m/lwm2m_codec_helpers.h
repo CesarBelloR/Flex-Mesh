@@ -124,6 +124,15 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 */
 int lwm2m_codec_helpers_set_device_data(void);
 
+/**
+ * Log the paths contained in the path_list in INFO log level.
+ *
+ * @param path_list List of lwm2m paths. Array can not be smaller than 
+ *                  CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX.
+*/
+void lwm2m_codec_helpers_path_list_log(const struct lwm2m_obj_path path_list[],
+				       uint8_t path_list_size);
+
 #ifdef __cplusplus
 }
 #endif
