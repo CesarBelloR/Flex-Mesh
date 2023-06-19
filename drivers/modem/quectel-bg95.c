@@ -1226,7 +1226,7 @@ MODEM_CMD_DEFINE(on_cmd_power_down)
 MODEM_CMD_DEFINE(on_cmd_sim_ini_stat)
 {
 	mdata.sim_ini_stat = ATOI(argv[0], -1, "sim_ini_stat");
-	LOG_DBG("SIM ini stat %d", sim_ini_stat);
+	LOG_DBG("SIM ini stat %d", mdata.sim_ini_stat);
 	k_sem_give(&mdata.sem_response);
 }
 
@@ -2177,7 +2177,7 @@ static bool modem_get_sim_init_status(void)
 		return false;
 	}
 
-	if (mdata.sim_ini_stat == 2) {
+	if (mdata.sim_ini_stat == 3) {
 		return true;
 	}
 
@@ -2190,13 +2190,13 @@ static void modem_retrieve_sim_numbers(void)
 	static const struct setup_cmd sim_number_cmds[] = {
 		SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
 		SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
-	}
+	};
 
 	int cnt = 0;
 	bool ret_bool;
 	int ret;
 	
-	while (!(ret_bool = modem_get_sim_init_status()) ||
+	while (!(ret_bool = modem_get_sim_init_status()) &&
 		(cnt < 3)) {
 		cnt++;
 		k_sleep(K_MSEC(100));
