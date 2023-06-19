@@ -349,6 +349,8 @@ static int setup(void)
 {
 	if (quectel_bg95_is_ready()) {
 		modem_set_connected();
+	} else {
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
 	}
 	if (modem_dev != NULL) {
 		modem_evt_handler_init(modem_dev, modem_evt_handler);
@@ -377,6 +379,7 @@ static void on_sub_state_modem_psm(struct modem_msg_data *msg)
 	     IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
 	     etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		modem_psm_cmd(modem_dev, MODEM_API_PSM_CMD_WAKEUP, NULL);
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
 	}
 }
 

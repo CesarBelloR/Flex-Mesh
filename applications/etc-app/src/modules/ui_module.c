@@ -220,10 +220,13 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	sys_snode_t *node = sys_slist_get(&pattern_transition_list);
 
 	if (node == NULL) {
-		return;
+		led_pattern_list[LED_STATE_TURN_OFF].led_state = LED_STATE_TURN_OFF;
+		led_pattern_list[LED_STATE_TURN_OFF].duration_sec = HOLD_FOREVER;
+		next_pattern = &led_pattern_list[LED_STATE_TURN_OFF];
+	} else {
+		next_pattern = CONTAINER_OF(node, struct led_pattern, header);
 	}
 
-	next_pattern = CONTAINER_OF(node, struct led_pattern, header);
 
 	/* Prevent the same LED led_state from being scheduled twice in a row. */
 	if (next_pattern->led_state != previous_led_state) {
@@ -231,12 +234,22 @@ static void led_pattern_update_work_fn(struct k_work *work)
 		previous_led_state = next_pattern->led_state;
 	}
 
-	/* Even if the LED state is not updated due a match with the previous state a LED pattern
-	 * update is scheduled. This will prolong the pattern until the LED pattern transition
-	 * list is cleared.
+	/* - Skip HOLD_FOREVER states if there is another item in the list
+	 * - If LED is being turned off or an ON state is being held forever,
+	     don't reschedule handler
+	 * - If LED is on and duration is specified (not HOLD_FOREVER),
+	 *   reschedule handler to turn off LED after specified time (save power)
 	 */
-	if (next_pattern->duration_sec > 0) {
-		k_work_reschedule(&led_pattern_update_work, K_SECONDS(next_pattern->duration_sec));
+	if (!sys_slist_is_empty(&pattern_transition_list) ||
+	    ((next_pattern->led_state != LED_STATE_TURN_OFF) &&
+	     (next_pattern->duration_sec != HOLD_FOREVER))) {
+		if (next_pattern->duration_sec > 0) {
+			k_work_reschedule(&led_pattern_update_work, 
+					  K_SECONDS(next_pattern->duration_sec));
+		} else {
+			k_work_reschedule(&led_pattern_update_work, 
+					  UI_LED_WAIT_TIME);
+		}
 	}
 }
 
@@ -248,9 +261,6 @@ static void ui_module_send(void)
 }
 
 static void ui_input_handler(enum etc_interface_event_type type) {
-	extern void ui_leds_start(void);	
-	ui_leds_start();
-	k_msleep(100);	
 	if (type == ETC_INTERFACE_EVENT_RTC) {
 		LOG_INF("UI -> ETC_INTERFACE_EVENT_RTC");
 	} else if ((type == ETC_INTERFACE_EVENT_RTC) || (type == ETC_INTERFACE_EVENT_HALL)) {
@@ -315,20 +325,25 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
-	/* Hold the LED OFF until next transition */
-	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTING)) {
+		transition_list_append(LED_STATE_LTE_CONNECTING, 5);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
-		transition_list_clear();
 		transition_list_append(LED_STATE_LTE_CONNECTED, 5);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}	
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED) ||
+	    IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+		transition_list_append(LED_STATE_LTE_DISCONNECTED, 5);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_LTE_CONNECTED, 5);
+		transition_list_append(LED_STATE_CLOUD_CONNECTED, 5);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
@@ -350,7 +365,6 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		transition_list_clear();
 		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 	}
@@ -366,20 +380,13 @@ static void on_state_running(struct ui_msg_data *msg)
 /* Message handler for STATE_CLOUD_CONNECTING. */
 static void on_state_cloud_connecting(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_CLOUD_ASSOCIATED, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_RUNNING);
-	}
 }
 
 /* Message handler for STATE_CLOUD_ASSOCIATING. */
 static void on_state_cloud_associating(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_CLOUD_ASSOCIATED, HOLD_FOREVER);
+		transition_list_append(LED_STATE_CLOUD_CONNECTED, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_RUNNING);
 	}
@@ -429,11 +436,6 @@ static void on_state_fota_update(struct ui_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
-		extern void ui_leds_stop(void);	
-		ui_leds_stop();	
-	}
-
 	if (IS_EVENT(msg, data, DATA_EVT_TEST_DATA_READY)) {
 		if (ui_module_gen_num_of_sample != 0) {
 			ui_module_gen_num_of_sample = ui_module_gen_num_of_sample - 1;
