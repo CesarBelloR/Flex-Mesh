@@ -19,7 +19,7 @@ config INTERVAL_TIME_TRANSMISSION_IN_SECONDS
 
 config SERIAL_NUMBER_TYPE
 	int "Select serial number concept by using HWInfo or EXACT Serial Number"
-	default 0
+	default 1
 	help
 		Setting to select the serial from HW info (option 0) or EXACT Serial Number (1)
 
