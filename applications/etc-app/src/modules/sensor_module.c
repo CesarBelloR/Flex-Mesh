@@ -273,6 +273,7 @@ static void sensor_gpios_enable(void)
 static void sensor_gpios_disable(void)
 {
 	gpio_pin_set_dt(&vsen_en_dt, 0U);
+	gpio_pin_set_dt(&s0_dt, 0);
 	gpio_pin_configure_dt(&sense_dt, GPIO_DISCONNECTED);
 	/* Note: pin s0 is configured by watchdog module. */
 	gpio_pin_configure_dt(&s1_dt, GPIO_DISCONNECTED);

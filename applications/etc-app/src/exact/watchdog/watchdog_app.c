@@ -186,10 +186,12 @@ static int watchdog_enable(const struct wdt_config_storage *config,
 static void hw_wdt_feed(void)
 {
 	LOG_INF("Feeding HW WDT");
-	gpio_pin_set_dt(&s0_watchdog_dt, GPIO_OUTPUT_ACTIVE);
+	gpio_pin_set_dt(&s0_watchdog_dt, 0);
+	k_busy_wait(50);
+	gpio_pin_set_dt(&s0_watchdog_dt, 1);
 	/* Minimum required pulse width according to datasheet is 100 ns. */
-	k_busy_wait(1);
-	gpio_pin_set_dt(&s0_watchdog_dt, GPIO_OUTPUT_INACTIVE);
+	k_busy_wait(50);
+	gpio_pin_set_dt(&s0_watchdog_dt, 0);
 }
 
 static void hw_wdt_work_fn(struct k_work *work)
