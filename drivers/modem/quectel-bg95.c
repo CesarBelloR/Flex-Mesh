@@ -257,8 +257,6 @@ static void socket_close(struct modem_socket *sock, bool force_close)
 	if (ret == 0) {
 		modem_socket_put(&mdata.socket_config, sock->sock_fd);
 	}
-
-	return ret;
 }
 
 /* Handler: OK */
@@ -1228,6 +1226,7 @@ MODEM_CMD_DEFINE(on_cmd_sim_ini_stat)
 	mdata.sim_ini_stat = ATOI(argv[0], -1, "sim_ini_stat");
 	LOG_DBG("SIM ini stat %d", mdata.sim_ini_stat);
 	k_sem_give(&mdata.sem_response);
+	return 0;
 }
 
 /** @brief Turn the modem on/off using PWRKEY.
@@ -2170,7 +2169,7 @@ static bool modem_get_sim_init_status(void)
 	};
 
 
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0, buf,
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmd, ARRAY_SIZE(cmd), buf,
 			     &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0) {
 		LOG_ERR("Failed to set retrieve SIM init status");
