@@ -384,6 +384,11 @@ int pcf85263a_init(const char* device)
     data->is_error = false;
  	/* Initialize and take the lock */
 	k_sem_init(&data->lock, 0, 1);
+
+    /* Disable the CLK output */
+    pcf85263a_set_clkpin(false);
+    /* Set the interrupt for INTA only */
+    pcf85263a_set_interrupt_io(true);
     return 0;
 }
 
