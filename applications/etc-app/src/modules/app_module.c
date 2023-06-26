@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "modules_common.h"
 
 #define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
-#define MINIMUM_TIME_TO_WAKEUP_S   65
+#define MINIMUM_TIME_TO_WAKEUP_S   (30)
 
 struct app_msg_data {
 	union {
