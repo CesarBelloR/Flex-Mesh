@@ -309,7 +309,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sockopen)
 {
 	int err = ATOI(argv[1], 0, "sock_err");
 
-	LOG_INF("Error in open socket: %d", err);
+	LOG_INF("Status of open socket: %d", err);
 	modem_cmd_handler_set_error(data, err);
 	k_sem_give(&mdata.sem_sock_conn);
 
@@ -321,7 +321,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sslopen)
 {
 	int err = ATOI(argv[1], 0, "sock_err");
 
-	LOG_INF("Error in open TLS socket: %d", err);
+	LOG_INF("Status of open TLS socket: %d", err);
 	modem_cmd_handler_set_error(data, err);
 	k_sem_give(&mdata.sem_sock_conn);
 
