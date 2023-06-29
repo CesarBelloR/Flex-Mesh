@@ -820,8 +820,11 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 		for (int i = 0; i < path_size; i++) {
 			bool new_path = true;
 
+			/* Compare existing paths to the path that needs to be added
+			 * and check if they are the identical. If they are identical,
+			 * skip comparing more paths. */
 			for (int j = 0; j < output->valid_object_paths; j++) {
-				if (memcmp(&path[i], &output->paths[i], 
+				if (memcmp(&path[i], &output->paths[j], 
 					   sizeof(path[i])) == 0) {
 					new_path = false;
 					break;
@@ -840,6 +843,10 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 			new_paths_idx[i] = i;
 		}
 		new_paths_len = path_size;
+	}
+
+	if (new_paths_len == 0) {
+		return 0;
 	}
 
 	/* Add new paths to output paths */
