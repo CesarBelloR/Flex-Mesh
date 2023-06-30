@@ -1,6 +1,7 @@
 #define DT_DRV_COMPAT quectel_bg95
 
 #include <fcntl.h>
+#include <zephyr/net/dns_resolve.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
@@ -28,9 +29,7 @@ static struct modem_context    mctx;
 static const struct socket_op_vtable offload_socket_fd_op_vtable;
 
 #if defined(CONFIG_DNS_RESOLVER)
-static struct zsock_addrinfo result;
-static struct sockaddr result_addr;
-static char result_canonname[DNS_MAX_NAME_SIZE + 1];
+#define AI_ARR_MAX 1
 #endif
 
 
@@ -748,6 +747,7 @@ static int on_dns_parser_ip_count(uint8_t* dns_buffer, int length) {
 /* Handler: +QIURC: "dnsgip","<resolved_ip_address>"[0] */
 MODEM_CMD_DEFINE(on_cmd_dns)
 {
+	struct zsock_addrinfo *result;
 	if (!mdata.dns_request) {
 		return 0;
 	};
@@ -766,13 +766,14 @@ MODEM_CMD_DEFINE(on_cmd_dns)
 	mdata.dns_ip_count += 1;
 
 	if (mdata.dns_ip_count == 1) {
+		result = mdata.dns_ai;
 		/* chop off end quote */
 		dns_buffer[out_len - 1] = '\0';
 
-		result_addr.sa_family = AF_INET;
+		result->_ai_addr.sa_family = AF_INET;
 		/* skip beginning quote when parsing */
-		(void)net_addr_pton(result.ai_family, &dns_buffer[1],
-					&((struct sockaddr_in *)&result_addr)->sin_addr);
+		(void)net_addr_pton(result->ai_family, &dns_buffer[1],
+					&((struct sockaddr_in *)&result->_ai_addr)->sin_addr);
 	}
 
 
@@ -2352,70 +2353,84 @@ static int offload_getaddrinfo(const char *node, const char *service,
 {
 	uint32_t port = 0U;
 	int ret;
+	struct zsock_addrinfo *result;
 	/* DNS command + 128 bytes for domain name parameter */
 	char sendbuf[sizeof("AT+QIDNSGIP=#,'[]'\r") + 128];
 
-	/* init result */
-	(void)memset(&result, 0, sizeof(result));
-	(void)memset(&result_addr, 0, sizeof(result_addr));
+	*res = calloc(AI_ARR_MAX, sizeof(struct zsock_addrinfo));
+	if (!(*res)) {
+		LOG_ERR("Allocation of struct zsock_addrinfo failed");
+		return DNS_EAI_MEMORY;
+	}
+	result = &(*res[0]);
+
 	/* FIXME: Hard-code DNS to return only IPv4 */
-	result.ai_family = AF_INET;
-	result_addr.sa_family = AF_INET;
-	result.ai_addr = &result_addr;
-	result.ai_addrlen = sizeof(result_addr);
-	result.ai_canonname = result_canonname;
-	result_canonname[0] = '\0';
+	result->ai_family = AF_INET;
+	result->_ai_addr.sa_family = AF_INET;
+	result->ai_addr = &result->_ai_addr;
+	result->ai_addrlen = sizeof(result->_ai_addr);
+	result->ai_canonname = result->_ai_canonname;
+	result->_ai_canonname[0] = '\0';
 
 	if (service) {
 		port = ATOI(service, 0U, "port");
 		if (port < 1 || port > USHRT_MAX) {
+			free(*res);
 			return DNS_EAI_SERVICE;
 		}
 	}
 
 	if (port > 0U) {
 		/* FIXME: DNS is hard-coded to return only IPv4 */
-		if (result.ai_family == AF_INET) {
-			net_sin(&result_addr)->sin_port = htons(port);
+		if (result->_ai_addr.sa_family == AF_INET) {
+			net_sin(&result->_ai_addr)->sin_port = htons(port);
 		}
 	}
 
 	/* check to see if node is an IP address */
-	if (net_addr_pton(result.ai_family, node,
-			  &((struct sockaddr_in *)&result_addr)->sin_addr)
+	if (net_addr_pton(result->ai_family, node,
+			  &((struct sockaddr_in *)&result->_ai_addr)->sin_addr)
 	    == 0) {
-		*res = &result;
 		return 0;
 	}
 
 	/* user flagged node as numeric host, but we failed net_addr_pton */
 	if (hints && hints->ai_flags & AI_NUMERICHOST) {
+		free(*res);
 		return DNS_EAI_NONAME;
 	}
+	/* Ensure only one DNS request is processed at a time.*/
+	ret = k_sem_take(&mdata.sem_dns_busy, MDM_TX_LOCK_TIMEOUT);
+	if (ret != 0) {
+		free(*res);
+		return DNS_EAI_AGAIN;
+	}
+	mdata.dns_ai = *res;
 	mdata.dns_ready = false;
 	mdata.dns_request = true;
 	mdata.dns_result = 0;
 	snprintk(sendbuf, sizeof(sendbuf), "AT+QIDNSGIP=1,\"%s\"", node);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     NULL, 0, sendbuf, &mdata.sem_dns_ready,
-			     MDM_DNS_TIMEOUT);
+				NULL, 0, sendbuf, &mdata.sem_dns_ready,
+				MDM_DNS_TIMEOUT);
+	k_sem_give(&mdata.sem_dns_busy);
 	if (ret < 0) {
 		return ret;
 	}
 
 	LOG_DBG("DNS RESULT: %s",
-		net_addr_ntop(result.ai_family,
-					 &net_sin(&result_addr)->sin_addr,
-					 sendbuf, NET_IPV4_ADDR_LEN));
+		net_addr_ntop(result->ai_family,
+			      &net_sin(&result->_ai_addr)->sin_addr,
+			      sendbuf, NET_IPV4_ADDR_LEN));
 
-	*res = (struct zsock_addrinfo *)&result;
 	return 0;
 }
 
 static void offload_freeaddrinfo(struct zsock_addrinfo *res)
 {
-	/* using static result from offload_getaddrinfo() -- no need to free */
-	res = NULL;
+	__ASSERT_NO_MSG(res);
+
+	free(res);
 }
 
 const struct socket_dns_offload offload_dns_ops = {
@@ -2563,6 +2578,7 @@ static int modem_init(const struct device *dev)
 	k_sem_init(&mdata.sem_response,	 0, 1);
 	k_sem_init(&mdata.sem_tx_ready,	 0, 1);
 	k_sem_init(&mdata.sem_sock_conn, 0, 1);
+	k_sem_init(&mdata.sem_dns_busy, 1, 1);
 	k_sem_init(&mdata.sem_dns_ready, 0, 1);
 	k_sem_init(&mdata.sem_data_ready, 0, 1);
 	k_sem_init(&mdata.sem_shutdown, 0, 1);

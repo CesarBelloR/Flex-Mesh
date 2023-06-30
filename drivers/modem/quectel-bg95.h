@@ -114,6 +114,7 @@ struct modem_data {
 	int sock_fd;
 	
 	/*  Flag to detect DNS is ready or not */
+	struct zsock_addrinfo *dns_ai;
 	bool dns_ready;
 	bool dns_request;
 	int  dns_result;
@@ -148,6 +149,7 @@ struct modem_data {
 	struct k_sem sem_response;
 	struct k_sem sem_tx_ready;
 	struct k_sem sem_sock_conn;
+	struct k_sem sem_dns_busy;
 	struct k_sem sem_dns_ready;
 	struct k_sem sem_data_ready;
 	struct k_sem sem_shutdown;
