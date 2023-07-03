@@ -28,7 +28,7 @@ mcuboot_pad:
   size: 0x200
 mcuboot_primary:
   address: 0x10000
-  end_address: 0x78000
+  end_address: 0xF8000
   orig_span: &id001
   - app
   - mcuboot_pad
@@ -66,16 +66,16 @@ settings_storage:
 etc_settings_storage:
   address: 0xF8000
   device: MX25R1635
-  end_address: 0x108000
+  end_address: 0x118000
   placement:
     before:
     - etc_settings_storage
   region: external_flash
-  size: 0x10000
+  size: 0x20000
 etc_records_storage:
-  address: 0x108000
+  address: 0x118000
   device: MX25R1635
-  end_address: 0x168000
+  end_address: 0x178000
   region: external_flash
   size: 0x60000
 sram_primary:
