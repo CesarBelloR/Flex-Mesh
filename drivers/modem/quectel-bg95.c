@@ -7,7 +7,6 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
 #include "quectel-bg95.h"
 #include "certificates.h"
-#include "memfault/http/root_certs.h"
 
 #ifdef CONFIG_PM_DEVICE
 #include <zephyr/kernel.h>
@@ -1602,7 +1601,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		}
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_CA_FILE_NAME, MEMFAULT_ROOT_CERTS_AMAZON_ROOT_CA1, sizeof(MEMFAULT_ROOT_CERTS_AMAZON_ROOT_CA1) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_CA_FILE_NAME, MEMFAULT_ROOT_CERTS_PEM, sizeof(MEMFAULT_ROOT_CERTS_PEM) - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download CA Certificate %d", ret);
 		return ret;
