@@ -308,7 +308,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sockopen)
 {
 	int err = ATOI(argv[1], 0, "sock_err");
 
-	LOG_INF("Error in open socket: %d", err);
+	LOG_INF("Status of open socket: %d", err);
 	modem_cmd_handler_set_error(data, err);
 	k_sem_give(&mdata.sem_sock_conn);
 
@@ -320,7 +320,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sslopen)
 {
 	int err = ATOI(argv[1], 0, "sock_err");
 
-	LOG_INF("Error in open TLS socket: %d", err);
+	LOG_INF("Status of open TLS socket: %d", err);
 	modem_cmd_handler_set_error(data, err);
 	k_sem_give(&mdata.sem_sock_conn);
 
@@ -822,10 +822,15 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 {
 	int  ret;
 	char send_buf[sizeof("AT+Q###SEND=##,####,")] = {0};
+	int bytes_written;
 
 	if (buf_len > MDM_MAX_DATA_LENGTH) {
 		buf_len = MDM_MAX_DATA_LENGTH;
 	}
+
+	/* Setup the locks correctly. */
+	k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, K_FOREVER);
+	k_sem_reset(&mdata.sem_tx_ready);
 
 	/* Create a buffer with the correct params. */
 	mdata.sock_written = buf_len;
@@ -834,10 +839,6 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 	} else {
 		snprintk(send_buf, sizeof(send_buf), "AT+QISEND=%d,%ld", sock->sock_fd, (long)buf_len);
 	}
-
-	/* Setup the locks correctly. */
-	k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, K_FOREVER);
-	k_sem_reset(&mdata.sem_tx_ready);
 
 	/* Send the Modem command. */
 	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
@@ -883,6 +884,7 @@ exit:
 	/* unset handler commands and ignore any errors */
 	(void)modem_cmd_handler_update_cmds(&mdata.cmd_handler_data,
 					    NULL, 0U, false);
+	bytes_written = mdata.sock_written;
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 
 	if (ret < 0) {
@@ -890,7 +892,7 @@ exit:
 	}
 
 	/* Return the amount of data written on the socket. */
-	return mdata.sock_written;
+	return bytes_written;
 }
 
 /* Func: offload_sendto
@@ -931,6 +933,8 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 		errno = ENOTCONN;
 		return -1;
 	}
+
+	LOG_INF("len: %u", len);
 
 	ret = send_socket_data(sock, to, cmd, ARRAY_SIZE(cmd), buf, len,
 			       MDM_CMD_TIMEOUT);
@@ -1601,43 +1605,25 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		}
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_CA_FILE_NAME, AWS_IOT_CA_CERTIFICATE, sizeof(AWS_IOT_CA_CERTIFICATE) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_CA_FILE_NAME, MEMFAULT_ROOT_CERTS_PEM, sizeof(MEMFAULT_ROOT_CERTS_PEM) - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download CA Certificate %d", ret);
 		return ret;
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_CLIENT_CERT_FILE_NAME, AWS_IOT_CLIENT_PUBLIC_CERTIFICATE, sizeof(AWS_IOT_CLIENT_PUBLIC_CERTIFICATE) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_CLIENT_CERT_FILE_NAME, "empty", sizeof("empty") - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download Client Certificate %d", ret);
 		return ret;
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_PRIV_KEY_FILE_NAME, AWS_IOT_CLIENT_PRIVATE_KEY, sizeof(AWS_IOT_CLIENT_PRIVATE_KEY) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_PRIV_KEY_FILE_NAME, "empty", sizeof("empty") - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download Private Key %d", ret);
 		return ret;
 	}
 
 	char buf[256];
-
-	snprintk(buf, sizeof(buf), "AT+QFLDS=\"UFS\"");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0)
-	{
-		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
-		return -1;
-	}
-
-	snprintk(buf, sizeof(buf), "AT+QFLDS=\"EUFS\"");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0)
-	{
-		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
-		return -1;
-	}
 
 	snprintk(buf, sizeof(buf), "AT+QFLST");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
@@ -1648,7 +1634,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XC02F", "ciphersuite", sock->sock_fd);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XFFFF", "ciphersuite", sock->sock_fd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1694,7 +1680,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->sock_fd, 2);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->sock_fd, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1718,6 +1704,16 @@ static int on_connect_tls_init(struct modem_socket *sock)
 	if (ret < 0)
 	{
 		LOG_DBG("Error to set QSSLCFG->ignorelocaltime");
+		return -1;
+	}
+
+	/* Disable DTLS when using TLS socket */
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->sock_fd, 0);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for DTLS enable");
 		return -1;
 	}
 	

@@ -20,6 +20,8 @@
 #define MODULE_DATA_BATTERY_BUFFER_COUNT 8
 #define MODULE_LORA_SENSOR_BUFFER_COUNT 8
 
+#include "etc_memfault.h"
+
 #include "modules_common.h"
 #include "events/app_event.h"
 #include "events/cloud_event.h"
@@ -428,8 +430,9 @@ static void on_all_states(struct data_msg_data *msg)
 			data_encode();
 		}
 	}
-
+		
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
+		ETC_MEMFAULT_TRACE_EVENT(send_fail);
 		/* Reset record ID on fail */
 		record_id = 0;
 		if (state == STATE_CLOUD_CONNECTED) {

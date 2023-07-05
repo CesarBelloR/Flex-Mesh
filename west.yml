@@ -12,4 +12,9 @@ manifest:
       repo-path: sdk-nrf
       revision: v2.3.0
       import: true
+    # list the Memfault SDK as a top-level module
+    - name: memfault-firmware-sdk
+      url: https://github.com/memfault/memfault-firmware-sdk
+      path: modules/lib/memfault-firmware-sdk
+      revision: 1.0.1
     
