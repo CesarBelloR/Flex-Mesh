@@ -822,10 +822,15 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 {
 	int  ret;
 	char send_buf[sizeof("AT+Q###SEND=##,####,")] = {0};
+	int bytes_written;
 
 	if (buf_len > MDM_MAX_DATA_LENGTH) {
 		buf_len = MDM_MAX_DATA_LENGTH;
 	}
+
+	/* Setup the locks correctly. */
+	k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, K_FOREVER);
+	k_sem_reset(&mdata.sem_tx_ready);
 
 	/* Create a buffer with the correct params. */
 	mdata.sock_written = buf_len;
@@ -834,10 +839,6 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 	} else {
 		snprintk(send_buf, sizeof(send_buf), "AT+QISEND=%d,%ld", sock->sock_fd, (long)buf_len);
 	}
-
-	/* Setup the locks correctly. */
-	k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, K_FOREVER);
-	k_sem_reset(&mdata.sem_tx_ready);
 
 	/* Send the Modem command. */
 	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
@@ -883,6 +884,7 @@ exit:
 	/* unset handler commands and ignore any errors */
 	(void)modem_cmd_handler_update_cmds(&mdata.cmd_handler_data,
 					    NULL, 0U, false);
+	bytes_written = mdata.sock_written;
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 
 	if (ret < 0) {
@@ -890,7 +892,7 @@ exit:
 	}
 
 	/* Return the amount of data written on the socket. */
-	return mdata.sock_written;
+	return bytes_written;
 }
 
 /* Func: offload_sendto
@@ -931,6 +933,8 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 		errno = ENOTCONN;
 		return -1;
 	}
+
+	LOG_INF("len: %u", len);
 
 	ret = send_socket_data(sock, to, cmd, ARRAY_SIZE(cmd), buf, len,
 			       MDM_CMD_TIMEOUT);
