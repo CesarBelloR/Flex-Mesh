@@ -314,11 +314,11 @@
 		};
 		etc_settings_partition: partition@F8000 {
 			label = "etc-settings-partition";
-			reg = <0x000F8000 0x00010000>;
+			reg = <0x000F8000 0x00020000>;
 		};
-		etc_records_partition: partition@108000 {
+		etc_records_partition: partition@118000 {
 			label = "etc-records-partition";
-			reg = <0x00108000 0x00060000>;
+			reg = <0x00118000 0x00060000>;
 		};
 	};
 };
