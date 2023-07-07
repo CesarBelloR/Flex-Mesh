@@ -11,6 +11,7 @@ enum etc_serial_number_types {
 #define ETC_SETTINGS_DEVICE_ID_LEN (32)
 #define ETC_SETTING_FW_VER_LEN	   (8)
 #define ETC_SETTING_HW_VER_LEN	   (8)
+#define ETC_SETTING_RELAY_ICCID_LEN (4)
 #define ETC_SETTING_PSK_LEN	   CONFIG_LWM2M_SECURITY_KEY_SIZE
 
 #define ETC_SETTING_SERIAL_NUMBER_DEFAULT	    (enum etc_serial_number_types)CONFIG_SERIAL_NUMBER_TYPE
@@ -82,6 +83,7 @@ int etc_set_tx_delay_msec(uint16_t msecond);
 int etc_set_rx_duration_secs(uint16_t second);
 int etc_set_alarm_threshold(uint16_t threshold);
 int etc_set_serial_number_type(enum etc_serial_number_types type);
+int etc_set_relay_iccid(void);
 
 int etc_get_hw_version(char *buf, int buf_len);
 int etc_get_fw_version(char *buf, int buf_len);
@@ -119,5 +121,6 @@ uint16_t etc_get_wake_early_secs(void);
 uint16_t etc_get_tx_delay_msec(void);
 uint16_t etc_get_rx_duration_secs(void);
 uint16_t etc_get_alarm_threshold(void);
+int etc_get_relay_iccid(char *buf, int buf_len);
 
 #endif /* ETC_SETTINGS_H__ */

@@ -59,6 +59,12 @@ struct logger_lora_response {
 	int reclaim_end_time;
 };
 
+struct relay_lora_message {
+	bool is_okay;
+	char relay_id[LORA_LOGGER_ID_LEN];
+	char logger_id[LORA_LOGGER_ID_LEN];
+};
+
 /* Lora module message queue. */
 #define LORA_QUEUE_ENTRY_COUNT	  20
 #define LORA_QUEUE_BYTE_ALIGNMENT 4
@@ -208,14 +214,10 @@ static int setup(void)
 		return -1;
 	}
 
-	if (etc_device_get_mode() == ETC_DEVICE_MODE_RELAY) {
-		LOG_INF("Start a thread for Relay LORA");
-		k_thread_create(&lora_rx_thread, lora_rx_stack,
-				K_KERNEL_STACK_SIZEOF(lora_rx_stack),
-				(k_thread_entry_t)rx_thread_fn, NULL, NULL, NULL, K_PRIO_COOP(7), 0,
-				K_NO_WAIT);
+	if (etc_device_is_relay()) {
+		LOG_INF("Relay device mode with Lora");
 	} else {
-		LOG_INF("Logger device mode for Lora");
+		LOG_INF("Logger device mode with Lora");
 	}
 
 	return 0;
@@ -284,6 +286,40 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 		}
 	}
 	return response;
+}
+
+static struct relay_lora_message lora_module_relay_get_message(char* package) 
+{
+	struct relay_lora_message message;
+	uint8_t i = 0;
+	char *pt;
+	char *ptr;
+	message.is_okay = false;
+	pt = strtok(package, ",");
+	if (pt != NULL) { 
+		for (i = 0; i < 5; i++) {
+			if (pt == NULL) {
+				message.is_okay = false;
+				return message;
+			}
+			if (i == 0) {
+				if (pt[0] != 'S') {
+					LOG_WRN("Unknown start message");
+					message.is_okay = false;
+					return message;
+				}
+			} else if (i == 1) {
+				snprintf(message.relay_id, sizeof(message.relay_id), "%s", pt);
+			} else if (i == 3) {
+				snprintf(message.logger_id, sizeof(message.logger_id), "%s", pt);
+				message.is_okay = true;
+			} else {
+				/* No action required */
+			}
+			pt = strtok(NULL, ",");
+		}
+	}
+	return message;
 }
 
 static int module_lora_wait_packet(void)
@@ -356,6 +392,82 @@ retry_recv:
 #if 0
 char decr_buf[LORA_ACKUNCRYPT_LEN + 1];
 #endif
+
+static int module_lora_prepare_packet(const char* logger_id, const char* relay_iccid)
+{
+	int decoded_buf_len = 0;
+	int tx_delay_min = etc_get_tx_interval_secs() / 60;
+	int now = date_time_now_second();
+	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "%.*s,%d,%.*s,%d,0,0", strlen(logger_id), 
+		logger_id, tx_delay_min, strlen(relay_iccid), relay_iccid, now);
+
+	LOG_DBG("Decoded length %d", decoded_buf_len);
+	LOG_DBG("Msg %s", decoded_buf);
+	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, 21);
+	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
+
+	int rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
+	if (rc) {
+		LOG_ERR("Failed to transmit packet");
+		return rc;
+	}
+
+	return 0;
+}
+
+static int module_lora_relay_wait_packet(void)
+{
+	int ret = 0;
+	int16_t rssi;
+	int8_t snr;
+	char relay_iccid[ETC_SETTING_RELAY_ICCID_LEN + 1];
+	int64_t start_time = k_uptime_get();
+	int64_t start_waiting_time = 0;
+	int64_t max_waiting_time = 0;
+
+	memset(lora_rx_buf, 0, sizeof(lora_rx_buf));
+	memset(decoded_buf, 0, sizeof(decoded_buf));
+	ret = lora_config(lora_dev, &etc_lora_rx_config);
+	if (ret < 0) {
+		LOG_ERR("Lora_config failed error %d", ret);
+		return -EINVAL;
+	}
+	
+	etc_get_relay_iccid(relay_iccid, sizeof(relay_iccid));
+	relay_iccid[ETC_SETTING_RELAY_ICCID_LEN] = '\0';
+	start_waiting_time = k_uptime_get();
+	max_waiting_time = etc_device_get_rx_timeout() * 1000;
+	LOG_INF("Max waiting time %lld", max_waiting_time);
+retry_recv:
+	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), K_MSEC(LORA_LOGGER_ON_RECV_MODE_MSEC), &rssi, &snr);
+	if (ret < 0) {
+		LOG_DBG("No message");
+	} else {
+		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
+		LOG_DBG("Decoded buf %s", decoded_buf);
+		struct relay_lora_message message = lora_module_relay_get_message(decoded_buf);
+		if (message.is_okay) {
+			etc_device_write_relay_record(decoded_buf);
+			LOG_INF("Relay ID %s - Logger ID %s", message.relay_id, message.logger_id);
+			if ((strncmp(message.relay_id, "OPEN", strlen("OPEN"))) || 
+				strncmp(message.relay_id, relay_iccid, ETC_SETTING_RELAY_ICCID_LEN)) {
+					/* Send ACK message */
+					module_lora_prepare_packet(message.logger_id, relay_iccid);
+				}
+		}
+	}
+
+	int64_t delta = k_uptime_get() - start_waiting_time;
+	if (delta >= max_waiting_time) {
+		LOG_DBG("Done time: %lld", delta);
+		return 0;
+	} else {
+		LOG_DBG("Run time: %lld", delta);
+		goto retry_recv;
+	}
+
+	return 0;
+}
 
 static int module_lora_process_packet(union etc_device_record record)
 {
@@ -484,6 +596,19 @@ static void on_all_states(struct lora_msg_data *msg)
 					break;
 				}
 			} while (1);
+			SEND_EVENT(lora, LORA_EVT_RX_DATA_READY);
+		}
+	}
+
+	if (etc_device_is_relay()) {
+		if (IS_EVENT(msg, app, APP_EVT_DATA_RECEIVE)) {
+			LOG_INF("Relay is listening for data");
+			int rc = module_lora_relay_wait_packet();
+			if (rc == 0) {
+				LOG_INF("Waiting time is done. Go to sleep");
+			} else {
+				LOG_DBG("Error in waiting packet %d", rc);
+			}
 			SEND_EVENT(lora, LORA_EVT_RX_DATA_READY);
 		}
 	}

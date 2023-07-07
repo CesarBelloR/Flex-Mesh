@@ -19,10 +19,10 @@
 #define IMG_PUBKEY_ID_LEN	4
 
 /* Define an enum to describe the job of logger currently */
-enum etc_logger_job {
-	ETC_LOGGER_JOB_LOG = 0x00,
-	ETC_LOGGER_JOB_TX,
-	ETC_LOGGER_JOB_BOTH,
+enum etc_device_job {
+	ETC_DEVICE_JOB_LOG = 0x00,
+	ETC_DEVICE_JOB_TX_RX,
+	ETC_DEVICE_JOB_BOTH,
 };
 
 /* Define an enum to describe the sub job for transmit event */
@@ -218,6 +218,13 @@ uint16_t etc_device_nack_count(void);
  * @return	true if LoRa logging is enabled, false otherwise.
  */
 bool etc_device_is_logger_lora(void);
+
+/**
+ * @brief Check if the ETC device is configured for LoRa relaying.
+ *
+ * @return	true if LoRa relaying is enabled, false otherwise.
+ */
+bool etc_device_is_relay(void);
 
 /**
  * @brief Get the receive timeout for the ETC device.

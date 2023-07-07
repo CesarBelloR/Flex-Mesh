@@ -470,8 +470,12 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	}
 
 	if (next_transmit != 0) {
-		struct tm tm_transmit_time = {0x00};
-		enum etc_device_mode device_mode = etc_get_device_mode();
+		if (etc_device_is_relay()) {
+			uint16_t wakeup_early = etc_get_wake_early_secs();
+			next_transmit = next_transmit > wakeup_early ? next_transmit - wakeup_early : next_transmit;
+		} 
+		
+		struct tm tm_transmit_time = {0};
 		gmtime_r(&next_transmit, &tm_transmit_time);
 		pcf85263a_alarm_type_1_config_t config_1 = {
 			.seconds = tm_transmit_time.tm_sec,
@@ -511,7 +515,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	app_set_next_wakekup(wakeup, type);
 	
 	LOG_DBG("Now at: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
-	LOG_DBG("Log %u - Transmit %u", (uint32_t)next_log, (uint32_t)next_transmit);
+	LOG_DBG("Log %u - Transmit/Receive %u", (uint32_t)next_log, (uint32_t)next_transmit);
 
 	pcf85263a_interrupt_flag_t interrupt_flag = {
 		.enable_level_pulse = 0,
@@ -555,42 +559,46 @@ static void app_peripheral_on(bool is_rtc)
 	bool flag_1 = pcf85263a_is_alarm_1_flags();
 	bool flag_2 = pcf85263a_is_alarm_2_flags();
 	
-	enum etc_logger_job job = ETC_LOGGER_JOB_BOTH;
+	enum etc_device_job job = ETC_DEVICE_JOB_BOTH;
 	if (flag_1 && flag_2) {
-		job = ETC_LOGGER_JOB_BOTH;
+		job = ETC_DEVICE_JOB_BOTH;
 	} else if (flag_1) {
-		job = ETC_LOGGER_JOB_TX;
+		job = ETC_DEVICE_JOB_TX_RX;
 	} else if (flag_2) {
-		job = ETC_LOGGER_JOB_LOG;
+		job = ETC_DEVICE_JOB_LOG;
 	} 
 
 	LOG_DBG("UTC time %d - Job %d", (int)now, job);
 	switch (job) {
-		case ETC_LOGGER_JOB_LOG: {
+		case ETC_DEVICE_JOB_LOG: {
 			LOG_DBG("Doing log");
-			etc_device_set_job(ETC_LOGGER_JOB_LOG);
-			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_LOG);
+			etc_device_set_job(ETC_DEVICE_JOB_LOG);
+			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_LOG);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
 			break;
 		}
-		case ETC_LOGGER_JOB_TX: {
-			LOG_DBG("Doing transmit");
-			etc_device_set_job(ETC_LOGGER_JOB_TX);
-			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_TX);
+		case ETC_DEVICE_JOB_TX_RX: {
+			etc_device_set_job(ETC_DEVICE_JOB_TX_RX);
+			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_TX_RX);
 			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else {
-				etc_device_set_transmit_sub_job(ETC_TRANSMIT_NORMAL);
-				SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+				if (etc_device_is_relay()) {
+					LOG_DBG("Doing receive");
+					SEND_EVENT(app, APP_EVT_DATA_RECEIVE);
+				} else {
+					LOG_DBG("Doing transmit");
+					SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+				}
 			}
 			
 			break;
 		}
-		case ETC_LOGGER_JOB_BOTH: {
+		case ETC_DEVICE_JOB_BOTH: {
 			LOG_DBG("Doing both job");
-			etc_device_set_job(ETC_LOGGER_JOB_BOTH);
-			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
+			etc_device_set_job(ETC_DEVICE_JOB_BOTH);
+			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_BOTH);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
 			break;
 		}
@@ -598,7 +606,7 @@ static void app_peripheral_on(bool is_rtc)
 #endif
 	} else {
 		LOG_DBG("Wakeup from external HALL sensor");
-		etc_device_set_job(ETC_LOGGER_JOB_BOTH);
+		etc_device_set_job(ETC_DEVICE_JOB_BOTH);
 		SEND_EVENT(app, APP_EVT_DATA_GET);
 	}
 }
@@ -636,13 +644,13 @@ void date_time_handler(const struct date_time_evt *evt)
 		    ((now_wakeup_diff > etc_device_get_log_interval_second()) &&
 		    (now_wakeup_diff > tx_sec))) {
 			LOG_INF("Update wakeup time after date/time synced");
-			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
+			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_BOTH);
 		} else if (now_wakeup_diff > etc_device_get_log_interval_second()) {
 			LOG_INF("Update log wakeup time after date/time synced");
 			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_LOG);
 		} else if (now_wakeup_diff > tx_sec) {
 			LOG_INF("Update tx wakeup time after date/time synced");
-			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_TX);
+			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_TX_RX);
 		}
 		break;
 	}
@@ -663,13 +671,21 @@ static int setup(void)
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 	date_time_register_handler(date_time_handler);
 #endif
-	static bool is_send = false;
-	if (is_send == false) {
-		LOG_DBG("Request to transmit records");
-		is_send = true;
-		app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
-		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+	
+	app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_BOTH);
+
+	if (etc_device_is_relay()) {
+		/* No action required */
+		LOG_DBG("Device is relay");
+	} else {
+		static bool is_send = false;
+		if (is_send == false) {
+			LOG_DBG("Request to transmit records");
+			is_send = true;
+			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+		}
 	}
+
 	return 0;
 }
 
@@ -727,9 +743,14 @@ static void on_all_events(struct app_msg_data *msg)
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_MAGNET);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else {
-				LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_NORMAL);
-				SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+				if (etc_device_is_relay()) {
+					LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_RECEIVE");
+					SEND_EVENT(app, APP_EVT_DATA_RECEIVE);
+				} else {
+					LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
+					SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+				}
 			}
 		} else if (job == ETC_LOGGER_JOB_LOG) {
 			app_peripheral_off();

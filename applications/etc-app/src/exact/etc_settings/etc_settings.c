@@ -24,6 +24,7 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
+static char saved_relay_iccid[ETC_SETTING_RELAY_ICCID_LEN + 1];
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
 static uint8_t saved_psk[ETC_SETTING_PSK_LEN];
 static uint8_t saved_psk_len;
@@ -618,6 +619,19 @@ int etc_set_serial_number_type(enum etc_serial_number_types type)
 	return rc;
 }
 
+int etc_set_relay_iccid(void) {
+	extern char* quectel_bg95_get_sim_number(void);
+	char* sim_number = quectel_bg95_get_sim_number();
+	if (strstr(sim_number, "N.A") || strlen(sim_number) == 0) {
+		LOG_ERR("Invalid sim number %d %d", strstr(sim_number, "N.A") == NULL, strlen(sim_number));
+		return -1;
+	}
+	memcpy(saved_relay_iccid, sim_number, ETC_SETTING_RELAY_ICCID_LEN);
+	saved_relay_iccid[ETC_SETTING_RELAY_ICCID_LEN] = '\0';
+	LOG_DBG("Relay ICCID %s", saved_relay_iccid);
+	return 0;
+}
+
 enum etc_device_mode etc_get_device_mode(void)
 {
 	enum etc_device_mode mode;
@@ -724,6 +738,17 @@ uint16_t etc_get_alarm_threshold(void)
 	threshold = etc_cfg.alarm_threshold;
 	k_mutex_unlock(&setting_mutex);
 	return threshold;
+}
+
+int etc_get_relay_iccid(char *buf, int buf_len) 
+{
+	int copy_size;
+
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	copy_size = ETC_SETTING_RELAY_ICCID_LEN < buf_len ? ETC_SETTING_RELAY_ICCID_LEN : buf_len;
+	memcpy(buf, saved_relay_iccid, copy_size);
+	k_mutex_unlock(&setting_mutex);
+	return copy_size;
 }
 
 #ifdef CONFIG_SHELL

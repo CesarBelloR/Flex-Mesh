@@ -583,7 +583,11 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
+		if (etc_device_is_relay()) {
+			/* No action required */
+		} else {
+			etc_device_write_record_sensor(msg->module.sensor.data.sensors);
+		}
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 

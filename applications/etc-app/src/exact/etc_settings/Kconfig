@@ -29,6 +29,12 @@ config SERIAL_NUMBER_DEFAULT_VALUE
 	help
 		Default value for serial number when type is EXACT Serial Number
 
+config RELAY_MAX_RECORD_HISTORY
+	int "Maximum number of record that relay stores in ROM"
+	default 100
+	help
+		Default value for number of record that the Relay can save in ROM.
+
 module = ETC_SETTINGS
 module-str = etc settings
 source "subsys/logging/Kconfig.template.log_config"
