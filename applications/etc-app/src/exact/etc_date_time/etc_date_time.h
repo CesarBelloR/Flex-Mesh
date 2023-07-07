@@ -178,6 +178,12 @@ int date_time_timestamp_clear(int64_t *unix_timestamp);
  * 
  */
 void date_time_start_work(void);
+
+/**
+ * @brief Trigger an event to re-calculate wakeup timer 
+ * 
+ */
+void date_time_force_event(enum date_time_evt_type event);
 #ifdef __cplusplus
 }
 #endif

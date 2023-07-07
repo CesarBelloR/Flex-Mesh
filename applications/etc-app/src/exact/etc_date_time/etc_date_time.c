@@ -478,6 +478,12 @@ void date_time_start_work(void)
 	k_work_reschedule(&time_work, K_NO_WAIT);
 }
 
+void date_time_force_event(enum date_time_evt_type event) 
+{
+	evt.type = event;
+	date_time_notify_event(&evt);
+}
+
 SYS_INIT(date_time_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 
 #ifdef CONFIG_SHELL
