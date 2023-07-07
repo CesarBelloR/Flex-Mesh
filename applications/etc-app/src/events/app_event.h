@@ -35,6 +35,9 @@ enum app_event_type {
 	/** Request to sync with cloud in desired event (Lora Sync, Magnet, T.B.D in future) */
 	APP_EVT_DATA_SYNC_CLOUD,
 
+	/** Request receive from logger to relay */
+	APP_EVT_DATA_RECEIVE,
+	
 	/** Create a list with all available sensor types in the system and
 	 *  distribute it as an APP_EVT_DATA_GET event.
 	 */
