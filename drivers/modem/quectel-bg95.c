@@ -1448,6 +1448,9 @@ int quectel_bg95_file_upload(const char* file_name) {
 		goto exit;
 	}
 exit:
+	/* unset handler commands */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      NULL, 0U, false);
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	return ret;
 }
@@ -1502,6 +1505,9 @@ int quectel_bg95_file_download(const char* file_name, const uint8_t* data, const
 		goto exit;
 	}
 exit:
+	/* unset handler commands */
+	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
+				      NULL, 0U, false);
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	return ret;
 }
