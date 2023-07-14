@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "modules_common.h"
 
 #define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
-#define MINIMUM_TIME_TO_WAKEUP_S   65
+#define MINIMUM_TIME_TO_WAKEUP_S   (30)
 
 struct app_msg_data {
 	union {
@@ -441,24 +441,29 @@ static void app_input_handler(enum etc_interface_event_type type)
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 void date_time_handler(const struct date_time_evt *evt)
 {
-	static enum date_time_evt_type last_type = DATE_TIME_NOT_OBTAINED;
-	if (last_type == evt->type) {
-		return;
-	}
-	last_type = evt->type;
 	switch (evt->type) {
-		case DATE_TIME_OBTAINED_MODEM:
-		case DATE_TIME_OBTAINED_EXT: {
-			int now = date_time_now_second();
-			int wakeup = app_get_next_wakeup();
-			if ((now != -1) && (now > wakeup)) {
-				LOG_INF("Update wakeup time after date/time synced");
-				app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
-			}
-			break;
+	case DATE_TIME_OBTAINED_MODEM:
+	case DATE_TIME_OBTAINED_EXT: {
+		int now = date_time_now_second();
+		int wakeup = app_get_next_wakeup();
+		int now_wakeup_diff = abs(wakeup - now);
+		
+		if ((now > wakeup) || 
+		    ((now_wakeup_diff > etc_device_get_log_interval_second()) &&
+		    (now_wakeup_diff > etc_device_get_tx_interval_second()))) {
+			LOG_INF("Update wakeup time after date/time synced");
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
+		} else if (now_wakeup_diff > etc_device_get_log_interval_second()) {
+			LOG_INF("Update log wakeup time after date/time synced");
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_LOG);
+		} else if (now_wakeup_diff > etc_device_get_tx_interval_second()) {
+			LOG_INF("Update tx wakeup time after date/time synced");
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_TX);
 		}
-		case DATE_TIME_NOT_OBTAINED: 
-			break;
+		break;
+	}
+	case DATE_TIME_NOT_OBTAINED: 
+		break;
 	}
 }
 #endif

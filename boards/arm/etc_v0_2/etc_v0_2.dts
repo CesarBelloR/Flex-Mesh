@@ -147,6 +147,7 @@
                 max-current = <2000>;
                 charge-current = <1500>;
                 charge-voltage = <4200>;
+				precharge-current = <260>;
                 int-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
         };
 };
@@ -292,7 +293,7 @@
 		};
 		slot0_partition: partition@10000 {
 			label = "image-0";
-			reg = <0x00010000 0x00070000>;
+			reg = <0x00010000 0x000E8000>;
 		};
 	};
 };
@@ -305,15 +306,19 @@
 
 		slot1_partition: partition@0 {
 			label = "image-1";
-			reg = <0x00000000 0x00070000>;
+			reg = <0x00000000 0x000E8000>;
 		};
-		storage_partition: partition@1F0000 {
-			label = "storage";
-			reg = <0x001F0000 0x00005000>;
+		setting_partition: partition@E8000 {
+			label = "setting-partition";
+			reg = <0x000E8000 0x00010000>;
 		};
-		nvs_partition: partition@1F5000 {
-			label = "nvs-storage";
-			reg = <0x001F5000 0x00005000>;
+		etc_settings_partition: partition@F8000 {
+			label = "etc-settings-partition";
+			reg = <0x000F8000 0x00020000>;
+		};
+		etc_records_partition: partition@118000 {
+			label = "etc-records-partition";
+			reg = <0x00118000 0x00060000>;
 		};
 	};
 };
@@ -325,5 +330,9 @@ zephyr_udc0: &usbd {
 	cdc_acm_uart0: cdc_acm_uart0 {
 		compatible = "zephyr,cdc-acm-uart";
 		label = "CDC_ACM_0";
+	};
+	cdc_acm_uart1: cdc_acm_uart1 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_1";
 	};
 };

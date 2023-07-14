@@ -17,7 +17,7 @@ menu "LwM2M integration library"
 
 config LWM2M_INTEGRATION_ENDPOINT_PREFIX
 	string "LwM2M endpoint prefix"
-	default "urn:dev:mac:"
+	default "urn:dev:os:60606-"
 
 config LWM2M_INTEGRATION_PSK_ID
 	string "LwM2M PSK"
@@ -47,6 +47,30 @@ config LWM2M_INTEGRATION_MAX_TEMP_SENSOR_INSTANCE_COUNT
 	help
 	  This setting establishes the total count of EXACT Temperature
 	  Sensor instances available to the LWM2M client.
+
+
+config LWM2M_INTEGRATION_FIRMWARE_UPDATE_OBJ_SUPPORT
+	bool "Firmware Update object support"
+	default y
+	select LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT if (!ZTEST)
+	select DFU_TARGET
+	select BOOTLOADER_MCUBOOT if !ZTEST
+	select IMG_MANAGER if !ZTEST
+	select IMG_ERASE_PROGRESSIVELY if !ZTEST
+	select FLASH if !ZTEST
+	select MPU_ALLOW_FLASH_WRITE if !ZTEST
+	select FOTA_DOWNLOAD_PROGRESS_EVT if FOTA_DOWNLOAD
+
+if LWM2M_INTEGRATION_FIRMWARE_UPDATE_OBJ_SUPPORT
+
+config LWM2M_INTEGRATION_MCUBOOT_FLASH_BUF_SIZE
+	int "Size of buffer used for flash write operations during MCUboot updates"
+	depends on DFU_TARGET_MCUBOOT
+	default 512
+	help
+	  Buffer size must be aligned to the minimal flash write block size.
+
+endif # LWM2M_INTEGRATION_FIRMWARE_UPDATE_OBJ_SUPPORT
 
 endmenu
 

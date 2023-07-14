@@ -35,6 +35,7 @@
 #define MDM_SHUTDOWN_TIMEOUT		  K_SECONDS(60)
 #define MDM_TX_LOCK_TIMEOUT		  K_SECONDS(5)
 #define MDM_SENDMSG_SLEEP		  K_MSEC(1)
+#define MDM_NTP_TIMEOUT			  K_SECONDS(150)
 #define MDM_MAX_DATA_LENGTH		  1024
 #define MDM_RECV_MAX_BUF		  16
 #define MDM_RECV_BUF_SIZE		  256
@@ -111,11 +112,9 @@ struct modem_data {
 
 	/* Socket from which we are currently reading data. */
 	int sock_fd;
-
-	/* Socket's non-block flag */
-	bool sock_nonblock;
 	
 	/*  Flag to detect DNS is ready or not */
+	struct zsock_addrinfo *dns_ai;
 	bool dns_ready;
 	bool dns_request;
 	int  dns_result;
@@ -136,6 +135,9 @@ struct modem_data {
 
 	bool psm_active;
 
+	/* SIM initialization status reported by modem */
+	int8_t sim_ini_stat;
+
 	/* Modem API */
 	modem_api_evt_handler_t evt_callback;
 
@@ -147,10 +149,12 @@ struct modem_data {
 	struct k_sem sem_response;
 	struct k_sem sem_tx_ready;
 	struct k_sem sem_sock_conn;
+	struct k_sem sem_dns_busy;
 	struct k_sem sem_dns_ready;
 	struct k_sem sem_data_ready;
 	struct k_sem sem_shutdown;
 	struct k_sem sem_busy;
+	struct k_sem sem_ntp_ready;
 };
 
 /* Socket read callback data */

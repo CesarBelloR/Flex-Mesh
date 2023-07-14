@@ -294,9 +294,19 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		break;
 	}
 	case CLOUD_WRAP_EVT_PAUSED:
+	{
 		LOG_DBG("CLOUD_WRAP_EVT_PAUSED");
 		SEND_EVENT(cloud, CLOUD_EVT_PAUSED);
 		break;
+	}
+
+	case CLOUD_WRAP_EVT_RX_OFF:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_RX_OFF");
+		SEND_EVENT(cloud, CLOUD_EVT_RX_OFF);
+		break;
+	}
+
 	case CLOUD_WRAP_EVT_DATA_RECEIVED:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_DATA_RECEIVED");
@@ -347,7 +357,7 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	}
 	case CLOUD_WRAP_EVT_REBOOT_REQUEST:
 	{
-		// FIXME: Implement
+		SEND_EVENT(cloud, CLOUD_EVT_REBOOT_REQUEST);
 		break;
 	}
 	default:
@@ -358,12 +368,6 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 
 static int setup(void)
 {
-#if defined(CONFIG_MCUBOOT_IMG_MANAGER)
-	/* After a successful initializaton, tell the bootloader that the
-	 * current image is confirmed to be working.
-	 */
-	boot_write_img_confirmed();
-#endif /* CONFIG_MCUBOOT_IMG_MANAGER */
 	cloud_wrap_init(cloud_wrap_event_handler);
 	return 0;
 }

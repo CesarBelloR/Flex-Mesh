@@ -1,0 +1,12 @@
+menuconfig ETC_NTC_TABLE
+	bool "Custom MCUMgrs Commands for the ETC"
+	default y
+	help
+	  Enable the NTC Table Lookup for sensor converter
+
+if ETC_NTC_TABLE
+	config NTC_USE_OFFSET_1
+		bool "Use NTC table with offset 1 deg in C"
+		default y
+
+endif

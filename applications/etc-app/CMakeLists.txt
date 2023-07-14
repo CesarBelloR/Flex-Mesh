@@ -12,6 +12,19 @@ else()
 project(app LANGUAGES C VERSION 0.1.0)
 endif()
 
+set(PROJECT_VERSION_RC 9)
+
+if(PROJECT_VERSION_RC)
+  set(PROJECT_VERSION_SUFFIX "rc${PROJECT_VERSION_RC}")
+else()
+  set(PROJECT_VERSION_SUFFIX "")
+endif()
+
+if(PROJECT_VERSION_SUFFIX)
+  set(PROJECT_VERSION ${PROJECT_VERSION}-${PROJECT_VERSION_SUFFIX})
+endif()
+
+
 configure_file(app_version.h.in ${CMAKE_BINARY_DIR}/app/include/app_version.h)
 
 target_include_directories(app PRIVATE 
@@ -27,4 +40,5 @@ add_subdirectory(src/modules)
 add_subdirectory(src/data)
 add_subdirectory(src/cloud)
 
+zephyr_include_directories_ifdef(CONFIG_MEMFAULT configuration/memfault)
 zephyr_include_directories_ifdef(CONFIG_AWS_IOT_PROVISION_CERTIFICATES certs)

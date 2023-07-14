@@ -17,6 +17,10 @@
 #include "events/sensor_event.h"
 #include "events/lora_event.h"
 
+#if defined(CONFIG_MEMFAULT)
+#include <memfault/core/trace_event.h>
+#endif
+
 #ifdef CONFIG_PM_DEVICE
 #include <zephyr/pm/pm.h>
 #include <zephyr/pm/device.h>
@@ -70,6 +74,8 @@ static int16_t rsrp_value_latest;
 const k_tid_t module_thread;
 
 const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
+
+int64_t modem_wakeup_time = -1;
 
 static bool modem_module_is_sleep = false;
 /* Modem module message queue. */
@@ -211,12 +217,18 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static void modem_set_connected(void)
 {
+	struct modem_event *module_event = new_modem_event();
+
 	// Do not retrieve static modem data when waking up from PSM.
 	if (!(state == STATE_DISCONNECTED && sub_state == SUB_STATE_MODEM_PSM)) {
 		static_modem_data_get();
 	}
 	state_set(STATE_CONNECTED);
-	SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTED);
+	
+	module_event->data.time_to_connect = modem_wakeup_time != -1 ?
+				k_uptime_get() - modem_wakeup_time : -1;
+	module_event->type = MODEM_EVT_LTE_CONNECTED;
+	APP_EVENT_SUBMIT(module_event);
 }
 
 static void modem_evt_handler(const struct modem_api_evt *const evt)
@@ -349,6 +361,8 @@ static int setup(void)
 {
 	if (quectel_bg95_is_ready()) {
 		modem_set_connected();
+	} else {
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
 	}
 	if (modem_dev != NULL) {
 		modem_evt_handler_init(modem_dev, modem_evt_handler);
@@ -376,7 +390,9 @@ static void on_sub_state_modem_psm(struct modem_msg_data *msg)
 	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
 	     IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
 	     etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
+		modem_wakeup_time = k_uptime_get();
 		modem_psm_cmd(modem_dev, MODEM_API_PSM_CMD_WAKEUP, NULL);
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
 	}
 }
 

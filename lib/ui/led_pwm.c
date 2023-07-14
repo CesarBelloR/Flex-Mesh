@@ -33,9 +33,8 @@ static const struct led_effect effect[] = {
 	[UI_LTE_CONNECTING] = LED_EFFECT_LED_BLINK(500, UI_LTE_CONNECTING_COLOR),
 	[UI_LTE_CONNECTED] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL, UI_LED_OFF_PERIOD_NORMAL, UI_LTE_CONNECTED_COLOR),
 	[UI_CLOUD_PUBLISHING] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL, UI_LED_OFF_PERIOD_NORMAL, UI_CLOUD_PUBLISHING_COLOR),
-	[UI_CLOUD_CONNECTING] = LED_EFFECT_LED_OFF(),
-	[UI_CLOUD_ASSOCIATING] = LED_EFFECT_LED_OFF(),
-	[UI_CLOUD_ASSOCIATED] = LED_EFFECT_LED_OFF(),
+	[UI_CLOUD_CONNECTING] = LED_EFFECT_LED_BLINK(500, UI_CLOUD_CONNECTING_COLOR),
+	[UI_CLOUD_CONNECTED] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL, UI_LED_OFF_PERIOD_NORMAL, UI_CLOUD_CONNECTED_COLOR),
 	[UI_ERROR_CLOUD] = LED_EFFECT_LED_OFF(),
 	[UI_SENSOR_AQUIRING] = LED_EFFECT_LED_BLINK(500, UI_LED_AQUIRING_SENSOR_COLOR),
 	[UI_LORA_TRANSMITTING] = LED_EFFECT_LED_OFF(),
@@ -43,8 +42,9 @@ static const struct led_effect effect[] = {
 	[UI_ACTIVE_MODE] = LED_EFFECT_LED_OFF(),
 	[UI_PASSIVE_MODE] = LED_EFFECT_LED_OFF(),
 	[UI_ERROR_SYSTEM_FAULT] = LED_EFFECT_LED_OFF(),
-	[UI_FOTA_UPDATING] = LED_EFFECT_LED_OFF(),
+	[UI_FOTA_UPDATING] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_NORMAL, UI_LED_OFF_PERIOD_NORMAL, UI_LED_COLOR_PURPLE),
 	[UI_FOTA_UPDATE_REBOOT] = LED_EFFECT_LED_OFF(),
+	[UI_FOTA_UPDATE_ERROR] = LED_EFFECT_LED_BLINK_ASYM(100, 400, UI_LED_ERROR_COLOR),
 	[UI_TURN_OFF] = LED_EFFECT_LED_OFF(),
 };
 
@@ -117,10 +117,13 @@ static void led_update(struct led *led)
 	led->effect_step = 0;
 	led->effect_substep = 0;
 
-	if (!led->effect) {
-		LOG_DBG("No effect set");
+	if (!led->effect ||
+	    (led->effect == &effect[UI_TURN_OFF])) {
+		ui_leds_stop();
 		return;
 	}
+
+	ui_leds_start();
 
 	__ASSERT_NO_MSG(led->effect->steps);
 
@@ -174,7 +177,7 @@ void ui_leds_start(void)
 		LOG_ERR("PWM enable failed %d", err);
 	}
 #endif
-	led_update(&leds);
+	LOG_DBG("PWM on");
 	led_is_ready = true;
 }
 
@@ -189,6 +192,7 @@ void ui_leds_stop(void)
 		LOG_ERR("PWM disable failed %d", err);
 	}
 #endif
+	LOG_DBG("PWM off");
 	led_is_ready = false;
 }
 

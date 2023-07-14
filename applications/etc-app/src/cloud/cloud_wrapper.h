@@ -39,6 +39,7 @@ enum cloud_wrap_event_type {
 	CLOUD_WRAP_EVT_DISCONNECTED,
 	/** Cloud integration layer is paused. */
 	CLOUD_WRAP_EVT_PAUSED,
+	CLOUD_WRAP_EVT_RX_OFF,
 	/** Data received from cloud integration layer.
 	 *  Payload is of type @ref cloud_wrap_event_data.
 	 */

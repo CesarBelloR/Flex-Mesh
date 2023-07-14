@@ -161,7 +161,7 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 {
 	int err;
 	int len;
-	char id[ETC_SETTINGS_DEVICE_ID_LEN + sizeof("urn:dev:mac:")] = "urn:dev:mac:";
+	char id[ETC_SETTINGS_DEVICE_ID_LEN + sizeof("urn:dev:os:60606-")] = "urn:dev:os:60606-";
 
 	/* Use nRF52 device ID (64 bit) as part of the endpoint name */
 	len = strlen(id);

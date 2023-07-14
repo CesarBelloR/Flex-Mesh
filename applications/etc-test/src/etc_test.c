@@ -52,6 +52,7 @@ static const struct gpio_dt_spec pon_trig_gpio_dt =
 static const struct gpio_dt_spec modem_uart_oe_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(modem_uart_oe), control_gpios, 0);
 #endif
+static const struct device *ext_flash = DEVICE_DT_GET(DT_NODELABEL(mx25r1635));
 
 /* Inputs */
 static const struct gpio_dt_spec rtc_int_dt =
@@ -169,9 +170,14 @@ static void adc_print_channel(const struct shell *shell, int channel)
 	float val;
 
 	if ((channel == ETC_ADC_CHANNEL_AMB) || (channel == ETC_ADC_CHANNEL_SENSOR)) {
+#if defined(CONFIG_NTC_USE_TABLE)
+		extern const float table_ntc_resistance_temp[];
+		extern const int table_offset;
+		extern const int table_length;
+		val =  sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, adc_raw);
+#else
 		val = sensor_ntc_converter(channel, adc_raw);
-		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
-			    channel, adc_raw, val);
+#endif
 	} else {
 		adc_get_raw_to_millivolts(channel, &adc_raw);
 		val = (float)adc_raw / 1000.0f;
@@ -842,7 +848,48 @@ static int cmd_external_flash_get_info(const struct shell *shell, size_t argc, c
 	return 0;
 }
 
-SHELL_CMD_ARG_REGISTER(etc_flash_info, NULL, "Get information of external flash", cmd_external_flash_get_info, 1, 0);
+static int cmd_external_flash_erase(const struct shell *shell, size_t argc, char **argv)
+{
+	struct flash_pages_info info;
+	size_t page_count;
+	int ret;
+
+	if (!device_is_ready(ext_flash)) {
+		shell_error(shell, "%s: device not ready", ext_flash->name);
+		return 0;
+	}
+
+	ret = flash_get_page_info_by_idx(ext_flash, 0, &info);	
+	if (ret) {
+		LOG_ERR("Unable to get page info");
+		goto error;
+	}
+
+	page_count = flash_get_page_count(ext_flash);
+	if (page_count == 0) {
+		LOG_ERR("Unable to get page count");
+		goto error;
+	}
+
+	ret = flash_erase(ext_flash, 0x00, info.size * page_count);
+	if (ret < 0) {
+		goto error;
+	}
+
+	shell_print(shell, "External flash erased");
+	return 0;
+
+error:
+	shell_error(shell, "Error erasing flash");
+	return -1;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(etc_flash_sub,
+	SHELL_CMD_ARG(info, NULL, "Get information", cmd_external_flash_get_info, 1, 0),
+	SHELL_CMD_ARG(erase, NULL, "Wipe the external flash", cmd_external_flash_erase, 1, 0),
+	SHELL_SUBCMD_SET_END
+);
+SHELL_CMD_REGISTER(etc_flash, &etc_flash_sub, "External flash commands", NULL);
 
 const struct device *lora_dev = NULL;
 static struct lora_modem_config etc_lora_rx_config = {

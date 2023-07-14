@@ -51,8 +51,8 @@ static void date_time_notify_event(const struct date_time_evt *evt)
 
 static void date_time_print_datetime(struct tm *tm_time)
 {
- LOG_DBG("Datetime: %4d-%02d-%02d (wday=%d)  TIME: %2d:%02d:%02d", tm_time->tm_year - 100,
-									tm_time->tm_mon + 1, tm_time->tm_mday, tm_time->tm_wday, tm_time->tm_hour, tm_time->tm_min,
+ LOG_DBG("Datetime: %4d-%02d-%02d TIME: %2d:%02d:%02d", tm_time->tm_year - 100,
+									tm_time->tm_mon + 1, tm_time->tm_mday, tm_time->tm_hour, tm_time->tm_min,
 									tm_time->tm_sec);
 }
 
@@ -72,7 +72,7 @@ static int time_modem_get(void)
 	buf[AT_CMD_MODEM_DATE_TIME_RESPONSE_LEN - 4] = '\0';
 
 	/* Example of modem time response:
-	 * "20/02/25,17:15:02+04"
+	 * "2023/05/23,06:29:17+28,0"
 	 */
 	LOG_DBG("Response from modem: %s", (buf));
 
@@ -89,7 +89,7 @@ static int time_modem_get(void)
 	char *ptr_end = NULL;
 	int base = 10;
 
-	date_time.tm_year = strtol(ptr_index, &ptr_end, base) + 2000 - 1900;
+	date_time.tm_year = strtol(ptr_index, &ptr_end, base) - 1900;
 	ptr_end += 1;
 	ptr_index = ptr_end;
 	date_time.tm_mon = strtol(ptr_index, &ptr_end, base) - 1;
@@ -176,7 +176,6 @@ static void new_date_time_get(void)
 		err = current_time_check();
 		if (err == 0) {
 			LOG_DBG("Time successfully obtained");
-			initial_valid_time = true;
 			date_time_notify_event(&evt);
 			continue;
 		}
@@ -185,8 +184,6 @@ static void new_date_time_get(void)
 		err = time_modem_get();
 		if (err == 0) {
 			LOG_DBG("Time from cellular network obtained");
-			initial_valid_time = true;
-			date_time_store(time_aux.date_time_utc / 1000);
 			date_time_set_second(time_aux.date_time_utc / 1000);
 			evt.type = DATE_TIME_OBTAINED_MODEM;
 			date_time_notify_event(&evt);
@@ -302,11 +299,22 @@ int date_time_set(const struct tm *new_date_time)
 	return 0;
 }
 
-int date_time_set_second(uint32_t new_date_time_sec) {
+int date_time_set_second(uint32_t new_date_time_sec) 
+{
+	int ret;
+
+	ret = pcf85263a_rtc_set_time((time_t)new_date_time_sec);
+	if (ret < 0) {
+		return -1;
+	}
 	initial_valid_time = true;
+	date_time_store(new_date_time_sec);
 	time_aux.last_date_time_update = k_uptime_get();
 	time_aux.date_time_utc = (int64_t)new_date_time_sec * 1000;
-	return pcf85263a_rtc_set_time((time_t)new_date_time_sec);
+	evt.type = DATE_TIME_OBTAINED_EXT;
+	date_time_notify_event(&evt);
+	
+	return ret;
 }
 
 int date_time_uptime_to_unix_time_ms(int64_t *uptime)
@@ -512,12 +520,10 @@ static int cmd_date_time_get(const struct shell *shell, size_t argc, char **argv
 static int cmd_date_time_set(const struct shell *shell, size_t argc, char **argv)
 {
 	uint32_t utc_date_time_seconds = (uint32_t)atoi(argv[1]);
-	time_aux.date_time_utc = (int64_t)utc_date_time_seconds * 1000;
-	date_time_store(utc_date_time_seconds);
-	time_t rtc_time_set = utc_date_time_seconds + time_aux.time_zone;
-	pcf85263a_rtc_set_time((time_t)rtc_time_set);
-	shell_print(shell, "Set UTC date time: %u", utc_date_time_seconds);
-	shell_print(shell, "Set RTC local time: %u", (uint32_t)rtc_time_set);
+	time_t local_time = utc_date_time_seconds + time_aux.time_zone;
+	shell_print(shell, "Set UTC time: %u", utc_date_time_seconds);
+	shell_print(shell, "Set local time: %u", (uint32_t)local_time);
+	date_time_set_second(utc_date_time_seconds);
 	return 0;
 }
 

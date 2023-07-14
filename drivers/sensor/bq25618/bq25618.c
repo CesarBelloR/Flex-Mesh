@@ -283,6 +283,12 @@ static int bq25618_init(const struct device *dev)
 		bq25618_set_input_voltage_limit(dev,
 					cfg->min_voltage),
 		INIT_RETRIES, count, ret);
+	if (cfg->precharge_current != 0) {
+		RETRY_IF_FAIL(
+			bq25618_set_precharge_current(dev,
+						cfg->precharge_current),
+			INIT_RETRIES, count, ret);
+	}
 
 	bq25618_enable_disable_charge_timer(dev, cfg->charge_timer_en);
 	if (cfg->charge_timer_en) {
@@ -939,11 +945,12 @@ struct bq25618_dev_config bq25618_config = {
 	.interrupt = GPIO_DT_SPEC_INST_GET(0, int_gpios),
 
 	.charge_current_limit = DT_INST_PROP(0, charge_current),
-        .charge_voltage_limit = DT_INST_PROP(0, charge_voltage),
-        .max_current = DT_INST_PROP(0, max_current),
-        .min_voltage = DT_INST_PROP(0, min_voltage),
-        .charge_timer_en = DT_INST_PROP(0, has_charge_timer),
-        .charge_timer_val = DT_INST_PROP(0, charge_timer_val),
+    .charge_voltage_limit = DT_INST_PROP(0, charge_voltage),
+    .max_current = DT_INST_PROP(0, max_current),
+    .min_voltage = DT_INST_PROP(0, min_voltage),
+    .charge_timer_en = DT_INST_PROP(0, has_charge_timer),
+    .charge_timer_val = DT_INST_PROP(0, charge_timer_val),
+    .precharge_current = DT_INST_PROP_OR(0, precharge_current, 0),
 };
 
 DEVICE_DT_INST_DEFINE(0, bq25618_init, NULL, &bq25618_data,

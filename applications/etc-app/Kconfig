@@ -19,6 +19,7 @@ config APP_AWS_IOT
 rsource "src/exact/Kconfig"
 rsource "src/cloud/Kconfig"
 rsource "src/cloud/Kconfig.lwm2m"
+rsource "src/modules/Kconfig.debug_module"
 
 rsource "src/cloud/cloud_codec/Kconfig"
 

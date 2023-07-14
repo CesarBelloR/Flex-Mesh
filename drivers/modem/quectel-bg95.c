@@ -1,6 +1,7 @@
 #define DT_DRV_COMPAT quectel_bg95
 
 #include <fcntl.h>
+#include <zephyr/net/dns_resolve.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
@@ -17,6 +18,10 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
 #define PSM_TIMER_VAL_LEN	sizeof("00000011")
 
+#define MDM_TCP_ERROR_NO_MEMORY		553
+#define MDM_TCP_ERROR_TIMEOUT		569
+#define MDM_TCP_ERROR_SOCKET_IN_USE	563
+
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
@@ -24,9 +29,7 @@ static struct modem_context    mctx;
 static const struct socket_op_vtable offload_socket_fd_op_vtable;
 
 #if defined(CONFIG_DNS_RESOLVER)
-static struct zsock_addrinfo result;
-static struct sockaddr result_addr;
-static char result_canonname[DNS_MAX_NAME_SIZE + 1];
+#define AI_ARR_MAX 1
 #endif
 
 
@@ -175,7 +178,6 @@ static int on_cmd_sockread_common(int socket_fd,
 
 	/* check to make sure we have all of the data. */
 	if (net_buf_frags_len(data->rx_buf) < (socket_data_length + 2 + 4)) {
-		LOG_DBG("Not enough data -- wait!");
 		return -EAGAIN;
 	}
 
@@ -230,10 +232,10 @@ exit:
 /* Func: socket_close
  * Desc: Function to close the given socket descriptor.
  */
-static void socket_close(struct modem_socket *sock)
+static void socket_close(struct modem_socket *sock, bool force_close)
 {
 	char buf[sizeof("AT+Q###CLOSE=##")] = {0};
-	int  ret;
+	int  ret = 0;
 	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(buf, sizeof(buf), "AT+QSSLCLOSE=%d", sock->sock_fd);
 	} else {
@@ -242,7 +244,7 @@ static void socket_close(struct modem_socket *sock)
 	
 	k_sem_reset(&mdata.sem_response);
 	/* Tell the modem to close the socket, if connected */
-	if (sock->is_connected) {
+	if (sock->is_connected || force_close) {
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				NULL, 0U, buf,
 				&mdata.sem_response, MDM_CMD_TIMEOUT);
@@ -251,7 +253,9 @@ static void socket_close(struct modem_socket *sock)
 		}
 	}
 
-	modem_socket_put(&mdata.socket_config, sock->sock_fd);
+	if (ret == 0) {
+		modem_socket_put(&mdata.socket_config, sock->sock_fd);
+	}
 }
 
 /* Handler: OK */
@@ -304,7 +308,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sockopen)
 {
 	int err = ATOI(argv[1], 0, "sock_err");
 
-	LOG_INF("Error in open socket: %d", err);
+	LOG_INF("Status of open socket: %d", err);
 	modem_cmd_handler_set_error(data, err);
 	k_sem_give(&mdata.sem_sock_conn);
 
@@ -316,7 +320,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sslopen)
 {
 	int err = ATOI(argv[1], 0, "sock_err");
 
-	LOG_INF("Error in open TLS socket: %d", err);
+	LOG_INF("Status of open TLS socket: %d", err);
 	modem_cmd_handler_set_error(data, err);
 	k_sem_give(&mdata.sem_sock_conn);
 
@@ -463,6 +467,19 @@ MODEM_CMD_DEFINE(on_cmd_sock_getdatasize)
 	unread = ATOI(argv[2], 0, "unread");
 	LOG_DBG("recvd %d, read %d, unread %d", received, read, unread);
 	mdata.unread_size = unread;
+
+	return 0;
+}
+
+/* Handler: Read data size +QIGETERROR: <result>[0], <description>[1] */
+MODEM_CMD_DEFINE(on_cmd_tcp_geterror)
+{
+	int error;
+
+	error = ATOI(argv[0], 0, "error_code");
+
+	LOG_INF("TCP error %d: %s", error, argv[1]);
+	modem_cmd_handler_set_error(data, error);
 
 	return 0;
 }
@@ -688,7 +705,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_close)
 	LOG_INF("Socket Close Indication for socket: %d", sock_fd);
 
 	/* Tell the modem to close the socket. */
-	socket_close(sock);
+	socket_close(sock, false);
 	LOG_INF("Socket Closed: %d", sock_fd);
 	return 0;
 }
@@ -730,6 +747,7 @@ static int on_dns_parser_ip_count(uint8_t* dns_buffer, int length) {
 /* Handler: +QIURC: "dnsgip","<resolved_ip_address>"[0] */
 MODEM_CMD_DEFINE(on_cmd_dns)
 {
+	struct zsock_addrinfo *result;
 	if (!mdata.dns_request) {
 		return 0;
 	};
@@ -748,13 +766,14 @@ MODEM_CMD_DEFINE(on_cmd_dns)
 	mdata.dns_ip_count += 1;
 
 	if (mdata.dns_ip_count == 1) {
+		result = mdata.dns_ai;
 		/* chop off end quote */
 		dns_buffer[out_len - 1] = '\0';
 
-		result_addr.sa_family = AF_INET;
+		result->_ai_addr.sa_family = AF_INET;
 		/* skip beginning quote when parsing */
-		(void)net_addr_pton(result.ai_family, &dns_buffer[1],
-					&((struct sockaddr_in *)&result_addr)->sin_addr);
+		(void)net_addr_pton(result->ai_family, &dns_buffer[1],
+					&((struct sockaddr_in *)&result->_ai_addr)->sin_addr);
 	}
 
 
@@ -765,6 +784,31 @@ MODEM_CMD_DEFINE(on_cmd_dns)
 	return 0;
 }
 #endif
+
+
+static int get_tcp_error(struct modem_socket *sock)
+{
+	char   sendbuf[] = "AT+QIGETERROR";
+	int    ret;
+	/* Modem command to read the data. */
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("+QIGETERROR: ", on_cmd_tcp_geterror, 2U, ","),
+	};
+
+	k_sem_reset(&mdata.sem_response);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     cmd, ARRAY_SIZE(cmd), sendbuf, &mdata.sem_response,
+			     MDM_RECV_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Could not retrieve error details");
+		errno = -ret;
+		ret = -1;
+	} else {
+		ret = modem_cmd_handler_get_error(mctx.cmd_handler.cmd_handler_data);
+	}
+
+	return ret;
+}
 
 /* Func: send_socket_data
  * Desc: This function will send "binary" data over the socket object.
@@ -778,10 +822,15 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 {
 	int  ret;
 	char send_buf[sizeof("AT+Q###SEND=##,####,")] = {0};
+	int bytes_written;
 
 	if (buf_len > MDM_MAX_DATA_LENGTH) {
 		buf_len = MDM_MAX_DATA_LENGTH;
 	}
+
+	/* Setup the locks correctly. */
+	k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, K_FOREVER);
+	k_sem_reset(&mdata.sem_tx_ready);
 
 	/* Create a buffer with the correct params. */
 	mdata.sock_written = buf_len;
@@ -790,10 +839,6 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 	} else {
 		snprintk(send_buf, sizeof(send_buf), "AT+QISEND=%d,%ld", sock->sock_fd, (long)buf_len);
 	}
-
-	/* Setup the locks correctly. */
-	k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, K_FOREVER);
-	k_sem_reset(&mdata.sem_tx_ready);
 
 	/* Send the Modem command. */
 	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
@@ -839,6 +884,7 @@ exit:
 	/* unset handler commands and ignore any errors */
 	(void)modem_cmd_handler_update_cmds(&mdata.cmd_handler_data,
 					    NULL, 0U, false);
+	bytes_written = mdata.sock_written;
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 
 	if (ret < 0) {
@@ -846,7 +892,7 @@ exit:
 	}
 
 	/* Return the amount of data written on the socket. */
-	return mdata.sock_written;
+	return bytes_written;
 }
 
 /* Func: offload_sendto
@@ -888,11 +934,20 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 		return -1;
 	}
 
+	LOG_INF("len: %u", len);
+
 	ret = send_socket_data(sock, to, cmd, ARRAY_SIZE(cmd), buf, len,
 			       MDM_CMD_TIMEOUT);
 	if (ret < 0) {
-		errno = -ret;
-		return -1;
+		ret = get_tcp_error(sock); 
+		/* Error EAGAIN memory allocation failed, ETIMEDOUT if timed out */
+		if (ret == MDM_TCP_ERROR_NO_MEMORY) {
+			ret = EAGAIN;
+		} else if (ret == MDM_TCP_ERROR_TIMEOUT) {
+			ret = ETIMEDOUT;
+		}
+		errno = ret;
+		return -ret;
 	}
 
 	/* Data was written successfully. */
@@ -912,7 +967,6 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	int    ret;
 	int	   next_packet_size;
 	struct socket_read_data sock_data;
-	LOG_DBG("");
 	/* Modem command to read the data. */
 	struct modem_cmd data_cmd[] = {
 		MODEM_CMD("+QIRD: ", on_cmd_sock_readdata, 1U, ""),
@@ -932,7 +986,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	next_packet_size = modem_socket_next_packet_size(&mdata.socket_config,
 							 sock);
 	if (!next_packet_size) {
-		if ((flags & ZSOCK_MSG_DONTWAIT) || mdata.sock_nonblock) {
+		if ((flags & ZSOCK_MSG_DONTWAIT) || (sock->flags & O_NONBLOCK)) {
 			errno = EAGAIN;
 			return -1;
 		}
@@ -956,7 +1010,13 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 				sock->sock_fd, len);
 	}
 
-retry:
+	/* Take tx semaphore to ensure only one socket at a time can receive
+	   and that semaphore is acquired before mdata.sock_fd is modified. */
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+		LOG_ERR("Error taking semaphore");
+		errno = EAGAIN;
+		return -1;
+	}
 	/* Socket read settings */
 	(void) memset(&sock_data, 0, sizeof(sock_data));
 	sock_data.recv_buf     = buf;
@@ -964,19 +1024,15 @@ retry:
 	sock_data.recv_addr    = from;
 	sock->data	       = &sock_data;
 	mdata.sock_fd	       = sock->sock_fd;
-	mdata.recvfrom_ready = false;
 	/* Tell the modem to give us data (AT+QIRD=sock_fd,data_len). */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
 			     data_cmd, ARRAY_SIZE(data_cmd), sendbuf, &mdata.sem_response,
 			     MDM_RECV_TIMEOUT);
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	if (ret < 0) {
 		errno = -ret;
 		ret = -1;
 		goto exit;
-	}
-
-	if (mdata.recvfrom_ready) {
-		goto retry;
 	}
 
 	/* HACK: use dst address as from */
@@ -985,8 +1041,9 @@ retry:
 		memcpy(from, &sock->dst, *fromlen);
 	}
 
+#ifdef CONFIG_MODEM_CONTEXT_VERBOSE_DEBUG
 	LOG_HEXDUMP_DBG(sock_data.recv_buf, sock_data.recv_read_len, "RECV");
-
+#endif
 
 	/* Update data on socket with current size. */
 	int new_size = get_data_size(sock);
@@ -1053,21 +1110,16 @@ static int offload_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 }
 
 static int offload_fcntl(void *obj, unsigned int request, va_list args) {
+	struct modem_socket *sock = (struct modem_socket *)obj;
 	int retval = 0;
 
 	switch (request) {
 	case F_GETFL:	
-		if (mdata.sock_nonblock) {
-			retval |= O_NONBLOCK;
-		}
+		retval = sock->flags;
 		break;
 
 	case F_SETFL:
-		if ((va_arg(args, int) & O_NONBLOCK) != 0) {
-			mdata.sock_nonblock = true;
-		} else {
-			mdata.sock_nonblock = false;
-		}
+		sock->flags = va_arg(args, int);
 		break;
 
 	default:
@@ -1171,6 +1223,14 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 MODEM_CMD_DEFINE(on_cmd_power_down)
 {
 	k_sem_give(&mdata.sem_shutdown);
+	return 0;
+}
+
+MODEM_CMD_DEFINE(on_cmd_sim_ini_stat)
+{
+	mdata.sim_ini_stat = ATOI(argv[0], -1, "sim_ini_stat");
+	LOG_DBG("SIM ini stat %d", mdata.sim_ini_stat);
+	k_sem_give(&mdata.sem_response);
 	return 0;
 }
 
@@ -1545,43 +1605,25 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		}
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_CA_FILE_NAME, AWS_IOT_CA_CERTIFICATE, sizeof(AWS_IOT_CA_CERTIFICATE) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_CA_FILE_NAME, MEMFAULT_ROOT_CERTS_PEM, sizeof(MEMFAULT_ROOT_CERTS_PEM) - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download CA Certificate %d", ret);
 		return ret;
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_CLIENT_CERT_FILE_NAME, AWS_IOT_CLIENT_PUBLIC_CERTIFICATE, sizeof(AWS_IOT_CLIENT_PUBLIC_CERTIFICATE) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_CLIENT_CERT_FILE_NAME, "empty", sizeof("empty") - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download Client Certificate %d", ret);
 		return ret;
 	}
 
-	ret = quectel_bg95_file_download(MDM_TLS_PRIV_KEY_FILE_NAME, AWS_IOT_CLIENT_PRIVATE_KEY, sizeof(AWS_IOT_CLIENT_PRIVATE_KEY) - 1);
+	ret = quectel_bg95_file_download(MDM_TLS_PRIV_KEY_FILE_NAME, "empty", sizeof("empty") - 1);
 	if (ret != 0) {
 		LOG_DBG("Failed to download Private Key %d", ret);
 		return ret;
 	}
 
 	char buf[256];
-
-	snprintk(buf, sizeof(buf), "AT+QFLDS=\"UFS\"");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0)
-	{
-		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
-		return -1;
-	}
-
-	snprintk(buf, sizeof(buf), "AT+QFLDS=\"EUFS\"");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0)
-	{
-		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
-		return -1;
-	}
 
 	snprintk(buf, sizeof(buf), "AT+QFLST");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
@@ -1592,7 +1634,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XC02F", "ciphersuite", sock->sock_fd);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XFFFF", "ciphersuite", sock->sock_fd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1638,7 +1680,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->sock_fd, 2);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->sock_fd, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1662,6 +1704,16 @@ static int on_connect_tls_init(struct modem_socket *sock)
 	if (ret < 0)
 	{
 		LOG_DBG("Error to set QSSLCFG->ignorelocaltime");
+		return -1;
+	}
+
+	/* Disable DTLS when using TLS socket */
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->sock_fd, 0);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
+						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0)
+	{
+		LOG_DBG("Error to set QSSLCFG for DTLS enable");
 		return -1;
 	}
 	
@@ -1717,7 +1769,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (ret != 0) {
 		LOG_ERR("Error formatting IP string %d", ret);
 		LOG_ERR("Closing the socket!!!");
-		socket_close(sock);
+		socket_close(sock, false);
 		errno = -ret;
 		return -1;
 	}
@@ -1749,7 +1801,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		LOG_ERR("%s ret:%d", buf, ret);
 		LOG_ERR("Closing the socket!!!");
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock);
+		socket_close(sock, false);
 		goto exit;
 	}
 
@@ -1757,7 +1809,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	ret = modem_cmd_handler_update_cmds(&mdata.cmd_handler_data, cmd, ARRAY_SIZE(cmd), true);
 	if (ret < 0) {
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock);
+		socket_close(sock, false);
 		goto exit;
 	}
 
@@ -1767,20 +1819,23 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		LOG_ERR("Timeout waiting for socket open");
 		LOG_ERR("Closing the socket!!!");
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock);
+		socket_close(sock, false);
 		goto exit;
 	}
 
 	ret = modem_cmd_handler_get_error(&mdata.cmd_handler_data);
 	if (ret != 0) {
+		bool force_close = false;
 		LOG_ERR("Closing the socket!!! error %d", ret);
-		if (ret == 569) {
+		if (ret == MDM_TCP_ERROR_TIMEOUT) {
 			ret = -ETIMEDOUT;
+		} else if (ret == MDM_TCP_ERROR_SOCKET_IN_USE) {
+			force_close = true;
 		} else {
 			ret = -ret;
 		}
 		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock);
+		socket_close(sock, force_close);
 		goto exit;
 	}
 
@@ -1812,7 +1867,7 @@ static int offload_close(void *obj)
 	}
 
 	/* Close the socket */
-	socket_close(sock);
+	socket_close(sock, false);
 
 	return 0;
 }
@@ -2059,6 +2114,9 @@ static const struct setup_cmd psm_wakeup_cmds[] = {
 static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("ATH"),
+	SETUP_CMD_NOHANDLE("AT+CFUN=0"),
+	SETUP_CMD_NOHANDLE("AT+QCFG=\"nwscanmode\",3,1"),
+	SETUP_CMD_NOHANDLE("AT+CFUN=1"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
 	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
@@ -2070,13 +2128,8 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
 	SETUP_CMD("AT+QGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
 	SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
-#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
-	SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
-	SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
-#endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */
 	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
 };
-
 
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 /* Func: modem_rssi_query_work
@@ -2098,6 +2151,67 @@ static void modem_psm_wakeup_work(struct k_work *work)
 				    K_NO_WAIT);
 }
 #endif
+
+/**
+ * Retrieve SIM initialization status from modem.
+ * 
+ * @return true if ready, false if not ready or error.
+*/
+static bool modem_get_sim_init_status(void)
+{
+	char buf[] = "AT+QINISTAT";
+	int ret;
+	struct modem_cmd cmd[] = {
+		MODEM_CMD("+QINISTAT: ", on_cmd_sim_ini_stat, 1U, ""),
+	};
+
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmd, ARRAY_SIZE(cmd), buf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Failed to set retrieve SIM init status");
+		return false;
+	}
+
+	if (mdata.sim_ini_stat == 3) {
+		return true;
+	}
+
+	return false;
+}
+
+static void modem_retrieve_sim_numbers(void)
+{
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS)
+	static const struct setup_cmd sim_number_cmds[] = {
+		SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
+		SETUP_CMD("AT+QCCID", "", on_cmd_atcmdinfo_iccid, 0U, ""),
+	};
+
+	int cnt = 0;
+	bool ret_bool;
+	int ret;
+	
+	while (!(ret_bool = modem_get_sim_init_status()) &&
+		(cnt < 3)) {
+		cnt++;
+		k_sleep(K_MSEC(100));
+	}
+
+	if (!ret_bool) {
+		return;
+	}
+
+	/* Run SIM number setup commands on the modem. */
+	ret = modem_cmd_handler_setup_cmds(&mctx.iface, &mctx.cmd_handler,
+					   sim_number_cmds, ARRAY_SIZE(sim_number_cmds),
+					   &mdata.sem_response, MDM_REGISTRATION_TIMEOUT);
+	
+	if (ret < 0) {
+		LOG_WRN("Unable to read sim numbers");
+	}
+#endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */		   
+}
 
 /* Func: modem_setup
  * Desc: This function is used to setup the modem from zero. The idea
@@ -2136,6 +2250,8 @@ retry:
 	if (ret < 0) {
 		goto error;
 	}
+
+	modem_retrieve_sim_numbers();
 
 	/* Modem is ready - Start RSSI work in the background. */
 	LOG_INF("Modem is initialized.");
@@ -2233,70 +2349,84 @@ static int offload_getaddrinfo(const char *node, const char *service,
 {
 	uint32_t port = 0U;
 	int ret;
+	struct zsock_addrinfo *result;
 	/* DNS command + 128 bytes for domain name parameter */
 	char sendbuf[sizeof("AT+QIDNSGIP=#,'[]'\r") + 128];
 
-	/* init result */
-	(void)memset(&result, 0, sizeof(result));
-	(void)memset(&result_addr, 0, sizeof(result_addr));
+	*res = calloc(AI_ARR_MAX, sizeof(struct zsock_addrinfo));
+	if (!(*res)) {
+		LOG_ERR("Allocation of struct zsock_addrinfo failed");
+		return DNS_EAI_MEMORY;
+	}
+	result = &(*res[0]);
+
 	/* FIXME: Hard-code DNS to return only IPv4 */
-	result.ai_family = AF_INET;
-	result_addr.sa_family = AF_INET;
-	result.ai_addr = &result_addr;
-	result.ai_addrlen = sizeof(result_addr);
-	result.ai_canonname = result_canonname;
-	result_canonname[0] = '\0';
+	result->ai_family = AF_INET;
+	result->_ai_addr.sa_family = AF_INET;
+	result->ai_addr = &result->_ai_addr;
+	result->ai_addrlen = sizeof(result->_ai_addr);
+	result->ai_canonname = result->_ai_canonname;
+	result->_ai_canonname[0] = '\0';
 
 	if (service) {
 		port = ATOI(service, 0U, "port");
 		if (port < 1 || port > USHRT_MAX) {
+			free(*res);
 			return DNS_EAI_SERVICE;
 		}
 	}
 
 	if (port > 0U) {
 		/* FIXME: DNS is hard-coded to return only IPv4 */
-		if (result.ai_family == AF_INET) {
-			net_sin(&result_addr)->sin_port = htons(port);
+		if (result->_ai_addr.sa_family == AF_INET) {
+			net_sin(&result->_ai_addr)->sin_port = htons(port);
 		}
 	}
 
 	/* check to see if node is an IP address */
-	if (net_addr_pton(result.ai_family, node,
-			  &((struct sockaddr_in *)&result_addr)->sin_addr)
+	if (net_addr_pton(result->ai_family, node,
+			  &((struct sockaddr_in *)&result->_ai_addr)->sin_addr)
 	    == 0) {
-		*res = &result;
 		return 0;
 	}
 
 	/* user flagged node as numeric host, but we failed net_addr_pton */
 	if (hints && hints->ai_flags & AI_NUMERICHOST) {
+		free(*res);
 		return DNS_EAI_NONAME;
 	}
+	/* Ensure only one DNS request is processed at a time.*/
+	ret = k_sem_take(&mdata.sem_dns_busy, MDM_TX_LOCK_TIMEOUT);
+	if (ret != 0) {
+		free(*res);
+		return DNS_EAI_AGAIN;
+	}
+	mdata.dns_ai = *res;
 	mdata.dns_ready = false;
 	mdata.dns_request = true;
 	mdata.dns_result = 0;
 	snprintk(sendbuf, sizeof(sendbuf), "AT+QIDNSGIP=1,\"%s\"", node);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     NULL, 0, sendbuf, &mdata.sem_dns_ready,
-			     MDM_DNS_TIMEOUT);
+				NULL, 0, sendbuf, &mdata.sem_dns_ready,
+				MDM_DNS_TIMEOUT);
+	k_sem_give(&mdata.sem_dns_busy);
 	if (ret < 0) {
 		return ret;
 	}
 
 	LOG_DBG("DNS RESULT: %s",
-		net_addr_ntop(result.ai_family,
-					 &net_sin(&result_addr)->sin_addr,
-					 sendbuf, NET_IPV4_ADDR_LEN));
+		net_addr_ntop(result->ai_family,
+			      &net_sin(&result->_ai_addr)->sin_addr,
+			      sendbuf, NET_IPV4_ADDR_LEN));
 
-	*res = (struct zsock_addrinfo *)&result;
 	return 0;
 }
 
 static void offload_freeaddrinfo(struct zsock_addrinfo *res)
 {
-	/* using static result from offload_getaddrinfo() -- no need to free */
-	res = NULL;
+	__ASSERT_NO_MSG(res);
+
+	free(res);
 }
 
 const struct socket_dns_offload offload_dns_ops = {
@@ -2444,9 +2574,11 @@ static int modem_init(const struct device *dev)
 	k_sem_init(&mdata.sem_response,	 0, 1);
 	k_sem_init(&mdata.sem_tx_ready,	 0, 1);
 	k_sem_init(&mdata.sem_sock_conn, 0, 1);
+	k_sem_init(&mdata.sem_dns_busy, 1, 1);
 	k_sem_init(&mdata.sem_dns_ready, 0, 1);
 	k_sem_init(&mdata.sem_data_ready, 0, 1);
 	k_sem_init(&mdata.sem_shutdown, 0, 1);
+	k_sem_init(&mdata.sem_ntp_ready, 0, 1);
 
 	k_work_queue_start(&modem_workq, modem_workq_stack,
 			   K_KERNEL_STACK_SIZEOF(modem_workq_stack),
@@ -2460,7 +2592,6 @@ static int modem_init(const struct device *dev)
 	if (ret < 0) {
 		goto error;
 	}
-	mdata.sock_nonblock = false;
 
 	/* cmd handler */
 	mdata.cmd_handler_data.cmds[CMD_RESP]	   = response_cmds;
@@ -2776,9 +2907,18 @@ char* quectel_bg95_get_sim_number(void) {
 
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_clock)
 {
-	size_t out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 0, len);
+#define QNTP_FORMAT_OFFSET ("#,")
+	int out_len = net_buf_linearize(mdata.mdm_time, sizeof(mdata.mdm_time) - 1, data->rx_buf, 
+		sizeof(QNTP_FORMAT_OFFSET) - 1, len - sizeof(QNTP_FORMAT_OFFSET));
+	if (out_len <= 0) {
+		errno = -out_len;
+		mdata.mdm_time[0] = '\0';
+		modem_cmd_handler_set_error(data, -1);
+		return -1;
+	}
 	mdata.mdm_time[out_len] = '\0';
 	LOG_DBG("Clock: %s", mdata.mdm_time);
+	k_sem_give(&mdata.sem_ntp_ready);
 	return 0;
 }
 
@@ -2787,16 +2927,18 @@ int quectel_bg95_get_time(char* time_buf) {
 		return -1;
 	}
 
-	static const struct modem_cmd cmd = MODEM_CMD("+CCLK: ", on_cmd_atcmdinfo_clock, 0, ",");
-	static char *send_cmd = "AT+CCLK?";
-	int ret;
+	char   sendbuf[sizeof("AT+QNTP=1,") + 64] = {0};
+	int    ret;
+	static const struct modem_cmd cmd = MODEM_CMD("+QNTP: ", on_cmd_atcmdinfo_clock, 0, ",");
+	snprintk(sendbuf, sizeof(sendbuf), "AT+QNTP=1,\"%s\"", CONFIG_MODEM_NTP_SERVER);
 
+	
 	/* query modem clock */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, &cmd, 1U, send_cmd,
-			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, &cmd, 1U, sendbuf,
+			     &mdata.sem_ntp_ready, MDM_NTP_TIMEOUT);
 	if (ret < 0) {
-		LOG_ERR("AT+CCLK? ret:%d", ret);
-		return -1;
+		LOG_ERR("AT+QNTP ret:%d", ret);
+		return ret;
 	}
 
 	memcpy(time_buf, mdata.mdm_time, sizeof(mdata.mdm_time));

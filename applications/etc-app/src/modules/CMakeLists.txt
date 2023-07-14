@@ -10,3 +10,4 @@ target_sources(app PRIVATE
 )
 
 target_sources_ifdef(CONFIG_ETC_LORA_MODULE app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lora_module.c)
+target_sources_ifdef(CONFIG_DEBUG_MODULE app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/debug_module.c)

@@ -6,6 +6,8 @@ static char *get_evt_type_str(enum data_event_type type)
 	switch (type) {
 	case DATA_EVT_DATA_SEND:
 		return "DATA_EVT_DATA_SEND";
+	case DATA_EVT_TEST_DATA_READY:
+		return "DATA_EVT_TEST_DATA_READY";
 	case DATA_EVT_DATA_READY:
 		return "DATA_EVT_DATA_READY";
 	case DATA_EVT_DATA_SEND_BATCH:

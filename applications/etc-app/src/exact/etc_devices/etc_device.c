@@ -15,8 +15,8 @@
 #include "cloud/cloud_codec/data_codec.h"
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
-#define STORAGE_NODE_LABEL storage
-#define RECORD_NODE_LABEL  record_storage
+#define ETC_SETTINGS_NODE_LABEL etc_settings_storage
+#define ETC_RECORD_NODE_LABEL  etc_records_storage
 
 #if TEST
 #define ETC_RECORD_MAX_SECTOR	  (8)
@@ -69,20 +69,20 @@ void etc_device_nvs_init(void)
 {
 	int rc = 0;
 	struct flash_pages_info info;
-	etc_fs.flash_device = FLASH_AREA_DEVICE(STORAGE_NODE_LABEL);
+	etc_fs.flash_device = FLASH_AREA_DEVICE(ETC_SETTINGS_NODE_LABEL);
 	if (!device_is_ready(etc_fs.flash_device)) {
 		LOG_ERR("Flash device %s is not ready", etc_fs.flash_device->name);
 		return;
 	}
 
-	record_fs.flash_device = FLASH_AREA_DEVICE(RECORD_NODE_LABEL);
+	record_fs.flash_device = FLASH_AREA_DEVICE(ETC_RECORD_NODE_LABEL);
 	if (!device_is_ready(record_fs.flash_device)) {
 		LOG_ERR("Flash device %s is not ready", record_fs.flash_device->name);
 		return;
 	}
 
-	record_fs.offset = FLASH_AREA_OFFSET(RECORD_NODE_LABEL);
-	etc_fs.offset = FLASH_AREA_OFFSET(STORAGE_NODE_LABEL);
+	record_fs.offset = FLASH_AREA_OFFSET(ETC_RECORD_NODE_LABEL);
+	etc_fs.offset = FLASH_AREA_OFFSET(ETC_SETTINGS_NODE_LABEL);
 	rc = flash_get_page_info_by_offs(etc_fs.flash_device, etc_fs.offset, &info);
 	if (rc) {
 		LOG_DBG("Unable to get page info");
@@ -91,8 +91,8 @@ void etc_device_nvs_init(void)
 	etc_fs.sector_size = info.size;
 	record_fs.sector_size = info.size;
 
-	etc_fs.sector_count = (FLASH_AREA_SIZE(STORAGE_NODE_LABEL) / info.size);
-	record_fs.sector_count = (FLASH_AREA_SIZE(RECORD_NODE_LABEL) / info.size);
+	etc_fs.sector_count = (FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL) / info.size);
+	record_fs.sector_count = (FLASH_AREA_SIZE(ETC_RECORD_NODE_LABEL) / info.size);
 	rc = nvs_mount(&etc_fs);
 	if (rc) {
 		LOG_ERR("Flash Init failed");
@@ -100,9 +100,9 @@ void etc_device_nvs_init(void)
 	}
 
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
-		FLASH_AREA_SIZE(STORAGE_NODE_LABEL), info.size, etc_fs.sector_count);
+		FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL), info.size, etc_fs.sector_count);
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)record_fs.offset,
-		FLASH_AREA_SIZE(RECORD_NODE_LABEL), info.size, record_fs.sector_count);
+		FLASH_AREA_SIZE(ETC_RECORD_NODE_LABEL), info.size, record_fs.sector_count);
 	LOG_DBG("Initialised etc setting successfully");
 
 	rc = etc_nvs_read(ETC_RECORD_STAT, &etc_device_record_table,
@@ -167,17 +167,17 @@ static int etc_nvs_write(uint16_t element_id, const void *data, size_t len)
 
 static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 {
-	size_t read_len = 0;
+	ssize_t read_len = 0;
 	read_len = nvs_read(&etc_fs, element_id, data, len);
 	if (read_len < 0) {
 		LOG_ERR("Failed in reading NVS %d", read_len);
-		return -EINVAL;
+		return read_len;
 	}
 
 	if (read_len > len) {
 		LOG_ERR("Read length is higher than request read %d %d %d", element_id, len,
 			read_len);
-		return -EINVAL;
+		return read_len;
 	}
 
 	if (read_len == len) {
@@ -380,7 +380,7 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 	uint16_t min_id = ETC_RECORD_HEADER;
 	uint16_t last_id = ram_nack_record_id;
 	uint16_t check_id = 0;
-
+	bool find_next = false;
 	LOG_INF("Reclaim is running %d", etc_reclaim_info.flag_in_process);
 
 	if (etc_reclaim_info.flag_in_process == 1) {
@@ -404,28 +404,33 @@ next_id:
 		if (etc_device_record_header.ack == 0) {
 			if (reading_callback) {
 				rc = reading_callback(check_id, data);
-				if (rc > 0) { // Return record_id;
-					return rc;
-				} else {
-					if (newest_id != check_id) {
-						/* Increase the ram_nack_record_id */
-						check_id += 1;
-						if (check_id > max_id) {
-							check_id = min_id;
-						}
-						goto next_id;
-					}
-				}
 			}
+			if (rc <= 0) {
+				find_next = true;
+			}
+		} else {
+			find_next = true;
 		}
 	} else {
 		LOG_WRN("Error id %d - error %d", check_id, rc);
+		if (rc == -ENOENT) {
+			find_next = true;
+		}
 	}
 
-	if (rc == 0) {
-		return rc;
+	if (find_next) {
+		find_next = false;
+		if (newest_id != check_id) {
+			/* Increase the ram_nack_record_id */
+			check_id += 1;
+			if (check_id > max_id) {
+				check_id = min_id;
+			}
+			goto next_id;
+		} 
 	}
-	return -ENOENT;
+
+	return rc;
 }
 
 static int etc_device_record_reading(uint16_t record_id, void *data)
@@ -438,8 +443,8 @@ static int etc_device_record_reading(uint16_t record_id, void *data)
 		(record_id - ETC_RECORD_HEADER) - index.sector_idx * ETC_RECORD_MAX_PER_SECTOR;
 	uint32_t record_addr = (record_fs.offset) + index.sector_idx * record_fs.sector_size +
 			       index.element_idx * ETC_DEVICE_RECORD_SIZE;
-	// LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
-	// 	index.element_idx);
+	LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
+		index.element_idx);
 	int rc = flash_read(record_fs.flash_device, record_addr, buf, ETC_DEVICE_RECORD_SIZE);
 	if (rc != 0) {
 		LOG_ERR("Error in reading flash err %d", rc);
@@ -581,7 +586,7 @@ const struct device* etc_device_get_record(void) {
 }
 
 size_t etc_device_get_record_size(void) {
-	return FLASH_AREA_SIZE(RECORD_NODE_LABEL);
+	return FLASH_AREA_SIZE(ETC_RECORD_NODE_LABEL);
 }
 
 off_t etc_device_get_record_offset(void) {
@@ -831,6 +836,19 @@ static int cmd_reclaim_record(const struct shell *shell, size_t argc, char **arg
 	return 0;
 }
 
+static int cmd_generate_record(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc == 2) {
+		int num_of_sample = atoi(argv[1]);
+		extern void ui_module_test_data_request(int num_of_sample);
+		ui_module_test_data_request(num_of_sample);
+	} else {
+		shell_error(shell, "Invalid input parameter for generating record");
+	}
+
+	return 0;
+}
+
 static int cmd_erase_configuration(const struct shell *shell, size_t argc, char **argv)
 {
 	int rc = nvs_clear(&etc_fs);
@@ -851,6 +869,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(clean, NULL, "Clean the records", cmd_clean_records),
 	SHELL_CMD(parser, NULL, "Parser the hex record", cmd_parser_hex_record),
 	SHELL_CMD(reclaim, NULL, "Reclaim ", cmd_reclaim_record),
+	SHELL_CMD(generate, NULL, "Generate a certain number of samples to fill up the flash ", cmd_generate_record),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(record, &sub_record, "ETC Record Management", NULL);
 
@@ -859,4 +878,5 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(erase, NULL, "Erase all configuration - development only", cmd_erase_configuration),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(config, &sub_config, "ETC Configuration Management", NULL);
+
 #endif

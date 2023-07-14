@@ -17,6 +17,8 @@
 #include <zephyr/net/lwm2m.h>
 
 #include "etc_lwm2m_client_utils.h"
+#include "lwm2m_firmware.h"
+#include "lwm2m/lwm2m_codec_helpers.h"
 
 #include "cloud/cloud_wrapper.h"
 
@@ -58,7 +60,7 @@ static cloud_wrap_evt_handler_t wrapper_evt_handler;
 static struct lwm2m_ctx client;
 
 static char client_id_buf[ETC_SETTINGS_DEVICE_ID_LEN + 1];
-static char endpoint_name[sizeof("urn:dev:mac:") +
+static char endpoint_name[sizeof("urn:dev:os:60606-") +
 			  LWM2M_INTEGRATION_CLIENT_ID_LEN];
 
 /* Enable session lifetime check after initial boot. After bootstrapping, the bootstrap server
@@ -183,6 +185,8 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 		break;
 	case LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF:
 		LOG_DBG("LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF");
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_RX_OFF;
+		notify = true;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR:
 		LOG_ERR("LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR");
@@ -252,52 +256,6 @@ static void send_cb(enum lwm2m_send_status status)
 	}
 }
 
-#if 0
-/* Callback handler triggered when the modem should be put in a certain functional mode.
- * Handler is called pre provisioning of DTLS credentials when the modem should be put in
- * offline mode, and when the modem should return to normal mode after
- * provisioning has been carried out.
- */
-static int modem_mode_request_cb(enum lte_lc_func_mode new_mode, void *user_data)
-{
-	ARG_UNUSED(user_data);
-
-	int err;
-	enum lte_lc_func_mode mode_current;
-	struct cloud_wrap_event cloud_wrap_evt = { 0 };
-
-	err = lte_lc_func_mode_get(&mode_current);
-	if (err) {
-		LOG_ERR("lte_lc_func_mode_get failed, error: %d", err);
-		return err;
-	}
-
-	/* Return success if the modem is in the required functional mode. */
-	if (mode_current == new_mode) {
-		return 0;
-	}
-
-	switch (new_mode) {
-	case LTE_LC_FUNC_MODE_OFFLINE:
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_LTE_DISCONNECT_REQUEST;
-		break;
-	case LTE_LC_FUNC_MODE_NORMAL:
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_LTE_CONNECT_REQUEST;
-		break;
-	default:
-		LOG_ERR("Non supported modem functional mode request.");
-		return -ENOTSUP;
-	}
-
-	cloud_wrapper_notify_event(&cloud_wrap_evt);
-
-	/* If the modem is not in the required functional mode,
-	 * return the time that the security object should wait before the handler is called again.
-	 * Set by CONFIG_LWM2M_INTEGRATION_MODEM_MODE_REQUEST_RETRY_SECONDS.
-	 */
-	return CONFIG_LWM2M_INTEGRATION_MODEM_MODE_REQUEST_RETRY_SECONDS;
-}
-
 static int firmware_update_state_cb(uint8_t update_state)
 {
 	int err;
@@ -305,7 +263,7 @@ static int firmware_update_state_cb(uint8_t update_state)
 	struct cloud_wrap_event cloud_wrap_evt = { 0 };
 
 	/* Get the firmware object update result code */
-	err = lwm2m_engine_get_u8(FIRMWARE_UPDATE_RESULT_PATH, &update_result);
+	err = lwm2m_get_u8(&LWM2M_OBJ(5, 0, 5), &update_result);
 	if (err) {
 		LOG_ERR("Failed getting firmware result resource value");
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
@@ -330,8 +288,9 @@ static int firmware_update_state_cb(uint8_t update_state)
 		return 0;
 	case STATE_UPDATING:
 		LOG_DBG("STATE_UPDATING, result: %d", update_result);
-		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_DONE;
-		break;
+		/* Disable further callbacks from FOTA */
+		lwm2m_firmware_set_update_state_cb(NULL);
+		return 0;
 	default:
 		LOG_ERR("Unknown state: %d", update_state);
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_ERROR;
@@ -341,7 +300,6 @@ static int firmware_update_state_cb(uint8_t update_state)
 	cloud_wrapper_notify_event(&cloud_wrap_evt);
 	return 0;
 }
-#endif
 
 static int lwm2m_init_security(struct lwm2m_ctx *client, const char *ep_name)
 {
@@ -430,6 +388,18 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 		return err;
 	}
 
+	err = lwm2m_init_firmware();
+	if (err) {
+		LOG_ERR("lwm2m_init_firmware, error: %d", err);
+		return err;
+	}
+
+	err = lwm2m_init_image();
+	if (err < 0) {
+		LOG_ERR("lwm2m_init_image, error: %d", err);
+		return err;
+	}
+
 	err = lwm2m_register_exec_callback(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID,
 						      0, DEVICE_OBJECT_REBOOT_RID),
 					   device_reboot_cb);
@@ -437,6 +407,8 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 		LOG_ERR("lwm2m_engine_register_exec_callback, error: %d", err);
 		return err;
 	}
+
+	lwm2m_firmware_set_update_state_cb(firmware_update_state_cb);
 
 	wrapper_evt_handler = event_handler;
 	state = DISCONNECTED;
@@ -541,6 +513,8 @@ int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id,
 	ARG_UNUSED(id);
 
 	int err;
+
+	lwm2m_codec_helpers_path_list_log(path_list, len);
 
 	err = lwm2m_send_cb(&client, path_list, len, send_cb);
 	if (err) {

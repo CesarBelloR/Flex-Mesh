@@ -82,7 +82,7 @@ static cJSON *create_data_arr_logger(struct data_sensors *sens_data,
 	item = cJSON_CreateNumber(quectel_bg95_get_rssi());
 	cJSON_AddItemToArray(data_arr, item);
 	/* fw */
-	item = cJSON_CreateString(APP_VERSION_STR);
+	item = cJSON_CreateString(APP_VERSION_NUM_STR);
 	cJSON_AddItemToArray(data_arr, item);
 	/* packet */
 	item = cJSON_CreateNumber(0);

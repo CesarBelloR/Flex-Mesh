@@ -11,7 +11,7 @@
 #include "etc_device.h"
 #include "watchdog_app.h"
 #define MODULE sensor_module
-
+#include "cloud/cloud_codec/data_codec.h"
 #include "modules_common.h"
 #include "events/app_event.h"
 #include "events/data_event.h"
@@ -48,10 +48,15 @@ static struct sensor_data static_sensor_data;
 
 /* Sensor Analog constant information */
 #define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
+
+#if defined(CONFIG_ETC_NTC_TABLE)
+#include "etc_ntc_table.h"
+#else
 #define SENSOR_NTC_NOMINAL_TEMP 25.0
 #define SENSOR_NTC_BETA (float)DT_PROP(DT_PATH(ntc), b_value_k)
 #define SENSOR_NTC_RESISTOR_REF (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
-#define SENSOR_NTC_REFERENCE_VOLTAGE (float)(DT_PROP(DT_PATH(ntc), reference_voltage_mv) / 1000.0f)
+#define SENSOR_NTC_REFERENCE_VOLTAGE ((float)(DT_PROP(DT_PATH(ntc), reference_voltage_mv)) / 1000.0f)
+#endif
 
 #define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
 
@@ -60,6 +65,7 @@ static struct sensor_data static_sensor_data;
 /* Battery constant information */
 const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
 const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
+
 
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
@@ -82,8 +88,28 @@ static const struct gpio_dt_spec s0_dt =
 static const struct gpio_dt_spec s1_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 
+/* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
+inline static int8_t remap_th_channel(int8_t channel)
+{
+	__ASSERT(channel >= 0 && channel <= 3, "invalid channel number");
+
+	switch (channel) {
+	case 0:
+		return 3;
+	case 1:
+		return 2;
+	case 2:
+		return 0;
+	case 3:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
 static void sensor_adc_switch_channel(int8_t channel) 
 {
+	channel = remap_th_channel(channel);
 	gpio_pin_set_dt(&sense_dt, 0U);
 	gpio_pin_set_dt(&s0_dt, channel & 0x01);
 	gpio_pin_set_dt(&s1_dt, (channel >> 1) & 0x01);
@@ -188,10 +214,11 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void sensor_module_send_sensor(struct sensor_data* sensor)
+static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 {
 	struct sensor_event *sensor_event = new_sensor_event();
-	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
+	sensor_event->type = is_test ? SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY : 
+		SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
 	sensor_event->data.sensors = sensor;
 	APP_EVENT_SUBMIT(sensor_event);
 }
@@ -203,6 +230,24 @@ static int setup(void)
 	return 0;
 }
 
+#if defined(CONFIG_ETC_NTC_TABLE)
+static float sensor_ntc_converter(const float table[], int table_length, int offset , int raw_adc, int max_adc) {
+  float input = ((float)max_adc / (float)raw_adc) - 1;
+  input = (float) SENSOR_NTC_NOMINAL_RESISTANCE / input;
+  input = input / 1000.0;
+  float temp_value = 0.0;
+  float tmp;
+  for (int i = 0; i < table_length - 1; i++) {
+    if (input <= table[i] && input >= table[i + 1]) {
+      tmp = ( (-40 + (i * offset)) - (-40 + ((i + 1) * offset)) ) / ( table[i] - table[i + 1] );
+      tmp = tmp * (input - table[i]);
+      tmp = tmp +  (-40 + (i * offset));
+      temp_value = tmp;
+    }
+  }
+  return (temp_value);
+}
+#else
 static float sensor_ntc_converter(int data, float full_scale_v, int full_scale_count) {
 	float raw_data = ((float)(data) * full_scale_v / SENSOR_NTC_REFERENCE_VOLTAGE);
 	float tmp_value = (float)full_scale_count / (float)raw_data - 1.0;
@@ -215,6 +260,7 @@ static float sensor_ntc_converter(int data, float full_scale_v, int full_scale_c
 	tmp_value -= 273.15;
 	return tmp_value;
 }
+#endif
 
 static void sensor_gpios_enable(void)
 {
@@ -227,12 +273,13 @@ static void sensor_gpios_enable(void)
 static void sensor_gpios_disable(void)
 {
 	gpio_pin_set_dt(&vsen_en_dt, 0U);
+	gpio_pin_set_dt(&s0_dt, 0);
 	gpio_pin_configure_dt(&sense_dt, GPIO_DISCONNECTED);
 	/* Note: pin s0 is configured by watchdog module. */
 	gpio_pin_configure_dt(&s1_dt, GPIO_DISCONNECTED);
 }
 
-static int sensor_poll_handler(void) {
+static int sensor_poll_handler(bool is_test) {
 	if (sensor_is_processing) {
 		return 0;
 	}
@@ -246,22 +293,33 @@ static int sensor_poll_handler(void) {
 
 	sensor_is_processing = true;
 	struct sensor_data* data = &static_sensor_data;
-	data->timestamp = date_time_now_second();
+	int utc_timestamp = date_time_now_second();
+	data->timestamp = utc_timestamp == -1 ? 0 : utc_timestamp;
 	data->temperature[SENSOR_INPUT_AMBIENT] = 
+	#if defined(CONFIG_ETC_NTC_TABLE)
+			sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, adc_get_channel(ETC_ADC_CHANNEL_AMB), 
+				adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
+	#else
 			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB),
 			  (float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
 			  adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
-	if (fabs(data->temperature[SENSOR_INPUT_AMBIENT] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+	#endif
+	if (data_codec_compare_temperature_is_valid(data->temperature[SENSOR_INPUT_AMBIENT])) {
 		LOG_DBG("Ambient temp %2.2f", data->temperature[SENSOR_INPUT_AMBIENT]);
 	}
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		sensor_adc_switch_channel(i);
 		k_msleep(50);
 		data->temperature[i] = 
+	#if defined(CONFIG_ETC_NTC_TABLE)
+			sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, adc_get_channel(ETC_ADC_CHANNEL_SENSOR), 
+				adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
+	#else
 			sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR),
 				(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) / 1000.0f,
 				adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
-		if (fabs(data->temperature[i] - SENSOR_NTC_NO_CONNECTED) > 1.0) {
+	#endif
+		if (data_codec_compare_temperature_is_valid(data->temperature[i])) {
 			LOG_DBG("Channel %d temp %f", i, data->temperature[i]);
 		} else {
 			LOG_DBG("Channel %d isn't available", i);
@@ -272,7 +330,7 @@ static int sensor_poll_handler(void) {
 	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_adc_battery);
 	int adc_mv_battery = raw_adc_battery * (sFullOhms / sOutputOhms);
 	data->battery_mV = adc_mv_battery;
-	sensor_module_send_sensor(data);
+	sensor_module_send_sensor(data, is_test);
 	sensor_is_processing = false;
 	
 	sensor_gpios_disable();
@@ -300,7 +358,7 @@ static void on_all_states(struct sensor_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
 		LOG_INF("APP_EVT_DATA_GET");
-		sensor_poll_handler();
+		sensor_poll_handler(false);
 		return;
 	}
 
@@ -317,7 +375,12 @@ static void on_all_states(struct sensor_msg_data *msg)
 		LOG_INF("UI_EVT_INPUT_DATA_READY");
 		/* The UI input (HALL Sensor or Button) is triggered */
 		adc_init();
-		sensor_poll_handler();
+		sensor_poll_handler(false);
+		return;
+	}
+
+	if (IS_EVENT(msg, ui, UI_EVT_TEST_DATA_READY)) {
+		sensor_poll_handler(true);
 		return;
 	}
 
@@ -328,7 +391,7 @@ static void on_all_states(struct sensor_msg_data *msg)
 			if (!is_send) {
 				LOG_DBG("Device is online. Collecting and sending first sensor data");
 				is_send = true;
-				sensor_poll_handler();
+				sensor_poll_handler(false);
 			}
 		}
 		return;

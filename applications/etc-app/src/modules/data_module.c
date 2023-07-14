@@ -20,6 +20,8 @@
 #define MODULE_DATA_BATTERY_BUFFER_COUNT 8
 #define MODULE_LORA_SENSOR_BUFFER_COUNT 8
 
+#include "etc_memfault.h"
+
 #include "modules_common.h"
 #include "events/app_event.h"
 #include "events/cloud_event.h"
@@ -60,6 +62,8 @@ static struct data_battery bat_buf[MODULE_DATA_BATTERY_BUFFER_COUNT];
 static struct data_lora_sensors lora_buf[MODULE_LORA_SENSOR_BUFFER_COUNT];
 
 static struct data_modem_static modem_stat;
+
+static bool first_send = true;
 
 /* Size of the static modem (modem_stat) data structure.
  * Used to provide an array size when encoding batch data.
@@ -293,7 +297,6 @@ static void data_send(enum data_event_type event,
 	}
 
 	APP_EVENT_SUBMIT(module_event);
-	data_codec_clear_data(data);
 }
 
 static void data_encode(void) 
@@ -306,6 +309,11 @@ static void data_encode(void)
 		LOG_WRN("Not sending new record."
 			"Record ID %u is already being sent.", record_id);
 		return;
+	}
+
+	if (first_send) {
+		data_codec_prepare_update_packet(&codec);
+		first_send = false;
 	}
 
 	record_id = etc_device_read_record(&record);
@@ -350,12 +358,6 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		data_encode();
 		return;
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
-		/* Send latest record on fail */
-		record_id = 0;
-		data_encode();
 	}
 
 	if (IS_EVENT(msg, app, APP_EVT_CONFIG_GET)) {
@@ -411,16 +413,36 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
-
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY)) {
+		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
+		SEND_EVENT(data, DATA_EVT_TEST_DATA_READY);
+	}
+
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
+		data_codec_clear_data(&codec);
 		/* Acknowledge record and encode more data, if connected to cloud */
 		etc_device_set_ack_record(record_id);
 		record_id = 0;
 		if (state == STATE_CLOUD_CONNECTED) {
 			data_encode();
+		}
+	}
+		
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
+		ETC_MEMFAULT_TRACE_EVENT(send_fail);
+		/* Reset record ID on fail */
+		record_id = 0;
+		if (state == STATE_CLOUD_CONNECTED) {
+			data_encode();
+		}
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
+		if (record_id != 0) {
+			record_id = 0;
 		}
 	}
 

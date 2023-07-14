@@ -58,6 +58,7 @@ struct bq25618_dev_config {
         uint16_t charge_voltage_limit;
         uint16_t max_current;
         uint16_t min_voltage;
+        uint16_t precharge_current;
         bool charge_timer_en;
         uint8_t charge_timer_val;
 };

@@ -21,9 +21,11 @@ enum sensor_input {
 };
 
 int sensor_init(void);
-
+#if defined(CONFIG_NTC_USE_TABLE)
+float sensor_ntc_converter(const float table[], int table_length, int offset , int raw_adc);
+#else
 float sensor_ntc_converter(enum etc_adc_channel channel, int val);
-
+#endif
 int sensor_get_raw_value(enum etc_adc_channel channel);
 
 void sensor_adc_switch_channel(enum sensor_input channel);

@@ -89,6 +89,8 @@ void main(void)
 	if (rc < 0) {
 		LOG_ERR("Error initializing stats system [%d]", rc);
 	}
+
+	LOG_INF("EXACT Monitor 2.0 version %s", APP_VERSION_STR);
 #ifdef CONFIG_MCUMGR_CMD_ETC_MGMT
 	etc_mgmt_register_group();
 #endif
@@ -99,11 +101,6 @@ void main(void)
 	etc_cape_set_key(key, 10);
 
 #ifdef CONFIG_MCUMGR
-	rc = boot_write_img_confirmed();
-	if (rc) {
-		LOG_ERR("Img confirmed failed");
-	}
-
 	/* using __TIME__ ensure that a new binary will be built on every
 	 * compile which is convient when testing firmware upgrade.
 	 */
