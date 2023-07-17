@@ -910,7 +910,7 @@ SHELL_CMD_REGISTER(etc_flash, &etc_flash_sub, "External flash commands", NULL);
 
 const struct device *lora_dev = NULL;
 static struct lora_modem_config etc_lora_rx_config = {
-	.frequency = 915000000,
+	.frequency = DEFAULT_LORA_FREQUENCY_HZ,
 	.bandwidth = BW_125_KHZ,
 	.datarate = SF_7,
 	.preamble_len = 8,
@@ -920,7 +920,7 @@ static struct lora_modem_config etc_lora_rx_config = {
 };
 
 static struct lora_modem_config etc_lora_tx_config  = {
-	.frequency = 915000000,
+	.frequency = DEFAULT_LORA_FREQUENCY_HZ,
 	.bandwidth = BW_125_KHZ,
 	.datarate = SF_7,
 	.preamble_len = 8,
@@ -1030,25 +1030,63 @@ static int send_lora_message2(void)
 
 static int cmd_lora_tx(const struct shell *shell, size_t argc, char **argv) {
 	uint32_t t0 = k_uptime_get_32();
-	uint8_t tx_buf[] = "Hello World";
+	uint32_t freq = DEFAULT_LORA_FREQUENCY_HZ;
+	uint8_t no_samples = 0;
+	uint8_t count = 0;
+	uint8_t dev_id[16];
+	uint8_t tx_buf[128];
+	int offset = 0;
+	ssize_t hwinfo_length;
+
+	if ((argc != 1) && (argc != 3)) {
+		shell_print(shell, "Usage: %s <number of samples> <frequency in Hz>",
+			    argv[0]);
+		return -1;
+	}
+
+	if (argc == 3) {
+		no_samples = atoi(argv[1]);
+		freq = atoi(argv[2]);
+		if ((freq < LORA_FREQ_US_MIN_HZ) || (freq > LORA_FREQ_US_MAX_HZ) ||
+		    (no_samples == 0) || (no_samples > 100)) {
+			shell_print(shell, "Number of samples must be between 1 and 100");
+			shell_print(shell, "Lora freq must be between %lu and %lu",
+				    LORA_FREQ_US_MIN_HZ, LORA_FREQ_US_MAX_HZ);
+			return -1;
+		}
+	}
+
+	etc_lora_tx_config.frequency = freq;
 	int ret = lora_config(dev_lora, &etc_lora_tx_config);
 	if (ret < 0) {
 		shell_error(shell, "lora_config failed error %d", ret);
 		return 0;
 	}
-	while (k_uptime_get_32() - t0 < 10000) {
-		ret = lora_send(dev_lora, tx_buf, strlen(tx_buf));
+	
+	hwinfo_length = hwinfo_get_device_id(dev_id, sizeof(dev_id));
+	for (int i = 0 ; i < hwinfo_length ; i++) {
+		offset += snprintf(tx_buf + offset, sizeof(tx_buf) - offset,"%02X", dev_id[i]);
+	}
+	if (offset < 0) {
+		shell_print(shell, "Error: Out of memory for buffer get device id");
+		return -ENOMEM;
+	}
+
+	while (((argc == 3) && (count < no_samples)) ||
+	       ((argc == 1) && (k_uptime_get_32() - t0 < 10000))) {
+		ret = lora_send(dev_lora, tx_buf, offset);
 		if (ret < 0) {
-			shell_error(shell, "lora_send failed error %d", ret);
-			break;
+			shell_error(shell, "%u: error %d", count, ret);
+			continue;
 		} else {
-			shell_print(shell, "Transmit data success %s", tx_buf);
+			shell_print(shell, "%u: %s", count, tx_buf);
 		}
-		k_sleep(K_SECONDS(1));
+		count++;
+		k_sleep(K_MSEC(10));
 	}
 	return 0;
 }
-SHELL_CMD_ARG_REGISTER(etc_lora_tx, NULL, "Transmit a message over Lora", cmd_lora_tx, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_lora_tx, NULL, "Transmit a message over Lora", cmd_lora_tx, 1, 2);
 
 #define ACKUNCRYPT 49 
 
@@ -1092,13 +1130,57 @@ static int lora_rx(void)
 }
 
 static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
-	shell_print(shell, "Starting LoRa rx thread if not already running.\n"
-		    "Log messages will report on the status.");
-	lora_action = LORA_ACTION_RX;
-	k_sem_give(&lora_sem);
+	int ret;
+
+	if (argc == 1) {
+		shell_print(shell, "Starting LoRa rx thread if not already running.\n"
+			"Log messages will report on the status.");
+		lora_action = LORA_ACTION_RX;
+		etc_lora_rx_config.frequency = DEFAULT_LORA_FREQUENCY_HZ;
+		k_sem_give(&lora_sem);
+	}
+
+	if (argc != 3) {
+		shell_print(shell, "Usage: %s <number of samples> <frequency in Hz>",
+			    argv[0]);
+		return -1;
+	}
+	uint8_t no_samples = atoi(argv[1]);
+	uint32_t freq_hz = atoi(argv[2]);
+
+	if ((no_samples == 0) || (no_samples > 100) ||
+	    (freq_hz < LORA_FREQ_US_MIN_HZ) || (freq_hz > LORA_FREQ_US_MAX_HZ)) {
+		shell_print(shell, "Number of samples must be between 1 and 100");
+		shell_print(shell, "Lora freq must be between %lu and %lu",
+				LORA_FREQ_US_MIN_HZ, LORA_FREQ_US_MAX_HZ);
+	}
+
+	etc_lora_rx_config.frequency = freq_hz;
+	ret = lora_config(dev_lora, &etc_lora_rx_config);
+	if (ret < 0) {
+		LOG_ERR("lora_config failed error %d", ret);
+		return 0;
+	}
+	int16_t rssi;
+	int8_t snr;
+	uint8_t rx_buf[128] = {0x00};
+	uint8_t count = 0;
+	shell_print(shell, "Start receiving LoRa messages");
+
+	while (count < no_samples) {
+		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
+		if (ret < 0) {
+			shell_print(shell, "%u: timeout", count);
+		} else {
+			rx_buf[MIN(ret, sizeof(rx_buf) - 1)] = '\0';
+			shell_print(shell, "%u: %d,%s", count, rssi, rx_buf);
+		}
+		count++;
+	}
+
 	return 0;
 }
-SHELL_CMD_ARG_REGISTER(etc_lora_rx, NULL, "Receive message over Lora", cmd_lora_rx, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_lora_rx, NULL, "Receive message over Lora", cmd_lora_rx, 1, 2);
 
 static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 	uint32_t t0 = k_uptime_get_32();
