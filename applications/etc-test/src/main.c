@@ -17,7 +17,6 @@
 
 #include "pcf85263a.h"
 #include "adc.h"
-#include "ui.h"
 #include "ds18b20.h"
 #include "etc_cape.h"
 
@@ -30,7 +29,6 @@ BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),
 static void app_driver_init(void) {
 	extern void etc_test_init(void);
 	etc_test_init();
-	ui_init();
 	adc_init();
 	pcf85263a_init("I2C_0");
 }

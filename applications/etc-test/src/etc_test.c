@@ -12,10 +12,10 @@
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/hwinfo.h>
+#include <zephyr/drivers/pwm.h>
 #include <stdio.h>
 #include "pcf85263a.h"
 #include "adc.h"
-#include "ui.h"
 #include "sensor.h"
 #include "ds2484.h"
 #include "ds18b20.h"
@@ -54,6 +54,10 @@ static const struct gpio_dt_spec modem_uart_oe_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(modem_uart_oe), control_gpios, 0);
 #endif
 static const struct device *ext_flash = DEVICE_DT_GET(DT_NODELABEL(mx25r1635));
+
+static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
+static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
+static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
 
 /* Inputs */
 static const struct gpio_dt_spec rtc_int_dt =
@@ -777,23 +781,30 @@ SHELL_CMD_REGISTER(bq24195, &bq24195_sub, "BQ25618/9 PMIC commands", NULL);
 #endif
 
 static int cmd_ui_request(const struct shell *shell, size_t argc, char **argv)
-{
-	int pattern = atoi(argv[1]);
-	shell_print(shell, "Set UI color %d", pattern);
-	if (pattern == 4) {
-		ui_led_set_color(255, 0, 0);
-	} else if (pattern == 5) {
-		ui_led_set_color(0, 255, 0);
-	} else if (pattern == 6) {
-		ui_led_set_color(0, 0, 255);
-	} else {
-		ui_led_set_pattern((enum ui_led_pattern)pattern);
+{	
+	if (argv < 4) {
+		shell_error(shell, "Failed to set the LED - Syntax error");
+		shell_print(shell, "Syntax: etc_ui <red> <green> <blue>");
+		return 0;
 	}
-	
+
+	int red = atoi(argv[1]);
+	int green = atoi(argv[2]);
+	int blue = atoi(argv[3]);
+
+	if ((0 <= red && red <= 255) && (0 <= blue && blue <= 255) || (0 <= green && green <= 255)) {
+		pwm_set_dt(&pwm_led0, PWM_USEC(255), PWM_USEC(red));
+		pwm_set_dt(&pwm_led1, PWM_USEC(255), PWM_USEC(green));
+		pwm_set_dt(&pwm_led2, PWM_USEC(255), PWM_USEC(blue));
+		shell_print(shell, "Set R %d - G %d - B %d", red, green, blue);
+		return 0;
+	} else {
+		shell_error(shell, "Out of range for input value [0, 255] - %d %d %d", red, green, blue);
+	}
 	return 0;
 }
 
-SHELL_CMD_ARG_REGISTER(etc_ui, NULL, "Set color UI", cmd_ui_request, 2, 0);
+SHELL_CMD_ARG_REGISTER(etc_ui, NULL, "Set color UI", cmd_ui_request, 4, 0);
 
 static int cmd_pcf85263_set_time(const struct shell *shell, size_t argc, char **argv)
 {
