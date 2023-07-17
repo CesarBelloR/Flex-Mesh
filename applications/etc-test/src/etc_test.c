@@ -11,6 +11,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/hwinfo.h>
 #include <stdio.h>
 #include "pcf85263a.h"
 #include "adc.h"
@@ -1177,7 +1178,7 @@ SHELL_CMD_ARG_REGISTER(etc_start_wdt, NULL, "Start feeding hardware watchdog", c
 
 static int cmd_ble_active(const struct shell *shell, size_t argc, char **argv) 
 {
-#ifdef CONFIG_MCUMGR_SMP_BT
+#if IS_ENABLED(CONFIG_MCUMGR_SMP_BT)
 	extern void start_smp_bluetooth(void);
 	start_smp_bluetooth();
 	shell_print(shell, "Enable the BLE MCUMGR");
@@ -1192,7 +1193,7 @@ SHELL_CMD_ARG_REGISTER(etc_ble_active, NULL, "Active the BLE MCUMGR", cmd_ble_ac
 
 static int cmd_ble_deactive(const struct shell *shell, size_t argc, char **argv) 
 {
-#ifdef CONFIG_MCUMGR_SMP_BT
+#if IS_ENABLED(CONFIG_MCUMGR_SMP_BT)
 	extern void stop_smp_bluetooth(void);
 	stop_smp_bluetooth();
 	shell_print(shell, "Deactive the BLE");
@@ -1204,4 +1205,34 @@ static int cmd_ble_deactive(const struct shell *shell, size_t argc, char **argv)
 }
 
 SHELL_CMD_ARG_REGISTER(etc_ble_deactive, NULL, "Deactive the BLE MCUMGR", cmd_ble_deactive, 1, 0);
+
+static int cmd_last_reset_reason(const struct shell *shell, size_t argc, char **argv) 
+{
+	uint32_t reason;
+	hwinfo_get_reset_cause(&reason);
+	shell_print(shell, "Reboot reason 0x%08x", reason);
+	if (reason & RESET_PIN) {
+		shell_print(shell, " -> Reset from pin-reset detected");
+	} 
+	if (reason & RESET_SOFTWARE) {
+		shell_print(shell, " -> Reset from soft-reset detected");
+	} 
+	if (reason & RESET_WATCHDOG) {
+		shell_print(shell, " -> Reset from watch-dog detected");
+	} 
+	if (reason & RESET_CPU_LOCKUP) {
+		shell_print(shell, " -> Reset from cpu lock-up detected");
+	} 
+	if (reason & RESET_LOW_POWER_WAKE) {
+		shell_print(shell, " -> Reset due to wakeup from System Off mode when wakeup is triggered from DETECT signal from GPIO");
+	} 
+	if (reason & RESET_DEBUG) {
+		shell_print(shell, " -> Reset due to wakeup from System Off mode when wakeup is triggered from entering info debug interface");
+	}
+
+	hwinfo_clear_reset_cause();
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_reset_reason, NULL, "Get the reset reason", cmd_last_reset_reason, 1, 0);
 
