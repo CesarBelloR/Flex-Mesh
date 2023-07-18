@@ -133,7 +133,7 @@ K_WORK_DELAYABLE_DEFINE(hw_wdt_work, hw_wdt_work_handler);
 
 static void hw_wdt_start_feed(void)
 {
-	k_work_submit(&hw_wdt_work);
+	k_work_reschedule(&hw_wdt_work, K_NO_WAIT);
 }
 
 void etc_test_init(void) 
@@ -1274,7 +1274,7 @@ static int cmd_start_feed_wdt(const struct shell *shell, size_t argc, char **arg
 		wdt_feed_interval_s = interval;
 		shell_print(shell, "WDT feed interval set to %u seconds", interval);
 	}
-	k_work_submit(&hw_wdt_work);
+	k_work_reschedule(&hw_wdt_work, K_NO_WAIT);
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_start_wdt, NULL, "Start feeding hardware watchdog", cmd_start_feed_wdt, 1, 1);
