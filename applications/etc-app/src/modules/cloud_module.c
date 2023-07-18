@@ -289,8 +289,6 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	case CLOUD_WRAP_EVT_CONNECTED:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_CONNECTED");
-		/* Set the relay ICCID */
-		etc_set_relay_iccid();
 		SEND_EVENT(cloud, CLOUD_EVT_CONNECTED);
 		break;
 	}

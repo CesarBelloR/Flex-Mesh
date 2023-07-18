@@ -564,6 +564,7 @@ static void on_all_states(struct data_msg_data *msg)
 		strcpy(modem_stat.imsi, msg->module.modem.data.modem_static.imsi);
 		strcpy(modem_stat.iccid, msg->module.modem.data.modem_static.iccid);
 
+		etc_set_relay_iccid(modem_stat.iccid);		
 		data_codec_prepare_modem_static_packet(&codec, &modem_stat);
 	}
 

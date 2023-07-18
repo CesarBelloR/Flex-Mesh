@@ -222,11 +222,6 @@ int etc_device_read_record(union etc_device_record *record, bool *active_reclaim
 
 int etc_device_write_relay_record(const uint8_t* record) {
 	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
-	if (p_relay_stat->number_record < ETC_RELAY_RECORD_MAX_ELEMENT) {
-		p_relay_stat->number_record += 1;
-	} else {
-		p_relay_stat->flag_over_flow = true;
-	}
 	memcpy(etc_relay_record_buf, record, ETC_DEVICE_RELAY_BUF_SIZE);
 	int rc = etc_nvs_relay_write(ETC_RECORD_HEADER + p_relay_stat->write_index, 
 		etc_relay_record_buf, ETC_DEVICE_RELAY_BUF_SIZE);
@@ -234,6 +229,11 @@ int etc_device_write_relay_record(const uint8_t* record) {
 		LOG_ERR("Relay: Failed to write data");
 		k_mutex_unlock(&etc_relay_record_mutex);
 		return rc;
+	}
+	if (p_relay_stat->number_record < ETC_RELAY_RECORD_MAX_ELEMENT) {
+		p_relay_stat->number_record += 1;
+	} else {
+		p_relay_stat->flag_over_flow = true;
 	}
 	if (++p_relay_stat->write_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
 		p_relay_stat->write_index = 0;
@@ -263,7 +263,7 @@ int etc_device_read_relay_record(uint8_t* record) {
 		p_relay_stat->read_index = 0;
 	}
 
-	p_relay_stat->number_record =-1;
+	p_relay_stat->number_record -= 1;
 
 	etc_nvs_relay_write(ETC_RECORD_STAT, p_relay_stat, sizeof(relay_record_stat));
 	k_mutex_unlock(&etc_relay_record_mutex);
@@ -281,6 +281,11 @@ int etc_device_set_ack_record(int record_id)
 uint16_t etc_device_nack_count(void) {
 	return (etc_device_record_get_total_record() - 
 		etc_device_record_get_num_ack());
+}
+
+int etc_device_erase_setting(uint16_t setting_id) 
+{
+	return nvs_delete(&etc_fs, setting_id);
 }
 
 enum etc_device_mode etc_device_get_mode(void)

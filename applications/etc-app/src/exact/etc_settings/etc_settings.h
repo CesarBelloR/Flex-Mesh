@@ -83,7 +83,7 @@ int etc_set_tx_delay_msec(uint16_t msecond);
 int etc_set_rx_duration_secs(uint16_t second);
 int etc_set_alarm_threshold(uint16_t threshold);
 int etc_set_serial_number_type(enum etc_serial_number_types type);
-int etc_set_relay_iccid(void);
+int etc_set_relay_iccid(const char* iccid);
 
 int etc_get_hw_version(char *buf, int buf_len);
 int etc_get_fw_version(char *buf, int buf_len);

@@ -309,6 +309,14 @@ void etc_settings_update(const struct etc_config *new_config)
 	int rc = 1;
 	if (etc_cfg.device_mode != new_config->device_mode) {
 		rc = etc_set_device_mode(new_config->device_mode);
+		if (rc) {
+			goto done;
+		}
+
+		rc = etc_device_reset_stat_record();
+		if (rc) {
+			LOG_ERR("Failed to reset stat records");
+		}
 	}
 	if (etc_cfg.power_mode != new_config->power_mode) {
 		rc = etc_set_power_mode(new_config->power_mode);
@@ -337,6 +345,8 @@ void etc_settings_update(const struct etc_config *new_config)
 	if (etc_cfg.rx_duration_secs != new_config->rx_duration_secs) {
 		rc = etc_set_rx_duration_secs(new_config->rx_duration_secs);
 	} 
+
+done:
 	if (rc == 1) {
 		LOG_DBG("No value changed");
 	} else if (rc == 0) {
@@ -354,6 +364,7 @@ int etc_set_device_mode(enum etc_device_mode mode)
 		k_mutex_unlock(&setting_mutex);
 		return 0;
 	}
+
 	etc_cfg.device_mode = mode;
 	rc = etc_device_write_setting(ETC_SETTING_DEVICE_MODE_ID, &etc_cfg.device_mode,
 				      sizeof(etc_cfg.device_mode));
@@ -619,14 +630,14 @@ int etc_set_serial_number_type(enum etc_serial_number_types type)
 	return rc;
 }
 
-int etc_set_relay_iccid(void) {
-	extern char* quectel_bg95_get_sim_number(void);
-	char* sim_number = quectel_bg95_get_sim_number();
-	if (strstr(sim_number, "N.A") || strlen(sim_number) == 0) {
-		LOG_ERR("Invalid sim number %d %d", strstr(sim_number, "N.A") == NULL, strlen(sim_number));
+int etc_set_relay_iccid(const char* iccid) {
+	__ASSERT(iccid != NULL, "Empty ICCID input");
+	if (strstr(iccid, "N.A") || strlen(iccid) == 0) {
+		LOG_ERR("Invalid sim number %d %d", strstr(iccid, "N.A") == NULL, strlen(iccid));
 		return -1;
 	}
-	memcpy(saved_relay_iccid, sim_number, ETC_SETTING_RELAY_ICCID_LEN);
+	
+	memcpy(saved_relay_iccid, &iccid[strlen(iccid) - ETC_SETTING_RELAY_ICCID_LEN], ETC_SETTING_RELAY_ICCID_LEN);
 	saved_relay_iccid[ETC_SETTING_RELAY_ICCID_LEN] = '\0';
 	LOG_DBG("Relay ICCID %s", saved_relay_iccid);
 	return 0;
@@ -902,10 +913,24 @@ static int cmd_get_psk(const struct shell *shell, size_t argc, char **argv)
 static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		if (etc_set_device_mode((enum etc_device_mode)atoi(argv[1])) == 0) {
-			shell_print(shell, "OK");
-			return 0;
+		enum etc_device_mode cur_mode = etc_get_device_mode();
+		enum etc_device_mode new_mode = (enum etc_device_mode)atoi(argv[1]);
+		if (cur_mode != new_mode) {
+			shell_print(shell, "Update mode successful");
+		} else {
+			int rc = etc_set_device_mode(new_mode);
+			if (rc) {
+				shell_error(shell, "Failed to set new mode %d", rc);
+				return 0;
+			} else {
+				rc = etc_device_reset_stat_record();
+				if (rc) {
+					shell_error(shell, "Failed to sync record stat");
+				}
+				return 0;
+			}
 		}
+
 	}
 	shell_error(shell, "Invalid parameter for setting device mode");
 	return 0;
