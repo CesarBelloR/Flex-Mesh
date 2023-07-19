@@ -30,7 +30,12 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
-#define DEFAULT_RADIO_NODE DT_ALIAS(lora0)
+#define DEFAULT_RADIO_NODE DT_ALIAS	(lora0)
+#define DEFAULT_LORA_FREQUENCY_HZ	915000000LU
+#define LORA_FREQ_US_MIN_HZ		902300000LU
+#define LORA_FREQ_US_MAX_HZ		927500000LU
+
+#define HW_WDT_FEED_INTERVAL_S		(10 * 60)
  
 /* Outputs */
 static const struct gpio_dt_spec hall_dt =
@@ -71,6 +76,8 @@ static struct k_mutex lora_mutex;
 static struct gpio_callback hall_cb;
 static struct k_sem lora_sem;
 
+static uint16_t wdt_feed_interval_s = HW_WDT_FEED_INTERVAL_S;
+
 volatile enum lora_action {
 	LORA_ACTION_HALL_TRIGGERED,
 	LORA_ACTION_RX,
@@ -102,8 +109,6 @@ static void hall_cb_fn(const struct device *dev,
 	k_sem_give(&lora_sem);
 }
 
-#define HW_WDT_FEED_INTERVAL	K_SECONDS(10 * 60)
-
 static void hw_wdt_feed(void)
 {
 	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT);
@@ -113,6 +118,7 @@ static void hw_wdt_feed(void)
 	/* Minimum required pulse width according to datasheet is 100 ns. */
 	k_busy_wait(1);
 	gpio_pin_set_dt(&s0_dt, 0U);
+	LOG_INF("HW WDT fed");
 }
 
 void hw_wdt_work_handler(struct k_work *work) 
@@ -120,15 +126,14 @@ void hw_wdt_work_handler(struct k_work *work)
 	struct k_work_delayable *work_delayable =
 		CONTAINER_OF(work, struct k_work_delayable, work);
 	hw_wdt_feed();
-	k_work_schedule(work_delayable, HW_WDT_FEED_INTERVAL);
+	k_work_reschedule(work_delayable, K_SECONDS(wdt_feed_interval_s));
 }
 
 K_WORK_DELAYABLE_DEFINE(hw_wdt_work, hw_wdt_work_handler);
 
 static void hw_wdt_start_feed(void)
 {
-	hw_wdt_feed();
-	k_work_schedule(&hw_wdt_work, HW_WDT_FEED_INTERVAL);
+	k_work_reschedule(&hw_wdt_work, K_NO_WAIT);
 }
 
 void etc_test_init(void) 
@@ -905,7 +910,7 @@ SHELL_CMD_REGISTER(etc_flash, &etc_flash_sub, "External flash commands", NULL);
 
 const struct device *lora_dev = NULL;
 static struct lora_modem_config etc_lora_rx_config = {
-	.frequency = 915000000,
+	.frequency = DEFAULT_LORA_FREQUENCY_HZ,
 	.bandwidth = BW_125_KHZ,
 	.datarate = SF_7,
 	.preamble_len = 8,
@@ -915,7 +920,7 @@ static struct lora_modem_config etc_lora_rx_config = {
 };
 
 static struct lora_modem_config etc_lora_tx_config  = {
-	.frequency = 915000000,
+	.frequency = DEFAULT_LORA_FREQUENCY_HZ,
 	.bandwidth = BW_125_KHZ,
 	.datarate = SF_7,
 	.preamble_len = 8,
@@ -1025,25 +1030,63 @@ static int send_lora_message2(void)
 
 static int cmd_lora_tx(const struct shell *shell, size_t argc, char **argv) {
 	uint32_t t0 = k_uptime_get_32();
-	uint8_t tx_buf[] = "Hello World";
+	uint32_t freq = DEFAULT_LORA_FREQUENCY_HZ;
+	uint8_t no_samples = 0;
+	uint8_t count = 0;
+	uint8_t dev_id[16];
+	uint8_t tx_buf[128];
+	int offset = 0;
+	ssize_t hwinfo_length;
+
+	if ((argc != 1) && (argc != 3)) {
+		shell_print(shell, "Usage: %s <number of samples> <frequency in Hz>",
+			    argv[0]);
+		return -1;
+	}
+
+	if (argc == 3) {
+		no_samples = atoi(argv[1]);
+		freq = atoi(argv[2]);
+		if ((freq < LORA_FREQ_US_MIN_HZ) || (freq > LORA_FREQ_US_MAX_HZ) ||
+		    (no_samples == 0) || (no_samples > 100)) {
+			shell_print(shell, "Number of samples must be between 1 and 100");
+			shell_print(shell, "Lora freq must be between %lu and %lu",
+				    LORA_FREQ_US_MIN_HZ, LORA_FREQ_US_MAX_HZ);
+			return -1;
+		}
+	}
+
+	etc_lora_tx_config.frequency = freq;
 	int ret = lora_config(dev_lora, &etc_lora_tx_config);
 	if (ret < 0) {
 		shell_error(shell, "lora_config failed error %d", ret);
 		return 0;
 	}
-	while (k_uptime_get_32() - t0 < 10000) {
-		ret = lora_send(dev_lora, tx_buf, strlen(tx_buf));
+	
+	hwinfo_length = hwinfo_get_device_id(dev_id, sizeof(dev_id));
+	for (int i = 0 ; i < hwinfo_length ; i++) {
+		offset += snprintf(tx_buf + offset, sizeof(tx_buf) - offset,"%02X", dev_id[i]);
+	}
+	if (offset < 0) {
+		shell_print(shell, "Error: Out of memory for buffer get device id");
+		return -ENOMEM;
+	}
+
+	while (((argc == 3) && (count < no_samples)) ||
+	       ((argc == 1) && (k_uptime_get_32() - t0 < 10000))) {
+		ret = lora_send(dev_lora, tx_buf, offset);
 		if (ret < 0) {
-			shell_error(shell, "lora_send failed error %d", ret);
-			break;
+			shell_error(shell, "%u: error %d", count, ret);
+			continue;
 		} else {
-			shell_print(shell, "Transmit data success %s", tx_buf);
+			shell_print(shell, "%u: %s", count, tx_buf);
 		}
-		k_sleep(K_SECONDS(1));
+		count++;
+		k_sleep(K_MSEC(10));
 	}
 	return 0;
 }
-SHELL_CMD_ARG_REGISTER(etc_lora_tx, NULL, "Transmit a message over Lora", cmd_lora_tx, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_lora_tx, NULL, "Transmit a message over Lora", cmd_lora_tx, 1, 2);
 
 #define ACKUNCRYPT 49 
 
@@ -1087,13 +1130,57 @@ static int lora_rx(void)
 }
 
 static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
-	shell_print(shell, "Starting LoRa rx thread if not already running.\n"
-		    "Log messages will report on the status.");
-	lora_action = LORA_ACTION_RX;
-	k_sem_give(&lora_sem);
+	int ret;
+
+	if (argc == 1) {
+		shell_print(shell, "Starting LoRa rx thread if not already running.\n"
+			"Log messages will report on the status.");
+		lora_action = LORA_ACTION_RX;
+		etc_lora_rx_config.frequency = DEFAULT_LORA_FREQUENCY_HZ;
+		k_sem_give(&lora_sem);
+	}
+
+	if (argc != 3) {
+		shell_print(shell, "Usage: %s <number of samples> <frequency in Hz>",
+			    argv[0]);
+		return -1;
+	}
+	uint8_t no_samples = atoi(argv[1]);
+	uint32_t freq_hz = atoi(argv[2]);
+
+	if ((no_samples == 0) || (no_samples > 100) ||
+	    (freq_hz < LORA_FREQ_US_MIN_HZ) || (freq_hz > LORA_FREQ_US_MAX_HZ)) {
+		shell_print(shell, "Number of samples must be between 1 and 100");
+		shell_print(shell, "Lora freq must be between %lu and %lu",
+				LORA_FREQ_US_MIN_HZ, LORA_FREQ_US_MAX_HZ);
+	}
+
+	etc_lora_rx_config.frequency = freq_hz;
+	ret = lora_config(dev_lora, &etc_lora_rx_config);
+	if (ret < 0) {
+		LOG_ERR("lora_config failed error %d", ret);
+		return 0;
+	}
+	int16_t rssi;
+	int8_t snr;
+	uint8_t rx_buf[128] = {0x00};
+	uint8_t count = 0;
+	shell_print(shell, "Start receiving LoRa messages");
+
+	while (count < no_samples) {
+		ret = lora_recv(dev_lora, rx_buf, sizeof(rx_buf), K_SECONDS(1), &rssi, &snr);
+		if (ret < 0) {
+			shell_print(shell, "%u: timeout", count);
+		} else {
+			rx_buf[MIN(ret, sizeof(rx_buf) - 1)] = '\0';
+			shell_print(shell, "%u: %d,%s", count, rssi, rx_buf);
+		}
+		count++;
+	}
+
 	return 0;
 }
-SHELL_CMD_ARG_REGISTER(etc_lora_rx, NULL, "Receive message over Lora", cmd_lora_rx, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_lora_rx, NULL, "Receive message over Lora", cmd_lora_rx, 1, 2);
 
 static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 	uint32_t t0 = k_uptime_get_32();
@@ -1182,10 +1269,15 @@ SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd
 
 static int cmd_start_feed_wdt(const struct shell *shell, size_t argc, char **argv) 
 {
-	hw_wdt_start_feed();
+	if (argc == 2) {
+		uint16_t interval = atoi(argv[1]);
+		wdt_feed_interval_s = interval;
+		shell_print(shell, "WDT feed interval set to %u seconds", interval);
+	}
+	k_work_reschedule(&hw_wdt_work, K_NO_WAIT);
 	return 0;
 }
-SHELL_CMD_ARG_REGISTER(etc_start_wdt, NULL, "Start feeding hardware watchdog", cmd_start_feed_wdt, 1, 0);
+SHELL_CMD_ARG_REGISTER(etc_start_wdt, NULL, "Start feeding hardware watchdog", cmd_start_feed_wdt, 1, 1);
 
 static int cmd_ble_active(const struct shell *shell, size_t argc, char **argv) 
 {
