@@ -170,6 +170,12 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 	if (err) {
 		return err;
 	}
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
+					   APN, 0), 
+				CONFIG_MODEM_QUECTEL_BG95_M3_APN, 
+				sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_APN) - 1,
+				sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_APN) - 1,
+				LWM2M_RES_DATA_FLAG_RO);
 
 	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
 						POWER_SOURCE_VOLTAGE_RID, 0));
@@ -498,34 +504,24 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 		return -ENODATA;
 	}
 
-#if 0
-	if (modem_dynamic->nw_mode == LTE_LC_LTE_MODE_LTEM) {
-		err = lwm2m_engine_set_u8(LWM2M_PATH(
-						LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
-						NETWORK_BEARER_ID),
-						LTE_FDD_BEARER);
+	if (modem_dynamic->nw_mode == ACT_LTE_M) {
+		err = lwm2m_set_u8(&LWM2M_OBJ(
+				   LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
+				   NETWORK_BEARER_ID),
+				   LTE_FDD_BEARER);
 		if (err) {
 			return err;
 		}
-	} else if (modem_dynamic->nw_mode == LTE_LC_LTE_MODE_NBIOT) {
-		err = lwm2m_engine_set_u8(LWM2M_PATH(
-						LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
-						NETWORK_BEARER_ID),
-						NB_IOT_BEARER);
+	} else if (modem_dynamic->nw_mode == ACT_NB_IOT) {
+		err = lwm2m_set_u8(&LWM2M_OBJ(
+				   LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
+				   NETWORK_BEARER_ID),
+				   NB_IOT_BEARER);
 		if (err) {
 			return err;
 		}
 	} else {
 		return -EINVAL;
-	}
-
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID,
-					   0, IP_ADDRESSES, 0),
-				modem_dynamic->ip, (uint16_t)strlen(modem_dynamic->ip),
-				(uint16_t)strlen(modem_dynamic->ip),
-				LWM2M_RES_DATA_FLAG_RO);
-	if (err) {
-		return err;
 	}
 
 	err = lwm2m_set_u32(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, CELLID),
@@ -552,6 +548,15 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 		return err;
 	}
 
+#if 0
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID,
+					   0, IP_ADDRESSES, 0),
+				modem_dynamic->ip, (uint16_t)strlen(modem_dynamic->ip),
+				(uint16_t)strlen(modem_dynamic->ip),
+				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
 #endif
 
 	err = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),

@@ -62,6 +62,7 @@ static struct data_battery bat_buf[MODULE_DATA_BATTERY_BUFFER_COUNT];
 static struct data_lora_sensors lora_buf[MODULE_LORA_SENSOR_BUFFER_COUNT];
 
 static struct data_modem_static modem_stat;
+static struct data_modem_dynamic modem_dynamic;
 
 static bool first_send = true;
 
@@ -302,7 +303,6 @@ static void data_send(enum data_event_type event,
 static void data_encode(void) 
 {
 	union etc_device_record record;
-	struct data_modem_dynamic modem_data = {0};
 	int ret;
 
 	if (record_id != 0) {
@@ -322,11 +322,11 @@ static void data_encode(void)
 		return;
 	}
 	
-	modem_data.rsrp = quectel_bg95_get_rssi();
-	modem_data.qual = quectel_bg95_get_qual();
-	modem_data.queued = 1;
+	modem_dynamic.rsrp = quectel_bg95_get_rssi();
+	modem_dynamic.qual = quectel_bg95_get_qual();
+	modem_dynamic.queued = 1;
 
-	ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_data);
+	ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
 	if (ret != 0) {
 		LOG_WRN("No message to publish");
 		return;
@@ -409,6 +409,21 @@ static void on_all_states(struct data_msg_data *msg)
 		strcpy(modem_stat.iccid, msg->module.modem.data.modem_static.iccid);
 
 		data_codec_prepare_modem_static_packet(&codec, &modem_stat);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_DYNAMIC_DATA_READY)) {
+		modem_dynamic.ts = msg->module.modem.data.modem_dynamic.timestamp;
+		modem_dynamic.queued = true;
+
+		modem_dynamic.nw_mode = msg->module.modem.data.modem_dynamic.act;
+		modem_dynamic.area = msg->module.modem.data.modem_dynamic.tac;
+		modem_dynamic.cell = msg->module.modem.data.modem_dynamic.cell_id;
+		modem_dynamic.mcc = msg->module.modem.data.modem_dynamic.mcc;
+		modem_dynamic.mnc = msg->module.modem.data.modem_dynamic.mnc;
+		modem_dynamic.psm_active_time_s = msg->module.modem.data.modem_dynamic.active_time_s;
+		modem_dynamic.psm_periodic_atu_s = msg->module.modem.data.modem_dynamic.periodic_tau_s;
+
+		data_codec_prepare_modem_dynamic_packet(&codec, &modem_dynamic);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {

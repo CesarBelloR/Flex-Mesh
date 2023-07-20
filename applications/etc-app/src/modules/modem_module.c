@@ -231,6 +231,24 @@ static void modem_set_connected(void)
 	APP_EVENT_SUBMIT(module_event);
 }
 
+static void new_dynamic_modem_data(const struct modem_network_data *mdm_data) {
+	struct modem_event *modem_event = new_modem_event();
+
+	modem_event->data.modem_dynamic.act = mdm_data->act;
+	modem_event->data.modem_dynamic.tac = mdm_data->tac;
+	modem_event->data.modem_dynamic.cell_id = mdm_data->cell_id;
+	modem_event->data.modem_dynamic.active_time_s = mdm_data->active_time_s;
+	modem_event->data.modem_dynamic.periodic_tau_s = mdm_data->periodic_tau_s;
+	modem_event->data.modem_dynamic.cops_mode = mdm_data->cops_mode;
+	modem_event->data.modem_dynamic.mcc = mdm_data->mcc;
+	modem_event->data.modem_dynamic.mnc = mdm_data->mnc;
+
+	modem_event->data.modem_dynamic.timestamp = k_uptime_get();
+
+	modem_event->type = MODEM_EVT_MODEM_DYNAMIC_DATA_READY;
+	APP_EVENT_SUBMIT(modem_event);
+}
+
 static void modem_evt_handler(const struct modem_api_evt *const evt)
 {
 	switch (evt->type) {
@@ -249,39 +267,53 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 		sub_state_lte_connected_set(SUB_STATE_MODEM_PSM);
 		SEND_EVENT(modem, MODEM_EVT_PSM_ENTERED);
 	}
+
+	case MODEM_API_DYNAMIC_DATA_UPDATE_EVT: {
+		new_dynamic_modem_data(evt->dynamic_data);
 	}
+	}
+}
+
+static int dynamic_modem_data_get(void)
+{
+	struct modem_api_data modem_data = {0};
+
+	modem_get_data(modem_dev, MODEM_API_DATA_REQUEST_DYNAMIC, &modem_data);
+
+	new_dynamic_modem_data(&modem_data.modem_network);
 }
 
 static int static_modem_data_get(void)
 {	
 	int err;
 	struct modem_event *modem_event = new_modem_event();
-	struct modem_static_info modem_info = {0};
+	struct modem_api_data modem_data = {0};
+	struct modem_static_info *modem_info = &modem_data.modem_info;
 
-	modem_get_static_info(modem_dev, &modem_info);
+	modem_get_data(modem_dev, MODEM_API_DATA_REQUEST_STATIC, &modem_data);
 
 	strncpy(modem_event->data.modem_static.manufacturer,
-		modem_info.manufacturer,
+		modem_info->manufacturer,
 		sizeof(modem_event->data.modem_static.manufacturer) - 1);
 
 	strncpy(modem_event->data.modem_static.board_version,
-		modem_info.model,
+		modem_info->model,
 		sizeof(modem_event->data.modem_static.board_version) - 1);
 
 	strncpy(modem_event->data.modem_static.modem_fw,
-		modem_info.revision,
+		modem_info->revision,
 		sizeof(modem_event->data.modem_static.modem_fw) - 1);
 
 	strncpy(modem_event->data.modem_static.iccid,
-		modem_info.iccid,
+		modem_info->iccid,
 		sizeof(modem_event->data.modem_static.iccid) - 1);
 
 	strncpy(modem_event->data.modem_static.imei,
-		modem_info.imei,
+		modem_info->imei,
 		sizeof(modem_event->data.modem_static.imei) - 1);
 	
 	strncpy(modem_event->data.modem_static.imsi,
-		modem_info.imsi,
+		modem_info->imsi,
 		sizeof(modem_event->data.modem_static.imsi) - 1);
 
 	modem_event->data.modem_static.manufacturer
@@ -359,13 +391,15 @@ static int modem_data_init(void)
 
 static int setup(void)
 {
-	if (quectel_bg95_is_ready()) {
-		modem_set_connected();
-	} else {
-		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
-	}
 	if (modem_dev != NULL) {
 		modem_evt_handler_init(modem_dev, modem_evt_handler);
+	}
+
+	if (quectel_bg95_is_ready()) {
+		modem_set_connected();
+		dynamic_modem_data_get();
+	} else {
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
 	}
 	return 0;
 }

@@ -69,7 +69,9 @@
 #define CONFIG_DNS_RESOLVER
 
 /* Modem ATOI routine. */
-#define ATOI(s_, value_, desc_)	  modem_atoi(s_, value_, desc_, __func__)
+#define ATOI(s_, value_, desc_)	  modem_atoi(s_, value_, desc_, __func__, 10)
+
+#define ATOI_HEX(s_, value_, desc_)	  modem_atoi(s_, value_, desc_, __func__, 16)
 
 /* driver data */
 struct modem_data {
@@ -91,6 +93,9 @@ struct modem_data {
 	/* RSSI work */
 	struct k_work_delayable rssi_query_work;
 
+	/* Modem dynamic data update work */
+	struct k_work dynamic_data_update_work;
+
 	/* PSM wakeup work */
 	struct k_work psm_wakeup_work;
 
@@ -106,6 +111,9 @@ struct modem_data {
 	char mdm_time[MDM_TIME_LENGTH];
 	int mdm_rssi;
 	uint8_t mdm_qual;
+
+	struct modem_network_data mdm_network;
+	struct k_mutex mdm_network_mutex;
 
 	/* bytes written to socket in last transaction */
 	int sock_written;
