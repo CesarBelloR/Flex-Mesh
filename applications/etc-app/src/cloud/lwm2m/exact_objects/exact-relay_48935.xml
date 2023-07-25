@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LWM2M xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.openmobilealliance.org/tech/profiles/LWM2M.xsd">
+	<Object ObjectType="MODefinition">
+		<Name>EXACT Relay</Name>
+		<Description1 />
+		<ObjectID>48935</ObjectID>
+		<ObjectURN>urn:oma:lwm2m:x:48935:1.0</ObjectURN>
+		<LWM2MVersion>1.1</LWM2MVersion>
+		<ObjectVersion>1.0</ObjectVersion>
+		<MultipleInstances>Multiple</MultipleInstances>
+		<Mandatory>Optional</Mandatory>
+		<Resources>
+			<Item ID="1">
+				<Name>Data</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Opaque</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Data from relayed LoRa loggers, as described in: https://docs.google.com/document/d/1lc0Wl1sfZU4V-kAgGfS_-cVcgKgGyfzzue5PASHXO4A/edit#heading=h.540v6l1fbcv8]]></Description>
+			</Item>
+			<Item ID="2">
+				<Name>Command</Name>
+				<Operations>W</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Opaque</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Command(s) that need to be sent to individual loggers connected through LoRa.]]></Description>
+			</Item>
+		</Resources>
+		<Description2 />
+	</Object>
+</LWM2M>
