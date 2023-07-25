@@ -13,6 +13,7 @@
 
 #include "etc_device.h"
 #include "etc_settings.h"
+#include "modem_api.h"
 
 #if defined(CONFIG_LWM2M)
 #include <zephyr/net/lwm2m.h>
@@ -68,12 +69,16 @@ struct data_modem_dynamic {
 	int16_t rsrp;
 	/** Signal quality*/
 	uint8_t qual;
+	/* Access technology (NB-IoT or LTE-M) */
+	enum access_technology nw_mode;
+	/* PSM Active timer value in s */
+	uint16_t psm_active_time_s;
+	/* PSM periodic timer value in s */
+	uint32_t psm_periodic_atu_s;
 	/** Internet Protocol Address. */
 	char ip[INET6_ADDRSTRLEN];
 	/** Access Point Name. */
 	char apn[CONFIG_CLOUD_CODEC_APN_LEN_MAX];
-	/** Mobile Country Code and Mobile Network Code. */
-	char mccmnc[7];
 	/** Flag signifying that the data entry is to be encoded. */
 	bool queued : 1;
 };
@@ -171,6 +176,9 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 
 int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_static *modem_data);
+
+int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
+				    struct data_modem_dynamic *modem_data);
 
 /**
  * Prepare a packet that reflects the current status of devices. This is

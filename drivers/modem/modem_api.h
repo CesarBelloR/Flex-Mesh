@@ -17,15 +17,59 @@
 #define MDM_IMSI_LENGTH			  16
 #define MDM_ICCID_LENGTH		  23
 
+enum cereg_stat {
+	STAT_NOT_REGISTERED = 0,
+	STAT_REGISTERED_HOME = 1,
+	STAT_SEARCHING = 2,
+	STAT_REGISTRATION_DENIED = 3,
+	STAT_UNKNOWN = 4,
+	STAT_REGISTERED_ROAMING = 5
+};
+
+enum cops_mode {
+	MODE_AUTOMATIC,
+	MODE_MANUAL,
+	MODE_MANUAL_DEREGISTER,
+	MODE_FORMAT_ONLY,
+	MODE_MANUAL_AUTOMATIC
+};
+
+enum access_technology {
+	ACT_GSM = 0,
+	ACT_LTE_M = 8,
+	ACT_NB_IOT = 9
+};
+
+struct modem_network_data {
+	/* Data that can be retrieved from CEREG */
+	enum cereg_stat stat;
+	uint16_t tac; 
+	uint32_t cell_id;
+	enum access_technology act;
+	uint8_t cause_type;
+	uint8_t reject_cause;
+	uint16_t active_time_s;
+	uint32_t periodic_tau_s;
+	/* Data that can be retrieved from COPS */
+	enum cops_mode cops_mode;
+	/* Mobile Country Code */
+	uint16_t mcc;
+	/* Mobile Network Code */
+	uint16_t mnc;
+};
+
 enum modem_api_evt_type {
 	MODEM_API_CONNECTED_EVT,
 	MODEM_API_DISCONNECTED_EVT,
 	MODEM_API_PSM_ENTERED_EVT,
+	MODEM_API_DYNAMIC_DATA_UPDATE_EVT
 };
-
 
 struct modem_api_evt {
         enum modem_api_evt_type type;
+	union {
+		const struct modem_network_data *dynamic_data;
+	};
 };
 
 enum modem_api_cred_type {
@@ -46,6 +90,18 @@ struct modem_static_info {
 	char iccid[MDM_ICCID_LENGTH];
 };
 
+enum modem_api_data_request {
+	MODEM_API_DATA_REQUEST_STATIC,
+	MODEM_API_DATA_REQUEST_DYNAMIC
+};
+
+struct modem_api_data {
+	union {
+		struct modem_static_info modem_info;
+		struct modem_network_data modem_network;
+	};
+};
+
 typedef void(*modem_api_evt_handler_t)(const struct modem_api_evt *const evt);
 
 typedef int(*modem_api_evt_handler_init_t)(const struct device *dev,
@@ -59,8 +115,9 @@ typedef int(*modem_api_psm_t)(const struct device *dev,
 			      enum modem_api_psm_cmd cmd,
 			      void *psm_data);
 
-typedef int(*modem_api_get_static_info_t)(const struct device *dev,
-					  struct modem_static_info *info);
+typedef int(*modem_api_get_data_t)(const struct device *dev,
+				   enum modem_api_data_request request,
+				   struct modem_api_data *data);
 
 struct modem_api {
 	/**
@@ -81,7 +138,7 @@ struct modem_api {
 	/* Send a PSM command, e.g. wakeup */
 	modem_api_psm_t psm_cmd;
 	/* Get static information about the modem */
-	modem_api_get_static_info_t get_static_info;
+	modem_api_get_data_t get_data;
 };
 
 struct modem_psk {
@@ -149,17 +206,18 @@ inline static int modem_psm_cmd(const struct device *dev,
 	return api->psm_cmd(dev, cmd, psm_data);
 }
 
-inline static int modem_get_static_info(const struct device *dev,
-					struct modem_static_info *info)
+inline static int modem_get_data(const struct device *dev,
+				enum modem_api_data_request request,
+				struct modem_api_data *data)
 {
 	const struct modem_api *api =
 		(const struct modem_api *)dev->api;
 
-	if (api->get_static_info == NULL) {
+	if (api->get_data == NULL) {
 		return -ENOSYS;
 	}
 
-	return api->get_static_info(dev, info);
+	return api->get_data(dev, request, data);
 }
 
 char* quectel_bg95_get_imei(void);

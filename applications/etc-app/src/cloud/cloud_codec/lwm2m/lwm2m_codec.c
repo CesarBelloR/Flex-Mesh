@@ -149,6 +149,10 @@ int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_static *modem_data)
 {
 	int err = 0;
+
+	__ASSERT_NO_MSG(cloud_data != NULL);
+	__ASSERT_NO_MSG(modem_data != NULL);
+
 	if (cloud_data == NULL || modem_data == NULL) {
 		return -EINVAL;
 	}
@@ -157,6 +161,33 @@ int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
 			LWM2M_OBJ(ETC_INFO_OBJECT_ID),
+		};
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							       path_list,
+							       ARRAY_SIZE(path_list));
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			return err;
+		}
+	}
+	return 0;
+}
+
+int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
+				    struct data_modem_dynamic *modem_data)
+{
+	int err = 0;
+
+	__ASSERT_NO_MSG(cloud_data != NULL);
+	__ASSERT_NO_MSG(modem_data != NULL);
+	if (cloud_data == NULL || modem_data == NULL) {
+		return -EINVAL;
+	}
+
+	err = lwm2m_codec_helpers_set_modem_dynamic_data(modem_data);
+	if (err == 0) {
+		static const struct lwm2m_obj_path path_list[] = {
+			LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID),
 		};
 		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
 							       path_list,

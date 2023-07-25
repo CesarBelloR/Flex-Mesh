@@ -32,6 +32,11 @@ static const struct socket_op_vtable offload_socket_fd_op_vtable;
 #define AI_ARR_MAX 1
 #endif
 
+#define MODEM_SUBMIT_EVT(evt_type)	const struct modem_api_evt mdm_evt = { 	\
+					.type = evt_type 			\
+				};						\
+				modem_event_callback(&mdm_evt);
+
 
 static K_KERNEL_STACK_DEFINE(modem_rx_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(modem_workq_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_WORKQ_STACK_SIZE);
@@ -64,7 +69,7 @@ static char psm_param_rptau[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PS
 #endif
 
 static void quectel_bg95_set_connected(bool connected);
-static int modem_event_callback(enum modem_api_evt_type evt_type);
+static int modem_event_callback(const struct modem_api_evt *evt);
 int quectel_bg95_psm_wakeup(void);
 /* Implementation in net/ip/utils.h */
 extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
@@ -115,13 +120,13 @@ static inline uint8_t *modem_get_mac(const struct device *dev)
  * Desc: Convert string to long integer, but handle errors
  */
 static int modem_atoi(const char *s, const int err_value,
-		      const char *desc, const char *func)
+		      const char *desc, const char *func, int base)
 {
 	int   ret;
 	char  *endptr;
 
-	ret = (int)strtol(s, &endptr, 10);
-	if (!endptr || *endptr != '\0') {
+	ret = (int)strtol(s, &endptr, base);
+	if (!endptr || (*endptr != '\0' && *endptr != '\"')) {
 		LOG_ERR("bad %s '%s' in %s", s, desc,
 			func);
 		return err_value;
@@ -144,6 +149,143 @@ static inline int find_len(char *data)
 
 	return ATOI(buf, 0, "rx_buf");
 }
+
+enum t3412_inc {
+	T3412_10_MIN = 0,
+	T3412_1_HR,
+	T3412_10_HR,
+	T3412_2_SEC,
+	T3412_30_SEC,
+	T3412_1_MIN
+};
+
+enum t3324_inc {
+	T3324_2_SEC = 0,
+	T3324_1_MIN,
+	T3324_DECI_HR,
+	T3324_DISABLED
+};
+
+static int timer_val_parse(char *buf, uint8_t buf_len, uint16_t *at_val,
+			    uint8_t *at_increment) {
+	__ASSERT_NO_MSG(buf != NULL);
+	__ASSERT_NO_MSG(at_val != NULL);	
+	__ASSERT_NO_MSG(at_increment != NULL);
+
+	/* 8 digits (bits) + 2x '"' */
+	if (buf_len != 10) {
+		// exit early
+		return -1;
+	}
+	*at_val = 0;
+
+	/* Determine increment binary value */
+	*at_increment = (buf[1] - '0') << 2 | (buf[2] - '0') << 1 | (buf[3] - '0');
+	/* Determine raw timer value */
+	for (int i = 4; i < 9; i++) {
+		*at_val |= (buf[i] - '0') << (8 - i);
+	}
+
+	return 0;
+}
+
+static inline uint16_t tau_to_seconds(char *buf, uint8_t buf_len)
+{
+	uint32_t at_val = 0;
+	uint8_t at_increment;
+
+	if (timer_val_parse(buf, buf_len, (uint16_t *)&at_val, &at_increment) != 0) {
+		return 0;
+	}	
+	
+	switch (at_increment) {
+		case T3412_10_MIN:
+			at_val *= (10 * 60);
+			break;
+
+		case T3412_1_HR:
+			at_val *= (60 * 60);
+			break;
+
+		case T3412_10_HR:
+			at_val *= (10 * 60 * 60);
+			break;
+
+		case T3412_2_SEC:
+			at_val *= 2;
+			break;
+
+		case T3412_30_SEC:
+			at_val *= 30;
+			break;
+
+		case T3412_1_MIN:
+			at_val *= 60;
+			break;
+
+		default:
+			at_val = 0;
+	}
+
+	return at_val;
+}
+
+/**
+ * Convert a T3324 active timer value to seconds.
+ * 
+ * @return 0: fail (0 is not a valid timer value)
+ *         >0: success
+*/
+static inline uint16_t active_time_to_seconds(char *buf, uint8_t buf_len)
+{
+	uint16_t at_val = 0;
+	uint8_t at_increment;
+
+	if (timer_val_parse(buf, buf_len, &at_val, &at_increment) != 0) {
+		return 0;
+	}
+
+	switch (at_increment) {
+		case T3324_2_SEC:
+			at_val *= 2;
+			break;
+			
+		case T3324_1_MIN:
+			at_val *= 60;
+			break;
+
+		case T3324_DECI_HR:
+			at_val *= (6 * 60);
+			break;
+
+		case T3324_DISABLED:
+		default:
+			at_val = 0;
+	}
+
+	return at_val;
+}
+
+static inline int parse_oper(char *buf, uint8_t buf_len, uint8_t format)
+{
+	if ((format != 2) || 
+	    (buf_len < (sizeof("\"#####\"") - 1))) {
+		LOG_WRN("Incorrect format: %u", format);
+		return -1;
+	}
+
+	/* Limit MCC to first 3 digits: "### */
+	char tmp = buf[4];
+	buf[4] = '\0';
+	mdata.mdm_network.mcc = ATOI(&buf[1], 0, "MCC");
+
+	/* Parse MNC (can be two or 3 digits) */
+	buf[4] = tmp;
+	mdata.mdm_network.mnc = ATOI(&buf[4], 0, "MNC");
+
+	return 0;
+}
+
 
 /* Func: on_cmd_sockread_common
  * Desc: Function to successfully read data from the modem on a given socket.
@@ -484,32 +626,6 @@ MODEM_CMD_DEFINE(on_cmd_tcp_geterror)
 	return 0;
 }
 
-enum cereg_stat {
-	STAT_NOT_REGISTERED = 0,
-	STAT_REGISTERED_HOME = 1,
-	STAT_SEARCHING = 2,
-	STAT_REGISTRATION_DENIED = 3,
-	STAT_UNKNOWN = 4,
-	STAT_REGISTERED_ROAMING = 5
-};
-
-enum access_technology {
-	ACT_GSM = 0,
-	ACT_LTE_M = 8,
-	ACT_NB_IOT = 9
-};
-
-struct cereg_data {
-	enum cereg_stat stat;
-	char tac[sizeof("##")]; 
-	char cell_id[sizeof("####")];
-	enum access_technology act;
-	uint8_t cause_type;
-	uint8_t reject_cause;
-	char active_time[PSM_TIMER_VAL_LEN];
-	char periodic_tau[PSM_TIMER_VAL_LEN];
-};
-
 #if CONFIG_MODEM_QUECTEL_BG95_PSM
 struct psm_ind {
 	/* 1 rising, 0 falling */
@@ -585,39 +701,96 @@ MODEM_CMD_DEFINE(on_cmd_unsol_qpsmtimer)
 
 MODEM_CMD_DEFINE(on_cmd_unsol_cereg)
 {
-	struct cereg_data reg_data;
+	struct modem_data *mdm_data = CONTAINER_OF(data, struct modem_data, 
+							 cmd_handler_data);
+	struct modem_network_data *nw_data = &mdm_data->mdm_network;
+	int ret;
 
-	memset(&reg_data, 0, sizeof(reg_data));
-
-	reg_data.stat = ATOI(argv[0], STAT_NOT_REGISTERED, "stat");	
-	/* Copy PSM active timer and periodic TAU values */
-	if (argc >= 7) {
-		uint8_t val_len;
-		uint8_t copy_len;
-
-		val_len = strlen(argv[6]);
-		copy_len = val_len < sizeof(reg_data.active_time) ? 
-			   val_len : sizeof(reg_data.active_time) - 1;
-		memcpy(reg_data.active_time, argv[6], copy_len);
-		reg_data.active_time[copy_len] = '\0';
-
-		val_len = strlen(argv[7]);
-		copy_len = val_len < sizeof(reg_data.periodic_tau) ? 
-			   val_len : sizeof(reg_data.periodic_tau) - 1;
-		memcpy(reg_data.periodic_tau, argv[7], copy_len);
-		reg_data.periodic_tau[copy_len] = '\0';
+	ret = k_mutex_lock(&mdm_data->mdm_network_mutex, MDM_CMD_TIMEOUT);
+	__ASSERT_NO_MSG(ret == 0);
+	if (ret != 0) {
+		return -1;
 	}
-	LOG_INF("Status: %u, AT: %s, TAU: %s", 
-		reg_data.stat, reg_data.active_time, reg_data.periodic_tau);
+	nw_data->stat = ATOI(argv[0], STAT_NOT_REGISTERED, "stat");
+	if (argc >= 4) {
+		/* Hex values start with a '"'. Skip this. "*/
+		if (strlen(argv[1]) > 0) {
+			nw_data->tac = ATOI_HEX(argv[1] + 1, 0, "tac");
+		}
+		if (strlen(argv[2]) > 0) {
+			nw_data->cell_id = ATOI_HEX(argv[2] + 1, 0, "ci");
+		}
+		nw_data->act = ATOI(argv[3], 0, "AcT");
+	}
+
+	/* Copy PSM active timer and periodic TAU values */
+	if (argc >= 8) {
+		nw_data->active_time_s = active_time_to_seconds(argv[6], strlen(argv[6]));
+
+		nw_data->periodic_tau_s = tau_to_seconds(argv[7], strlen(argv[7]));
+	}
+	k_mutex_unlock(&mdm_data->mdm_network_mutex);
+	LOG_INF("Status: %u, tac: %u, ci: %u, AcT: %u, AT: %u, TAU: %u", 
+		nw_data->stat, nw_data->tac, nw_data->cell_id, nw_data->act,
+		nw_data->active_time_s, nw_data->periodic_tau_s);
 	
-	if ((reg_data.stat == STAT_REGISTERED_HOME) || 
-	    (reg_data.stat == STAT_REGISTERED_ROAMING)) {
+	if ((nw_data->stat == STAT_REGISTERED_HOME) || 
+	    (nw_data->stat == STAT_REGISTERED_ROAMING)) {
 		LOG_INF("Network connected");
+		k_work_submit_to_queue(&modem_workq, &mdata.dynamic_data_update_work);
 	} else {
 		LOG_INF("Network disconnected.");
 	}
 
 	return 0;
+}
+
+enum cops_error {
+	COPS_OKAY = 0,
+	COPS_WRONG_FORMAT,
+	COPS_ERROR
+};
+
+/**
+ * Process a COPS command response.
+ * 
+ * @return 0: success
+ * 	   -
+*/
+MODEM_CMD_DEFINE(on_cmd_cops)
+{
+	struct modem_data *mdm_data = CONTAINER_OF(data, struct modem_data, 
+							 cmd_handler_data);
+	struct modem_network_data *nw_data = &mdm_data->mdm_network;
+	uint8_t format = 0;
+	int ret;
+
+	if (argc > 1) {
+		format = ATOI(argv[1], 0, "fmt");
+	}
+
+	if (format != 2) {
+		modem_cmd_handler_set_error(&mdata.cmd_handler_data, COPS_WRONG_FORMAT);
+		return COPS_WRONG_FORMAT;
+	}
+
+	ret = k_mutex_lock(&mdm_data->mdm_network_mutex, MDM_CMD_TIMEOUT);
+	__ASSERT_NO_MSG(ret == 0);
+	if (ret != 0) {
+		return -1;
+	}
+	
+	if (argc >= 3) {
+		parse_oper(argv[2], strlen(argv[2]), format);
+	} else {
+		LOG_WRN("COPS: not enough args");
+	}
+	k_mutex_unlock(&mdm_data->mdm_network_mutex);
+
+	LOG_INF("MCC: %u, MNC: %u", nw_data->mcc, nw_data->mnc);
+	
+	ret = modem_cmd_handler_set_error(&mdata.cmd_handler_data, COPS_OKAY);
+	return COPS_OKAY;
 }
 
 /* Func: get_data_size
@@ -1215,7 +1388,7 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
 #endif
 
-	modem_event_callback(MODEM_API_PSM_ENTERED_EVT);
+	MODEM_SUBMIT_EVT(MODEM_API_PSM_ENTERED_EVT);
 
 	return 0;
 }
@@ -1298,6 +1471,42 @@ error:
 				      NULL, 0U, false);
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	return ret;
+}
+
+static int set_cops_format(uint8_t format)
+{
+	char cmd[sizeof("AT+COPS=3,#")];
+	int ret;
+
+	__ASSERT_NO_MSG(format >= 0 && format <= 2);
+
+	snprintk(cmd, sizeof(cmd), "AT+COPS=3,%u", format);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
+		NULL, 0, cmd, &mdata.sem_response,
+		MDM_CMD_TIMEOUT);
+	return ret;
+}
+
+static int get_operator_info(void)
+{
+	const char *cmd_cops = "AT+COPS?";
+	int ret;
+	int count = 0;
+
+	struct modem_cmd cmd[] = {
+		MODEM_CMD_ARGS_MAX("+COPS: ", on_cmd_cops, 1U, 4U, ","),
+	};
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, 
+			cmd, ARRAY_SIZE(cmd), cmd_cops, &mdata.sem_response,
+			MDM_CMD_TIMEOUT);
+
+	if (ret != 0) {
+		LOG_ERR("Error retrieving operator details");
+		return -1;
+	}
+	
+	return 0;
 }
 
 #if 0 // Uncomment when we need to use
@@ -1973,17 +2182,15 @@ static int modem_pdp_context_activate(void)
  * @param evt_type Event type to be forwarded to callback.
  * @return 0 on success, negative on error.
 */
-static int modem_event_callback(enum modem_api_evt_type evt_type)
+static int modem_event_callback(const struct modem_api_evt *evt)
 {
-	const struct modem_api_evt evt = {
-		.type = evt_type,
-	};
+	__ASSERT_NO_MSG(evt != NULL);
 
 	if (mdata.evt_callback == NULL) {
 		return -ENOSYS;
 	}
 
-	mdata.evt_callback(&evt);
+	mdata.evt_callback(evt);
 
 	return 0;
 }
@@ -2000,7 +2207,7 @@ static void quectel_bg95_set_connected(bool connected)
 
 	if (!connected) {
 		if (mdata.is_connected && !mdata.psm_active) {
-			modem_event_callback(MODEM_API_DISCONNECTED_EVT);
+			MODEM_SUBMIT_EVT(MODEM_API_DISCONNECTED_EVT);
 		}
 		mdata.is_connected = false;
 	} else {
@@ -2017,11 +2224,34 @@ static void quectel_bg95_set_connected(bool connected)
 			quectel_bg95_set_psm(enable,
 					CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT,
 					CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU);
-			modem_event_callback(MODEM_API_CONNECTED_EVT);
+			MODEM_SUBMIT_EVT(MODEM_API_CONNECTED_EVT);
 			LOG_INF("Network connected.");
 			mdata.is_connected = true;
 		}
 	}
+}
+
+static void modem_dynamic_update_work(struct k_work *work)
+{
+	struct modem_api_evt evt = {
+		.type = MODEM_API_DYNAMIC_DATA_UPDATE_EVT
+	};
+	struct modem_network_data nw_data;
+	int ret;
+
+	get_operator_info();
+
+	ret = k_mutex_lock(&mdata.mdm_network_mutex, MDM_CMD_TIMEOUT);
+	__ASSERT_NO_MSG(ret == 0);
+	if (ret != 0) {
+		return;
+	}
+	memcpy(&nw_data, &mdata.mdm_network, sizeof(nw_data));
+	k_mutex_unlock(&mdata.mdm_network_mutex);
+
+	evt.dynamic_data = &nw_data;
+
+	modem_event_callback(&evt);
 }
 
 /**
@@ -2113,6 +2343,7 @@ static const struct setup_cmd psm_wakeup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
 	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
+	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
 };
 #endif
 
@@ -2122,9 +2353,10 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATH"),
 	SETUP_CMD_NOHANDLE("AT+CFUN=0"),
 	SETUP_CMD_NOHANDLE("AT+QCFG=\"nwscanmode\",3,1"),
+	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
+	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
 	SETUP_CMD_NOHANDLE("AT+CFUN=1"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
-	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 	SETUP_CMD_NOHANDLE("AT+QCFG=\"psm/urc\",1"),
 #endif
@@ -2135,6 +2367,8 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD("AT+QGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
 	SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
 	SETUP_CMD_NOHANDLE("AT+QICSGP=1,3,\"" MDM_APN "\",\"" MDM_USERNAME "\",\"" MDM_PASSWORD "\",1"),
+	/* Save current profile to ensure settings are loaded on next power up. */
+	SETUP_CMD_NOHANDLE("AT&W")
 };
 
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
@@ -2521,11 +2755,13 @@ static int quectel_bg95_psm_cmd(const struct device *dev,
 	return -EINVAL;
 }
 
+
 static int quectel_bg95_get_static_info(const struct device *dev,
 				 struct modem_static_info *info)
 {
 	struct modem_data *data = dev->data;
 
+	__ASSERT_NO_MSG(info != NULL);
 	if (info == NULL) {
 		return -EINVAL;
 	}
@@ -2543,13 +2779,53 @@ static int quectel_bg95_get_static_info(const struct device *dev,
 	return 0;
 }
 
+static int quectel_bg95_modem_get_dynamic_info(const struct device *dev,
+					       struct modem_network_data *data)
+{
+	struct modem_data *mdm_data = dev->data;
+	int ret;
+
+	__ASSERT_NO_MSG(data != NULL);
+	if (data == NULL) {
+		return -EINVAL;
+	}
+
+	ret = k_mutex_lock(&mdm_data->mdm_network_mutex, MDM_CMD_TIMEOUT);
+	__ASSERT_NO_MSG(ret == 0);
+	if (ret != 0) {
+		return -ETIMEDOUT;
+	}
+	memcpy(data, &mdm_data->mdm_network, sizeof(*data));
+	k_mutex_unlock(&mdm_data->mdm_network_mutex);
+
+	return 0;
+}
+
+static int quectel_bg95_get_data(const struct device *dev,
+				 enum modem_api_data_request request,
+				 struct modem_api_data *data)
+{
+	__ASSERT_NO_MSG(data != NULL);
+	if (data == NULL) {
+		return -EINVAL;
+	}
+
+	if (request == MODEM_API_DATA_REQUEST_STATIC) {
+		return quectel_bg95_get_static_info(dev, &data->modem_info);
+	} else if (MODEM_API_DATA_REQUEST_DYNAMIC) {
+		return quectel_bg95_modem_get_dynamic_info(dev, &data->modem_network);
+	} else {
+		return -ENOTSUP;
+	}
+}
+
 static struct modem_api api_funcs = {
 	.iface_api.init = modem_net_iface_init,
 
 	.evt_handler_init = quectel_bg95_evt_handler_init,
 	.set_credentials = quectel_bg95_set_credentials,
 	.psm_cmd = quectel_bg95_psm_cmd,
-	.get_static_info = quectel_bg95_get_static_info,
+	.get_data = quectel_bg95_get_data,
 };
 
 static bool offload_is_supported(int family, int type, int proto)
@@ -2585,6 +2861,8 @@ static int modem_init(const struct device *dev)
 	k_sem_init(&mdata.sem_data_ready, 0, 1);
 	k_sem_init(&mdata.sem_shutdown, 0, 1);
 	k_sem_init(&mdata.sem_ntp_ready, 0, 1);
+	
+	k_mutex_init(&mdata.mdm_network_mutex);
 
 	k_work_queue_start(&modem_workq, modem_workq_stack,
 			   K_KERNEL_STACK_SIZEOF(modem_workq_stack),
@@ -2711,6 +2989,7 @@ static int modem_init(const struct device *dev)
 
 	/* Init RSSI query */
 	k_work_init_delayable(&mdata.rssi_query_work, modem_rssi_query_work);
+	k_work_init(&mdata.dynamic_data_update_work, modem_dynamic_update_work);
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 	/* Init PSM work */
 	k_work_init(&mdata.psm_wakeup_work, modem_psm_wakeup_work);

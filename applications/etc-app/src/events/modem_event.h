@@ -148,12 +148,29 @@ struct modem_static_modem_data {
 	char imei[MDM_IMEI_LENGTH];
 };
 
+struct modem_dynamic_modem_data {
+	int64_t timestamp;
+	enum cereg_stat stat;
+	uint16_t tac; 
+	uint32_t cell_id;
+	enum access_technology act;
+	uint16_t active_time_s;
+	uint32_t periodic_tau_s;
+	/* Data that can be retrieved from COPS */
+	enum cops_mode cops_mode;
+	/* Mobile Country Code */
+	uint16_t mcc;
+	/* Mobile Network Code */
+	uint16_t mnc;
+};
+
 /** @brief Modem event. */
 struct modem_event {
 	struct app_event_header header;
 	enum modem_event_type type;
 	union {
 		struct modem_static_modem_data modem_static;
+		struct modem_dynamic_modem_data modem_dynamic;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
 		int err;
