@@ -915,8 +915,9 @@ static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
 		enum etc_device_mode cur_mode = etc_get_device_mode();
 		enum etc_device_mode new_mode = (enum etc_device_mode)atoi(argv[1]);
-		if (cur_mode != new_mode) {
+		if (cur_mode == new_mode) {
 			shell_print(shell, "Update mode successful");
+			return 0;
 		} else {
 			int rc = etc_set_device_mode(new_mode);
 			if (rc) {
@@ -926,6 +927,7 @@ static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 				rc = etc_device_reset_stat_record();
 				if (rc) {
 					shell_error(shell, "Failed to sync record stat");
+					return rc;
 				}
 				return 0;
 			}

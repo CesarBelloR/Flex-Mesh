@@ -395,6 +395,28 @@ static int cmd_erase_configuration(const struct shell *shell, size_t argc, char 
 	return 0;
 }
 
+static int cmd_get_record(const struct shell *shell, size_t argc, char ** argv)
+{
+	uint8_t record[ETC_DEVICE_RELAY_BUF_SIZE];
+	int ret;
+
+	if (etc_device_mode != ETC_DEVICE_MODE_RELAY) {
+		return -ENOTSUP;
+	}
+
+	memset(record, 0, sizeof(record));
+
+	ret = etc_device_read_relay_record(record);
+	if (ret != 0) {
+		shell_error(shell, "Could not read record: %d", ret);
+		return ret;
+	}
+
+	shell_hexdump(shell, record, sizeof(record));
+
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_config,
 	SHELL_CMD(erase, NULL, "Erase all configuration - development only", cmd_erase_configuration),

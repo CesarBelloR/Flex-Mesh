@@ -97,7 +97,7 @@ static uint8_t lora_rx_buf[LORA_ACKUNCRYPT_LEN] = {0x00};
 static int lora_parent_id = -1;
 static uint8_t lora_pkt_counter = 0;
 static struct lora_modem_config etc_lora_rx_config = {
-	.frequency = 915000000,
+	.frequency = CONFIG_ETC_LORA_MODULE_RX_FREQUENCY,
 	.bandwidth = BW_125_KHZ,
 	.datarate = SF_7,
 	.preamble_len = 8,
@@ -106,7 +106,7 @@ static struct lora_modem_config etc_lora_rx_config = {
 	.tx = false,
 };
 static struct lora_modem_config etc_lora_tx_config = {
-	.frequency = 915000000,
+	.frequency = CONFIG_ETC_LORA_MODULE_TX_FREQUENCY,
 	.bandwidth = BW_125_KHZ,
 	.datarate = SF_7,
 	.preamble_len = 8,

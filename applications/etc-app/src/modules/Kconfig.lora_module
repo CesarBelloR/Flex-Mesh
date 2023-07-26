@@ -1,0 +1,15 @@
+menuconfig ETC_LORA_MODULE
+	bool "Enable/disable LoRa module"
+	default y
+
+if ETC_LORA_MODULE
+
+config ETC_LORA_MODULE_RX_FREQUENCY
+        int "LoRa frequency used for receives"
+        default 915000000
+
+config ETC_LORA_MODULE_TX_FREQUENCY
+        int "LoRa frequency used for transmits"
+        default 915000000
+
+endif

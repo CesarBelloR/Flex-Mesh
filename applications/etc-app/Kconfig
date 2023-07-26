@@ -8,10 +8,6 @@ config CONNECTION_RETRY_TIMEOUT_SECONDS
 	int "Number of seconds between each AWS IoT connection retry"
 	default 30
 
-config ETC_LORA_MODULE
-	bool "Enable/disable LoRa module"
-	default y
-
 config APP_AWS_IOT
 	bool "Enable/disable use of AWS IoT to connect to cloud"
 	default y
@@ -22,6 +18,7 @@ rsource "src/cloud/Kconfig.lwm2m"
 rsource "src/modules/Kconfig.debug_module"
 rsource "src/modules/Kconfig.modem_module"
 rsource "src/modules/Kconfig.ui_module"
+rsource "src/modules/Kconfig.lora_module"
 rsource "src/cloud/cloud_codec/Kconfig"
 
 endmenu
