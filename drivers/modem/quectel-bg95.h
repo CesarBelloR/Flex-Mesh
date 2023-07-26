@@ -25,53 +25,59 @@
 #include "modem_iface_uart.h"
 #include "modem_api.h"
 
-#define MDM_UART_DEV			  DEVICE_DT_GET(DT_INST_BUS(0))
-#define MDM_UART_NODE			  DT_INST_BUS(0)
-#define MDM_CMD_TIMEOUT			  K_SECONDS(10)
-#define MDM_DNS_TIMEOUT			  K_SECONDS(60)
-#define MDM_RECV_TIMEOUT          K_SECONDS(10)
-#define MDM_CMD_CONN_TIMEOUT		  K_SECONDS(120)
-#define MDM_REGISTRATION_TIMEOUT	  K_SECONDS(180)
-#define MDM_SHUTDOWN_TIMEOUT		  K_SECONDS(60)
-#define MDM_TX_LOCK_TIMEOUT		  K_SECONDS(5)
-#define MDM_SENDMSG_SLEEP		  K_MSEC(1)
-#define MDM_NTP_TIMEOUT			  K_SECONDS(150)
-#define MDM_MAX_DATA_LENGTH		  1024
-#define MDM_RECV_MAX_BUF		  16
-#define MDM_RECV_BUF_SIZE		  256
-#define MDM_MAX_SOCKETS			  5
-#define MDM_BASE_SOCKET_NUM		  0
-#define MDM_NETWORK_RETRY_COUNT		  10
-#define MDM_INIT_RETRY_COUNT		  10
-#define MDM_PDP_ACT_RETRY_COUNT		  10
-#define MDM_WAIT_FOR_RSSI_COUNT		  10
-#define MDM_POWER_DOWN_RETRY_COUNT	  10
-#define BUF_ALLOC_TIMEOUT		  K_SECONDS(1)
-#define MDM_MAX_BOOT_TIME		  K_SECONDS(15)
-#define MDM_RSSI_INVALID		  -1000
+#define MDM_UART_DEV			DEVICE_DT_GET(DT_INST_BUS(0))
+#define MDM_UART_NODE			DT_INST_BUS(0)
+#define MDM_CMD_TIMEOUT			K_SECONDS(10)
+#define MDM_DNS_TIMEOUT			K_SECONDS(60)
+#define MDM_RECV_TIMEOUT		K_SECONDS(10)
+#define MDM_CMD_CONN_TIMEOUT		K_SECONDS(120)
+#define MDM_REGISTRATION_TIMEOUT	K_SECONDS(180)
+#define MDM_SHUTDOWN_TIMEOUT		K_SECONDS(60)
+#define MDM_TX_LOCK_TIMEOUT		K_SECONDS(5)
+#define MDM_SENDMSG_SLEEP		K_MSEC(1)
+#define MDM_NTP_TIMEOUT			K_SECONDS(150)
+#define MDM_MAX_DATA_LENGTH		1024
+#define MDM_RECV_MAX_BUF		16
+#define MDM_RECV_BUF_SIZE		256
+#define MDM_MAX_SOCKETS			5
+#define MDM_BASE_SOCKET_NUM		0
+#define MDM_NETWORK_RETRY_COUNT		10
+#define MDM_INIT_RETRY_COUNT		10
+#define MDM_PDP_ACT_RETRY_COUNT		10
+#define MDM_WAIT_FOR_RSSI_COUNT		10
+#define MDM_POWER_DOWN_RETRY_COUNT	10
+#define BUF_ALLOC_TIMEOUT		K_SECONDS(1)
+#define MDM_MAX_BOOT_TIME		K_SECONDS(15)
+#define MDM_RSSI_INVALID		-1000
 
-#define MDM_FILE_NAME_MAX_LENGTH (80)
+#define MDM_FILE_NAME_MAX_LENGTH	(80)
 
 #define MDM_TLS_CA_FILE_NAME "iot_cacert.pem"
 #define MDM_TLS_PRIV_KEY_FILE_NAME "iot_privatekey.pem"
 #define MDM_TLS_CLIENT_CERT_FILE_NAME "iot_clientcert.pem"
 
 /* Default lengths of certain things. */
-#define MDM_TIME_LENGTH           	  32
-#define MDM_APN_LENGTH			  32
-#define RSSI_TIMEOUT_SECS		  30
-#define MDM_WAIT_FOR_RSSI_TIMEOUT	  K_SECONDS(2)
+#define MDM_TIME_LENGTH			32
+#define MDM_APN_LENGTH			32
+#define RSSI_TIMEOUT_SECS		30
+#define MDM_WAIT_FOR_RSSI_TIMEOUT	K_SECONDS(2)
 
-#define MDM_APN				      CONFIG_MODEM_QUECTEL_BG95_M3_APN
-#define MDM_USERNAME			  CONFIG_MODEM_QUECTEL_BG95_M3_USERNAME
-#define MDM_PASSWORD			  CONFIG_MODEM_QUECTEL_BG95_M3_PASSWORD
+#define MDM_APN				CONFIG_MODEM_QUECTEL_BG95_M3_APN
+#define MDM_USERNAME			CONFIG_MODEM_QUECTEL_BG95_M3_USERNAME
+#define MDM_PASSWORD			CONFIG_MODEM_QUECTEL_BG95_M3_PASSWORD
 
 #define CONFIG_DNS_RESOLVER
 
 /* Modem ATOI routine. */
-#define ATOI(s_, value_, desc_)	  modem_atoi(s_, value_, desc_, __func__, 10)
+#define ATOI(s_, value_, desc_)		modem_atoi(s_, value_, desc_, __func__, 10)
+#define ATOI_HEX(s_, value_, desc_)	modem_atoi(s_, value_, desc_, __func__, 16)
 
-#define ATOI_HEX(s_, value_, desc_)	  modem_atoi(s_, value_, desc_, __func__, 16)
+enum modem_power_state {
+	MODEM_POWER_OFF,
+	MODEM_POWER_ON,
+	MODEM_POWER_PSM_PENDING,
+	MODEM_POWER_PSM
+};
 
 /* driver data */
 struct modem_data {
@@ -141,7 +147,7 @@ struct modem_data {
 	/* Modem status */
 	bool is_connected;
 
-	bool psm_active;
+	enum modem_power_state power;
 
 	/* SIM initialization status reported by modem */
 	int8_t sim_ini_stat;
