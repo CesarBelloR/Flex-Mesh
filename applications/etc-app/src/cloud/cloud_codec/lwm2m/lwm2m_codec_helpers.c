@@ -683,6 +683,15 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 	return 0;
 }
 
+int lwm2m_codec_helpers_set_relay_data(const uint8_t *data, uint16_t data_len)
+{
+	int err;
+
+	err = lwm2m_set_opaque(&LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_DATA),
+			       data, data_len);
+	return err;
+}
+
 static int invalidate_sensor_value(struct cloud_codec_data *cloud_data,
 				   int obj_inst_id, const struct lwm2m_obj_path *path,
 				   time_t timestamp)

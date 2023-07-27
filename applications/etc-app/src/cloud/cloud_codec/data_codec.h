@@ -181,6 +181,18 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_dynamic *modem_data);
 
 /**
+ * @brief Prepare a relay packet that relays data from LoRa loggers to the cloud.
+ * 
+ * @param cloud_data Pointer to the cloud_data struct.
+ * @param[in] relay_data Pointer to the relay data that should be sent to cloud.
+ * @param[in] relay_data_len Length of the relay data.
+ * 
+ * @return 0 on success, otherwise a negative value indicating an error.
+*/
+int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
+				    const uint8_t *relay_data, uint16_t relay_data_len);
+
+/**
  * Prepare a packet that reflects the current status of devices. This is
  * used to update the server's data model when a device first turns on.
  * 

@@ -125,6 +125,16 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 int lwm2m_codec_helpers_set_device_data(void);
 
 /**
+ * @brief Fill the relay object's data resource with the data passed.
+ * 
+ * @param[in] data Pointer to data that should be written to relay object.
+ * @param[in] data_len Length of the data.
+ * 
+ * @return 0 If successful, otherwise a negative value indicating the reason of failure.
+*/
+int lwm2m_codec_helpers_set_relay_data(const uint8_t *data, uint16_t data_len);
+
+/**
  * Log the paths contained in the path_list in INFO log level.
  *
  * @param path_list List of lwm2m paths. Array can not be smaller than 

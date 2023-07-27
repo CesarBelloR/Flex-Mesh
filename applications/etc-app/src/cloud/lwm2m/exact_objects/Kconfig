@@ -1,0 +1,27 @@
+#
+# Copyright (c) 2022 Nordic Semiconductor
+#
+# Copyright (c) 2023 EXACT Technology Corporation
+#
+
+if LWM2M_INTEGRATION
+
+menu "LwM2M ETC objects"
+
+config LWM2M_ETC_RELAY_OBJ_DATA_SIZE
+	int "Size of the relay object's data resource"
+	default 512
+	help
+	  Size of the relay object's data resource. This is used to forward
+	  relay data recorded from a LoRa logger through LwM2M.
+
+config LWM2M_ETC_RELAY_OBJ_COMMAND_SIZE
+	int "Size of the relay object's command resource"
+	default 128
+	help
+	  Size of the relay object's command resource. This is used by the portal
+	  to forward commands to an end device that is connected over LoRa.
+
+endmenu
+
+endif # LWM2M_INTEGRATION
