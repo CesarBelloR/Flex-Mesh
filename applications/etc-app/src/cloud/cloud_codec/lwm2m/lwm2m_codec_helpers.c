@@ -689,6 +689,7 @@ int lwm2m_codec_helpers_set_relay_data(const uint8_t *data, uint16_t data_len)
 
 	err = lwm2m_set_opaque(&LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_DATA),
 			       data, data_len);
+
 	return err;
 }
 

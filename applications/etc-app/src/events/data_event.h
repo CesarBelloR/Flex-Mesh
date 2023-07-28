@@ -17,6 +17,10 @@ enum data_event_type {
 
 	/** The option to support fast sample request */
 	DATA_EVT_TEST_DATA_READY,
+
+	/** Relay data is ready to be published. */
+	DATA_EVT_RELAY_DATA_READY,
+
 	/** Send newly sampled data.
 	 *  The event has an associated payload of type @ref data_module_data_buffers in
 	 *  the `data.buffer` member.
@@ -100,6 +104,11 @@ struct data_module_data_buffers {
 	uint8_t valid_object_paths;
 };
 
+struct relay_data_buffer {
+	const uint8_t *data;
+	uint16_t data_len;
+};
+
 struct data_event {
 	struct app_event_header header;
 
@@ -113,6 +122,8 @@ struct data_event {
 		uint32_t id;
 		/* Publish messag id */
 		uint32_t message_id;
+		/** Relay data to be published */
+		struct relay_data_buffer relay_data;
 	} data;
 };
 
