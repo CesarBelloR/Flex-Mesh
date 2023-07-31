@@ -37,6 +37,16 @@ static const struct socket_op_vtable offload_socket_fd_op_vtable;
 				};						\
 				modem_event_callback(&mdm_evt);
 
+#if defined(CONFIG_MODEM_QUECTEL_BG95_PSM)
+struct psm_ind {
+	struct k_work_delayable work;
+	/* 1 rising, 0 falling */
+	int edge;
+	int64_t last_change_s;
+} psm_ind;
+
+#define PSM_IND_DEBOUNCE_INTERVAL_MS	250
+#endif
 
 static K_KERNEL_STACK_DEFINE(modem_rx_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(modem_workq_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_WORKQ_STACK_SIZE);
@@ -63,6 +73,9 @@ static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wd
 #endif
 
 #if defined(CONFIG_MODEM_QUECTEL_BG95_PSM)
+/* GPIO mdm_psm_ind_gpios indicates the modem's PSM status. 
+ * Pin active: modem is in PSM (or off) 
+ * Pin inactive: modem is on */
 static const struct gpio_dt_spec psm_ind_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_psm_ind_gpios);
 static char psm_param_rat[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT;
 static char psm_param_rptau[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU;
@@ -627,35 +640,107 @@ MODEM_CMD_DEFINE(on_cmd_tcp_geterror)
 }
 
 #if CONFIG_MODEM_QUECTEL_BG95_PSM
-struct psm_ind {
-	/* 1 rising, 0 falling */
-	uint8_t edge;
-	struct k_work work;
-} psm_ind;
+static int pm_suspend_uart(void) 
+{
+	int ret;
 
-/**
- * @brief Work that needs to be performed when modem signals a wakeup from PSM.
- * This can be used in the future to wake up the modem UART from suspend/sleep state.
- * The modem changes the PSM_IND's pin status before sending APP RDY.
-*/
-static void psm_ind_work_fn(struct k_work *work)
-{	
-	ARG_UNUSED(work);
+#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
+	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
+#endif
+	uart_irq_rx_disable(mctx.iface.dev);
+	uart_irq_tx_disable(mctx.iface.dev);
+	// uart doesn't have a shutdown mode only suspend
+	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_SUSPEND);
+	if (ret)
+	{
+		LOG_ERR("Can't suspend device: %d", ret);
+		return ret;
+	}
+
+	LOG_DBG("UART suspended");
+	
+	return 0;
+}
+
+static int pm_resume_uart(void)
+{
+	int ret;
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
 	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
 #endif
+	uart_irq_rx_enable(mctx.iface.dev);
+	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_RESUME);
+	__ASSERT_NO_MSG((ret == 0) || (ret == -EALREADY));
+	if (ret)
+	{
+		LOG_ERR("Can't resume device: %d", ret);
+		return ret;
+	}
 
-	LOG_INF("Woken up from PSM.");
+	LOG_DBG("UART resumed");
+
+	return 0;
+}
+
+/**
+ * @brief Work that needs to be performed when modem signals a wakeup from or
+ * entering into PSM.
+ * The modem changes the PSM_IND's pin status before sending APP RDY.
+ * When entering PSM, there are two high -> low transitions with pulses of
+ * ~50 ms. This is handled through a "debounce" mechanism.
+*/
+static void psm_ind_work_fn(struct k_work *work)
+{	
+	struct k_work_delayable *work_delayable = k_work_delayable_from_work(work);
+	struct psm_ind *ind = CONTAINER_OF(work_delayable, struct psm_ind, work);
+	int64_t uptime_now = k_uptime_get();
+
+	if (ind->last_change_s != 0 && 
+	    (uptime_now - ind->last_change_s) < PSM_IND_DEBOUNCE_INTERVAL_MS) {
+		k_work_reschedule_for_queue(&modem_workq, &ind->work, 
+					    K_MSEC(PSM_IND_DEBOUNCE_INTERVAL_MS));
+		return;
+	}
+
+	/* If psm.edge is a negative value something went wrong and we can't
+	 * guarantee correct modem operation anymore. */
+	__ASSERT_NO_MSG(ind->edge >= 0);
+	if (ind->edge == 0) {
+		pm_resume_uart();
+	}
+
+	ind->last_change_s = uptime_now;
 }
 
 static void psm_ind_callback(const struct device *dev,
 			     struct gpio_callback *cb, uint32_t pins)
 {
-	psm_ind.edge = gpio_pin_get(dev, pins);
-	k_work_submit_to_queue(&modem_workq, &psm_ind.work);
+	psm_ind.edge = gpio_pin_get(dev, find_msb_set(pins) - 1);
+	/* Submit work to modem queue. If the work is currently executed, 
+	 * it is re-submitted/queued. */
+	k_work_reschedule_for_queue(&modem_workq, &psm_ind.work, K_NO_WAIT);
 }
 static struct gpio_callback psm_ind_gpio_callback;
+
+static inline int disable_psm_ind_interrupt()
+{
+	int ret;
+
+	ret = gpio_pin_interrupt_configure_dt(&psm_ind_gpio, GPIO_INT_DISABLE);
+
+	return ret;
+}
+
+static inline int enable_psm_ind_interrupt()
+{
+	int ret;
+
+	ret = gpio_pin_interrupt_configure_dt(&psm_ind_gpio, GPIO_INT_EDGE_BOTH);
+	__ASSERT_NO_MSG(ret == 0);
+
+	return ret;
+}
 #endif
 
 static int setup_psm_ind_interrupt()
@@ -677,9 +762,7 @@ static int setup_psm_ind_interrupt()
 		return ret;
 	}
 
-	ret = gpio_pin_interrupt_configure_dt(&psm_ind_gpio, GPIO_INT_EDGE_TO_ACTIVE);
-
-	k_work_init(&psm_ind.work, psm_ind_work_fn);
+	k_work_init_delayable(&psm_ind.work, psm_ind_work_fn);
 
 	return ret;
 #endif
@@ -886,10 +969,10 @@ MODEM_CMD_DEFINE(on_cmd_unsol_close)
 /* Handler: Modem initialization ready. */
 MODEM_CMD_DEFINE(on_cmd_unsol_rdy)
 {
-	if (!mdata.psm_active) {
+	if (mdata.power != MODEM_POWER_PSM) {
 		k_sem_give(&mdata.sem_response);
 		return 0;
-	} 
+	}
 
 	k_work_submit_to_queue(&modem_workq, &mdata.psm_wakeup_work);
 	
@@ -1374,9 +1457,8 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 	/* stop RSSI delay work */
 	k_work_cancel_delayable(&mdata.rssi_query_work);
 
-	mdata.psm_active = true;
+	mdata.power = MODEM_POWER_PSM;
 	quectel_bg95_set_connected(false);
-	setup_psm_ind_interrupt();
 	for(int i = 0; i < MDM_MAX_SOCKETS; i++) {
 		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_num) {
 			LOG_DBG("invalidating socket: %u", mdata.sockets[i].id);
@@ -1384,9 +1466,8 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 		}
 	}
 
-#if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
-	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
-#endif
+	pm_suspend_uart();
+	enable_psm_ind_interrupt();
 
 	MODEM_SUBMIT_EVT(MODEM_API_PSM_ENTERED_EVT);
 
@@ -1396,6 +1477,7 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 MODEM_CMD_DEFINE(on_cmd_power_down)
 {
 	k_sem_give(&mdata.sem_shutdown);
+	mdata.power = MODEM_POWER_OFF;
 	return 0;
 }
 
@@ -1491,7 +1573,6 @@ static int get_operator_info(void)
 {
 	const char *cmd_cops = "AT+COPS?";
 	int ret;
-	int count = 0;
 
 	struct modem_cmd cmd[] = {
 		MODEM_CMD_ARGS_MAX("+COPS: ", on_cmd_cops, 1U, 4U, ","),
@@ -2206,7 +2287,8 @@ static void quectel_bg95_set_connected(bool connected)
 	int ret;
 
 	if (!connected) {
-		if (mdata.is_connected && !mdata.psm_active) {
+		if (mdata.is_connected && 
+		    !(mdata.power == MODEM_POWER_PSM)) {
 			MODEM_SUBMIT_EVT(MODEM_API_DISCONNECTED_EVT);
 		}
 		mdata.is_connected = false;
@@ -2214,7 +2296,6 @@ static void quectel_bg95_set_connected(bool connected)
 		if (mdata.is_connected) {
 			return;
 		}
-		mdata.psm_active = false;
 
 		ret = modem_pdp_context_activate();
 		if (ret < 0) {
@@ -2379,6 +2460,8 @@ static void modem_psm_wakeup_work(struct k_work *work)
 {
 	int ret;
 
+	disable_psm_ind_interrupt();
+
 	/* Run setup commands on the modem. */
 	ret = modem_cmd_handler_setup_cmds(&mctx.iface, &mctx.cmd_handler,
 					   psm_wakeup_cmds, ARRAY_SIZE(psm_wakeup_cmds),
@@ -2386,6 +2469,8 @@ static void modem_psm_wakeup_work(struct k_work *work)
 	if (ret < 0) {
 		LOG_ERR("wakeup commands fail: %u", ret);
 	}
+
+	mdata.power = MODEM_POWER_ON;
 
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    K_NO_WAIT);
@@ -2495,6 +2580,7 @@ retry:
 
 	/* Modem is ready - Start RSSI work in the background. */
 	LOG_INF("Modem is initialized.");
+	mdata.power = MODEM_POWER_ON;
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    MDM_WAIT_FOR_RSSI_TIMEOUT);
 
@@ -2993,6 +3079,7 @@ static int modem_init(const struct device *dev)
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 	/* Init PSM work */
 	k_work_init(&mdata.psm_wakeup_work, modem_psm_wakeup_work);
+	setup_psm_ind_interrupt();
 #endif
 	return modem_setup();
 
@@ -3100,13 +3187,8 @@ static int quectel_bg95_pm_suspend(void)
 	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_INACTIVE);
 #endif
 
-	uart_irq_rx_disable(mctx.iface.dev);
-	uart_irq_tx_disable(mctx.iface.dev);
-	// uart doesn't have a shutdown mode only suspend
-	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_SUSPEND);
-	if (ret)
-	{
-		LOG_ERR("Can't suspend device: %d", ret);
+	ret = pm_suspend_uart();
+	if (ret) {
 		return ret;
 	}
 
@@ -3122,11 +3204,8 @@ static int quectel_bg95_pm_resume(void)
 	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);
 #endif
 
-	uart_irq_rx_enable(mctx.iface.dev);
-	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_RESUME);
-	if (ret)
-	{
-		LOG_ERR("Can't resume device: %d", ret);
+	ret = pm_resume_uart();
+	if (ret) {
 		return ret;
 	}
 	ret = modem_setup();
