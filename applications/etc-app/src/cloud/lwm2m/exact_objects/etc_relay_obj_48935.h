@@ -1,0 +1,17 @@
+/* 
+ * Copyright (c) 2023 EXACT Technology
+ */
+
+#ifndef ETC_RELAY_OBJ_48935_H__
+#define ETC_RELAY_OBJ_48935_H__
+
+#define ETC_RELAY_OBJECT_ID	48935
+
+/* EXACT Relay object resource IDs */
+#define ETC_RELAY_OBJ_R_DATA		1U
+#define ETC_RELAY_OBJ_R_COMMAND		2U
+
+#define ETC_RELAY_DATA_SIZE		CONFIG_LWM2M_ETC_RELAY_OBJ_DATA_SIZE
+#define ETC_RELAY_COMMAND_SIZE		CONFIG_LWM2M_ETC_RELAY_OBJ_COMMAND_SIZE
+
+#endif /* ETC_RELAY_OBJ_48935_H__ */

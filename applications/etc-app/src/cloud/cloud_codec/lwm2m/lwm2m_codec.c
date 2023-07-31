@@ -200,6 +200,34 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
 	return 0;
 }
 
+int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
+				    const uint8_t *relay_data, uint16_t relay_data_len)
+{
+	int err = 0;
+
+	__ASSERT_NO_MSG(cloud_data != NULL);
+	__ASSERT_NO_MSG(relay_data != NULL);
+	if (cloud_data == NULL || relay_data == NULL) {
+		return -EINVAL;
+	}
+
+	err = lwm2m_codec_helpers_set_relay_data(relay_data, relay_data_len);
+	if (err == 0) {
+		static const struct lwm2m_obj_path path_list[] = {
+			LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_DATA),
+		};
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							       path_list,
+							       ARRAY_SIZE(path_list));
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			return err;
+		}
+	}
+
+	return 0;
+}
+
 int data_codec_clear_data(struct cloud_codec_data *cloud_data)
 {
 	if (cloud_data == NULL) {
