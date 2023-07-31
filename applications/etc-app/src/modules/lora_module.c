@@ -88,7 +88,7 @@ K_MSGQ_DEFINE(msgq_lora_request, sizeof(struct lora_request), LORA_REQUEST_QUEUE
 
 static struct k_thread module_lora_rx_thread_id;
 static void module_lora_rx_thread_fn(void);
-static K_KERNEL_STACK_DEFINE(module_lora_rx_stack, 1024);
+static K_KERNEL_STACK_DEFINE(module_lora_rx_stack, CONFIG_ETC_LORA_MODULE_STACK_SIZE);
 
 static char decoded_buf[LORA_ACKUNCRYPT_LEN] = {0x00};
 static char buf_tmp[ETC_SETTINGS_DEVICE_ID_LEN];

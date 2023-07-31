@@ -12,4 +12,8 @@ config ETC_LORA_MODULE_TX_FREQUENCY
         int "LoRa frequency used for transmits"
         default 915000000
 
+config ETC_LORA_MODULE_STACK_SIZE
+        int "Stack size for Lora thread"
+        default 4096
+
 endif

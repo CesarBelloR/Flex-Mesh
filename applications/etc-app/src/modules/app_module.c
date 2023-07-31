@@ -434,6 +434,8 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 		}
 	}
 
+	LOG_DBG("Log %u - Transmit/Receive %u", (uint32_t)next_log, (uint32_t)next_transmit);
+
 	if (next_log != 0) {
 		struct tm tm_log_time = {0};
 		gmtime_r(&next_log, &tm_log_time);
@@ -472,8 +474,11 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	if (next_transmit != 0) {
 		if (etc_device_is_relay()) {
 			uint16_t wakeup_early = etc_get_wake_early_secs();
-			next_transmit = next_transmit > wakeup_early ? next_transmit - wakeup_early : next_transmit;
-		} 
+			uint16_t sleep_time = now - next_transmit;
+			if (wakeup_early < sleep_time) {
+				next_transmit = next_transmit > wakeup_early ? next_transmit - wakeup_early : next_transmit;
+			}
+		}
 		
 		struct tm tm_transmit_time = {0};
 		gmtime_r(&next_transmit, &tm_transmit_time);
