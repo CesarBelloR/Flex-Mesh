@@ -42,3 +42,8 @@ add_subdirectory(src/cloud)
 
 zephyr_include_directories_ifdef(CONFIG_MEMFAULT configuration/memfault)
 zephyr_include_directories_ifdef(CONFIG_AWS_IOT_PROVISION_CERTIFICATES certs)
+
+if(CONFIG_NRFX_TWIM AND CONFIG_I2C_LOG_LEVEL_DBG)
+  zephyr_compile_definitions(NRFX_TWIM_CONFIG_LOG_ENABLED=1)
+  # zephyr_compile_definitions(NRFX_SPIM_CONFIG_LOG_ENABLED=1)
+endif()

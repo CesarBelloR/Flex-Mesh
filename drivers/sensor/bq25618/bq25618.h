@@ -225,9 +225,9 @@ int bq25618_charge_status(const struct device *dev, uint8_t *status);
  */
 int bq25618_voltage_bus_status(const struct device *dev, uint8_t *status);
 
-/** @brief Check if the power good
+/** @brief Check if the power is good
  *
- * @retval return 1 if power good, 1 if not good,
+ * @retval return 1 if power good, 0 if not good,
  *  otherwise error
  */
 int bq25618_is_power_good(const struct device *dev);
