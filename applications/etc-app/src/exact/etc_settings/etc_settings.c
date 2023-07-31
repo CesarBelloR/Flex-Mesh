@@ -344,7 +344,7 @@ int etc_set_log_interval_secs(uint32_t second)
 	}
 	k_mutex_unlock(&setting_mutex);
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
-	date_time_force_event(DATE_TIME_OBTAINED_EXT);
+	date_time_force_event(DATE_TIME_SYSTEM_RELOAD);
 #endif
 	return rc;
 }
@@ -392,7 +392,7 @@ int etc_set_tx_interval_secs(uint32_t second)
 	}
 	k_mutex_unlock(&setting_mutex);
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
-	date_time_force_event(DATE_TIME_OBTAINED_EXT);
+	date_time_force_event(DATE_TIME_SYSTEM_RELOAD);
 #endif
 	return rc;
 }

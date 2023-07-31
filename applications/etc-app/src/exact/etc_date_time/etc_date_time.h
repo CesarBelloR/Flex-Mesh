@@ -16,7 +16,9 @@ enum date_time_evt_type {
 	/** Date time library has obtained valid time from external source. */
 	DATE_TIME_OBTAINED_EXT,
 	/** Date time library does not have valid time. */
-	DATE_TIME_NOT_OBTAINED
+	DATE_TIME_NOT_OBTAINED,
+	/** Date time library triggers a event to reload system time */
+	DATE_TIME_SYSTEM_RELOAD,
 };
 
 /** @brief Struct with data received from the Date time library. */
