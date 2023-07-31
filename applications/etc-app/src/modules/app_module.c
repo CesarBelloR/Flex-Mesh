@@ -462,6 +462,10 @@ void date_time_handler(const struct date_time_evt *evt)
 		}
 		break;
 	}
+	case DATE_TIME_SYSTEM_RELOAD: {
+		app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
+		break;
+	}
 	case DATE_TIME_NOT_OBTAINED: 
 		break;
 	}
