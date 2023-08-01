@@ -16,14 +16,17 @@ LOG_MODULE_REGISTER(MAX31888, CONFIG_SENSOR_LOG_LEVEL);
 static int max31888_configure(const struct device *dev);
 
 /* measure wait time  */
-static const uint16_t measure_wait_ms = {20};
+static const uint16_t measure_wait_ms = 20;
 
 static inline void max31888_temperature_from_raw(uint8_t *temp_raw, struct sensor_value *val) 
 {
-	int16_t temp = sys_get_le16(temp_raw);
-
-	val->val1 = temp / 16;
-	val->val2 = (temp % 16) * 1000000 / 16;
+	int16_t temp = sys_get_be16(temp_raw);
+	int64_t celsius_value = ((float)(temp) * 0.005) * 1000000;
+	val->val1 = celsius_value / 1000000;
+	val->val2 = celsius_value % 1000000;
+	if (val->val2 < 0) {
+		val->val2 *= (-1);
+	}
 }
 
 static uint16_t max31888_crc16(const uint8_t *input, uint16_t len, uint16_t crc) 
@@ -61,7 +64,7 @@ static int max31888_read_fifo(const struct device *dev, struct max31888_fifo *fi
 	struct max31888_data *data = dev->data;
 	const struct device *bus = max31888_bus(dev);
 	uint8_t cmd_buf[5] = {MAX31888_CMD_READ_REGISTER, MAX31888_CMD_FIFO_DATA_REGISTER, 0x01};
-	int rc = w1_write_read(bus, &data->config, cmd_buf, 3, (uint8_t *)&fifo[0], 3);
+	int rc = w1_write_read(bus, &data->config, cmd_buf, 3, (uint8_t *)&fifo[0], 4);
 	if (rc) {
 		LOG_ERR("Failed to write/read bus (err %d)", rc);
 		return rc;
@@ -69,7 +72,7 @@ static int max31888_read_fifo(const struct device *dev, struct max31888_fifo *fi
 
 	cmd_buf[3] = (uint8_t)((fifo->temp & 0xFF00) >> 8);
 	cmd_buf[4] = (uint8_t)(fifo->temp & 0xFF);
-
+	LOG_HEXDUMP_INF((uint8_t *)&fifo[0], 4, "READ");
 	bool crc_check = max31888_check_crc16(cmd_buf, sizeof(cmd_buf), (const uint8_t *)&fifo->crc);
 	if (!crc_check) { 
 		return -EINVAL;
@@ -88,7 +91,13 @@ static int max31888_temperature_convert(const struct device *dev) {
 	if (ret != 0) {
 		goto out;
 	}
-	ret = w1_write_byte(bus, MAX31888_CMD_CONVERT_T);
+	uint8_t cmd_buf[1] = {MAX31888_CMD_CONVERT_T};
+	uint8_t crc[2] = {0x00};
+	ret = w1_write_read(bus, &data->config, cmd_buf, 1, crc, 2);
+	bool crc_check = max31888_check_crc16(cmd_buf, sizeof(cmd_buf), (const uint8_t *)crc);
+	if (!crc_check) { 
+		ret = -EINVAL;
+	}
 out:
 	(void)w1_unlock_bus(bus);
 	return ret;

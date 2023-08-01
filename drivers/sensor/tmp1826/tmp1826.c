@@ -61,7 +61,7 @@ static int tmp1826_write_scratchpad(const struct device *dev,
     uint8_t data_buf[10] = { 0 };
     uint8_t crc_byte = 0;
 
-	data_buf[0] = TMP1826_CMD_CONVERT_T;
+	data_buf[0] = TMP1826_CMD_WRITE_SCRATCHPAD;
     data_buf[1] = scratchpad.config_1 | TMP1826_CFG1_RESERVED;
     data_buf[2] = scratchpad.config_2;
     data_buf[3] = scratchpad.short_addr;
@@ -103,12 +103,12 @@ static int tmp1826_read_scratchpad(const struct device *dev,
 
 	uint8_t first_calc_crc = tmp1826_crc8(&data_buf[0], 8);
 	uint8_t second_calc_crc = tmp1826_crc8(&data_buf[9], 8);
+	LOG_HEXDUMP_DBG(data_buf, sizeof(data_buf), "READ");
 	if ((first_calc_crc != data_buf[8]) || (second_calc_crc != data_buf[17])) {
 		LOG_ERR("Failed in calculating CRC8 0x%02x - 0x%02x and 0x%02x - 0x%02x", 
 			first_calc_crc, data_buf[8], second_calc_crc, data_buf[17]);
 		return -EINVAL;
 	}
-
     scratchpad->temperature = ((int16_t) data_buf[1] << 8 ) | data_buf[0];
     scratchpad->status = data_buf[2];
     scratchpad->config_1 = data_buf[4];

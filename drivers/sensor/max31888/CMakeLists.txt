@@ -1,5 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
-
-zephyr_library()
-
-zephyr_library_sources_ifdef(CONFIG_MAX31888 max31888.c)
+if(CONFIG_MAX31888)
+    zephyr_include_directories(./)
+    zephyr_library_sources(max31888.c)
+endif()
