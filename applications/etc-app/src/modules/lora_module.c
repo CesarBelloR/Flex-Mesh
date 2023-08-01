@@ -464,10 +464,11 @@ retry_recv:
 		LOG_DBG("No message");
 	} else {
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
+		memcpy(lora_rx_buf, decoded_buf, sizeof(decoded_buf));
 		LOG_HEXDUMP_DBG(decoded_buf, ret, "Decrypted data");
 		struct relay_lora_message message = lora_module_relay_get_message(decoded_buf);
 		if (message.is_okay) {
-			etc_device_write_relay_record(decoded_buf);
+			etc_device_write_relay_record(lora_rx_buf);
 			LOG_INF("Relay ID %s - Logger ID %s", message.relay_id, message.logger_id);
 			if (((strncmp(message.relay_id, "OPEN", strlen("OPEN"))) && 
 				(strlen(message.relay_id) == strlen("OPEN"))) || 
