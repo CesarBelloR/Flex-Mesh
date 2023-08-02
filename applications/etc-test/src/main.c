@@ -29,8 +29,10 @@ BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),
 static void app_driver_init(void) {
 	extern void etc_test_init(void);
 	etc_test_init();
-	adc_init();
+	// adc_init();
 	pcf85263a_init("I2C_0");
+	pcf85263a_set_interrupt_io(true);
+	pcf85263a_set_clkpin(false);
 }
 
 char key[] = "ElL10TaC4T";
@@ -52,6 +54,6 @@ void main(void)
 
 	app_driver_init();
 	while(1) {
-		k_sleep(K_MSEC(100));
+		k_sleep(K_FOREVER);
 	}
 }

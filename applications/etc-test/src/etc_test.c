@@ -13,6 +13,10 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/pwm.h>
+#include <zephyr/usb/usb_device.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
 #include <stdio.h>
 #include "pcf85263a.h"
 #include "adc.h"
@@ -1384,3 +1388,48 @@ static int cmd_last_reset_reason(const struct shell *shell, size_t argc, char **
 
 SHELL_CMD_ARG_REGISTER(etc_reset_reason, NULL, "Get the reset reason", cmd_last_reset_reason, 1, 0);
 
+static int cmd_etc_sleep(const struct shell *shell, size_t argc, char **argv)
+{
+	static const struct device *pm_devs[] = {
+		DEVICE_DT_GET(DT_NODELABEL(mx25r1635)),
+#ifdef CONFIG_BOARD_ETC_0_3_0
+		DEVICE_DT_GET(DT_NODELABEL(spi3)),
+#else
+		DEVICE_DT_GET(DT_NODELABEL(spi1)),
+#endif
+		DEVICE_DT_GET(DT_NODELABEL(spi2)),
+		DEVICE_DT_GET(DT_NODELABEL(pwm0)),
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
+		DEVICE_DT_GET(DT_NODELABEL(uart0)),
+#endif
+		DEVICE_DT_GET(DT_NODELABEL(uart1)),
+		DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart0)),
+		DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart1))
+	};
+	int ret;
+
+	/* Set all GPIOs to consume the least amount of power. */
+#if !defined(CONFIG_BOARD_ETC_0_3_0)
+	gpio_pin_configure_dt(&sense_enable_dt, GPIO_OUTPUT_LOW);
+#endif
+	gpio_pin_configure_dt(&hall_dt, GPIO_DISCONNECTED);
+	gpio_pin_configure_dt(&vsens_enable_dt, GPIO_OUTPUT_HIGH);
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&power_gpio_dt, GPIO_DISCONNECTED);
+	gpio_pin_configure_dt(&pon_trig_gpio_dt, GPIO_DISCONNECTED);
+#if DT_NODE_EXISTS(DT_NODELABEL(modem_uart_oe))
+	gpio_pin_configure_dt(&modem_uart_oe_dt, GPIO_ACTIVE_LOW | GPIO_OUTPUT_INACTIVE);
+#endif
+
+	gpio_pin_interrupt_configure_dt(&hall_dt, GPIO_INT_DISABLE);	
+
+	for (int i = 0; i < ARRAY_SIZE(pm_devs); i++) {
+		ret = pm_device_action_run(pm_devs[i], PM_DEVICE_ACTION_SUSPEND);
+		if (ret != 0) {
+			shell_error(shell, "Error suspending device: %s", pm_devs[i]->name);
+		}
+	}
+}
+
+SHELL_CMD_ARG_REGISTER(etc_sleep, NULL, "Make the system to sleep mode", cmd_etc_sleep, 1, 1);

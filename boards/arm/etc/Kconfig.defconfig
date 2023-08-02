@@ -7,6 +7,10 @@ config BOARD_VERSION
 	string
 	default "0.2.0"
 
+config BOARD_ETC_0_3_0
+	bool "ETC board version 0.3.0"
+	default false
+
 config BT_CTLR
 	default BT
 
