@@ -470,9 +470,9 @@ retry_recv:
 		if (message.is_okay) {
 			etc_device_write_relay_record(lora_rx_buf);
 			LOG_INF("Relay ID %s - Logger ID %s", message.relay_id, message.logger_id);
-			if (((strncmp(message.relay_id, "OPEN", strlen("OPEN"))) && 
-				(strlen(message.relay_id) == strlen("OPEN"))) || 
-				(strncmp(message.relay_id, relay_iccid, ETC_SETTING_RELAY_ICCID_LEN) && 
+			if (((strncmp(message.relay_id, "OPEN", strlen("OPEN")) == 0) &&
+				(strlen(message.relay_id) == strlen("OPEN"))) ||
+				(strncmp(message.relay_id, relay_iccid, ETC_SETTING_RELAY_ICCID_LEN) == 0 &&
 				(strlen(message.relay_id) == strlen(relay_iccid)))) {
 					/* Send ACK message */
 					module_lora_prepare_packet(message.logger_id, relay_iccid);
