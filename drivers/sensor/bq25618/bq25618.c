@@ -13,6 +13,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/pm/device_runtime.h>
 #include <zephyr/init.h>
 #include "bq25618.h"
 
@@ -41,7 +42,7 @@ LOG_MODULE_REGISTER(BQ25618, CONFIG_BQ25618_LOG_LEVEL);
 
 
 #define BQ25618_I2C_7BIT_ADDR (0x6A)
-#define BQ25618_VERSION_ID (0x23)
+#define BQ25618_VERSION_ID (0x44)
 
 /* BQ25618 registers */
 enum {
@@ -104,8 +105,12 @@ static int read_all_registers(const struct device *dev,
 			buf_size : BQ25618_REG_MAX;
 	const uint8_t read_addr = 0x00;
 
+	pm_device_runtime_get(cfg->i2c.bus);
+
 	rc = i2c_write_read(cfg->i2c.bus, cfg->i2c.addr, &read_addr, 1,
 			buf, read_size);
+
+	pm_device_runtime_put(cfg->i2c.bus);
 	
 	return rc;
 }
@@ -178,6 +183,8 @@ static void bq25618_work_fn(struct k_work *work)
 	int count;
 	int ret;
 
+	pm_device_runtime_get(cfg->i2c.bus);
+
 	ret = bq25618_is_power_good(drv_data->dev);
 	if (ret != 1) {
 		return;
@@ -192,6 +199,8 @@ static void bq25618_work_fn(struct k_work *work)
 	}
 
 	bq25618_get_fault_reg(dev, NULL);
+
+	pm_device_runtime_put(cfg->i2c.bus);
 }
 
 static void bq25618_gpio_callback(const struct device *dev,
@@ -242,6 +251,7 @@ static int bq25618_init_interrupt(const struct device *dev)
 static int bq25618_init(const struct device *dev)
 {
 	int ret = 0;
+	int retval = 0;
 	uint8_t reg = 0x00;
 	int count;
 	const struct bq25618_dev_config *cfg = dev->config;
@@ -251,17 +261,19 @@ static int bq25618_init(const struct device *dev)
 		return -EINVAL;
 	}
 
+	pm_device_runtime_get(cfg->i2c.bus);
+
 	ret = read_register(dev, BQ25618_PART_INFORMATION_REG, &reg);
 	if (ret != 0) {
 		LOG_ERR("Failed to read reg BQ24195_PMIC_VERSION_REG error %d", ret);
 		return ret;
 	}
 
-	/* ToDo: Figure out correct version ID for part */
-	LOG_DBG("BQ25618 version id: %X", reg);
-	// if (reg != BQ25618_VERSION_ID) {
-	// 	return -ENOTSUP;
-	// }
+	if (reg != BQ25618_VERSION_ID) {
+		LOG_ERR("Invalid version ID: 0x%02X", reg);
+		retval = -ENOTSUP;
+		goto exit;
+	}
 
 	bq25618_get_fault_reg(dev, NULL);
 
@@ -300,7 +312,11 @@ static int bq25618_init(const struct device *dev)
 #if (CONFIG_BQ25618_LOG_LEVEL == LOG_LEVEL_DBG)
 	bq25618_print_all_registers(dev);
 #endif
-	return 0;
+
+exit:
+	pm_device_runtime_put(cfg->i2c.bus);
+
+	return retval;
 }
 
 int bq25618_enable_buck(const struct device *dev) 
@@ -945,12 +961,12 @@ struct bq25618_dev_config bq25618_config = {
 	.interrupt = GPIO_DT_SPEC_INST_GET(0, int_gpios),
 
 	.charge_current_limit = DT_INST_PROP(0, charge_current),
-    .charge_voltage_limit = DT_INST_PROP(0, charge_voltage),
-    .max_current = DT_INST_PROP(0, max_current),
-    .min_voltage = DT_INST_PROP(0, min_voltage),
-    .charge_timer_en = DT_INST_PROP(0, has_charge_timer),
-    .charge_timer_val = DT_INST_PROP(0, charge_timer_val),
-    .precharge_current = DT_INST_PROP_OR(0, precharge_current, 0),
+	.charge_voltage_limit = DT_INST_PROP(0, charge_voltage),
+	.max_current = DT_INST_PROP(0, max_current),
+	.min_voltage = DT_INST_PROP(0, min_voltage),
+	.charge_timer_en = DT_INST_PROP(0, has_charge_timer),
+	.charge_timer_val = DT_INST_PROP(0, charge_timer_val),
+	.precharge_current = DT_INST_PROP_OR(0, precharge_current, 0),
 };
 
 DEVICE_DT_INST_DEFINE(0, bq25618_init, NULL, &bq25618_data,
