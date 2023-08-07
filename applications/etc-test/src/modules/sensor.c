@@ -230,28 +230,36 @@ const int table_length = sizeof(table_ntc_resistance_temp) / sizeof(float);
 #define SENSOR_NTC_REFERENCE_VOLTAGE (float)(DT_PROP(DT_PATH(ntc), reference_voltage_mv) / 1000.0f)
 #endif /* #if defined(CONFIG_NTC_USE_TABLE) */
 
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 static const struct gpio_dt_spec sense_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+#endif
 static const struct gpio_dt_spec s0_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
 static const struct gpio_dt_spec s1_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 
 void sensor_adc_switch_channel(enum sensor_input channel) 
 {
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	gpio_pin_set_dt(&sense_dt, 0U);
+#endif
 	gpio_pin_set_dt(&s0_dt, channel & 0x01);
 	gpio_pin_set_dt(&s1_dt, (channel >> 1) & 0x01);
 }
 
 static void sensor_adc_hw_init(void) {
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	if (!device_is_ready(sense_dt.port)) {
 		return;
 	}
+#endif
 	if (!device_is_ready(s0_dt.port)) {
 		return;
 	}
 	if (!device_is_ready(s1_dt.port)) {
 		return;
 	}
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
+#endif
 	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
 	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 }

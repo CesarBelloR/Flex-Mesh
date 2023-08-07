@@ -1,7 +1,7 @@
-if BOARD_ETC_V0_2
+if BOARD_ETC
 
 config BOARD
-	default "ETC Core v0.2 with nRF52840 and BG95x"
+	default "ETC Core Base version with nRF52840 and BG95x"
 
 config BOARD_VERSION
 	string

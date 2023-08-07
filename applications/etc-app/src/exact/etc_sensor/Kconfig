@@ -1,0 +1,23 @@
+menuconfig ETC_SENSOR
+	bool "Ambient temperature sensor"
+	default y
+	help
+	  The ambient temperature sensor library for application
+
+if ETC_SENSOR
+
+config ETC_AMBIENT_NTC_SENSOR
+	bool "Select ambient with NTC sensor"
+	default y
+	depends on !TMP1705
+
+config ETC_AMBIENT_I2C_SENSOR
+	bool "Select ambient with I2C sensor"
+	default y
+	depends on TMP1705
+
+module = ETC_INTERFACE
+module-str = etc interface
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # ETC_SENSOR

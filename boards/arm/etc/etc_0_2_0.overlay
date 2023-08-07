@@ -1,0 +1,28 @@
+#include "etc_0_2_0.dtsi"
+
+/ {
+	board-control {
+		sense_enable: sense-enable {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+	};
+};
+
+
+&uart1 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+
+	quectel_bg95: quectel_bg95 {
+		compatible = "quectel,bg95";
+		label      = "quectel-bg95";
+		status     = "okay";
+		mdm-power-gpios = <&gpio0 25 0>;
+		mdm-on-off-gpios = <&gpio1 1 0>;
+		mdm-pon-trig-gpios = <&gpio1 13 0>;
+		mdm-psm-ind-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
+		mdm-uart-oe-gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
+	};
+};
