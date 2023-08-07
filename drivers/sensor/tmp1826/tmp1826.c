@@ -32,14 +32,14 @@ static uint8_t tmp1826_crc8(uint8_t *data_buf, uint8_t len)
     uint8_t crc = 0;
     uint8_t byte_cnt = 0;
     uint8_t bit_cnt = 0;
-    for ( byte_cnt = 0; byte_cnt < len; byte_cnt++ ) 
+    for (byte_cnt = 0; byte_cnt < len; byte_cnt++) 
     {
         crc ^= data_buf[byte_cnt];
-        for ( bit_cnt = 0; bit_cnt < 8; bit_cnt++ ) 
+        for (bit_cnt = 0; bit_cnt < 8; bit_cnt++) 
         {
-            if ( crc & 0x01 ) 
+            if (crc & 0x01) 
             {
-                crc = ( crc >> 1 ) ^ 0x8C;
+                crc = (crc >> 1) ^ 0x8C;
             }
             else
             {
@@ -58,19 +58,19 @@ static int tmp1826_write_scratchpad(const struct device *dev,
 {
 	struct tmp1826_data *data = dev->data;
 	const struct device *bus = tmp1826_bus(dev);
-    uint8_t data_buf[10] = { 0 };
+    uint8_t data_buf[10] = {0};
     uint8_t crc_byte = 0;
 
 	data_buf[0] = TMP1826_CMD_WRITE_SCRATCHPAD;
     data_buf[1] = scratchpad.config_1 | TMP1826_CFG1_RESERVED;
     data_buf[2] = scratchpad.config_2;
     data_buf[3] = scratchpad.short_addr;
-    data_buf[4] = (uint8_t) (scratchpad.temp_limit_low & 0xFF);
-    data_buf[5] = (uint8_t) ((scratchpad.temp_limit_low >> 8) & 0xFF);
-    data_buf[6] = (uint8_t) (scratchpad.temp_limit_high & 0xFF );
-    data_buf[7] = (uint8_t) ((scratchpad.temp_limit_high >> 8) & 0xFF);
-    data_buf[8] = (uint8_t) (scratchpad.temp_offset & 0xFF);
-    data_buf[9] = (uint8_t) ((scratchpad.temp_offset >> 8) & 0xFF);
+    data_buf[4] = (uint8_t)(scratchpad.temp_limit_low & 0xFF);
+    data_buf[5] = (uint8_t)((scratchpad.temp_limit_low >> 8) & 0xFF);
+    data_buf[6] = (uint8_t)(scratchpad.temp_limit_high & 0xFF );
+    data_buf[7] = (uint8_t)((scratchpad.temp_limit_high >> 8) & 0xFF);
+    data_buf[8] = (uint8_t)(scratchpad.temp_offset & 0xFF);
+    data_buf[9] = (uint8_t)((scratchpad.temp_offset >> 8) & 0xFF);
 
 	int rc = w1_write_read(bus, &data->config, data_buf, sizeof(data_buf), &crc_byte, 1);
 	if (rc) {
@@ -109,14 +109,14 @@ static int tmp1826_read_scratchpad(const struct device *dev,
 			first_calc_crc, data_buf[8], second_calc_crc, data_buf[17]);
 		return -EINVAL;
 	}
-    scratchpad->temperature = ((int16_t) data_buf[1] << 8 ) | data_buf[0];
+    scratchpad->temperature = ((int16_t)data_buf[1] << 8 ) | data_buf[0];
     scratchpad->status = data_buf[2];
     scratchpad->config_1 = data_buf[4];
     scratchpad->config_2 = data_buf[5];
     scratchpad->short_addr = data_buf[6];
-    scratchpad->temp_limit_low = ((int16_t) data_buf[10] << 8 ) | data_buf[9];
-    scratchpad->temp_limit_high = ((int16_t) data_buf[12] << 8 ) | data_buf[11];
-    scratchpad->temp_offset = ((int16_t) data_buf[14] << 8 ) | data_buf[13];
+    scratchpad->temp_limit_low = ((int16_t)data_buf[10] << 8 ) | data_buf[9];
+    scratchpad->temp_limit_high = ((int16_t)data_buf[12] << 8 ) | data_buf[11];
+    scratchpad->temp_offset = ((int16_t)data_buf[14] << 8 ) | data_buf[13];
 	return 0;
 }
 
