@@ -8,6 +8,9 @@
 #include "etc_sensor.h"
 #include "adc.h"
 
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(etc_sensor, CONFIG_ETC_SENSOR_LOG_LEVEL);
+
 /* Sensor Analog constant information */
 #define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
 
@@ -25,21 +28,22 @@ const struct device *const ambient_i2c_dev = DEVICE_DT_GET_ANY(ti_tmp1075);
 #endif
 
 #if defined(CONFIG_ETC_NTC_TABLE)
-static float etc_sensor_ntc_converter(const float table[], int table_length, int offset , int raw_adc, int max_adc) {
-  float input = ((float)max_adc / (float)raw_adc) - 1;
-  input = (float) SENSOR_NTC_NOMINAL_RESISTANCE / input;
-  input = input / 1000.0;
-  float temp_value = 0.0;
-  float tmp;
-  for (int i = 0; i < table_length - 1; i++) {
-    if (input <= table[i] && input >= table[i + 1]) {
-      tmp = ( (-40 + (i * offset)) - (-40 + ((i + 1) * offset)) ) / ( table[i] - table[i + 1] );
-      tmp = tmp * (input - table[i]);
-      tmp = tmp +  (-40 + (i * offset));
-      temp_value = tmp;
-    }
-  }
-  return (temp_value);
+static float etc_sensor_ntc_converter(const float table[], int table_length, int offset , 
+	int raw_adc, int max_adc) {
+ 	float input = ((float)max_adc / (float)raw_adc) - 1;
+ 	input = (float) SENSOR_NTC_NOMINAL_RESISTANCE / input;
+ 	input = input / 1000.0;
+ 	float temp_value = 0.0;
+ 	float tmp;
+ 	for (int i = 0; i < table_length - 1; i++) {
+		if (input <= table[i] && input >= table[i + 1]) {
+			tmp = ( (-40 + (i * offset)) - (-40 + ((i + 1) * offset)) ) / ( table[i] - table[i + 1] );
+			tmp = tmp * (input - table[i]);
+			tmp = tmp +  (-40 + (i * offset));
+			temp_value = tmp;
+		}
+	}
+  	return (temp_value);
 }
 #else
 static float etc_sensor_ntc_converter(int data, float full_scale_v, int full_scale_count) {
@@ -66,35 +70,36 @@ void etc_sensor_init(void) {
 float etc_sensor_get_ambient_temp(void) {
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_NTC_SENSOR)
 #if defined(CONFIG_ETC_NTC_TABLE)
-	return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, adc_get_channel(ETC_ADC_CHANNEL_AMB), 
-		adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
+	return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, 
+		adc_get_channel(ETC_ADC_CHANNEL_AMB), adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
 #else
 	return etc_sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB),
 		(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
 		adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
 #endif
 #elif IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
-    int rc = sensor_sample_fetch(ambient_i2c_dev);
-    if (rc) {
-        LOG_ERR("Failed to sample the sensor (err %d), rc");
-        return SENSOR_NTC_NO_CONNECTED;
-    }
-    
-    struct sensor_value temp_value;
-    rc = sensor_channel_get(ambient_i2c_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp_value);
-	if (ret) {
+	int rc = sensor_sample_fetch(ambient_i2c_dev);
+	if (rc) {
+		LOG_ERR("Failed to sample the sensor (err %d), rc");
+		return SENSOR_NTC_NO_CONNECTED;
+	}
+	
+	struct sensor_value temp_value;
+	rc = sensor_channel_get(ambient_i2c_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp_value);
+	if (rc) {
 		LOG_ERR("Faied to sensor_channel_get (err %d)", rc);
 		return SENSOR_NTC_NO_CONNECTED;
 	}
 
-    return (float)sensor_value_to_double(&temp_value);
+	return (float)sensor_value_to_double(&temp_value);
 #endif
-    return SENSOR_NTC_NO_CONNECTED;
+	return SENSOR_NTC_NO_CONNECTED;
 }
 
 float etc_sensor_get_probe_temp(void) {
 	#if defined(CONFIG_ETC_NTC_TABLE)
-			return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, adc_get_channel(ETC_ADC_CHANNEL_SENSOR), 
+			return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, 
+				table_offset, adc_get_channel(ETC_ADC_CHANNEL_SENSOR), 
 				adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
 	#else
 			return etc_sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR),

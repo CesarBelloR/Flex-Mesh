@@ -73,6 +73,10 @@ static const struct gpio_dt_spec vsen_en_dt =
 static const struct gpio_dt_spec sense_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
 #endif
+#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+static const struct gpio_dt_spec onewire_slpz_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(onewire_slpz), control_gpios, 0);
+#endif
 static const struct gpio_dt_spec s0_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
 static const struct gpio_dt_spec s1_dt = 
@@ -123,6 +127,14 @@ static void sensor_adc_hw_init(void)
 	if (!device_is_ready(vsen_en_dt.port)) {
 		return;
 	}
+#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+	if (!device_is_ready(onewire_slpz_dt.port)) {
+		return;
+	}
+
+	// Set the SLPZ to LOW -> Sleep mode
+	gpio_pin_configure_dt(&onewire_slpz_dt, GPIO_OUTPUT_INACTIVE);
+#endif
 	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_INACTIVE);
 }
 

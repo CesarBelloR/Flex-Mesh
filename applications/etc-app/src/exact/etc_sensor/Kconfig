@@ -6,18 +6,22 @@ menuconfig ETC_SENSOR
 
 if ETC_SENSOR
 
+choice
+	prompt "Select protocol to get ambient sensor"
+	default ETC_AMBIENT_NTC_SENSOR
+
 config ETC_AMBIENT_NTC_SENSOR
 	bool "Select ambient with NTC sensor"
-	default y
-	depends on !TMP1705
+	depends on !TMP1075
 
 config ETC_AMBIENT_I2C_SENSOR
 	bool "Select ambient with I2C sensor"
-	default y
-	depends on TMP1705
+	depends on TMP1075
 
-module = ETC_INTERFACE
-module-str = etc interface
+endchoice
+
+module = ETC_SENSOR
+module-str = etc sensor
 source "subsys/logging/Kconfig.template.log_config"
 
 endif # ETC_SENSOR

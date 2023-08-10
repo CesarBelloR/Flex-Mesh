@@ -247,7 +247,7 @@ static int cmd_etc_io(const struct shell *shell, size_t argc, char **argv)
 		shell_print(shell, "\t SENS_SEL0             -> ID: 5");
 		shell_print(shell, "\t SENS_SEL1             -> ID: 6");
 		shell_print(shell, "\t LTE_ON_OFF[0.2.0]     -> ID: 7");
-		shell_print(shell, "\t LTE_ON_OFF            -> ID: 7");
+		shell_print(shell, "\t HW_WDT[0.3.0]         -> ID: 7");
 		shell_print(shell, "\t LTE_PON_TRIG          -> ID: 8");
 		return 0;
 	}
