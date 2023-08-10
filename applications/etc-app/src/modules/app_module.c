@@ -474,9 +474,11 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	if (next_transmit != 0) {
 		if (etc_device_is_relay()) {
 			uint16_t wakeup_early = etc_get_wake_early_secs();
-			uint16_t sleep_time = now - next_transmit;
+			uint16_t sleep_time = next_transmit - now;
 			if (wakeup_early < sleep_time) {
 				next_transmit = next_transmit > wakeup_early ? next_transmit - wakeup_early : next_transmit;
+			} else {
+				/* No minus wakeup_early */
 			}
 		}
 		
