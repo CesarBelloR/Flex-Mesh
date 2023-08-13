@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2023 EXACT Technology
+#
+
+menuconfig MODEM_MODULE
+	bool "Modem module"
+	default y
+
+if MODEM_MODULE
+
+config MODEM_MODULE_MAX_CONNECTION_TIME_S
+	int "Maximum allowed modem connection time"
+	default 120
+	help
+	  The maximum amount of time in seconds that the modem is allowed
+	  to take from turning on to having established a network connection.
+	  If the modem takes longer than this amount of configured time,
+	  the modem is turned off manually until the next scheduled transmit or
+	  other wakeup event.
+
+endif

@@ -55,6 +55,10 @@ static char *get_evt_type_str(enum modem_event_type type)
 		return "MODEM_EVT_CARRIER_REBOOT_REQUEST";
 	case MODEM_EVT_PSM_ENTERED:
 		return "MODEM_EVT_PSM_ENTERED";
+	case MODEM_EVT_POWERED_DOWN:
+		return "MODEM_EVT_POWERED_DOWN";
+	case MODEM_EVT_CONNECT_TIMEOUT:
+		return "MODEM_EVT_CONNECT_TIMEOUT";
 	default:
 		return "Unknown event";
 	}

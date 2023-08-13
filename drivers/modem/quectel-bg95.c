@@ -656,6 +656,10 @@ static int pm_suspend_uart(void)
 	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_SUSPEND);
 	if (ret)
 	{
+		if (ret == -EALREADY) {
+			LOG_WRN("Device already suspended");
+			return 0;
+		}
 		LOG_ERR("Can't suspend device: %d", ret);
 		return ret;
 	}
@@ -1225,8 +1229,6 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 		return -1;
 	}
 
-	LOG_INF("len: %u", len);
-
 	ret = send_socket_data(sock, to, cmd, ARRAY_SIZE(cmd), buf, len,
 			       MDM_CMD_TIMEOUT);
 	if (ret < 0) {
@@ -1513,6 +1515,7 @@ MODEM_CMD_DEFINE(on_cmd_power_down)
 {
 	k_sem_give(&mdata.sem_shutdown);
 	mdata.power = MODEM_POWER_OFF;
+	MODEM_SUBMIT_EVT(MODEM_API_POWER_DOWN_EVT);
 	return 0;
 }
 
@@ -1534,7 +1537,8 @@ static void modem_pin_on_off(void)
 	gpio_pin_set_dt(&power_gpio, 0);
 }
 
-static int quectel_bg95_power_down() {
+static int quectel_bg95_power_down() 
+{
 	const char *pw_dwn = "AT+QPOWD";
 	int ret;
 	int retries = 0;
@@ -1543,7 +1547,12 @@ static int quectel_bg95_power_down() {
 		MODEM_CMD("POWERED DOWN", on_cmd_power_down, 0U, ""),
 	};
 
-	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+	/* If modem is already powered off, return immediately. */
+	if (mdata.power == MODEM_POWER_OFF) {
+		return 0;
+	}
+
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_REGISTRATION_TIMEOUT) != 0) {
 		LOG_ERR("Error taking semaphore");
 		return -EAGAIN;
 	}
@@ -2539,6 +2548,8 @@ static void modem_psm_wakeup_work(struct k_work *work)
 {
 	int ret;
 
+	MODEM_SUBMIT_EVT(MODEM_API_PSM_WAKEUP_EVT);
+
 	disable_psm_ind_interrupt();
 
 	/* Run setup commands on the modem. */
@@ -2911,10 +2922,12 @@ static int quectel_bg95_set_credentials(const struct device *dev,
 }
 
 static int quectel_bg95_psm_cmd(const struct device *dev,
-				enum modem_api_psm_cmd cmd, void *psm_data)
+				enum modem_api_cmd cmd, void *psm_data)
 {
-	if (cmd == MODEM_API_PSM_CMD_WAKEUP) {
+	if (cmd == MODEM_API_CMD_PSM_WAKEUP) {
 		return quectel_bg95_psm_wakeup();
+	} else if (cmd == MODEM_API_CMD_POWER_ON) {
+		return modem_setup();
 	}
 
 	return -EINVAL;
@@ -2989,7 +3002,7 @@ static struct modem_api api_funcs = {
 
 	.evt_handler_init = quectel_bg95_evt_handler_init,
 	.set_credentials = quectel_bg95_set_credentials,
-	.psm_cmd = quectel_bg95_psm_cmd,
+	.cmd = quectel_bg95_psm_cmd,
 	.get_data = quectel_bg95_get_data,
 };
 

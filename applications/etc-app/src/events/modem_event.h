@@ -136,6 +136,10 @@ enum modem_event_type {
 	MODEM_EVT_CARRIER_EVENT_LTE_LINK_DOWN_REQUEST,
 	/* Modem entered PSM */
 	MODEM_EVT_PSM_ENTERED,
+	/* Modem has powered down (expected or unexpected) */
+	MODEM_EVT_POWERED_DOWN,
+	/* Modem has not been able to connect within timeout */
+	MODEM_EVT_CONNECT_TIMEOUT
 };
 
 struct modem_static_modem_data {

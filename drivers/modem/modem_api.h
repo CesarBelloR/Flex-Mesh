@@ -59,9 +59,17 @@ struct modem_network_data {
 };
 
 enum modem_api_evt_type {
+	/* Modem successfully connected to a network */
 	MODEM_API_CONNECTED_EVT,
+	/* Modem disconnected from network and trying to re-establish connection */
 	MODEM_API_DISCONNECTED_EVT,
+	/* PSM entered and modem put to sleep */
 	MODEM_API_PSM_ENTERED_EVT,
+	/* Modem woken up from PSM and powered on */
+	MODEM_API_PSM_WAKEUP_EVT,
+	/* Modem powered down manually, NOT in PSM*/
+	MODEM_API_POWER_DOWN_EVT,
+	/* Modem dynamic data changed (e.g. cellular network, PSM parameters) */
 	MODEM_API_DYNAMIC_DATA_UPDATE_EVT
 };
 
@@ -77,8 +85,9 @@ enum modem_api_cred_type {
 	MODEM_API_CRED_TYPE_PSK
 };
 
-enum modem_api_psm_cmd {
-	MODEM_API_PSM_CMD_WAKEUP,
+enum modem_api_cmd {
+	MODEM_API_CMD_PSM_WAKEUP,
+	MODEM_API_CMD_POWER_ON
 };
 
 struct modem_static_info {
@@ -111,9 +120,9 @@ typedef int(*modem_api_set_credentials_t)(const struct device *dev,
 					  enum modem_api_cred_type type,
 					  uint8_t *cred_buf, uint8_t cred_len);
 
-typedef int(*modem_api_psm_t)(const struct device *dev,
-			      enum modem_api_psm_cmd cmd,
-			      void *psm_data);
+typedef int(*modem_api_cmd_t)(const struct device *dev,
+			      enum modem_api_cmd cmd,
+			      void *data);
 
 typedef int(*modem_api_get_data_t)(const struct device *dev,
 				   enum modem_api_data_request request,
@@ -135,8 +144,8 @@ struct modem_api {
 	/* Set the modem's DTLS credentials.
 	*/
 	modem_api_set_credentials_t set_credentials;	
-	/* Send a PSM command, e.g. wakeup */
-	modem_api_psm_t psm_cmd;
+	/* Send a command to the modem, e.g. wakeup from PSM */
+	modem_api_cmd_t cmd;
 	/* Get static information about the modem */
 	modem_api_get_data_t get_data;
 };
@@ -147,6 +156,29 @@ struct modem_psk {
 	uint8_t psk[CONFIG_MODEM_QUECTEL_BG95_M3_PSK_MAX_SIZE];
 	uint8_t psk_len;
 };
+
+/**
+ * @brief Return the given evt as a string.
+*/
+static inline char *modem_evt_to_str(enum modem_api_evt_type evt) 
+{
+	switch (evt) {
+	case MODEM_API_CONNECTED_EVT:
+		return "MODEM_API_CONNECTED_EVT";
+	case MODEM_API_DISCONNECTED_EVT:
+		return "MODEM_API_DISCONNECTED_EVT";
+	case MODEM_API_PSM_ENTERED_EVT:
+		return "MODEM_API_PSM_ENTERED_EVT";
+	case MODEM_API_PSM_WAKEUP_EVT:
+		return "MODEM_API_PSM_WAKEUP_EVT";
+	case MODEM_API_POWER_DOWN_EVT:
+		return "MODEM_API_POWER_DOWN_EVT";
+	case MODEM_API_DYNAMIC_DATA_UPDATE_EVT:
+		return "MODEM_API_DYNAMIC_DATA_UPDATE_EVT";
+	default:
+		return "Unknown event";
+	}
+}
 
 /**
  * @brief Register an event handler callback for the modem
@@ -192,18 +224,18 @@ inline static int modem_set_credentials(const struct device *dev,
 	return api->set_credentials(dev, type, cred_buf, cred_len);
 }
 
-inline static int modem_psm_cmd(const struct device *dev,
-			        enum modem_api_psm_cmd cmd,
-			        void *psm_data)
+inline static int modem_cmd(const struct device *dev,
+			        enum modem_api_cmd api_cmd,
+			        void *data)
 {
 	const struct modem_api *api =
 		(const struct modem_api *)dev->api;
 
-	if (api->psm_cmd == NULL) {
+	if (api->cmd == NULL) {
 		return -ENOSYS;
 	}
 
-	return api->psm_cmd(dev, cmd, psm_data);
+	return api->cmd(dev, api_cmd, data);
 }
 
 inline static int modem_get_data(const struct device *dev,
