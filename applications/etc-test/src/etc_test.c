@@ -622,7 +622,7 @@ static int cmd_ds2484_enable(const struct shell *shell, size_t argc, char **argv
 #endif
 	k_sleep(K_SECONDS(1));
 
-	ret = ds2484_init();
+	ret = ds2484_init(DEVICE_DT_GET(DT_NODELABEL(i2c1)));
 	shell_print(shell, "DS2484 enabled");
 	if (ret == 0) {
 		shell_print(shell, "Initialized");
