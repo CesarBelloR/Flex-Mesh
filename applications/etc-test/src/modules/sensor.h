@@ -4,11 +4,11 @@
 #include <stdint.h>
 
 enum etc_adc_channel {
-        ETC_ADC_CHANNEL_AMB = 0,
-        ETC_ADC_CHANNEL_BATTERY,
-        ETC_ADC_CHANNEL_SENSOR,
-        ETC_ADC_CHANNEL_HW_VER,
-        ETC_ADC_CHANNEL_MAX
+	ETC_ADC_CHANNEL_AMB = 0,
+	ETC_ADC_CHANNEL_BATTERY,
+	ETC_ADC_CHANNEL_SENSOR,
+	ETC_ADC_CHANNEL_HW_VER,
+	ETC_ADC_CHANNEL_MAX
 };
 
 enum sensor_input {
@@ -22,7 +22,7 @@ enum sensor_input {
 
 int sensor_init(void);
 #if defined(CONFIG_NTC_USE_TABLE)
-float sensor_ntc_converter(const float table[], int table_length, int offset , int raw_adc);
+float sensor_ntc_converter(const float table[], int table_length, int offset, int raw_adc);
 #else
 float sensor_ntc_converter(enum etc_adc_channel channel, int val);
 #endif

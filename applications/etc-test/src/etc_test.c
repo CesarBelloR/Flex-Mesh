@@ -210,6 +210,8 @@ static void adc_print_channel(const struct shell *shell, int channel)
 #else
 		val = sensor_ntc_converter(channel, adc_raw);
 #endif
+		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
+			    channel, adc_raw, val);
 	} else {
 		adc_get_raw_to_millivolts(channel, &adc_raw);
 		val = (float)adc_raw / 1000.0f;
