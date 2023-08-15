@@ -161,6 +161,7 @@ struct modem_data {
 
 	/* Semaphore(s) */
 	struct k_sem sem_response;
+	struct k_sem sem_ready;
 	struct k_sem sem_tx_ready;
 	struct k_sem sem_sock_conn;
 	struct k_sem sem_dns_busy;

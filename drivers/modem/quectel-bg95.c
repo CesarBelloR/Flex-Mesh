@@ -970,7 +970,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_close)
 MODEM_CMD_DEFINE(on_cmd_unsol_rdy)
 {
 	if (mdata.power != MODEM_POWER_PSM) {
-		k_sem_give(&mdata.sem_response);
+		k_sem_give(&mdata.sem_ready);
 		return 0;
 	}
 
@@ -2557,7 +2557,7 @@ retry:
 
 	/* Let the modem respond. */
 	LOG_INF("Waiting for modem to respond");
-	ret = k_sem_take(&mdata.sem_response, MDM_MAX_BOOT_TIME);
+	ret = k_sem_take(&mdata.sem_ready, MDM_MAX_BOOT_TIME);
 	if (ret < 0) {
 		LOG_ERR("Timeout waiting for RDY");
 		if (counter < 4) {
@@ -2940,6 +2940,7 @@ static int modem_init(const struct device *dev)
 {
 	int ret; ARG_UNUSED(dev);
 	k_sem_init(&mdata.sem_response,	 0, 1);
+	k_sem_init(&mdata.sem_ready,	 0, 1);
 	k_sem_init(&mdata.sem_tx_ready,	 0, 1);
 	k_sem_init(&mdata.sem_sock_conn, 0, 1);
 	k_sem_init(&mdata.sem_dns_busy, 1, 1);
