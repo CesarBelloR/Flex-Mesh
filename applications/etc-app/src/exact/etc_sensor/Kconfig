@@ -1,0 +1,27 @@
+menuconfig ETC_SENSOR
+	bool "Ambient temperature sensor"
+	default y
+	help
+	  The ambient temperature sensor library for application
+
+if ETC_SENSOR
+
+choice
+	prompt "Select protocol to get ambient sensor"
+	default ETC_AMBIENT_NTC_SENSOR
+
+config ETC_AMBIENT_NTC_SENSOR
+	bool "Select ambient with NTC sensor"
+	depends on !TMP1075
+
+config ETC_AMBIENT_I2C_SENSOR
+	bool "Select ambient with I2C sensor"
+	depends on TMP1075
+
+endchoice
+
+module = ETC_SENSOR
+module-str = etc sensor
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # ETC_SENSOR

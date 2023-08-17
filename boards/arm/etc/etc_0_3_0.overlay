@@ -1,0 +1,54 @@
+#include "etc_0_3_0.dtsi"
+
+/ {
+	board-control {
+		onewire_slpz: onewire-slpz {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		hw_wdt: hw-wdt {
+			compatible = "etc,output";
+			control-gpios = <&gpio1 1 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+	};
+};
+
+&i2c0 {
+	compatible = "nordic,nrf-twim";
+	status = "okay"; 
+
+	tmp1075: tmp1075@68 {
+		compatible = "ti,tmp1075";
+		reg = <0x68>;
+	};
+};
+
+&i2c1 {
+	compatible = "nordic,nrf-twim";
+	status = "okay"; 
+	pinctrl-0 = <&i2c1_default>;
+	pinctrl-1 = <&i2c1_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	w1: w1@18 {
+		compatible = "maxim,ds2484";
+		reg = <0x18>;
+	};
+};
+
+&uart1 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+
+	quectel_bg95: quectel_bg95 {
+		compatible = "quectel,bg95";
+		label      = "quectel-bg95";
+		status     = "okay";
+		mdm-power-gpios = <&gpio0 25 0>;
+		mdm-pon-trig-gpios = <&gpio1 13 0>;
+		mdm-psm-ind-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
+		mdm-uart-oe-gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
+	};
+};

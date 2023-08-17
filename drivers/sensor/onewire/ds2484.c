@@ -153,14 +153,14 @@ static int ds2484_wait_busy(uint8_t *status)
 	return 0;
 }
 
-int ds2484_init(void)
+int ds2484_init(const struct device *i2c_dev)
 {
 	struct ds2484_config *config = &m_ds2484_config;
 	struct ds2484_data *data = &m_ds2484_data;
 
-	config->bus = (struct device *)device_get_binding("I2C_0");
+	config->bus = i2c_dev;
 	if (config->bus == NULL) {
-		LOG_ERR("Failed to get device_get_binding I2C_0");
+		LOG_ERR("Failed to get I2C bus");
 		return -EINVAL;
 	}
 

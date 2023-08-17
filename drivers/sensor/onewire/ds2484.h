@@ -55,7 +55,7 @@ typedef enum
  * @retval return 0 on success, or a negative error code from an I2C
  * transaction or invalid parameter.
  */
-int ds2484_init(void);
+int ds2484_init(const struct device *i2c_dev);
 
 /** @brief Read the DS2484's status register
  * 

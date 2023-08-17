@@ -1,5 +1,5 @@
-identifier: ETC Core v0.2 (nRF52840 with BG95)
-name: ETC Core v0.2
+identifier: ETC Core Base Version nRF52840
+name: ETC Core Base Version nRF52840
 type: mcu
 arch: arm
 toolchain:

@@ -32,9 +32,12 @@ struct wdt_data_storage {
 	struct k_work_delayable system_workqueue_work;
 };
 
-
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+static const struct gpio_dt_spec hw_wdt_dt =  GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hw_wdt), control_gpios, 0);
+#else
 struct k_sem sens_sel0_wdt_sem;
 static const struct gpio_dt_spec s0_watchdog_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+#endif
 
 static watchdog_evt_handler_t app_evt_handler;
 static struct k_work_delayable hw_wdt_work;
@@ -186,12 +189,21 @@ static int watchdog_enable(const struct wdt_config_storage *config,
 static void hw_wdt_feed(void)
 {
 	LOG_INF("Feeding HW WDT");
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	gpio_pin_set_dt(&hw_wdt_dt, 0);
+	k_busy_wait(50);
+	gpio_pin_set_dt(&hw_wdt_dt, 1);
+	/* Minimum required pulse width according to datasheet is 100 ns. */
+	k_busy_wait(50);
+	gpio_pin_set_dt(&hw_wdt_dt, 0);
+#else
 	gpio_pin_set_dt(&s0_watchdog_dt, 0);
 	k_busy_wait(50);
 	gpio_pin_set_dt(&s0_watchdog_dt, 1);
 	/* Minimum required pulse width according to datasheet is 100 ns. */
 	k_busy_wait(50);
 	gpio_pin_set_dt(&s0_watchdog_dt, 0);
+#endif
 }
 
 static void hw_wdt_work_fn(struct k_work *work)
@@ -208,21 +220,32 @@ static void hw_wdt_work_fn(struct k_work *work)
 
 static void init_hw_wdt(void)
 {
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_ACTIVE_HIGH);
+#else
 	k_sem_init(&sens_sel0_wdt_sem, 1, 1);
 	gpio_pin_configure_dt(&s0_watchdog_dt, GPIO_OUTPUT_INACTIVE);
-
+#endif
 	k_work_init_delayable(&hw_wdt_work, hw_wdt_work_fn);
 	k_work_schedule(&hw_wdt_work, K_SECONDS(5));
 }
 
 int watchdog_sens_sel0_wdt_sem_take(k_timeout_t timeout)
 {
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	return 0;
+#else
 	return k_sem_take(&sens_sel0_wdt_sem, timeout);
+#endif
 }
 
 void watchdog_sens_sel0_wdt_sem_give(void)
 {
-	return k_sem_give(&sens_sel0_wdt_sem);
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	return;
+#else
+	k_sem_give(&sens_sel0_wdt_sem);
+#endif
 }
 
 int watchdog_init_and_start(void)

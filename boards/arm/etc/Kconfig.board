@@ -1,4 +1,4 @@
-config BOARD_ETC_V0_2
+config BOARD_ETC
 	bool "ETC Core with nRF52840 and BG95x"
 	select HAS_DTS_GPIO
 	depends on SOC_NRF52840_QIAA

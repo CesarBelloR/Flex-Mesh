@@ -18,8 +18,10 @@ static const struct device *uart_dev = DEVICE_DT_GET(DT_PARENT(DT_NODELABEL(quec
 
 K_MSGQ_DEFINE(uart_msgq, RX_BUF_SIZE, 10, 4);
 
+#if DT_NODE_HAS_PROP(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios)
 static const struct gpio_dt_spec lte_on_off_gpio_dt =
 		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios);
+#endif
 static const struct gpio_dt_spec power_gpio_dt =
 		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_power_gpios);
 static const struct gpio_dt_spec pon_trig_gpio_dt =
@@ -148,7 +150,9 @@ static int cmd_modem_gpio_set(const struct shell *shell, size_t argc, char **arg
 	else if (strcmp(argv[1], "on_off") == 0)
 	{
 		enable = atoi(argv[1]);
+#if DT_NODE_HAS_PROP(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios)
 		gpio_pin_set_dt(&lte_on_off_gpio_dt, enable);
+#endif
 	} else {
 		goto error;
 	}
@@ -172,9 +176,9 @@ SHELL_CMD_ARG_REGISTER(etc_modem_gpio_set, NULL,
 
 static void pin_init(void)
 {
-
+#if DT_NODE_HAS_PROP(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios)
 	gpio_pin_configure_dt(&lte_on_off_gpio_dt, GPIO_OUTPUT_ACTIVE);
-
+#endif
 	gpio_pin_configure_dt(&power_gpio_dt, GPIO_OUTPUT);
 	gpio_pin_set_dt(&power_gpio_dt, 0U);
 	k_sleep(K_MSEC(500));

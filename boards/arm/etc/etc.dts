@@ -1,10 +1,10 @@
 /dts-v1/;
 #include <nordic/nrf52840_qiaa.dtsi>
 #include <zephyr/dt-bindings/gpio/gpio.h>
-#include "etc_v0_2_pinctrl.dtsi"
+#include "etc_pinctrl.dtsi"
 
 / {
-	model = "ETC Core v0.2";
+	model = "ETC Core - nRF52840 base version";
         compatible = "nordic,nrf52840-dk-nrf52840";
 
 	chosen {
@@ -63,11 +63,6 @@
 	};
 
 	board-control {
-		sense_enable: sense-enable {
-			compatible = "etc,output";
-			control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
-			status = "okay";
-		};
 		vsens_enable: vsens-enable {
 			compatible = "etc,output";
 			control-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
@@ -210,12 +205,11 @@
 	pinctrl-names = "default", "sleep";
 };
 
-&spi1 {
+&spi2 {
 	compatible = "nordic,nrf-spi";
 	status = "okay";
-	label = "SPI_1";
-	pinctrl-0 = <&spi1_default>;
-	pinctrl-1 = <&spi1_sleep>;
+	pinctrl-0 = <&spi2_default>;
+	pinctrl-1 = <&spi2_sleep>;
 	pinctrl-names = "default", "sleep";
 	cs-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
 
@@ -231,12 +225,11 @@
 	};
 };
 
-&spi2 {
+&spi3 {
 	compatible = "nordic,nrf-spim";
-	label = "SPI_2";
 	status = "okay";
-	pinctrl-0 = <&spi2_default>;
-	pinctrl-1 = <&spi2_sleep>;
+	pinctrl-0 = <&spi3_default>;
+	pinctrl-1 = <&spi3_sleep>;
 	pinctrl-names = "default", "sleep";
 
 	cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
@@ -268,17 +261,6 @@
 	pinctrl-0 = <&uart1_default>;
 	pinctrl-1 = <&uart1_sleep>;
 	pinctrl-names = "default", "sleep";
-
-	quectel_bg95: quectel_bg95 {
-		compatible = "quectel,bg95";
-		label      = "quectel-bg95";
-		status     = "okay";
-		mdm-power-gpios = <&gpio0 25 0>;
-		mdm-on-off-gpios = <&gpio1 1 0>;
-		mdm-pon-trig-gpios = <&gpio1 13 0>;
-		mdm-psm-ind-gpios = <&gpio0 2 0>;
-		mdm-uart-oe-gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
-	};
 };
 
 &flash0 {

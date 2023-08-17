@@ -281,6 +281,8 @@ static int dynamic_modem_data_get(void)
 	modem_get_data(modem_dev, MODEM_API_DATA_REQUEST_DYNAMIC, &modem_data);
 
 	new_dynamic_modem_data(&modem_data.modem_network);
+	
+	return 0;
 }
 
 static int static_modem_data_get(void)

@@ -40,16 +40,24 @@ LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 /* Outputs */
 static const struct gpio_dt_spec hall_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hall_int), control_gpios, 0);
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 static const struct gpio_dt_spec sense_enable_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+static const struct gpio_dt_spec onewire_slpz_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(onewire_slpz), control_gpios, 0);
+#endif
 static const struct gpio_dt_spec s0_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
 static const struct gpio_dt_spec s1_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 static const struct gpio_dt_spec vsens_enable_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+#if DT_NODE_HAS_PROP(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios)
 static const struct gpio_dt_spec lte_on_off_gpio_dt =
 		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios);
+#endif
 static const struct gpio_dt_spec power_gpio_dt =
 		GPIO_DT_SPEC_GET(DT_NODELABEL(quectel_bg95), mdm_power_gpios);
 static const struct gpio_dt_spec pon_trig_gpio_dt =
@@ -57,6 +65,10 @@ static const struct gpio_dt_spec pon_trig_gpio_dt =
 #if DT_NODE_EXISTS(DT_NODELABEL(modem_uart_oe))
 static const struct gpio_dt_spec modem_uart_oe_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(modem_uart_oe), control_gpios, 0);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+static const struct gpio_dt_spec hw_wdt_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hw_wdt), control_gpios, 0);
 #endif
 static const struct device *ext_flash = DEVICE_DT_GET(DT_NODELABEL(mx25r1635));
 
@@ -111,6 +123,13 @@ static void hall_cb_fn(const struct device *dev,
 
 static void hw_wdt_feed(void)
 {
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	gpio_pin_set_dt(&hw_wdt_dt, 0U);
+	k_busy_wait(10);
+	gpio_pin_set_dt(&hw_wdt_dt, 1U);
+	k_busy_wait(1);
+	gpio_pin_set_dt(&hw_wdt_dt, 0U);
+#else
 	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT);
 	gpio_pin_set_dt(&s0_dt, 0U);
 	k_busy_wait(10);
@@ -118,6 +137,7 @@ static void hw_wdt_feed(void)
 	/* Minimum required pulse width according to datasheet is 100 ns. */
 	k_busy_wait(1);
 	gpio_pin_set_dt(&s0_dt, 0U);
+#endif	
 	LOG_INF("HW WDT fed");
 }
 
@@ -149,7 +169,9 @@ void etc_test_init(void)
 	// Configure hall interrupt
 	gpio_pin_configure_dt(&hall_dt, GPIO_INPUT | GPIO_ACTIVE_LOW);
 	gpio_pin_configure_dt(&vsens_enable_dt, GPIO_OUTPUT_ACTIVE);
-	
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_ACTIVE);
+#endif
 	gpio_init_callback(&hall_cb, hall_cb_fn, BIT(hall_dt.pin));
 	ret = gpio_add_callback(hall_dt.port, &hall_cb);
 	if (ret < 0) {
@@ -188,6 +210,8 @@ static void adc_print_channel(const struct shell *shell, int channel)
 #else
 		val = sensor_ntc_converter(channel, adc_raw);
 #endif
+		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
+			    channel, adc_raw, val);
 	} else {
 		adc_get_raw_to_millivolts(channel, &adc_raw);
 		val = (float)adc_raw / 1000.0f;
@@ -216,15 +240,17 @@ static int cmd_etc_io(const struct shell *shell, size_t argc, char **argv)
 		shell_print(shell, "Syntax: etc_io <io id> 0/1");
 		shell_print(shell, "Active-low I/Os will be set to active state on 1 (low output)");
 		shell_print(shell, "IO as below:");
-		shell_print(shell, "\t SENS_ENABLE    -> ID: 0");
-		shell_print(shell, "\t LTE_PWRKEY     -> ID: 1");
-		shell_print(shell, "\t VSEN_EN        -> ID: 2");
-		shell_print(shell, "\t LTE_PON_TRIG   -> ID: 3");
-		shell_print(shell, "\t MODEM_UART_OE  -> ID: 4");
-		shell_print(shell, "\t SENS_SEL0      -> ID: 5");
-		shell_print(shell, "\t SENS_SEL1      -> ID: 6");
-		shell_print(shell, "\t LTE_ON_OFF     -> ID: 7");
-		shell_print(shell, "\t LTE_PON_TRIG   -> ID: 8");
+		shell_print(shell, "\t SENS_ENABLE[0.2.0]    -> ID: 0");
+		shell_print(shell, "\t 1W_SLPZ[0.3.0]        -> ID: 0");
+		shell_print(shell, "\t LTE_PWRKEY            -> ID: 1");
+		shell_print(shell, "\t VSEN_EN               -> ID: 2");
+		shell_print(shell, "\t LTE_PON_TRIG          -> ID: 3");
+		shell_print(shell, "\t MODEM_UART_OE         -> ID: 4");
+		shell_print(shell, "\t SENS_SEL0             -> ID: 5");
+		shell_print(shell, "\t SENS_SEL1             -> ID: 6");
+		shell_print(shell, "\t LTE_ON_OFF[0.2.0]     -> ID: 7");
+		shell_print(shell, "\t HW_WDT[0.3.0]         -> ID: 7");
+		shell_print(shell, "\t LTE_PON_TRIG          -> ID: 8");
 		return 0;
 	}
 
@@ -240,9 +266,18 @@ static int cmd_etc_io(const struct shell *shell, size_t argc, char **argv)
 	char* name = NULL;
 	switch (id) {
 	case 0:
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 		gpio_dt = &sense_enable_dt;
 		name = "SENS_ENABLE";
 		break;
+#elif DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+		gpio_dt = &onewire_slpz_dt;
+		name = "1W_SLPZ";
+		break;
+#else
+		shell_error(shell, "Not supported");
+		return 0;
+#endif
 	case 1:
 		gpio_dt = &power_gpio_dt;
 		name = "LTE_PWRKEY";
@@ -273,9 +308,18 @@ static int cmd_etc_io(const struct shell *shell, size_t argc, char **argv)
 		name = "SENS_SEL1";
 		break;
 	case 7:
+#if DT_NODE_HAS_PROP(DT_NODELABEL(quectel_bg95), mdm_on_off_gpios)
 		gpio_dt = &lte_on_off_gpio_dt;
 		name = "LTE_ON_OFF";
 		break;
+#elif DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+		gpio_dt = &hw_wdt_dt;
+		name = "HW_WDT";
+		break;
+#else
+		shell_error(shell, "Not supported");
+		return 0;
+#endif
 	case 8:
 		gpio_dt = &pon_trig_gpio_dt;
 		name = "LTE_PON_TRIG";
@@ -573,11 +617,12 @@ error:
 static int cmd_ds2484_enable(const struct shell *shell, size_t argc, char **argv)
 {
 	int ret;
-
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	gpio_pin_set_dt(&sense_enable_dt, 1U);
+#endif
 	k_sleep(K_SECONDS(1));
 
-	ret = ds2484_init();
+	ret = ds2484_init(DEVICE_DT_GET(DT_NODELABEL(i2c1)));
 	shell_print(shell, "DS2484 enabled");
 	if (ret == 0) {
 		shell_print(shell, "Initialized");

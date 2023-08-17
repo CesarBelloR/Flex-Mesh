@@ -1,0 +1,17 @@
+# Copyright (c) 2023 EXACT Technology
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+    TMP1075 Digital Temperature Sensor.  See more info at
+    https://www.ti.com/product/TMP1075
+
+compatible: "ti,tmp1075"
+
+include: [sensor-device.yaml, i2c-device.yaml]
+
+properties:
+    alert-gpios:
+      type: phandle-array
+      description: |
+        Identifies the ALERT signal, which is active-low open drain when
+        produced by the sensor.
