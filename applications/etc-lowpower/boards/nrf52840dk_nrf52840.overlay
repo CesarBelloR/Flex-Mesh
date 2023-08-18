@@ -1,0 +1,42 @@
+&i2c0 {
+	compatible = "nordic,nrf-twim";
+	status = "okay"; 
+};
+
+&adc {
+	status = "okay";
+};
+
+&spi2 {
+	compatible = "nordic,nrf-spi";
+	status = "okay";
+};
+
+&spi3 {
+	compatible = "nordic,nrf-spim";
+	status = "okay";
+};
+
+&uart0 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+};
+
+&uart1 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+};
+
+zephyr_udc0: &usbd {
+	compatible = "nordic,nrf-usbd";
+	status = "okay";
+
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_0";
+	};
+	cdc_acm_uart1: cdc_acm_uart1 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_1";
+	};
+};

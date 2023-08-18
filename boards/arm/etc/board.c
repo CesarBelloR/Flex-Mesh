@@ -17,4 +17,4 @@ static int init(const struct device *dev)
 	return 0;
 }
 
-SYS_INIT(init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+// SYS_INIT(init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
