@@ -8,9 +8,15 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/gpio.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
+
+static const struct gpio_dt_spec s0_dt =
+	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt =
+	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 
 void main(void)
 {
@@ -22,6 +28,8 @@ void main(void)
 		return;
 	}
 	
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_ACTIVE);
+	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 
 	while (1) {
 		struct sensor_value temp, hum;
