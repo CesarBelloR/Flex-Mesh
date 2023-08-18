@@ -407,7 +407,7 @@ retry:
 	strncpy(&decoded_buf[sizeof("S,") - 1], ack_id, sizeof("XXXX") - 1);
 	LOG_DBG("Decoded length %d", decoded_buf_len);
 	LOG_DBG("Msg %s", decoded_buf);
-	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, 21);
+	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, decoded_buf_len + 1, 21);
 	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
 
 	if (cnt != 0) {
