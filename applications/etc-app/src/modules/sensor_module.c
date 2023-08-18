@@ -322,11 +322,7 @@ static int sensor_poll_handler(bool is_test) {
 	sensor_is_processing = false;
 	
 	sensor_gpios_disable();
-	#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	sensor_gpios_disable();
 #if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	sensor_gpios_disable();
 	watchdog_sens_sel0_wdt_sem_give();
 #endif
 	return 0;
