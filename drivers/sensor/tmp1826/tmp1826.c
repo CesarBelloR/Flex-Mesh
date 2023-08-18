@@ -29,48 +29,48 @@ static inline void tmp1826_temperature_from_raw(uint8_t *temp_raw,
 
 static uint8_t tmp1826_crc8(uint8_t *data_buf, uint8_t len)
 {
-    uint8_t crc = 0;
-    uint8_t byte_cnt = 0;
-    uint8_t bit_cnt = 0;
-    for (byte_cnt = 0; byte_cnt < len; byte_cnt++) 
-    {
-        crc ^= data_buf[byte_cnt];
-        for (bit_cnt = 0; bit_cnt < 8; bit_cnt++) 
-        {
-            if (crc & 0x01) 
-            {
-                crc = (crc >> 1) ^ 0x8C;
-            }
-            else
-            {
-                crc >>= 1;
-            }
-        }
-    }
-    return crc;
+	uint8_t crc = 0;
+	uint8_t byte_cnt = 0;
+	uint8_t bit_cnt = 0;
+	for (byte_cnt = 0; byte_cnt < len; byte_cnt++) 
+	{
+		crc ^= data_buf[byte_cnt];
+		for (bit_cnt = 0; bit_cnt < 8; bit_cnt++) 
+		{
+			if (crc & 0x01) 
+			{
+				crc = (crc >> 1) ^ 0x8C;
+			}
+			else
+			{
+				crc >>= 1;
+			}
+		}
+	}
+	return crc;
 }
 
 /*
  * Write scratch pad, read back, then copy to eeprom
  */
 static int tmp1826_write_scratchpad(const struct device *dev,
-				    struct tmp1826_scratchpad scratchpad)
+					struct tmp1826_scratchpad scratchpad)
 {
 	struct tmp1826_data *data = dev->data;
 	const struct device *bus = tmp1826_bus(dev);
-    uint8_t data_buf[10] = {0};
-    uint8_t crc_byte = 0;
+	uint8_t data_buf[10] = {0};
+	uint8_t crc_byte = 0;
 
 	data_buf[0] = TMP1826_CMD_WRITE_SCRATCHPAD;
-    data_buf[1] = scratchpad.config_1 | TMP1826_CFG1_RESERVED;
-    data_buf[2] = scratchpad.config_2;
-    data_buf[3] = scratchpad.short_addr;
-    data_buf[4] = (uint8_t)(scratchpad.temp_limit_low & 0xFF);
-    data_buf[5] = (uint8_t)((scratchpad.temp_limit_low >> 8) & 0xFF);
-    data_buf[6] = (uint8_t)(scratchpad.temp_limit_high & 0xFF );
-    data_buf[7] = (uint8_t)((scratchpad.temp_limit_high >> 8) & 0xFF);
-    data_buf[8] = (uint8_t)(scratchpad.temp_offset & 0xFF);
-    data_buf[9] = (uint8_t)((scratchpad.temp_offset >> 8) & 0xFF);
+	data_buf[1] = scratchpad.config_1 | TMP1826_CFG1_RESERVED;
+	data_buf[2] = scratchpad.config_2;
+	data_buf[3] = scratchpad.short_addr;
+	data_buf[4] = (uint8_t)(scratchpad.temp_limit_low & 0xFF);
+	data_buf[5] = (uint8_t)((scratchpad.temp_limit_low >> 8) & 0xFF);
+	data_buf[6] = (uint8_t)(scratchpad.temp_limit_high & 0xFF );
+	data_buf[7] = (uint8_t)((scratchpad.temp_limit_high >> 8) & 0xFF);
+	data_buf[8] = (uint8_t)(scratchpad.temp_offset & 0xFF);
+	data_buf[9] = (uint8_t)((scratchpad.temp_offset >> 8) & 0xFF);
 
 	int rc = w1_write_read(bus, &data->config, data_buf, sizeof(data_buf), &crc_byte, 1);
 	if (rc) {
@@ -88,14 +88,14 @@ static int tmp1826_write_scratchpad(const struct device *dev,
 }
 
 static int tmp1826_read_scratchpad(const struct device *dev,
-				   struct tmp1826_scratchpad *scratchpad)
+				struct tmp1826_scratchpad *scratchpad)
 {
 	struct tmp1826_data *data = dev->data;
 	const struct device *bus = tmp1826_bus(dev);
 	uint8_t cmd = TMP1826_CMD_READ_SCRATCHPAD;
 	uint8_t data_buf[18] = {0};
 	int rc = w1_write_read(bus, &data->config, &cmd, 1,
-			     (uint8_t *)&data_buf[0], 18);
+				(uint8_t *)&data_buf[0], 18);
 	if (rc) {
 		LOG_ERR("Failed to read scratchpad (err %d)", rc);
 		return rc;
@@ -109,14 +109,14 @@ static int tmp1826_read_scratchpad(const struct device *dev,
 			first_calc_crc, data_buf[8], second_calc_crc, data_buf[17]);
 		return -EINVAL;
 	}
-    scratchpad->temperature = ((int16_t)data_buf[1] << 8 ) | data_buf[0];
-    scratchpad->status = data_buf[2];
-    scratchpad->config_1 = data_buf[4];
-    scratchpad->config_2 = data_buf[5];
-    scratchpad->short_addr = data_buf[6];
-    scratchpad->temp_limit_low = ((int16_t)data_buf[10] << 8 ) | data_buf[9];
-    scratchpad->temp_limit_high = ((int16_t)data_buf[12] << 8 ) | data_buf[11];
-    scratchpad->temp_offset = ((int16_t)data_buf[14] << 8 ) | data_buf[13];
+	scratchpad->temperature = ((int16_t)data_buf[1] << 8 ) | data_buf[0];
+	scratchpad->status = data_buf[2];
+	scratchpad->config_1 = data_buf[4];
+	scratchpad->config_2 = data_buf[5];
+	scratchpad->short_addr = data_buf[6];
+	scratchpad->temp_limit_low = ((int16_t)data_buf[10] << 8 ) | data_buf[9];
+	scratchpad->temp_limit_high = ((int16_t)data_buf[12] << 8 ) | data_buf[11];
+	scratchpad->temp_offset = ((int16_t)data_buf[14] << 8 ) | data_buf[13];
 	return 0;
 }
 
@@ -147,18 +147,18 @@ static void tmp1826_set_default(const struct device *dev, uint8_t resolution)
 	struct tmp1826_data *data = dev->data;
 
 	uint8_t resolution_cfg = resolution == 12 ? TMP1826_CFG1_TEMP_FMT_12_BIT : 
-						   TMP1826_CFG1_TEMP_FMT_16_BIT;
+						TMP1826_CFG1_TEMP_FMT_16_BIT;
 	
-    data->scratchpad.config_1 = resolution_cfg | 
-                           TMP1826_CFG1_CONV_TIME_SEL_5p5MS | 
-                           TMP1826_CFG1_ALERT_MODE_COMPARATOR | 
-                           TMP1826_CFG1_AVG_SEL_NO_AVG | 
-                           TMP1826_CFG1_CONV_MODE_SEL_ONE_SHOT;
-    data->scratchpad.config_2 =TMP1826_CFG2_OD_DIS | 
-                           TMP1826_CFG2_FLEX_ADDR_MODE_HOST | 
-                           TMP1826_CFG2_ARB_MODE_DIS | 
-                           TMP1826_CFG2_HYSTERESIS_5_C | 
-                           TMP1826_CFG2_LOCK_DIS;
+	data->scratchpad.config_1 = resolution_cfg | 
+						TMP1826_CFG1_CONV_TIME_SEL_5p5MS | 
+						TMP1826_CFG1_ALERT_MODE_COMPARATOR | 
+						TMP1826_CFG1_AVG_SEL_NO_AVG | 
+						TMP1826_CFG1_CONV_MODE_SEL_ONE_SHOT;
+	data->scratchpad.config_2 =TMP1826_CFG2_OD_DIS | 
+						TMP1826_CFG2_FLEX_ADDR_MODE_HOST | 
+						TMP1826_CFG2_ARB_MODE_DIS | 
+						TMP1826_CFG2_HYSTERESIS_5_C | 
+						TMP1826_CFG2_LOCK_DIS;
 }
 
 static int tmp1826_sample_fetch(const struct device *dev,
@@ -188,8 +188,8 @@ static int tmp1826_sample_fetch(const struct device *dev,
 }
 
 static int tmp1826_channel_get(const struct device *dev,
-			       enum sensor_channel chan,
-			       struct sensor_value *val)
+				enum sensor_channel chan,
+				struct sensor_value *val)
 {
 	struct tmp1826_data *data = dev->data;
 
@@ -241,7 +241,7 @@ static int tmp1826_configure(const struct device *dev)
 }
 
 int tmp1826_attr_set(const struct device *dev, enum sensor_channel chan,
-		     enum sensor_attribute attr, const struct sensor_value *thr)
+			enum sensor_attribute attr, const struct sensor_value *thr)
 {
 	struct tmp1826_data *data = dev->data;
 
@@ -279,11 +279,11 @@ static int tmp1826_init(const struct device *dev)
 	return 0;
 }
 
-#define TMP1826_CONFIG_INIT(inst)					       \
-	{								       \
-		.bus = DEVICE_DT_GET(DT_INST_BUS(inst)),		       \
-		.family = (uint8_t)DT_INST_PROP_OR(inst, family_code, 0x26),   \
-		.resolution = DT_INST_PROP(inst, resolution),		       \
+#define TMP1826_CONFIG_INIT(inst)					\
+	{								\
+		.bus = DEVICE_DT_GET(DT_INST_BUS(inst)),		\
+		.family = (uint8_t)DT_INST_PROP_OR(inst, family_code, 0x26),\
+		.resolution = DT_INST_PROP(inst, resolution),		\
 	}
 
 #define TMP1826_DEFINE(inst)						\
@@ -291,12 +291,12 @@ static int tmp1826_init(const struct device *dev)
 	static const struct tmp1826_config tmp1826_config_##inst =	\
 		TMP1826_CONFIG_INIT(inst);				\
 	SENSOR_DEVICE_DT_INST_DEFINE(inst,				\
-			      tmp1826_init,				\
-			      NULL,					\
-			      &tmp1826_data_##inst,			\
-			      &tmp1826_config_##inst,			\
-			      POST_KERNEL,				\
-			      CONFIG_SENSOR_INIT_PRIORITY,		\
-			      &tmp1826_driver_api);
+				tmp1826_init,				\
+				NULL,					\
+				&tmp1826_data_##inst,			\
+				&tmp1826_config_##inst,			\
+				POST_KERNEL,				\
+				CONFIG_SENSOR_INIT_PRIORITY,		\
+				&tmp1826_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(TMP1826_DEFINE)
