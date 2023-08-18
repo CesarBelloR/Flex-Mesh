@@ -87,6 +87,7 @@ inline static int8_t remap_th_channel(int8_t channel)
 {
 	__ASSERT(channel >= 0 && channel <= 3, "invalid channel number");
 
+#if !defined(CONFIG_BOARD_ETC_0_3_0)
 	switch (channel) {
 	case 0:
 		return 3;
@@ -99,6 +100,20 @@ inline static int8_t remap_th_channel(int8_t channel)
 	default:
 		return 0;
 	}
+#else
+	switch (channel) {
+	case 0:
+		return 1;
+	case 1:
+		return 0;
+	case 2:
+		return 3;
+	case 3:
+		return 2;
+	default:
+		return 0;
+	}
+#endif
 }
 
 static void sensor_adc_switch_channel(int8_t channel) 
@@ -236,42 +251,46 @@ static int setup(void)
 	return 0;
 }
 
-#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 static void sensor_gpios_enable(void)
 {
 	gpio_pin_set_dt(&vsen_en_dt, 1U);
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
 #endif
-	/* Note: pin s0 is configured by watchdog module. */
+	/* Note: pin s0 is configured by watchdog module if s0/wdt are shared */
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+#endif
 	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 }
 
 static void sensor_gpios_disable(void)
 {
 	gpio_pin_set_dt(&vsen_en_dt, 0U);
-	gpio_pin_set_dt(&s0_dt, 0);
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	gpio_pin_configure_dt(&sense_dt, GPIO_DISCONNECTED);
 #endif
-	/* Note: pin s0 is configured by watchdog module. */
+	/* Note: pin s0 is configured by watchdog module if s0/wdt are shared */
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	gpio_pin_configure_dt(&s0_dt, GPIO_DISCONNECTED);
+#else
+	gpio_pin_set_dt(&s0_dt, 0);
+#endif
 	gpio_pin_configure_dt(&s1_dt, GPIO_DISCONNECTED);
 }
-#endif
 
 static int sensor_poll_handler(bool is_test) {
 	if (sensor_is_processing) {
 		return 0;
 	}
 
-	#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	if (watchdog_sens_sel0_wdt_sem_take(K_SECONDS(SENSOR_HANDLER_MAX_WAIT_S)) != 0) {
 		LOG_WRN("Could not take watchdog_sens_sel0 semaphore");
 		return -EAGAIN;
 	}
-
+#endif
 	sensor_gpios_enable();
-	#endif
 
 	k_msleep(100);
 
@@ -302,10 +321,14 @@ static int sensor_poll_handler(bool is_test) {
 	sensor_module_send_sensor(data, is_test);
 	sensor_is_processing = false;
 	
+	sensor_gpios_disable();
+	#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	sensor_gpios_disable();
+#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	sensor_gpios_disable();
 	watchdog_sens_sel0_wdt_sem_give();
-	#endif
+#endif
 	return 0;
 }
 
