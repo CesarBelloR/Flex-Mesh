@@ -43,7 +43,7 @@ static float etc_sensor_ntc_converter(const float table[], int table_length, int
 			temp_value = tmp;
 		}
 	}
-  	return (temp_value);
+  	return (SENSOR_NTC_NO_CONNECTED);
 }
 #else
 static float etc_sensor_ntc_converter(int data, float full_scale_v, int full_scale_count) {
