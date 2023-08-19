@@ -2,7 +2,7 @@
 	w1: w1@18 {
 		compatible = "maxim,ds2484";
 		reg = <0x18>;
-
+		slpz-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
 		ds28e18 {
 			compatible = "maxim,ds28e18";
 			family-code = <0x56>;

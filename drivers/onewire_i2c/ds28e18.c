@@ -17,6 +17,11 @@ LOG_MODULE_REGISTER(DS28E18, CONFIG_ONEWIRE_I2C_LOG_LEVEL);
 
 #include "ds28e18.h"
 
+static const struct gpio_dt_spec s0_dt =
+	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt =
+	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
+
 static int ds28e18_reset_bus(const struct device *dev);
 static int ds28e18_onewire_configure(const struct device *dev);
 static int ds28e18_populate_rom(const struct device *dev);
@@ -571,12 +576,13 @@ static int ds28e18_i2c_init(const struct device *dev)
 	const struct ds28e18_i2c_config *cfg = dev->config;
 	struct ds28e18_i2c_data *data = dev->data;
 
-	k_msleep(100);
-
 	if (device_is_ready(cfg->bus) == 0) {
 		LOG_DBG("w1 bus for is not ready");
 		return -ENODEV;
 	}
+
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_LOW);
+	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_LOW);
 
 	w1_uint64_to_rom(0ULL, &data->config.rom);
 	int rc = ds28e18_reset_bus(dev);
