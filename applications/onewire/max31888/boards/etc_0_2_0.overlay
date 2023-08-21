@@ -1,0 +1,12 @@
+&i2c0 {
+	w1: w1@18 {
+		compatible = "maxim,ds2484";
+		reg = <0x18>;
+
+		max31888 {
+			compatible = "maxim,max31888";
+			family-code = <0x54>;
+			status = "okay";
+		};
+	};
+};
