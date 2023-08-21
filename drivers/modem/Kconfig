@@ -115,7 +115,7 @@ config MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU
 
 config MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT
 	string "PSM setting requested active time"
-	default "00001111"
+	default "00001010"
 	help
 		Power saving mode setting for requested active time.
 		See 3GPP 27.007 Ch. 7.38.

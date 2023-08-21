@@ -218,16 +218,30 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static const struct device *pm_devs[] = {
+	DEVICE_DT_GET(DT_NODELABEL(spi2)),
+	DEVICE_DT_GET(DT_NODELABEL(spi3)),
+	DEVICE_DT_GET(DT_CHOSEN(zephyr_console))
+};
+
 static void app_peripheral_off(void)
 {
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	int ret;
+
 	if (!device_is_ready(cons)) {
 		LOG_ERR("%s: device not ready.", cons->name);
 		return;
 	}
 
 #ifdef CONFIG_PM_DEVICE
-	pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
+	LOG_DBG("suspending devices");
+	for (int i = 0; i < ARRAY_SIZE(pm_devs); i++) {
+		ret = pm_device_action_run(pm_devs[i], PM_DEVICE_ACTION_SUSPEND);
+		if (ret != 0) {
+			LOG_ERR("Could not suspend device %s", pm_devs[i]->name);
+		}
+	}
 #endif
 }
 
@@ -369,13 +383,20 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 
 static void app_peripheral_on(bool is_rtc)
 {	
+	int ret;
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (!device_is_ready(cons)) {
 		LOG_ERR("%s: device not ready.", cons->name);
 		return;
 	}
 #ifdef CONFIG_PM_DEVICE
-	pm_device_action_run(cons, PM_DEVICE_ACTION_RESUME);
+	LOG_DBG("resuming devices");
+	for (int i = 0; i < ARRAY_SIZE(pm_devs); i++) {
+		ret = pm_device_action_run(pm_devs[i], PM_DEVICE_ACTION_RESUME);
+		if (ret != 0) {
+			LOG_ERR("Could not resume device %s", pm_devs[i]->name);
+		}
+	}
 #endif
 
 	if (is_rtc) {
@@ -541,7 +562,7 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 	
 	if ((IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) ||
-		(IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK))) {
+		(IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED))) {
 			app_peripheral_off();
 		return;
 	}
