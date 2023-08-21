@@ -140,7 +140,7 @@ static int sht31_attr_set(const struct device *dev,
 			   const struct sensor_value *val)
 {
 	int ret;
-
+	const struct sht31_config *config = dev->config;
 #ifdef CONFIG_PM_DEVICE
 	enum pm_device_state state;
 
@@ -153,7 +153,7 @@ static int sht31_attr_set(const struct device *dev,
 	switch (attr) {
 	case SENSOR_ATTR_CONFIGURATION:
 		/* Configure the I2C again */
-		i2c_configure(dev, 0);
+		i2c_configure(config->bus.bus, 0);
 
 		/* clear status register */
 		if (sht31_write_command(dev, SHT3XD_CMD_CLEAR_STATUS) < 0) {

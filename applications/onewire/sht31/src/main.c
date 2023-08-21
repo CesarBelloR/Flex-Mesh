@@ -21,15 +21,19 @@ void port_selection(int port_index) {
 		case 1:
 			gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_ACTIVE);
 			gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+			break;
 		case 2:
 			gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
 			gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+			break;
 		case 3:
 			gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_ACTIVE);
 			gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_ACTIVE);
+			break;
 		case 4:
 			gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
 			gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_ACTIVE);
+			break;
 	}
 }
 

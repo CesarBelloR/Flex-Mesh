@@ -324,10 +324,11 @@ static int ds28e18_i2c_configure(const struct device *dev,
 	const struct ds28e18_i2c_config *cfg = dev->config;
 	const struct device *bus = ds28e18_bus(dev);
 
+	w1_uint64_to_rom(0ULL, &data->config.rom);
+
 	// Reconfigure 
 	w1_configure(bus, W1_SETTING_RECONFIGURE, 0);
 
-	w1_uint64_to_rom(0ULL, &data->config.rom);
 	int rc = ds28e18_reset_bus(dev);
 	if (rc) {
 		LOG_ERR("Failed to reset bus (err %d)", rc);
