@@ -210,6 +210,7 @@ SHELL_CMD_ARG_REGISTER(etc_version, NULL, "Show kernel version", cmd_version, 1,
 static void adc_print_channel(const struct shell *shell, int channel)
 {
 	int adc_raw = sensor_get_raw_value(channel);
+	int val_mv;
 	float val;
 
 	if ((channel == ETC_ADC_CHANNEL_AMB) || (channel == ETC_ADC_CHANNEL_SENSOR)) {
@@ -224,8 +225,9 @@ static void adc_print_channel(const struct shell *shell, int channel)
 		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
 			    channel, adc_raw, val);
 	} else {
-		adc_get_raw_to_millivolts(channel, &adc_raw);
-		val = (float)adc_raw / 1000.0f;
+		val_mv = adc_raw;
+		adc_get_raw_to_millivolts(channel, &val_mv);
+		val = (float)val_mv / 1000.0f;
 		shell_print(shell, "ADC Channel %d - Value %d - Voltage %.2f V",
 			    channel, adc_raw, val);
 	}
@@ -439,10 +441,10 @@ static void adc_print_all_channels(const struct shell *shell)
 {
 	for (int chan = 0; chan < ETC_ADC_CHANNEL_MAX; chan++) {
 		if (chan == ETC_ADC_CHANNEL_SENSOR) {
-			for (int input = 0; input < SENSOR_INPUT_MAX; input++) {
+			for (int input = 0; input < (SENSOR_INPUT_MAX - SENSOR_INPUT_IN1); input++) {
 				sensor_adc_switch_channel(input);
 				k_msleep(100);
-				shell_print(shell, "Sensor input %u:", input);
+				shell_print(shell, "Probe %u:", (input + SENSOR_INPUT_IN1));
 				adc_print_channel(shell, chan);
 			}
 		} else {
