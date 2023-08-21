@@ -1,0 +1,9 @@
+# Copyright (c) 2018, Peter Bigot Consulting, LLC
+# Copyright (c) 2023 EXACT Technology
+# SPDX-License-Identifier: Apache-2.0
+
+description: Sensirion Humidity SHT31 humidity and temperature sensor
+
+compatible: "sensirion,sht31"
+
+include: [sensor-device.yaml, i2c-device.yaml]

@@ -15,7 +15,7 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 void main(void)
 {
-	const struct device *const dev = DEVICE_DT_GET_ONE(sensirion_sht3xd);
+	const struct device *const dev = DEVICE_DT_GET_ONE(sensirion_sht31);
 	int rc;
 
 	if (!device_is_ready(dev)) {
@@ -36,11 +36,11 @@ void main(void)
 						&hum);
 		}
 		if (rc != 0) {
-			LOG_ERR("SHT3XD: failed: %d\n", rc);
+			LOG_ERR("SHT31: failed: %d\n", rc);
 			break;
 		}
 
-		LOG_INF("SHT3XD: %.2f Cel ; %0.2f %%RH",
+		LOG_INF("SHT31: %.2f Cel ; %0.2f %%RH",
 		       sensor_value_to_double(&temp),
 		       sensor_value_to_double(&hum));
 
