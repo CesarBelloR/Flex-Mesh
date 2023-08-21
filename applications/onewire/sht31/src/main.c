@@ -13,6 +13,26 @@
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
+static const struct gpio_dt_spec s0_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
+
+void port_selection(int port_index) {
+	switch (port_index) {
+		case 1:
+			gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_ACTIVE);
+			gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+		case 2:
+			gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+			gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+		case 3:
+			gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_ACTIVE);
+			gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_ACTIVE);
+		case 4:
+			gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+			gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_ACTIVE);
+	}
+}
+
 void main(void)
 {
 	const struct device *const dev = DEVICE_DT_GET_ONE(sensirion_sht31);
@@ -22,6 +42,11 @@ void main(void)
 		LOG_ERR("Device %s is not ready", dev->name);
 		return;
 	}
+
+	/* Set the IO for selecting the ports 2 */
+	port_selection(2);
+	/* Call to re-configure the sensor */
+	sensor_attr_set(dev, SENSOR_CHAN_ALL, SENSOR_ATTR_CONFIGURATION, NULL);
 
 	while (1) {
 		struct sensor_value temp, hum;

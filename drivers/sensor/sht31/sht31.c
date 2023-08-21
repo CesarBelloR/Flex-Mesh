@@ -152,6 +152,9 @@ static int sht31_attr_set(const struct device *dev,
 
 	switch (attr) {
 	case SENSOR_ATTR_CONFIGURATION:
+		/* Configure the I2C again */
+		i2c_configure(dev, 0);
+
 		/* clear status register */
 		if (sht31_write_command(dev, SHT3XD_CMD_CLEAR_STATUS) < 0) {
 			LOG_DBG("Failed to clear status register!");
@@ -187,17 +190,14 @@ static int sht31_init(const struct device *dev)
 }
 
 
-#define SHT3XD_TRIGGER_INIT(inst)
-
-#define SHT3XD_DEFINE(inst)							\
+#define SHT31_DEFINE(inst)							\
 	struct sht31_data sht310_data_##inst;					\
 	static const struct sht31_config sht310_cfg_##inst = {		\
-		.bus = I2C_DT_SPEC_INST_GET(inst),				\
-		SHT3XD_TRIGGER_INIT(inst)					\
+		.bus = I2C_DT_SPEC_INST_GET(inst)				\
 	};									\
 	SENSOR_DEVICE_DT_INST_DEFINE(inst, sht31_init, NULL,			\
 		&sht310_data_##inst, &sht310_cfg_##inst,			\
 		POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,			\
 		&sht31_driver_api);
 
-DT_INST_FOREACH_STATUS_OKAY(SHT3XD_DEFINE)
+DT_INST_FOREACH_STATUS_OKAY(SHT31_DEFINE)

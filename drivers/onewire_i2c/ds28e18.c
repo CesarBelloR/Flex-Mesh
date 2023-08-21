@@ -17,11 +17,6 @@ LOG_MODULE_REGISTER(DS28E18, CONFIG_ONEWIRE_I2C_LOG_LEVEL);
 
 #include "ds28e18.h"
 
-static const struct gpio_dt_spec s0_dt =
-	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
-static const struct gpio_dt_spec s1_dt =
-	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
-
 static int ds28e18_reset_bus(const struct device *dev);
 static int ds28e18_onewire_configure(const struct device *dev);
 static int ds28e18_populate_rom(const struct device *dev);
@@ -325,26 +320,52 @@ static const struct i2c_driver_api ds28e18_i2c_driver_api = {
 static int ds28e18_i2c_configure(const struct device *dev,
 				   uint32_t i2c_config)
 {
-	int ret;
 	struct ds28e18_i2c_data *data = dev->data;
+	const struct ds28e18_i2c_config *cfg = dev->config;
 	const struct device *bus = ds28e18_bus(dev);
 
-	(void)w1_lock_bus(bus);
-	ret = w1_match_rom(bus, &data->config);
-	if (ret != 0) {
-		goto out;
+	// Reconfigure 
+	w1_configure(bus, W1_SETTING_RECONFIGURE, 0);
+
+	w1_uint64_to_rom(0ULL, &data->config.rom);
+	int rc = ds28e18_reset_bus(dev);
+	if (rc) {
+		LOG_ERR("Failed to reset bus (err %d)", rc);
+		return rc;
+	}
+	rc = ds28e18_populate_rom(dev);
+	if (rc) {
+		LOG_ERR("Failed to populate ROM (err %d)", rc);
+		return rc;
+	}
+	rc = ds28e18_onewire_configure(dev);
+	if (rc) {
+		LOG_ERR("Failed to configure one-wire (err %d)", rc);
+		return rc;
+	}
+	rc = ds28e18_set_io(dev);
+	if (rc) {
+		LOG_ERR("Failed to set IO (err %d)", rc);
+		return rc;
+	}
+	rc = ds28e18_onewire_device_status(dev);
+	if (rc) {
+		LOG_ERR("Failed to get device status");
+		return rc;
+	}
+	LOG_DBG("Set clock frequency at %d", cfg->frequency);
+	rc = ds28e18_i2c_configure_set_clock_frequency(dev, cfg->frequency);
+	if (rc) {
+		LOG_ERR("Failed to set clock frequency (err %d)", rc);
+		return rc;
+	}
+	rc = ds28e18_i2c_configure_get_clock_frequency(dev);
+	if (rc) {
+		LOG_ERR("Failed to get clock frequency (err %d)", rc);
+		return rc;
 	}
 
-	uint8_t tx_buf[6] = {DS28E18_CMD_START, 1, DS28E18_CMD_READ_CONFIG, 0x0, 0x00, DS28E18_CMD_RELEASE_BYTE};
-	uint8_t rx_buf[6] = {0x00};
-	uint16_t crc = 0;
-	crc = ~ds28e18_crc16(tx_buf, 3, crc);
-	tx_buf[3] = (uint8_t)(crc & 0x00FF);
-	tx_buf[4] = (uint8_t)((crc & 0xFF00) >> 8);
-	ret = w1_write_read(bus, &data->config, tx_buf, sizeof(tx_buf), rx_buf, 6);
-out:
-	(void)w1_unlock_bus(bus);
-	return ret;
+	return rc;
 }
 
 static int ds28e18_i2c_transfer(const struct device *dev,
@@ -574,54 +595,13 @@ out:
 static int ds28e18_i2c_init(const struct device *dev)
 {
 	const struct ds28e18_i2c_config *cfg = dev->config;
-	struct ds28e18_i2c_data *data = dev->data;
 
 	if (device_is_ready(cfg->bus) == 0) {
 		LOG_DBG("w1 bus for is not ready");
 		return -ENODEV;
 	}
 
-	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_LOW);
-	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_LOW);
-
-	w1_uint64_to_rom(0ULL, &data->config.rom);
-	int rc = ds28e18_reset_bus(dev);
-	if (rc) {
-		LOG_ERR("Failed to reset bus (err %d)", rc);
-		return rc;
-	}
-	rc = ds28e18_populate_rom(dev);
-	if (rc) {
-		LOG_ERR("Failed to populate ROM (err %d)", rc);
-		return rc;
-	}
-	rc = ds28e18_onewire_configure(dev);
-	if (rc) {
-		LOG_ERR("Failed to configure one-wire (err %d)", rc);
-		return rc;
-	}
-	rc = ds28e18_set_io(dev);
-	if (rc) {
-		LOG_ERR("Failed to set IO (err %d)", rc);
-		return rc;
-	}
-	rc = ds28e18_onewire_device_status(dev);
-	if (rc) {
-		LOG_ERR("Failed to get device status");
-		return rc;
-	}
-	LOG_DBG("Set clock frequency at %d", cfg->frequency);
-	rc = ds28e18_i2c_configure_set_clock_frequency(dev, cfg->frequency);
-	if (rc) {
-		LOG_ERR("Failed to set clock frequency (err %d)", rc);
-		return rc;
-	}
-	rc = ds28e18_i2c_configure_get_clock_frequency(dev);
-	if (rc) {
-		LOG_ERR("Failed to get clock frequency (err %d)", rc);
-		return rc;
-	}
-	return rc;
+	return 0;
 }
 
 struct ds28e18_i2c_data ds28e18_i2c_data;
