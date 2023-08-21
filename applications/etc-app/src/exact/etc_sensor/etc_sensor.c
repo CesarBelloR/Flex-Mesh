@@ -33,7 +33,7 @@ static float etc_sensor_ntc_converter(const float table[], int table_length, int
  	float input = ((float)max_adc / (float)raw_adc) - 1;
  	input = (float) SENSOR_NTC_NOMINAL_RESISTANCE / input;
  	input = input / 1000.0;
- 	float temp_value = 0.0;
+ 	float temp_value = SENSOR_NTC_NO_CONNECTED;
  	float tmp;
  	for (int i = 0; i < table_length - 1; i++) {
 		if (input <= table[i] && input >= table[i + 1]) {
@@ -43,7 +43,7 @@ static float etc_sensor_ntc_converter(const float table[], int table_length, int
 			temp_value = tmp;
 		}
 	}
-  	return (SENSOR_NTC_NO_CONNECTED);
+  	return temp_value;
 }
 #else
 static float etc_sensor_ntc_converter(int data, float full_scale_v, int full_scale_count) {
