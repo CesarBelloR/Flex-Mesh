@@ -4,7 +4,7 @@ config BOARD
 	default "ETC Core Base version with nRF52840 and BG95x"
 
 config BOARD_VERSION
-	string
+	string "Configured HW board version"
 	default "0.2.0"
 
 config BOARD_ETC_0_3_0

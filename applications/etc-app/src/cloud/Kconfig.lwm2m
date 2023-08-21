@@ -15,9 +15,22 @@ if LWM2M_INTEGRATION
 
 menu "LwM2M integration library"
 
+choice
+	prompt "Select the unique ID that should be used for the endpoint identification"
+	default LWM2M_INTEGRATION_ENDPOINT_HWINFO
+
+config LWM2M_INTEGRATION_ENDPOINT_HWINFO
+	bool "Use the nRF52 HW info (64-bit MAC) for endpoint identification"
+
+config LWM2M_INTEGRATION_ENDPOINT_SERIALNUMBER
+	bool "Use the EXACT assigned serial number for endpoint identification"
+
+endchoice
+
 config LWM2M_INTEGRATION_ENDPOINT_PREFIX
 	string "LwM2M endpoint prefix"
-	default "urn:dev:os:60606-"
+	default "urn:dev:mac:" if LWM2M_INTEGRATION_ENDPOINT_HWINFO
+	default "urn:dev:os:60606-" if LWM2M_INTEGRATION_ENDPOINT_SERIALNUMBER
 
 config LWM2M_INTEGRATION_PSK_ID
 	string "LwM2M PSK"
