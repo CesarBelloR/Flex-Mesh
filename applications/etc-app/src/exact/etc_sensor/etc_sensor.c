@@ -41,6 +41,7 @@ static float etc_sensor_ntc_converter(const float table[], int table_length, int
 			tmp = tmp * (input - table[i]);
 			tmp = tmp +  (-40 + (i * offset));
 			temp_value = tmp;
+			return temp_value;
 		}
 	}
   	return temp_value;
