@@ -1,0 +1,10 @@
+#
+# Copyright (c) 2023 EXACT Technology
+#
+
+description:
+    This is a representation of DS28E18 One-wire to I2C node
+
+compatible: "maxim,ds28e18"
+
+include: [i2c-controller.yaml, w1-slave.yaml]

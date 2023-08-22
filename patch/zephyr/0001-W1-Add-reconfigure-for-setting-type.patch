@@ -1,0 +1,28 @@
+From e2ddcd1255d6747ea2e171ddb9d9527c2381966a Mon Sep 17 00:00:00 2001
+From: Kien Bui <kien.bui@exacttechnology.com>
+Date: Mon, 21 Aug 2023 09:53:20 +0700
+Subject: [PATCH] W1: Add reconfigure for setting type
+
+---
+ include/zephyr/drivers/w1.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/include/zephyr/drivers/w1.h b/include/zephyr/drivers/w1.h
+index 63611613bc..003df8f585 100644
+--- a/include/zephyr/drivers/w1.h
++++ b/include/zephyr/drivers/w1.h
+@@ -61,6 +61,11 @@ enum w1_settings_type {
+ 	 */
+ 	W1_SETTING_STRONG_PULLUP,
+ 
++	/**
++	 * Reconfigure the W1
++	 */
++	W1_SETTING_RECONFIGURE,
++
+ 	/**
+ 	 * Number of different settings types.
+ 	 */
+-- 
+2.40.0.windows.1
+
