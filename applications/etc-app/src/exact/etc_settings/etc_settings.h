@@ -81,6 +81,7 @@ int etc_set_serial_number_type(enum etc_serial_number_types type);
 
 int etc_get_hw_version(char *buf, int buf_len);
 int etc_get_fw_version(char *buf, int buf_len);
+int etc_get_hw_id(char *buf, int buf_len);
 int etc_get_device_id(char *buf, int buf_len);
 enum etc_device_mode etc_get_device_mode(void);
 enum etc_power_mode_e etc_get_power_mode(void);

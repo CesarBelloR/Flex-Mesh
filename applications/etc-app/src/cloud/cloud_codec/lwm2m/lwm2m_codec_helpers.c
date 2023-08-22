@@ -361,6 +361,12 @@ int lwm2m_codec_helpers_setup_resources(void)
 		return err;
 	}
 
+	err = lwm2m_set_opaque(&LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_DATA),
+			       NULL, 0);
+	if (err) {
+		return err;
+	}
+
 	return 0;
 }
 
