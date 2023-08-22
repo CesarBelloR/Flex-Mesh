@@ -365,7 +365,13 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 	int err, len;
 	char hw_id_buf[ETC_SETTINGS_DEVICE_ID_LEN + 1];
 
+#if defined(CONFIG_LWM2M_INTEGRATION_ENDPOINT_HWINFO)
+	etc_get_hw_id(hw_id_buf, sizeof(hw_id_buf));
+#elif defined(CONFIG_LWM2M_INTEGRATION_ENDPOINT_SERIALNUMBER)
 	etc_get_device_id(hw_id_buf, sizeof(hw_id_buf));
+#else
+#error "Endpoint type not defined"
+#endif
 
 	strncpy(client_id_buf, hw_id_buf, sizeof(client_id_buf) - 1);
 

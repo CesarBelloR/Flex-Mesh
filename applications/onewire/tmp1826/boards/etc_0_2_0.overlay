@@ -1,0 +1,13 @@
+&i2c0 {
+	w1: w1@18 {
+		compatible = "maxim,ds2484";
+		reg = <0x18>;
+
+		tmp1826 {
+			compatible = "ti,tmp1826";
+			family-code = <0x26>;
+			resolution = <12>;
+			status = "okay";
+		};
+	};
+};

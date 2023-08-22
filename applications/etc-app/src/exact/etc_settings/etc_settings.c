@@ -68,10 +68,8 @@ int etc_get_hw_version(char *buf, int buf_len)
 {
 	int copy_size;
 
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	copy_size = ETC_SETTING_HW_VER_LEN < buf_len ? ETC_SETTING_HW_VER_LEN : buf_len;
-	memcpy(buf, saved_hw_version, copy_size);
-	k_mutex_unlock(&setting_mutex);
+	copy_size = sizeof(CONFIG_BOARD_VERSION) < buf_len ? sizeof(CONFIG_BOARD_VERSION) : buf_len;
+	memcpy(buf, CONFIG_BOARD_VERSION, copy_size);
 	return copy_size;
 }
 
@@ -79,14 +77,12 @@ int etc_get_fw_version(char *buf, int buf_len)
 {
 	int copy_size;
 
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	copy_size = ETC_SETTING_FW_VER_LEN < buf_len ? ETC_SETTING_FW_VER_LEN : buf_len;
-	memcpy(buf, saved_fw_version, copy_size);
-	k_mutex_unlock(&setting_mutex);
+	copy_size = sizeof(APP_VERSION_STR) < buf_len ? sizeof(APP_VERSION_STR) : buf_len;
+	memcpy(buf, APP_VERSION_STR, copy_size);
 	return copy_size;
 }
 
-static int etc_get_device_from_hwinfo(char *buf, int buf_len) 
+int etc_get_hw_id(char *buf, int buf_len) 
 {
 	uint8_t dev_id[16];
 	ssize_t length = hwinfo_get_device_id(dev_id, sizeof(dev_id));
@@ -107,7 +103,7 @@ int etc_get_device_id(char *buf, int buf_len)
 {
 	int copy_size;
 	if (saved_serial_number_type == ETC_SERIAL_TYPE_HW_INFO) {
-		copy_size = etc_get_device_from_hwinfo(buf, buf_len);
+		copy_size = etc_get_hw_id(buf, buf_len);
 	} else {
 		k_mutex_lock(&setting_mutex, K_FOREVER);
 		copy_size = ETC_SETTINGS_DEVICE_ID_LEN < buf_len ? ETC_SETTINGS_DEVICE_ID_LEN : buf_len;
@@ -626,12 +622,12 @@ uint16_t etc_get_alarm_threshold(void)
 
 static int cmd_info(const struct shell *shell, size_t argc, char **argv)
 {
-	shell_print(shell, "Hardware: %s", saved_hw_version);
-	shell_print(shell, "Firmware: %s", saved_fw_version);
-	shell_print(shell, "Device ID EXACT%s: %s", saved_serial_number_type == ETC_SERIAL_TYPE_EXACT_INFO 
+	shell_print(shell, "Hardware: %s", CONFIG_BOARD_VERSION);
+	shell_print(shell, "Firmware: %s", APP_VERSION_STR);
+	shell_print(shell, "Serial Number%s: %s", saved_serial_number_type == ETC_SERIAL_TYPE_EXACT_INFO 
 		? "[*] " : "", saved_device_id);
-	int rc = etc_get_device_from_hwinfo(tmp_saved_value, sizeof(tmp_saved_value));
-	shell_print(shell, "Device ID HW%s: %s", saved_serial_number_type == ETC_SERIAL_TYPE_HW_INFO 
+	int rc = etc_get_hw_id(tmp_saved_value, sizeof(tmp_saved_value));
+	shell_print(shell, "HW ID%s: %s", saved_serial_number_type == ETC_SERIAL_TYPE_HW_INFO 
 		? "[*] " : "", tmp_saved_value);
 	return 0;
 }
@@ -915,8 +911,10 @@ static int cmd_get_alarm_threshold(const struct shell *shell, size_t argc, char 
 /* Creating subcommands (level 1 command) array for command "demo". */
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_settings, SHELL_CMD(info, NULL, "Get ETC settings.", cmd_info),
+#if 0
 	SHELL_CMD(hardware, NULL, "Set hardware version", cmd_set_hardware_version),
 	SHELL_CMD(firmware, NULL, "Set firmware version", cmd_set_firmware_version),
+#endif
 	SHELL_CMD(set_serial_type, NULL, "Set serial number type", cmd_set_serial_type),
 	SHELL_CMD(set_device_id, NULL, "Set device ID", cmd_set_device_id),
 	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),

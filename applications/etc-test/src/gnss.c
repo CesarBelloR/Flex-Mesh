@@ -8,6 +8,7 @@
 #include <zephyr/shell/shell_uart.h>
 #include <zephyr/drivers/uart.h>
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
 static const struct device *uart0_dev = DEVICE_DT_GET(DT_NODELABEL(uart0));
 
 K_MSGQ_DEFINE(uart0_msgq, 128, 10, 4);
@@ -69,6 +70,7 @@ void gnss_init()
 {
 	const struct shell *shell = shell_backend_uart_get_ptr();
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
 	if (!device_is_ready(uart0_dev))
 	{
 		printk("UART device not found!");
@@ -84,6 +86,8 @@ void gnss_init()
 	{
 		shell_fprintf(shell, SHELL_NORMAL, "%s", tx_buf);
 	}
+#endif
 }
 
 K_THREAD_DEFINE(gnss, 2048, gnss_init, NULL, NULL, NULL, 6, 0, 0);
+#endif

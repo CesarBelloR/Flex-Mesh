@@ -60,16 +60,10 @@ pip3 install -r {ROOT}\bootloader\mcuboot\scripts\requirements.txt
         ```
 
 * Step 4: Build `etc-app` firmware at `applications\etc-app` folder
-    * Build with AWS IoT support with logging over RTT
-        ```
-        cd {ROOT}
-        west build -b etc -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf aws-overlay.conf"
-        ```
-
     * Build with LwM2M support with logging over RTT
         ```
         cd {ROOT}
-        west build -b etc -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf lwm2m-overlay.conf"
+        west build -b etc@0.3.0 -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf overlay-1nce.conf overlay-memfault.conf debug.conf"
         ```
 
 <a name="Flash"></a>

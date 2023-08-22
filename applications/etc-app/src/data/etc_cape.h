@@ -43,11 +43,13 @@ void etc_cape_decrypt(char *source, char *destination, uint16_t length);
  *
  * @param source to encrypt data
  * @param destination to store encrypted data.
- * @param length of decrypted data.
+ * @param source_length length of source data to encrypt.
+ * @param destination_length length of encrypted data. (always more than 1 byte source_length)
  * @param iv
  * @retval None
  */
-void etc_cape_encrypt( char *source, char *destination, uint16_t length, uint8_t iv);
+void etc_cape_encrypt( char *source, char *destination, uint16_t source_length, 
+	uint16_t destination_length, uint8_t iv);
 
 /** @brief Set key for encrypt/decrypt data
  *
