@@ -9,7 +9,10 @@
 extern "C" {
 #endif
 
-#define SENSOR_NTC_NO_CONNECTED -273.150
+/* Temperature value when no probe */
+#define SENSOR_TEMP_NO_CONNECTED -273.150
+/* Humid value when no probe */
+#define SENSOR_HUMID_NO_CONNECTED -1.0
 /* Minimum sensor temperature that is a valid reading. */
 #define SENSOR_TEMP_C_MIN	-40.0f
 /* Maximum sensor temperature that is a valid reading. */

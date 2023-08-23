@@ -31,6 +31,9 @@ const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
 const struct device *const ambient_i2c_dev = DEVICE_DT_GET_ANY(ti_tmp1075);
 #endif
 
+// Get any one sht31 in current bus. If NULL, SHT31 is not ready 
+const struct device *const sht31_i2c_dev = DEVICE_DT_GET_ANY(sensirion_sht31);
+
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 static const struct gpio_dt_spec sense_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
@@ -44,6 +47,8 @@ static const struct gpio_dt_spec vsen_en_dt =
 
 static enum sensor_type list_sensor_type[SENSOR_INPUT_IN4 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN4 + 1];
+static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
+static float list_sensor_digital_humid[SENSOR_INPUT_IN4 + 1];
 static int sensor_ambient_raw_adc = 0;
 static int sensor_battery_raw_adc = 0;
 
@@ -157,7 +162,46 @@ static void etc_sensor_run_detection(void) {
 #endif
 }
 
-static void etc_sensor_run_sample(void) {
+static void etc_sensor_run_digital_sample(void) {
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		if (list_sensor_type[i] == SENSOR_TYPE_DIGITAL) {
+			list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
+			list_sensor_digital_humid[i] = SENSOR_HUMID_NO_CONNECTED;
+			etc_sensor_adc_switch_channel(i);
+
+			k_msleep(50);
+			if (!device_is_ready(sht31_i2c_dev)) {
+				LOG_ERR("SHT31 is not ready in I2C bus");
+				continue;
+			}
+
+			/* Reset the bus */
+			sensor_attr_set(sht31_i2c_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_CONFIGURATION, NULL);
+			struct sensor_value temp, hum;
+			int rc = sensor_sample_fetch(sht31_i2c_dev);
+			if (rc) {
+				LOG_ERR("Failed to fetch sensor SHT31 (err %d)", rc);
+				continue;
+			}
+
+			rc = sensor_channel_get(sht31_i2c_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
+			if (rc) {
+				LOG_ERR("Failed to get temperature sensor SHT31 (err %d)", rc);
+			} else {
+				list_sensor_digital_temp[i] = (float)sensor_value_to_double(&temp);
+			}
+
+			rc = sensor_channel_get(sht31_i2c_dev, SENSOR_CHAN_HUMIDITY, &hum);
+			if (rc) {
+				LOG_ERR("Failed to get humidity sensor SHT31 (err %d)", rc);
+			} else {
+				list_sensor_digital_humid[i] = (float)sensor_value_to_double(&hum);
+			}
+		}
+	}
+}
+
+static void etc_sensor_run_analog_sample(void) {
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG) {
 			etc_sensor_adc_switch_channel(i);
@@ -169,13 +213,14 @@ static void etc_sensor_run_sample(void) {
 	}
 }
 
+
 #if defined(CONFIG_ETC_NTC_TABLE)
 static float etc_sensor_ntc_converter(const float table[], int table_length, int offset , 
 	int raw_adc, int max_adc) {
  	float input = ((float)max_adc / (float)raw_adc) - 1;
  	input = (float) SENSOR_NTC_NOMINAL_RESISTANCE / input;
  	input = input / 1000.0;
- 	float temp_value = SENSOR_NTC_NO_CONNECTED;
+ 	float temp_value = SENSOR_TEMP_NO_CONNECTED;
  	float tmp;
  	for (int i = 0; i < table_length - 1; i++) {
 		if (input <= table[i] && input >= table[i + 1]) {
@@ -233,22 +278,23 @@ float etc_sensor_get_ambient_temp(void) {
 	int rc = sensor_sample_fetch(ambient_i2c_dev);
 	if (rc) {
 		LOG_ERR("Failed to sample the sensor (err %d), rc");
-		return SENSOR_NTC_NO_CONNECTED;
+		return SENSOR_TEMP_NO_CONNECTED;
 	}
 	
 	struct sensor_value temp_value;
 	rc = sensor_channel_get(ambient_i2c_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp_value);
 	if (rc) {
 		LOG_ERR("Faied to sensor_channel_get (err %d)", rc);
-		return SENSOR_NTC_NO_CONNECTED;
+		return SENSOR_TEMP_NO_CONNECTED;
 	}
 
 	return (float)sensor_value_to_double(&temp_value);
 #endif
-	return SENSOR_NTC_NO_CONNECTED;
+	return SENSOR_TEMP_NO_CONNECTED;
 }
 
 float etc_sensor_get_probe_temp(enum sensor_input input) {
+	__ASSERT(input >= 0 && input <= 3, "invalid channel number");
 	if (list_sensor_type[input] == SENSOR_TYPE_ANALOG) {
 		#if defined(CONFIG_ETC_NTC_TABLE)
 				return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, 
@@ -260,11 +306,18 @@ float etc_sensor_get_probe_temp(enum sensor_input input) {
 					adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
 		#endif
 	} else if (list_sensor_type[input] == SENSOR_TYPE_DIGITAL) {
-		return 0.0;
+		return list_sensor_digital_temp[input];
 	} else {
 		/* No action required */
 	}
-	return SENSOR_NTC_NO_CONNECTED;
+	return SENSOR_TEMP_NO_CONNECTED;
+}
+
+float etc_sensor_get_probe_humid(enum sensor_input input) {
+	if (list_sensor_type[input] == SENSOR_TYPE_DIGITAL) {
+		return list_sensor_digital_humid[input];
+	}
+	return 0.0;
 }
 
 uint16_t etc_sensor_get_battery(void) {
@@ -282,8 +335,15 @@ void etc_sensor_run_acquistion(void) {
 	sensor_ambient_raw_adc = adc_get_channel(ETC_ADC_CHANNEL_AMB);
 	/* Run sample for battery */
 	sensor_battery_raw_adc = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
-	/* Run sample sensor for all ports */
-	etc_sensor_run_sample();
+	/* Run sample sensor for all ports - analog part*/
+	etc_sensor_run_analog_sample();
+	/* Run sample sensor for all ports - digital part */
+	etc_sensor_run_digital_sample();
 	/* Disable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_disable();
+}
+
+enum sensor_type etc_sensor_get_probe_type(enum sensor_input input) {
+	__ASSERT(input >= 0 && input <= 3, "invalid channel number");
+	return list_sensor_type[input];
 }

@@ -13,7 +13,9 @@
 void etc_sensor_init(void);
 float etc_sensor_get_ambient_temp(void);
 float etc_sensor_get_probe_temp(enum sensor_input input);
+float etc_sensor_get_probe_humid(enum sensor_input input);
 uint16_t etc_sensor_get_battery(void);
 void etc_sensor_run_acquistion(void);
+enum sensor_type etc_sensor_get_probe_type(enum sensor_input input);
 
 #endif /*  ETC_SENSOR_H_ */
