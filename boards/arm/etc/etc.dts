@@ -105,7 +105,7 @@
 /* A7 = P0.31 = AIN7 - ADC_AMB */ 
 /* A3 = P0.5  = AIN3 - ADC_BATT*/
 /* A2 = P0.4 = AIN2 - ADC_TH*/
-/* A2 = P0.29 = AIN5 - HW_VER*/
+/* A5 = P0.29 = AIN5 - HW_VER*/
 / {
 	zephyr,user {
 		/* adjust channel number according to pinmux in board.dts */

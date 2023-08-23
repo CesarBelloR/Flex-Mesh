@@ -14,6 +14,10 @@ extern "C" {
 #define SENSOR_TEMP_C_MIN	-40.0f
 /* Maximum sensor temperature that is a valid reading. */
 #define SENSOR_TEMP_C_MAX	120.0f
+/* No probe connected in DVT2 - etc@0.3.0 */
+#define SENSOR_ADC_NO_CONNECTED 4090
+/* One-wire probe connected in DVT2 - etc@0.3.0 */
+#define SENSOR_ADC_ONE_WIRE_CONNECTED 10
 
 /** @brief Sensor event types submitted by the Sensor module. */
 enum sensor_event_type {
@@ -32,6 +36,13 @@ enum sensor_input {
 	SENSOR_INPUT_IN4,
 	SENSOR_INPUT_AMBIENT,
 	SENSOR_INPUT_MAX
+};
+
+enum sensor_type {
+	SENSOR_TYPE_UNDEF = 0,
+	SENSOR_TYPE_ANALOG,
+	SENSOR_TYPE_DIGITAL,
+	SENSOR_TYPE_MAX,
 };
 
 #define SENSOR_EVENT_NUM_DEV_MAX SENSOR_INPUT_MAX

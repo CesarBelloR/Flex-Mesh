@@ -14,6 +14,10 @@ LOG_MODULE_REGISTER(etc_sensor, CONFIG_ETC_SENSOR_LOG_LEVEL);
 /* Sensor Analog constant information */
 #define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
 
+/* Battery constant information */
+const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
+const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
+
 #if defined(CONFIG_ETC_NTC_TABLE)
 #include "etc_ntc_table.h"
 #else
@@ -26,6 +30,144 @@ LOG_MODULE_REGISTER(etc_sensor, CONFIG_ETC_SENSOR_LOG_LEVEL);
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 const struct device *const ambient_i2c_dev = DEVICE_DT_GET_ANY(ti_tmp1075);
 #endif
+
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
+static const struct gpio_dt_spec sense_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
+#endif
+static const struct gpio_dt_spec s0_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
+static const struct gpio_dt_spec s1_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
+static const struct gpio_dt_spec vsen_en_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
+
+static enum sensor_type list_sensor_type[SENSOR_INPUT_IN4 + 1];
+static int list_sensor_raw_adc[SENSOR_INPUT_IN4 + 1];
+static int sensor_ambient_raw_adc = 0;
+static int sensor_battery_raw_adc = 0;
+
+/* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
+inline static int8_t remap_th_channel(int8_t channel)
+{
+	__ASSERT(channel >= 0 && channel <= 3, "invalid channel number");
+
+#if !defined(CONFIG_BOARD_ETC_0_3_0)
+	switch (channel) {
+	case 0:
+		return 3;
+	case 1:
+		return 2;
+	case 2:
+		return 0;
+	case 3:
+		return 1;
+	default:
+		return 0;
+	}
+#else
+	switch (channel) {
+	case 0:
+		return 1;
+	case 1:
+		return 0;
+	case 2:
+		return 3;
+	case 3:
+		return 2;
+	default:
+		return 0;
+	}
+#endif
+}
+
+static void etc_sensor_adc_switch_channel(int8_t channel) 
+{
+	channel = remap_th_channel(channel);
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
+	gpio_pin_set_dt(&sense_dt, 0U);
+#endif
+	gpio_pin_set_dt(&s0_dt, channel & 0x01);
+	gpio_pin_set_dt(&s1_dt, (channel >> 1) & 0x01);
+}
+
+static void etc_sensor_adc_hw_init(void) 
+{
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
+	if (!device_is_ready(sense_dt.port)) {
+		return;
+	}
+#endif
+	if (!device_is_ready(s0_dt.port)) {
+		return;
+	}
+	if (!device_is_ready(s1_dt.port)) {
+		return;
+	}
+	if (!device_is_ready(vsen_en_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_INACTIVE);
+
+	adc_init();
+}
+
+static void etc_sensor_gpios_enable(void)
+{
+	gpio_pin_set_dt(&vsen_en_dt, 1U);
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
+	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
+#endif
+	/* Note: pin s0 is configured by watchdog module if s0/wdt are shared */
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
+#endif
+	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
+}
+
+static void etc_sensor_gpios_disable(void)
+{
+	gpio_pin_set_dt(&vsen_en_dt, 0U);
+#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
+	gpio_pin_configure_dt(&sense_dt, GPIO_DISCONNECTED);
+#endif
+	/* Note: pin s0 is configured by watchdog module if s0/wdt are shared */
+#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	gpio_pin_configure_dt(&s0_dt, GPIO_DISCONNECTED);
+#else
+	gpio_pin_set_dt(&s0_dt, 0);
+#endif
+	gpio_pin_configure_dt(&s1_dt, GPIO_DISCONNECTED);
+}
+
+static void etc_sensor_run_detection(void) {
+#if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		etc_sensor_adc_switch_channel(i);
+		k_msleep(50);
+		int raw_adc = adc_get_channel(ETC_ADC_CHANNEL_SENSOR);
+		if (raw_adc >= SENSOR_ADC_NO_CONNECTED) {
+			list_sensor_type[i] = SENSOR_TYPE_UNDEF;
+		} else if (raw_adc <= SENSOR_ADC_ONE_WIRE_CONNECTED) {
+			list_sensor_type[i] = SENSOR_TYPE_DIGITAL;
+		} else {
+			list_sensor_type[i] = SENSOR_TYPE_ANALOG;
+		}
+	}
+#endif
+}
+
+static void etc_sensor_run_sample(void) {
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG) {
+			etc_sensor_adc_switch_channel(i);
+			k_msleep(50);
+			list_sensor_raw_adc[i] = adc_get_channel(ETC_ADC_CHANNEL_SENSOR);
+		} else {
+			list_sensor_raw_adc[i] = -1;
+		}
+	}
+}
 
 #if defined(CONFIG_ETC_NTC_TABLE)
 static float etc_sensor_ntc_converter(const float table[], int table_length, int offset , 
@@ -66,15 +208,24 @@ void etc_sensor_init(void) {
 	__ASSERT(ambient_i2c_dev != NULL, "Failed to get device binding");
 	__ASSERT(device_is_ready(ambient_i2c_dev), "Device %s is not ready", ambient_i2c_dev->name);
 #endif
+
+	etc_sensor_adc_hw_init();
+	for (int i = 0; i < SENSOR_INPUT_IN4 + 1; i++) {
+#if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
+		list_sensor_type[i] = SENSOR_TYPE_UNDEF;
+#else
+		list_sensor_type[i] = SENSOR_TYPE_ANALOG;
+#endif
+	}
 }
 
 float etc_sensor_get_ambient_temp(void) {
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_NTC_SENSOR)
 #if defined(CONFIG_ETC_NTC_TABLE)
 	return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, 
-		adc_get_channel(ETC_ADC_CHANNEL_AMB), adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
+		sensor_ambient_raw_adc, adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
 #else
-	return etc_sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_AMB),
+	return etc_sensor_ntc_converter(sensor_ambient_raw_adc,
 		(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
 		adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
 #endif
@@ -97,14 +248,42 @@ float etc_sensor_get_ambient_temp(void) {
 	return SENSOR_NTC_NO_CONNECTED;
 }
 
-float etc_sensor_get_probe_temp(void) {
-	#if defined(CONFIG_ETC_NTC_TABLE)
-			return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, 
-				table_offset, adc_get_channel(ETC_ADC_CHANNEL_SENSOR), 
-				adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
-	#else
-			return etc_sensor_ntc_converter(adc_get_channel(ETC_ADC_CHANNEL_SENSOR),
-				(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) / 1000.0f,
-				adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
-	#endif
+float etc_sensor_get_probe_temp(enum sensor_input input) {
+	if (list_sensor_type[input] == SENSOR_TYPE_ANALOG) {
+		#if defined(CONFIG_ETC_NTC_TABLE)
+				return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, 
+					table_offset, list_sensor_raw_adc[input], 
+					adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
+		#else
+				return etc_sensor_ntc_converter(list_sensor_raw_adc[input],
+					(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) / 1000.0f,
+					adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
+		#endif
+	} else if (list_sensor_type[input] == SENSOR_TYPE_DIGITAL) {
+		return 0.0;
+	} else {
+		/* No action required */
+	}
+	return SENSOR_NTC_NO_CONNECTED;
+}
+
+uint16_t etc_sensor_get_battery(void) {
+	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &sensor_battery_raw_adc);
+	int adc_mv_battery = sensor_battery_raw_adc * (sFullOhms / sOutputOhms);
+	return adc_mv_battery;
+}
+
+void etc_sensor_run_acquistion(void) {
+	/* Enable the GPIOs SEL0/SEL1 */
+	etc_sensor_gpios_enable();
+	/* Run detection sensor */
+	etc_sensor_run_detection();
+	/* Run sample for ambient ADC */
+	sensor_ambient_raw_adc = adc_get_channel(ETC_ADC_CHANNEL_AMB);
+	/* Run sample for battery */
+	sensor_battery_raw_adc = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
+	/* Run sample sensor for all ports */
+	etc_sensor_run_sample();
+	/* Disable the GPIOs SEL0/SEL1 */
+	etc_sensor_gpios_disable();
 }

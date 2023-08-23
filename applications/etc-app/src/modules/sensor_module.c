@@ -51,10 +51,6 @@ static struct sensor_data static_sensor_data;
 
 #define SENSOR_HANDLER_MAX_WAIT_S 10
 
-/* Battery constant information */
-const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
-const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
-
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
 
@@ -66,92 +62,6 @@ static struct module_data self = {
 	.msg_q = &msgq_sensor,
 	.supports_shutdown = true,
 };
-
-static const struct gpio_dt_spec vsen_en_dt = 
-		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
-#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
-static const struct gpio_dt_spec sense_dt = 
-		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
-#endif
-#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
-static const struct gpio_dt_spec onewire_slpz_dt = 
-		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(onewire_slpz), control_gpios, 0);
-#endif
-static const struct gpio_dt_spec s0_dt = 
-		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
-static const struct gpio_dt_spec s1_dt = 
-		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
-
-/* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
-inline static int8_t remap_th_channel(int8_t channel)
-{
-	__ASSERT(channel >= 0 && channel <= 3, "invalid channel number");
-
-#if !defined(CONFIG_BOARD_ETC_0_3_0)
-	switch (channel) {
-	case 0:
-		return 3;
-	case 1:
-		return 2;
-	case 2:
-		return 0;
-	case 3:
-		return 1;
-	default:
-		return 0;
-	}
-#else
-	switch (channel) {
-	case 0:
-		return 1;
-	case 1:
-		return 0;
-	case 2:
-		return 3;
-	case 3:
-		return 2;
-	default:
-		return 0;
-	}
-#endif
-}
-
-static void sensor_adc_switch_channel(int8_t channel) 
-{
-	channel = remap_th_channel(channel);
-#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
-	gpio_pin_set_dt(&sense_dt, 0U);
-#endif
-	gpio_pin_set_dt(&s0_dt, channel & 0x01);
-	gpio_pin_set_dt(&s1_dt, (channel >> 1) & 0x01);
-}
-
-static void sensor_adc_hw_init(void) 
-{
-#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
-	if (!device_is_ready(sense_dt.port)) {
-		return;
-	}
-#endif
-	if (!device_is_ready(s0_dt.port)) {
-		return;
-	}
-	if (!device_is_ready(s1_dt.port)) {
-		return;
-	}
-	if (!device_is_ready(vsen_en_dt.port)) {
-		return;
-	}
-#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
-	if (!device_is_ready(onewire_slpz_dt.port)) {
-		return;
-	}
-
-	// Set the SLPZ to LOW -> Sleep mode
-	gpio_pin_configure_dt(&onewire_slpz_dt, GPIO_OUTPUT_INACTIVE);
-#endif
-	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_INACTIVE);
-}
 
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type new_state)
@@ -246,37 +156,7 @@ static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 
 static int setup(void)
 {
-	adc_init();
-	sensor_adc_hw_init();
 	return 0;
-}
-
-static void sensor_gpios_enable(void)
-{
-	gpio_pin_set_dt(&vsen_en_dt, 1U);
-#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
-	gpio_pin_configure_dt(&sense_dt, GPIO_OUTPUT_INACTIVE);
-#endif
-	/* Note: pin s0 is configured by watchdog module if s0/wdt are shared */
-#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT_INACTIVE);
-#endif
-	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
-}
-
-static void sensor_gpios_disable(void)
-{
-	gpio_pin_set_dt(&vsen_en_dt, 0U);
-#if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
-	gpio_pin_configure_dt(&sense_dt, GPIO_DISCONNECTED);
-#endif
-	/* Note: pin s0 is configured by watchdog module if s0/wdt are shared */
-#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_configure_dt(&s0_dt, GPIO_DISCONNECTED);
-#else
-	gpio_pin_set_dt(&s0_dt, 0);
-#endif
-	gpio_pin_configure_dt(&s1_dt, GPIO_DISCONNECTED);
 }
 
 static int sensor_poll_handler(bool is_test) {
@@ -290,11 +170,10 @@ static int sensor_poll_handler(bool is_test) {
 		return -EAGAIN;
 	}
 #endif
-	sensor_gpios_enable();
-
-	k_msleep(100);
-
 	sensor_is_processing = true;
+
+	etc_sensor_run_acquistion();
+	
 	struct sensor_data* data = &static_sensor_data;
 	int utc_timestamp = date_time_now_second();
 	data->timestamp = utc_timestamp == -1 ? 0 : utc_timestamp;
@@ -304,9 +183,7 @@ static int sensor_poll_handler(bool is_test) {
 		LOG_DBG("Ambient temp %2.2f", data->temperature[SENSOR_INPUT_AMBIENT]);
 	}
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
-		sensor_adc_switch_channel(i);
-		k_msleep(50);
-		data->temperature[i] = etc_sensor_get_probe_temp();
+		data->temperature[i] = etc_sensor_get_probe_temp(i);
 		if (data_codec_compare_temperature_is_valid(data->temperature[i])) {
 			LOG_DBG("Channel %d temp %f", i, data->temperature[i]);
 		} else {
@@ -314,14 +191,10 @@ static int sensor_poll_handler(bool is_test) {
 		}
 	}
 
-	int raw_adc_battery = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
-	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_adc_battery);
-	int adc_mv_battery = raw_adc_battery * (sFullOhms / sOutputOhms);
-	data->battery_mV = adc_mv_battery;
+	data->battery_mV = etc_sensor_get_battery();
 	sensor_module_send_sensor(data, is_test);
 	sensor_is_processing = false;
-	
-	sensor_gpios_disable();
+
 #if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	watchdog_sens_sel0_wdt_sem_give();
 #endif
