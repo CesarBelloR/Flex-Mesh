@@ -108,6 +108,7 @@ int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data)
 		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, HARDWARE_VERSION_RID),
 		LWM2M_OBJ(ETC_CFG_OBJECT_ID),
 		LWM2M_OBJ(ETC_TEMP_OBJECT_ID),
+		LWM2M_OBJ(ETC_HUMID_OBJECT_ID),
 	};
 	int err;
 

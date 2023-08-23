@@ -178,20 +178,21 @@ static int sensor_poll_handler(bool is_test) {
 	struct sensor_data* data = &static_sensor_data;
 	int utc_timestamp = date_time_now_second();
 	data->timestamp = utc_timestamp == -1 ? 0 : utc_timestamp;
-	data->temperature[SENSOR_INPUT_AMBIENT] = etc_sensor_get_ambient_temp();
+	data->sensor[SENSOR_INPUT_AMBIENT] = etc_sensor_get_ambient_temp();
 
-	if (data_codec_compare_temperature_is_valid(data->temperature[SENSOR_INPUT_AMBIENT])) {
-		LOG_DBG("Ambient temp %2.2f", data->temperature[SENSOR_INPUT_AMBIENT]);
+	if (data_codec_compare_temperature_is_valid(data->sensor[SENSOR_INPUT_AMBIENT])) {
+		LOG_DBG("Ambient temp %2.2f", data->sensor[SENSOR_INPUT_AMBIENT]);
 	}
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
-		data->temperature[i] = etc_sensor_get_probe_temp(i);
-		if (data_codec_compare_temperature_is_valid(data->temperature[i])) {
-			LOG_DBG("Channel %d temp %f", i, data->temperature[i]);
+		data->sensor[i] = etc_sensor_get_probe_temp(i);
+		if (data_codec_compare_temperature_is_valid(data->sensor[i])) {
+			LOG_DBG("Channel %d temp %f", i, data->sensor[i]);
 		} else {
 			LOG_DBG("Channel %d isn't available", i);
 		}
 	}
 
+	data->sensor[SENSOR_INPUT_HUMID] = etc_sensor_get_probe_humid();
 	data->battery_mV = etc_sensor_get_battery();
 	sensor_module_send_sensor(data, is_test);
 	sensor_is_processing = false;

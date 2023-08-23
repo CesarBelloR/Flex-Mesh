@@ -1,0 +1,10 @@
+#ifndef ETC_HUMID_OBJ_48936_H__
+#define ETC_HUMID_OBJ_48936_H__
+
+#define ETC_HUMID_OBJECT_ID      48936
+
+#define ETC_HUMID_OBJ_R_TYPE	1
+#define ETC_HUMID_OBJ_R_PORT	2
+#define ETC_HUMID_OBJ_R_UID		3
+
+#endif // ETC_HUMID_OBJ_48936_H__

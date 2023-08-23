@@ -52,7 +52,7 @@ static const struct gpio_dt_spec vsen_en_dt =
 static enum sensor_type list_sensor_type[SENSOR_INPUT_IN4 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN4 + 1];
 static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
-static float list_sensor_digital_humid[SENSOR_INPUT_IN4 + 1];
+static float sensor_digital_humid;
 static int sensor_ambient_raw_adc = 0;
 static int sensor_battery_raw_adc = 0;
 
@@ -193,7 +193,7 @@ static void etc_sensor_run_digital_sample(void) {
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_DIGITAL) {
 			list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
-			list_sensor_digital_humid[i] = SENSOR_HUMID_NO_CONNECTED;
+			sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 			etc_sensor_adc_switch_channel(i);
 
 			k_msleep(50);
@@ -222,7 +222,7 @@ static void etc_sensor_run_digital_sample(void) {
 			if (rc) {
 				LOG_ERR("Failed to get humidity sensor SHT31 (err %d)", rc);
 			} else {
-				list_sensor_digital_humid[i] = (float)sensor_value_to_double(&hum);
+				sensor_digital_humid = (float)sensor_value_to_double(&hum);
 			}
 		}
 	}
@@ -341,11 +341,8 @@ float etc_sensor_get_probe_temp(enum sensor_input input) {
 	return SENSOR_TEMP_NO_CONNECTED;
 }
 
-float etc_sensor_get_probe_humid(enum sensor_input input) {
-	if (list_sensor_type[input] == SENSOR_TYPE_DIGITAL) {
-		return list_sensor_digital_humid[input];
-	}
-	return 0.0;
+float etc_sensor_get_probe_humid(void) {
+	return sensor_digital_humid;
 }
 
 uint16_t etc_sensor_get_battery(void) {
@@ -355,6 +352,7 @@ uint16_t etc_sensor_get_battery(void) {
 }
 
 void etc_sensor_run_acquistion(void) {
+	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	/* Enable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_enable();
 	/* Run detection sensor */

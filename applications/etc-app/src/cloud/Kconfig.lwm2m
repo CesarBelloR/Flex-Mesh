@@ -61,6 +61,13 @@ config LWM2M_INTEGRATION_MAX_TEMP_SENSOR_INSTANCE_COUNT
 	  This setting establishes the total count of EXACT Temperature
 	  Sensor instances available to the LWM2M client.
 
+config LWM2M_INTEGRATION_MAX_HUMID_SENSOR_INSTANCE_COUNT
+	int "Maximum # of EXACT Humidity Sensor object instances"
+	default 1
+	help
+	  This setting establishes the total count of EXACT Humidity
+	  Sensor instances available to the LWM2M client.
+
 
 config LWM2M_INTEGRATION_FIRMWARE_UPDATE_OBJ_SUPPORT
 	bool "Firmware Update object support"

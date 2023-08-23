@@ -34,14 +34,14 @@ static double temp_min_range_val = TEMP_MIN_RANGE_VALUE;
 static double temp_max_range_val = TEMP_MAX_RANGE_VALUE;
 static double humid_min_range_val = HUMID_MIN_RANGE_VALUE;
 static double humid_max_range_val = HUMID_MAX_RANGE_VALUE;
-static time_t temperature_ts[SENSOR_INPUT_MAX];
+static time_t temperature_ts[SENSOR_INPUT_AMBIENT + 1];
 static time_t humidity_ts;
 
 static int lwm2m_codec_helpers_setup_sensor_obj_values(void)
 {
 	int err;
 	
-	for (int i = 0; i < SENSOR_INPUT_MAX; i++)
+	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++)
 	{
 		/* Temperature object. */
 		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, i,
@@ -69,14 +69,14 @@ static int lwm2m_codec_helpers_setup_sensor_obj_values(void)
 	}
 
 	/* Humidity object. */
-	err = lwm2m_set_f64(&LWM2M_OBJ(IPSO_OBJECT_HUMIDITY_SENSOR_ID, 0,
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0,
 				       MIN_RANGE_VALUE_RID),
 			    humid_min_range_val);
 	if (err) {
 		return err;
 	}
 
-	err = lwm2m_set_f64(&LWM2M_OBJ(IPSO_OBJECT_HUMIDITY_SENSOR_ID, 0,
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0,
 				       MAX_RANGE_VALUE_RID),
 			    humid_max_range_val);
 	if (err) {
@@ -139,7 +139,7 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 {
 	int err;
 
-	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
+	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
 		err = lwm2m_create_object_inst(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID,
 							  i));
 		if (err) {
@@ -148,7 +148,7 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 	}
 
 	err = lwm2m_create_object_inst(
-				&LWM2M_OBJ(IPSO_OBJECT_HUMIDITY_SENSOR_ID, 0));
+				&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0));
 	if (err) {
 		return err;
 	}
@@ -322,7 +322,7 @@ int lwm2m_codec_helpers_setup_resources(void)
 		return err;
 	}
 
-	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
+	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
 		err = lwm2m_set_res_buf(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 
 						   i, TIMESTAMP_RID),
 					&temperature_ts[i], sizeof(temperature_ts[i]),
@@ -339,7 +339,7 @@ int lwm2m_codec_helpers_setup_resources(void)
 		}
 	}
 
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(IPSO_OBJECT_HUMIDITY_SENSOR_ID, 
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 
 					0, TIMESTAMP_RID),
 			&humidity_ts, sizeof(humidity_ts),
 			sizeof(humidity_ts), LWM2M_RES_DATA_FLAG_RW);
@@ -347,7 +347,7 @@ int lwm2m_codec_helpers_setup_resources(void)
 		return err;
 	}
 
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(IPSO_OBJECT_HUMIDITY_SENSOR_ID, 0,
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0,
 					   SENSOR_UNITS_RID),
 				HUMID_UNIT, (uint16_t)strlen(HUMID_UNIT),
 				(uint16_t)strlen(HUMID_UNIT),
@@ -754,6 +754,18 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 	}
 	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, SENSOR_VALUE_RID),
 			    record->sensor[SENSOR_INPUT_AMBIENT]);
+	if (err) {
+		return err;
+	}
+
+	/* Set humidity and timestamp */
+	err = lwm2m_set_time(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, TIMESTAMP_RID),
+			(time_t)(record->timestamp));
+	if (err) {
+		return err;
+	}
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, SENSOR_VALUE_RID),
+			    record->sensor[SENSOR_INPUT_HUMID]);
 	if (err) {
 		return err;
 	}

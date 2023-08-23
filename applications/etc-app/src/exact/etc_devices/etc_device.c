@@ -221,10 +221,10 @@ int etc_device_write_record_sensor(struct sensor_data *sensor)
 	record.flag = 0;
 	record.timestamp = (uint32_t)sensor->timestamp;
 	for (uint8_t i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
-		record.sensor[i] = sensor->temperature[i];
+		record.sensor[i] = sensor->sensor[i];
 	}
 	LOG_HEXDUMP_DBG((uint8_t *)&record, sizeof(record), "SAVE");
-	record.sensor[SENSOR_EVENT_NUM_DEV_MAX] = 0.0;
+
 	return etc_device_write_record(&record);
 }
 

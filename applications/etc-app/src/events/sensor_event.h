@@ -38,6 +38,7 @@ enum sensor_input {
 	SENSOR_INPUT_IN3,
 	SENSOR_INPUT_IN4,
 	SENSOR_INPUT_AMBIENT,
+	SENSOR_INPUT_HUMID,
 	SENSOR_INPUT_MAX
 };
 
@@ -54,8 +55,8 @@ enum sensor_type {
 struct sensor_data {
 	/** Uptime when the data was sampled. */
 	int64_t timestamp;
-	/** Temperature in Celsius degrees. */
-	float temperature[SENSOR_EVENT_NUM_DEV_MAX];
+	/** 5 Temperature in Celsius degrees + 1 Humidity %*/
+	float sensor[SENSOR_EVENT_NUM_DEV_MAX];
 	/** Voltage of battery in mV */
 	uint16_t battery_mV;
 };
