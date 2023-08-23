@@ -38,6 +38,10 @@ const struct device *const sht31_i2c_dev = DEVICE_DT_GET_ANY(sensirion_sht31);
 static const struct gpio_dt_spec sense_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
 #endif
+#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+static const struct gpio_dt_spec onewire_slpz_dt = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(onewire_slpz), control_gpios, 0);
+#endif
 static const struct gpio_dt_spec s0_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
 static const struct gpio_dt_spec s1_dt = 
@@ -112,6 +116,14 @@ static void etc_sensor_adc_hw_init(void)
 	if (!device_is_ready(vsen_en_dt.port)) {
 		return;
 	}
+
+#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+	if (!device_is_ready(onewire_slpz_dt.port)) {
+		return;
+	}
+	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_ACTIVE);
+#endif
+
 	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_INACTIVE);
 
 	adc_init();
@@ -130,6 +142,13 @@ static void etc_sensor_gpios_enable(void)
 	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 }
 
+static void etc_sensor_gpios_one_wire_enable(void) 
+{
+#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+	gpio_pin_configure_dt(&onewire_slpz_dt, GPIO_OUTPUT_INACTIVE);
+#endif
+}
+
 static void etc_sensor_gpios_disable(void)
 {
 	gpio_pin_set_dt(&vsen_en_dt, 0U);
@@ -143,6 +162,13 @@ static void etc_sensor_gpios_disable(void)
 	gpio_pin_set_dt(&s0_dt, 0);
 #endif
 	gpio_pin_configure_dt(&s1_dt, GPIO_DISCONNECTED);
+}
+
+static void etc_sensor_gpios_one_wire_disable(void) 
+{
+#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+	gpio_pin_configure_dt(&onewire_slpz_dt, GPIO_OUTPUT_ACTIVE);
+#endif
 }
 
 static void etc_sensor_run_detection(void) {
@@ -163,6 +189,7 @@ static void etc_sensor_run_detection(void) {
 }
 
 static void etc_sensor_run_digital_sample(void) {
+	etc_sensor_gpios_one_wire_enable();
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_DIGITAL) {
 			list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
@@ -199,6 +226,7 @@ static void etc_sensor_run_digital_sample(void) {
 			}
 		}
 	}
+	etc_sensor_gpios_one_wire_disable();
 }
 
 static void etc_sensor_run_analog_sample(void) {
