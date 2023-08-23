@@ -190,10 +190,10 @@ static void etc_sensor_run_detection(void) {
 
 static void etc_sensor_run_digital_sample(void) {
 	etc_sensor_gpios_one_wire_enable();
+	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_DIGITAL) {
 			list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
-			sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 			etc_sensor_adc_switch_channel(i);
 
 			k_msleep(50);
@@ -218,6 +218,10 @@ static void etc_sensor_run_digital_sample(void) {
 				list_sensor_digital_temp[i] = (float)sensor_value_to_double(&temp);
 			}
 
+			if (sensor_digital_humid != SENSOR_HUMID_NO_CONNECTED) {
+				// Get only one humidity sensor.
+				continue;
+			}
 			rc = sensor_channel_get(sht31_i2c_dev, SENSOR_CHAN_HUMIDITY, &hum);
 			if (rc) {
 				LOG_ERR("Failed to get humidity sensor SHT31 (err %d)", rc);
