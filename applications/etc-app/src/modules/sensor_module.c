@@ -156,6 +156,7 @@ static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 
 static int setup(void)
 {
+	etc_sensor_init();
 	return 0;
 }
 
@@ -173,7 +174,7 @@ static int sensor_poll_handler(bool is_test) {
 	sensor_is_processing = true;
 
 	etc_sensor_run_acquistion();
-	
+
 	struct sensor_data* data = &static_sensor_data;
 	int utc_timestamp = date_time_now_second();
 	data->timestamp = utc_timestamp == -1 ? 0 : utc_timestamp;
