@@ -53,6 +53,7 @@ static enum sensor_type list_sensor_type[SENSOR_INPUT_IN4 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN4 + 1];
 static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
 static float sensor_digital_humid;
+static int8_t sensor_digital_humid_port_index;
 static int sensor_ambient_raw_adc = 0;
 static int sensor_battery_raw_adc = 0;
 
@@ -191,6 +192,7 @@ static void etc_sensor_run_detection(void) {
 static void etc_sensor_run_digital_sample(void) {
 	etc_sensor_gpios_one_wire_enable();
 	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
+	sensor_digital_humid_port_index = -1;
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_DIGITAL) {
 			list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
@@ -227,6 +229,7 @@ static void etc_sensor_run_digital_sample(void) {
 				LOG_ERR("Failed to get humidity sensor SHT31 (err %d)", rc);
 			} else {
 				sensor_digital_humid = (float)sensor_value_to_double(&hum);
+				sensor_digital_humid_port_index = i;
 			}
 		}
 	}
@@ -347,6 +350,10 @@ float etc_sensor_get_probe_temp(enum sensor_input input) {
 
 float etc_sensor_get_probe_humid(void) {
 	return sensor_digital_humid;
+}
+
+int8_t etc_sensor_get_probe_humid_index(void) {
+	return sensor_digital_humid_port_index;
 }
 
 uint16_t etc_sensor_get_battery(void) {
