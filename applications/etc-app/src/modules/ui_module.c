@@ -207,7 +207,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 /* Static module functions. */
 static void update_led_pattern(enum led_state pattern)
 {
-	BUILD_ASSERT(UI_TURN_OFF == LED_STATE_TURN_OFF, 
+	BUILD_ASSERT((uint8_t)UI_TURN_OFF == (uint8_t)LED_STATE_TURN_OFF, 
 		     "ui_led_pattern and led_state incompatible");
 	LOG_DBG("Update the LED pattern %d", pattern);
 	ui_led_set_pattern((enum ui_led_pattern)pattern);

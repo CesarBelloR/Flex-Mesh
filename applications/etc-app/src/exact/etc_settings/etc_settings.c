@@ -681,7 +681,7 @@ static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv
 
 		char *input = argv[1];
 		for (int i = 0; i < input_len; i++) {
-			if (!isdigit(input[i])) {
+			if (!isdigit((unsigned char)input[i])) {
 				shell_error(shell, "Invalid input, non-numeric characters detected");
 				return 0;
 			}

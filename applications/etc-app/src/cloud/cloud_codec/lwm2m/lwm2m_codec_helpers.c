@@ -17,7 +17,7 @@
 #include "app_version.h"
 #include "etc_util.h"
 #include "etc_settings.h"
-
+#include "etc_sensor.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lwm2m_codec_helpers, CONFIG_CLOUD_CODEC_LOG_LEVEL);
 
@@ -822,7 +822,7 @@ void lwm2m_codec_helpers_path_list_log(const struct lwm2m_obj_path path_list[],
 		if (path_list->level == 0) {
 			return;
 		}
-		lwm2m_path_log_buf(buf, &path_list[i]);
+		lwm2m_path_log_buf(buf, (struct lwm2m_obj_path*)&path_list[i]);
 		LOG_DBG("%s", buf);
 	}
 }

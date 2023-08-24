@@ -77,8 +77,10 @@ static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wd
  * Pin active: modem is in PSM (or off) 
  * Pin inactive: modem is on */
 static const struct gpio_dt_spec psm_ind_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_psm_ind_gpios);
+#if 0 // Uncomment when use
 static char psm_param_rat[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT;
 static char psm_param_rptau[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU;
+#endif 
 #endif
 
 static void quectel_bg95_set_connected(bool connected);
@@ -1555,6 +1557,7 @@ error:
 	return ret;
 }
 
+#if 0 // Uncomment when use
 static int set_cops_format(uint8_t format)
 {
 	char cmd[sizeof("AT+COPS=3,#")];
@@ -1568,6 +1571,7 @@ static int set_cops_format(uint8_t format)
 		MDM_CMD_TIMEOUT);
 	return ret;
 }
+#endif 
 
 static int get_operator_info(void)
 {

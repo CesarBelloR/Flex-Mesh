@@ -88,7 +88,7 @@ static struct update_data {
 void client_acknowledge(void);
 
 /* Initialized to value different than success (0) */
-static int modem_lib_init_result = -1;
+// static int modem_lib_init_result = -1;
 
 
 static int *target_image_type_buffer_get(uint16_t instance)
@@ -346,7 +346,6 @@ static int firmware_target_schedule_update(int obj_inst_id, int dfu_image_type)
 
 static void update_work_handler(struct k_work *work)
 {
-	uint8_t result;
 	int updated_instance;
 
 	if (update_data.type == APP) {

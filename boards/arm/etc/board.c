@@ -13,8 +13,7 @@ static int init(const struct device *dev)
 	if (!device_is_ready(vsen_en_dt.port)) {
 		return -EINVAL;
 	}
-	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_ACTIVE);
 	return 0;
 }
 
-// SYS_INIT(init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+SYS_INIT(init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

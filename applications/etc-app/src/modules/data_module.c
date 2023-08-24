@@ -575,6 +575,7 @@ static int cmd_relay_send(const struct shell *shell, size_t argc, char **argv)
 	data_event->data.relay_data.data = cbor_data;
 	data_event->data.relay_data.data_len = sizeof(cbor_data);
 	APP_EVENT_SUBMIT(data_event);
+	return 0;
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
