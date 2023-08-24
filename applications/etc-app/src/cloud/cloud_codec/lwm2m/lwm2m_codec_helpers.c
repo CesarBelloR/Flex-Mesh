@@ -770,6 +770,11 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 		return err;
 	}
 
+	err = lwm2m_set_s8(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0,
+					      ETC_HUMID_OBJ_R_PORT), etc_sensor_get_probe_humid_index());
+	if (err) {
+		return err;
+	}
 	/* Set external sensor temperature and timestamp */
 	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		int obj_inst_id = i + 1;
