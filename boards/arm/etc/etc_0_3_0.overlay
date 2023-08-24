@@ -4,7 +4,7 @@
 	board-control {
 		onewire_slpz: onewire-slpz {
 			compatible = "etc,output";
-			control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+			control-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
 			status = "okay";
 		};
 		hw_wdt: hw-wdt {
