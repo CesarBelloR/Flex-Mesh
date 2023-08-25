@@ -127,7 +127,7 @@ POSSIBILITY OF SUCH DAMAGE.
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>0..32</RangeEnumeration>
+				<RangeEnumeration>-1..32</RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[The physical port number that this sensor is connected to.
 A 0 value indicates that this is an internal sensor.]]></Description>

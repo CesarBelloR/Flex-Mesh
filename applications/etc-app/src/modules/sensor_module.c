@@ -193,7 +193,7 @@ static int sensor_poll_handler(bool is_test) {
 	}
 
 	data->sensor[SENSOR_INPUT_HUMID] = etc_sensor_get_probe_humid();
-	LOG_DBG("Humid %2.2f%%", data->sensor[SENSOR_INPUT_HUMID]);
+	LOG_DBG("Humid %2.2f%% at port %d", data->sensor[SENSOR_INPUT_HUMID], etc_sensor_get_probe_humid_index());
 	data->battery_mV = etc_sensor_get_battery();
 	sensor_module_send_sensor(data, is_test);
 	sensor_is_processing = false;

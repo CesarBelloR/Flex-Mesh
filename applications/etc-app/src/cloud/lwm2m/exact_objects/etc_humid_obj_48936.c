@@ -38,7 +38,7 @@ static double sensor_value[MAX_INSTANCE_COUNT];
 static double min_range_value[MAX_INSTANCE_COUNT];
 static double max_range_value[MAX_INSTANCE_COUNT];
 static uint8_t type[MAX_INSTANCE_COUNT];
-static uint8_t port[MAX_INSTANCE_COUNT];
+static int8_t port[MAX_INSTANCE_COUNT];
 static char uid[MAX_INSTANCE_COUNT][UID_STR_MAX_SIZE];
 
 static struct lwm2m_engine_obj etc_humid_sensor;
@@ -89,7 +89,7 @@ static struct lwm2m_engine_obj_inst *humid_sensor_create(uint16_t obj_inst_id)
 	min_range_value[index] = 0;
 	max_range_value[index] = 0;
 	type[index] = 0;
-	port[index] = 0;
+	port[index] = -1;
 	uid[index][0] = '\0';
 
 	(void)memset(res[index], 0,

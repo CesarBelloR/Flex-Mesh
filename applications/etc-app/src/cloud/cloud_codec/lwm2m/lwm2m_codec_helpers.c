@@ -83,6 +83,10 @@ static int lwm2m_codec_helpers_setup_sensor_obj_values(void)
 		return err;
 	}
 
+	/* Set default object port for humidity is -1 */
+	err = lwm2m_set_s8(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0,
+				ETC_HUMID_OBJ_R_PORT), -1);
+
 	return 0;
 }
 

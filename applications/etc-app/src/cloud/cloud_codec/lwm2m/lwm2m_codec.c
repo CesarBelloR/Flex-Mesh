@@ -131,6 +131,7 @@ int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
 			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0),
+			LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0),
 			LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID)
 		};
 

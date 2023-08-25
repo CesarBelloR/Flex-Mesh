@@ -356,6 +356,7 @@ int8_t etc_sensor_get_probe_humid_index(void) {
 	return sensor_digital_humid_port_index;
 }
 
+
 uint16_t etc_sensor_get_battery(void) {
 	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &sensor_battery_raw_adc);
 	int adc_mv_battery = sensor_battery_raw_adc * (sFullOhms / sOutputOhms);
@@ -374,6 +375,7 @@ void etc_sensor_run_acquistion(void) {
 	sensor_battery_raw_adc = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
 	/* Run sample sensor for all ports - analog part*/
 	etc_sensor_run_analog_sample();
+	LOG_INF("%d %d %d %d", list_sensor_raw_adc[0], list_sensor_raw_adc[1], list_sensor_raw_adc[2], list_sensor_raw_adc[3]);
 	/* Run sample sensor for all ports - digital part */
 	etc_sensor_run_digital_sample();
 	/* Disable the GPIOs SEL0/SEL1 */
