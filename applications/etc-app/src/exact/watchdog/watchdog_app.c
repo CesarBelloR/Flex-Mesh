@@ -39,7 +39,7 @@ struct k_sem sens_sel0_wdt_sem;
 static const struct gpio_dt_spec s0_watchdog_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel0), control_gpios, 0);
 #endif
 
-static watchdog_evt_handler_t app_evt_handler;
+static watchdog_evt_handler_t app_evt_handler = NULL;
 static struct k_work_delayable hw_wdt_work;
 
 /* Flag set when the library has been initialized and started. */
@@ -188,8 +188,8 @@ static int watchdog_enable(const struct wdt_config_storage *config,
 
 static void hw_wdt_feed(void)
 {
-	LOG_INF("Feeding HW WDT");
 #if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+	LOG_INF("Feeding HW WDT with HW WDT pin");
 	gpio_pin_set_dt(&hw_wdt_dt, 0);
 	k_busy_wait(50);
 	gpio_pin_set_dt(&hw_wdt_dt, 1);
@@ -197,6 +197,7 @@ static void hw_wdt_feed(void)
 	k_busy_wait(50);
 	gpio_pin_set_dt(&hw_wdt_dt, 0);
 #else
+	LOG_INF("Feeding HW WDT with HW S0 pin");
 	gpio_pin_set_dt(&s0_watchdog_dt, 0);
 	k_busy_wait(50);
 	gpio_pin_set_dt(&s0_watchdog_dt, 1);
@@ -221,7 +222,7 @@ static void hw_wdt_work_fn(struct k_work *work)
 static void init_hw_wdt(void)
 {
 #if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_ACTIVE_HIGH);
+	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_ACTIVE);
 #else
 	k_sem_init(&sens_sel0_wdt_sem, 1, 1);
 	gpio_pin_configure_dt(&s0_watchdog_dt, GPIO_OUTPUT_INACTIVE);
