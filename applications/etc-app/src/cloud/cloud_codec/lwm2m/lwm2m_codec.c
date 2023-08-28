@@ -124,6 +124,7 @@ int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 {
 	int err = 0;
 	if (cloud_data == NULL || record == NULL) {
+		LOG_ERR("Null cloud or record data (%d %d)", (cloud_data == NULL), (record == NULL));
 		return -ENOMEM;
 	}
 
@@ -152,10 +153,11 @@ int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 {
 	int err = 0;
 
-	__ASSERT_NO_MSG(cloud_data != NULL);
-	__ASSERT_NO_MSG(modem_data != NULL);
+	// __ASSERT_NO_MSG(cloud_data != NULL);
+	// __ASSERT_NO_MSG(modem_data != NULL);
 
 	if (cloud_data == NULL || modem_data == NULL) {
+		LOG_ERR("Null cloud or modem data (%d %d)", (cloud_data == NULL), (modem_data == NULL));
 		return -EINVAL;
 	}
 
@@ -180,9 +182,10 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
 {
 	int err = 0;
 
-	__ASSERT_NO_MSG(cloud_data != NULL);
-	__ASSERT_NO_MSG(modem_data != NULL);
+	// __ASSERT_NO_MSG(cloud_data != NULL);
+	// __ASSERT_NO_MSG(modem_data != NULL);
 	if (cloud_data == NULL || modem_data == NULL) {
+		LOG_ERR("Null cloud or modem data (%d %d)", (cloud_data == NULL), (modem_data == NULL));
 		return -EINVAL;
 	}
 
@@ -207,9 +210,10 @@ int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 {
 	int err = 0;
 
-	__ASSERT_NO_MSG(cloud_data != NULL);
-	__ASSERT_NO_MSG(relay_data != NULL);
+	// __ASSERT_NO_MSG(cloud_data != NULL);
+	// __ASSERT_NO_MSG(relay_data != NULL);
 	if (cloud_data == NULL || relay_data == NULL) {
+		LOG_ERR("Null cloud or relay data (%d %d)", (cloud_data == NULL), (relay_data == NULL));
 		return -EINVAL;
 	}
 
@@ -233,6 +237,7 @@ int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 int data_codec_clear_data(struct cloud_codec_data *cloud_data)
 {
 	if (cloud_data == NULL) {
+		LOG_ERR("Null cloud data");
 		return -EINVAL;
 	}
 
@@ -247,6 +252,7 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 	int err = 0;
 
 	if (cloud_data == NULL) {
+		LOG_ERR("Null cloud data");
 		return -ENOMEM;
 	}
 
