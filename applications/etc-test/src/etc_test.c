@@ -238,6 +238,7 @@ static void adc_print_channel_raw_calibration(const struct shell *shell, int cha
 	int adc_raw = sensor_get_raw_value(channel);
 	int calibrated_value = (int)(((float)(adc_raw) - adc_calib_info.offset) / 
 		(adc_calib_info.high - adc_calib_info.offset) * adc_calib_info.ref);
+	int val_mv;
 	float val;
 
 	if ((channel == ETC_ADC_CHANNEL_AMB) || (channel == ETC_ADC_CHANNEL_SENSOR)) {
@@ -257,8 +258,9 @@ static void adc_print_channel_raw_calibration(const struct shell *shell, int cha
 					channel, calibrated_value);
 		}
 	} else {
-		adc_get_raw_to_millivolts(channel, &adc_raw);
-		val = (float)adc_raw / 1000.0f;
+		val_mv = calibrated_value;
+		adc_get_raw_to_millivolts(channel, &val_mv);
+		val = (float)val_mv / 1000.0f;
 		if (converted) {
 			shell_print(shell, "Calibrated ADC Channel %d - Value %d - Voltage %.2f V",
 					channel, calibrated_value, val);
@@ -457,10 +459,10 @@ static void adc_print_all_channels_calibration_raw(const struct shell *shell)
 {
 	for (int chan = 0; chan < ETC_ADC_CHANNEL_MAX; chan++) {
 		if (chan == ETC_ADC_CHANNEL_SENSOR) {
-			for (int input = 0; input < SENSOR_INPUT_MAX; input++) {
+			for (int input = 0; input < (SENSOR_INPUT_MAX - SENSOR_INPUT_IN1); input++) {
 				sensor_adc_switch_channel(input);
 				k_msleep(100);
-				shell_print(shell, "Sensor input %u:", input);
+				shell_print(shell, "Probe %u:", (input + SENSOR_INPUT_IN1));
 				adc_print_channel_raw_calibration(shell, chan, false);
 			}
 		} else {
