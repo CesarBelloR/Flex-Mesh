@@ -153,8 +153,8 @@ int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 {
 	int err = 0;
 
-	// __ASSERT_NO_MSG(cloud_data != NULL);
-	// __ASSERT_NO_MSG(modem_data != NULL);
+	__ASSERT_NO_MSG(cloud_data != NULL);
+	__ASSERT_NO_MSG(modem_data != NULL);
 
 	if (cloud_data == NULL || modem_data == NULL) {
 		LOG_ERR("Null cloud or modem data (%d %d)", (cloud_data == NULL), (modem_data == NULL));
@@ -182,8 +182,9 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
 {
 	int err = 0;
 
-	// __ASSERT_NO_MSG(cloud_data != NULL);
-	// __ASSERT_NO_MSG(modem_data != NULL);
+	__ASSERT_NO_MSG(cloud_data != NULL);
+	__ASSERT_NO_MSG(modem_data != NULL);
+
 	if (cloud_data == NULL || modem_data == NULL) {
 		LOG_ERR("Null cloud or modem data (%d %d)", (cloud_data == NULL), (modem_data == NULL));
 		return -EINVAL;
@@ -210,8 +211,9 @@ int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 {
 	int err = 0;
 
-	// __ASSERT_NO_MSG(cloud_data != NULL);
-	// __ASSERT_NO_MSG(relay_data != NULL);
+	__ASSERT_NO_MSG(cloud_data != NULL);
+	__ASSERT_NO_MSG(relay_data != NULL);
+	
 	if (cloud_data == NULL || relay_data == NULL) {
 		LOG_ERR("Null cloud or relay data (%d %d)", (cloud_data == NULL), (relay_data == NULL));
 		return -EINVAL;
