@@ -1,0 +1,13 @@
+menuconfig ETC_DEVICE
+	bool "Mode for ETC Monitor Device"
+	default y
+	help
+	  Selection for ETC Flex Setting/Calibration storage
+
+if ETC_DEVICE
+
+module = ETC_DEVICE
+module-str = device
+source "subsys/logging/Kconfig.template.log_config"
+
+endif

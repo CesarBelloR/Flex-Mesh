@@ -19,6 +19,8 @@ menu "Zephyr Kernel"
 source "$ZEPHYR_BASE/Kconfig.zephyr"
 endmenu
 
+rsource "src/etc_devices/Kconfig"
+
 module = ETC_TEST
 module-str = ETC Test
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

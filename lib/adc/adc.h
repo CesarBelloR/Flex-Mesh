@@ -60,4 +60,8 @@ int adc_get_full_scale_voltage_mv(int channel);
 */
 int adc_get_full_scale_count(int channel);
 
+/**
+ * @ref Set the calibration start
+ */
+int adc_set_start_calibration(int channel);
 #endif /* ADC_H_ */
