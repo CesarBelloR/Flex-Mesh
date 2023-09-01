@@ -156,6 +156,14 @@ static inline bool data_codec_compare_temperature_is_valid(float temperature) {
 	return false;
 }
 
+static inline bool data_codec_compare_humidity_is_valid(float humidity) {
+	if ((humidity >= SENSOR_HUMID_C_MIN) && 
+	    (humidity <= SENSOR_HUMID_C_MAX)) {
+		return true;
+	}
+	return false;
+} 
+
 int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_handler);
 
 void data_codec_populate_lora_sensor_buffer(

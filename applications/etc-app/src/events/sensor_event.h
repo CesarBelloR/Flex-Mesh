@@ -17,6 +17,10 @@ extern "C" {
 #define SENSOR_TEMP_C_MIN	-40.0f
 /* Maximum sensor temperature that is a valid reading. */
 #define SENSOR_TEMP_C_MAX	120.0f
+/* Minimum sensor humidity that is a valid reading. */
+#define SENSOR_HUMID_C_MIN	0.0f
+/* Maximum sensor humidity that is a valid reading. */
+#define SENSOR_HUMID_C_MAX	100.0f
 /* No probe connected in DVT2 - etc@0.3.0 */
 #define SENSOR_ADC_NO_CONNECTED 4090
 /* One-wire probe connected in DVT2 - etc@0.3.0 */

@@ -130,7 +130,7 @@ POSSIBILITY OF SUCH DAMAGE.
 				<RangeEnumeration>-1..32</RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[The physical port number that this sensor is connected to.
-A 0 value indicates that this is an internal sensor.]]></Description>
+A -1 value indicates that there is not any humidity sensor connected.]]></Description>
 			</Item><Item ID="3">
 				<Name>UID</Name>
 				<Operations>R</Operations>
