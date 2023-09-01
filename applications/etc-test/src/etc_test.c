@@ -510,7 +510,7 @@ static int cmd_adc_start_calibration(const struct shell *shell, size_t argc, cha
 	/* Start calibration to CHANNEL AMB */
 	/* It will process 2 events -> CALIBRATION DONE -> EVENT END */
 	int adc = adc_set_start_calibration(ETC_ADC_CHANNEL_AMB);
-	shell_print(shell, "Calibration status %s", adc == -1 ? "okay" : "not okay");
+	shell_print(shell, "Calibration status %s", adc != -1 ? "okay" : "not okay");
 	return 0;
 }
 
