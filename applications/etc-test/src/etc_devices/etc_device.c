@@ -64,13 +64,10 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 	ssize_t read_len = 0;
 	read_len = nvs_read(&etc_fs, element_id, data, len);
 	if (read_len < 0) {
-		LOG_ERR("Failed in reading NVS %d", read_len);
 		return read_len;
 	}
 
 	if (read_len > len) {
-		LOG_ERR("Read length is higher than request read %d %d %d", element_id, len,
-			read_len);
 		return read_len;
 	}
 

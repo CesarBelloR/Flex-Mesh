@@ -207,7 +207,7 @@ static int cmd_version(const struct shell *shell, size_t argc, char **argv)
 
 SHELL_CMD_ARG_REGISTER(etc_version, NULL, "Show kernel version", cmd_version, 1, 0);
 
-static void adc_print_channel(const struct shell *shell, int channel)
+static void adc_print_channel(const struct shell *shell, int channel, bool converted)
 {
 	int adc_raw = sensor_get_raw_value(channel);
 	int val_mv;
@@ -222,14 +222,25 @@ static void adc_print_channel(const struct shell *shell, int channel)
 #else
 		val = sensor_ntc_converter(channel, adc_raw);
 #endif
-		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
-			    channel, adc_raw, val);
+		if (converted) {
+			shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
+					channel, adc_raw, val);
+		} else {
+			shell_print(shell, "ADC Channel %d - Value %d", 
+					channel, adc_raw);
+		}
 	} else {
 		val_mv = adc_raw;
 		adc_get_raw_to_millivolts(channel, &val_mv);
 		val = (float)val_mv / 1000.0f;
-		shell_print(shell, "ADC Channel %d - Value %d - Voltage %.2f V",
-			    channel, adc_raw, val);
+		if (converted) {
+			shell_print(shell, "ADC Channel %d - Value %d - Voltage %.2f V",
+					channel, adc_raw, val);
+		} else {
+			shell_print(shell, "ADC Channel %d - Value %d",
+					channel, adc_raw);
+		}
+
 	}
 }
 
@@ -439,7 +450,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_etc_gpio,
 SHELL_CMD_REGISTER(etc_gpio, &sub_etc_gpio, "ETC GPIO commands", NULL);	
 #endif		       
 
-static void adc_print_all_channels(const struct shell *shell) 
+static void adc_print_all_channels(const struct shell *shell, bool converted) 
 {
 	for (int chan = 0; chan < ETC_ADC_CHANNEL_MAX; chan++) {
 		if (chan == ETC_ADC_CHANNEL_SENSOR) {
@@ -447,10 +458,10 @@ static void adc_print_all_channels(const struct shell *shell)
 				sensor_adc_switch_channel(input);
 				k_msleep(100);
 				shell_print(shell, "Probe %u:", (input + SENSOR_INPUT_IN1));
-				adc_print_channel(shell, chan);
+				adc_print_channel(shell, chan, converted);
 			}
 		} else {
-			adc_print_channel(shell, chan);
+			adc_print_channel(shell, chan, converted);
 		}
 	}
 }
@@ -475,7 +486,7 @@ static void adc_print_all_channels_calibration_converted(const struct shell *she
 {
 	for (int chan = 0; chan < ETC_ADC_CHANNEL_MAX; chan++) {
 		if (chan == ETC_ADC_CHANNEL_SENSOR) {
-			for (int input = 0; input < SENSOR_INPUT_MAX; input++) {
+			for (int input = 0; input < (SENSOR_INPUT_MAX - SENSOR_INPUT_IN1); input++) {
 				sensor_adc_switch_channel(input);
 				k_msleep(100);
 				shell_print(shell, "Sensor input %u:", input);
@@ -499,10 +510,10 @@ static int cmd_adc_request(const struct shell *shell, size_t argc, char **argv)
 	}
 
 	if (strstr(argv[1], "all") != NULL) {
-		adc_print_all_channels(shell);
+		adc_print_all_channels(adc_print_all_channels, true);
 	} else {
 		int channel = atoi(argv[1]);
-		adc_print_channel(shell, channel);
+		adc_print_channel(shell, channel, true);
 	}
 	return 0;
 }
@@ -523,35 +534,24 @@ SHELL_CMD_ARG_REGISTER(etc_adc_cal, NULL, "Start ADC calibration process", cmd_a
 static int cmd_adc_load_calibration(const struct shell *shell, size_t argc, char **argv)
 {
 	int rc = 0;
-	float last_calib = adc_calib_info.offset;
 	rc = etc_device_read_calib(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
 	if (rc) {
-		adc_calib_info.offset = last_calib;
-		shell_error(shell, "Failed to load calibration for offset %d", rc);
-		return 0;
-	} else {
-		shell_print(shell, "The offset calibration %.2f", adc_calib_info.offset);
+		adc_calib_info.offset = 0;
+		etc_device_write_calib(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
 	}
-
-	last_calib = adc_calib_info.high;
+	shell_print(shell, "The offset calibration: %.6f", adc_calib_info.offset);
 	rc = etc_device_read_calib(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
 	if (rc) {
-		adc_calib_info.high = last_calib;
-		shell_error(shell, "Failed to load calibration for high %d", rc);
-		return 0;
-	} else {
-		shell_print(shell, "The high calibration %.2f", adc_calib_info.high);
-	}
-
-	last_calib = adc_calib_info.ref;
+		adc_calib_info.high = 4014.548130;
+		etc_device_write_calib(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
+	} 
+	shell_print(shell, "The high raw calibration: %.6f", adc_calib_info.high);
 	rc = etc_device_read_calib(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
 	if (rc) {
-		adc_calib_info.ref = last_calib;
-		shell_error(shell, "Failed to load calibration for reference %d", rc);
-		return 0;
-	} else {
-		shell_print(shell, "The reference calibration %.2f", adc_calib_info.ref);
-	}
+		adc_calib_info.ref = 4014.548130;
+		etc_device_write_calib(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
+	} 
+	shell_print(shell, "The reference calibration: %.6f", adc_calib_info.ref);
 
 	return 0;
 }
@@ -636,10 +636,10 @@ static int cmd_adc_get_raw(const struct shell *shell, size_t argc, char **argv)
 	}
 
 	if (strstr(argv[1], "all") != NULL) {
-		adc_print_all_channels_calibration_raw(shell);
+		adc_print_all_channels(shell, false);
 	} else {
 		int channel = atoi(argv[1]);
-		adc_print_channel_raw_calibration(shell, channel, false);
+		adc_print_channel(shell, channel, false);
 	}
 	return 0;
 }
