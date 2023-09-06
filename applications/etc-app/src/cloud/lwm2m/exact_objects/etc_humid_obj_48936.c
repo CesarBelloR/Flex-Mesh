@@ -125,7 +125,7 @@ static struct lwm2m_engine_obj_inst *humid_sensor_create(uint16_t obj_inst_id)
 	return &inst[index];
 }
 
-static int etc_humid_sensor_init(const struct device *dev)
+static int etc_humid_sensor_init(void)
 {
 	etc_humid_sensor.obj_id = OBJECT_ID;
 	etc_humid_sensor.version_major = HUMID_VERSION_MAJOR;
