@@ -969,6 +969,19 @@ MODEM_CMD_DEFINE(on_cmd_unsol_close)
 	return 0;
 }
 
+MODEM_CMD_DEFINE(on_cmd_unsol_pdpdeact)
+{
+	quectel_bg95_set_connected(false);
+
+	if (mdata.power == MODEM_POWER_ON) {
+		k_work_reschedule_for_queue(&modem_workq,
+					&mdata.rssi_query_work,
+					MDM_PDPDEACT_RECONNECT_DELAY);
+	}
+
+	return 0;
+}
+
 /* Handler: Modem initialization ready. */
 MODEM_CMD_DEFINE(on_cmd_unsol_rdy)
 {
@@ -1618,6 +1631,29 @@ static int quectel_bg95_set_cereg(uint8_t n)
 }
 #endif
 
+static int modem_set_psm_indication(bool enable)
+{
+	char sendbuf[sizeof("AT+QCFG=#psm/urc#,##")];
+	uint8_t en_val;
+	int ret;
+
+	if (enable) {
+		en_val = 1;
+	} else {
+		en_val = 0;
+	}
+
+	snprintk(sendbuf, sizeof(sendbuf), "AT+QCFG=\"psm/urc\",%u", en_val);
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_WRN("Error setting PSM indication");
+	}
+
+	return ret;
+}
+
 /**
  * @brief Set the PSM requested active and periodic TAU timer values.
  * 
@@ -1650,6 +1686,9 @@ static int quectel_bg95_set_psm(bool enable, char *req_rat, char *req_rptau)
 		LOG_ERR("Failed to set PSM requested values");
 	} else {
 		LOG_DBG("Set PSM requested values");
+		if (enable) {
+			modem_set_psm_indication(true);
+		}
 	}
 
 	return ret;
@@ -2382,7 +2421,7 @@ static void modem_rssi_query_work(struct k_work *work)
 	}
 
 	/* Re-start RSSI query work */
-	if (work) {
+	if (work && (mdata.power == MODEM_POWER_ON)) {
 		k_work_reschedule_for_queue(&modem_workq,
 					    &mdata.rssi_query_work,
 					    timeout);
@@ -2418,6 +2457,7 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("+QSSLURC: \"recv\",",   on_cmd_unsol_recv,  1U, ""),
 	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
 	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
+	MODEM_CMD("+QIURC: \"pdpdeact\",", on_cmd_unsol_pdpdeact, 1U, ","),
 	MODEM_CMD_ARGS_MAX("+CEREG: ", on_cmd_unsol_cereg, 1U, 9U, ","),
 	MODEM_CMD("+QPSMTIMER: ", on_cmd_unsol_qpsmtimer, 2U, ","),
 	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
@@ -3001,8 +3041,9 @@ static int modem_init(const struct device *dev)
 	mctx.data_imei	       = mdata.mdm_imei;
 	mctx.data_rssi	       = &mdata.mdm_rssi;
 
-	/* Set qual to 99 (means not known) */
+	/* Set qual and RSSI to 99 (means not known/not connected) */
 	mdata.mdm_qual = 99;
+	mdata.mdm_rssi = MDM_RSSI_INVALID;
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 	ret = gpio_pin_configure_dt(&on_off_gpio, GPIO_OUTPUT_LOW);
@@ -3094,29 +3135,6 @@ error:
 	return ret;
 }
 
-static int modem_set_psm_indication(bool enable)
-{
-	char sendbuf[sizeof("AT+QCFG=#psm/urc#,##")];
-	uint8_t en_val;
-	int ret;
-
-	if (enable) {
-		en_val = 1;
-	} else {
-		en_val = 0;
-	}
-
-	snprintk(sendbuf, sizeof(sendbuf), "AT+QCFG=\"psm/urc\",%u", en_val);
-
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
-			     &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0) {
-		LOG_WRN("Error setting PSM indication");
-	}
-
-	return ret;
-}
-
 int quectel_bg95_get_psm_timers(void)
 {
 	char *sendcmd = "AT+QPSMS?";
@@ -3128,30 +3146,6 @@ int quectel_bg95_get_psm_timers(void)
 		LOG_WRN("Error getting PSM parameters");
 	}
 	
-	return ret;
-}
-
-int quectel_bg95_psm(bool enable)
-{
-	char sendbuf[sizeof("AT+QPSMS=#,,,##########,###########")];
-	int ret;
-
-	modem_set_psm_indication(true);
-
-	if (enable) {
-		snprintk(sendbuf, sizeof(sendbuf), "AT+QPSMS=1,,,\"%s\",\"%s\"", 
-			CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU,
-			CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT);
-	} else {
-		snprintk(sendbuf, sizeof(sendbuf), "AT+QPSMS=0");
-	}
-
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
-			     &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0) {
-		LOG_ERR("Error requesting PSM");
-	}
-
 	return ret;
 }
 
