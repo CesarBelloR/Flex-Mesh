@@ -452,10 +452,7 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
 		state_set(STATE_LTE_DISCONNECTED);
 
-		/* Explicitly disconnect cloud when you receive an LTE disconnected event.
-		 * This is to clear up the cloud library state.
-		 */
-		disconnect_cloud();
+		pause_cloud();
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
