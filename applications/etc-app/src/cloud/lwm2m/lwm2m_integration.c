@@ -248,6 +248,7 @@ static void send_cb(enum lwm2m_send_status status)
 		case LWM2M_SEND_STATUS_FAILURE:
 		case LWM2M_SEND_STATUS_TIMEOUT:
 		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_SEND_FAIL;
+		notify = true;
 		break;
 	}
 
