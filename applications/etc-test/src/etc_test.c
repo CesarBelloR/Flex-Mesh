@@ -226,8 +226,8 @@ static void adc_print_channel(const struct shell *shell, int channel, bool conve
 			shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
 					channel, adc_raw, val);
 		} else {
-			shell_print(shell, "ADC Channel %d - Value %d", 
-					channel, adc_raw);
+			shell_print(shell, "ADC Channel %d - Value %d:  %d", 
+					channel, channel, adc_raw);
 		}
 	} else {
 		val_mv = adc_raw;
@@ -237,8 +237,8 @@ static void adc_print_channel(const struct shell *shell, int channel, bool conve
 			shell_print(shell, "ADC Channel %d - Value %d - Voltage %.2f V",
 					channel, adc_raw, val);
 		} else {
-			shell_print(shell, "ADC Channel %d - Value %d",
-					channel, adc_raw);
+			shell_print(shell, "ADC Channel %d - Value %d: %d",
+					channel, channel, adc_raw);
 		}
 
 	}
@@ -265,8 +265,8 @@ static void adc_print_channel_raw_calibration(const struct shell *shell, int cha
 			shell_print(shell, "Calibrated ADC Channel %d - Value %d - Temperature %.2f deg C", 
 					channel, calibrated_value, val);
 		} else {
-			shell_print(shell, "Calibrated ADC Channel %d - Value %d ", 
-					channel, calibrated_value);
+			shell_print(shell, "Calibrated ADC Channel %d - Value %d: %d ", 
+					channel, channel,  calibrated_value);
 		}
 	} else {
 		val_mv = calibrated_value;
@@ -276,8 +276,8 @@ static void adc_print_channel_raw_calibration(const struct shell *shell, int cha
 			shell_print(shell, "Calibrated ADC Channel %d - Value %d - Voltage %.2f V",
 					channel, calibrated_value, val);
 		} else {
-			shell_print(shell, "Calibrated ADC Channel %d - Value %d",
-					channel, calibrated_value);
+			shell_print(shell, "Calibrated ADC Channel %d - Value %d: %d",
+					channel, channel, calibrated_value);
 		}
 
 	}
@@ -510,10 +510,10 @@ static int cmd_adc_request(const struct shell *shell, size_t argc, char **argv)
 	}
 
 	if (strstr(argv[1], "all") != NULL) {
-		adc_print_all_channels(adc_print_all_channels, true);
+		adc_print_all_channels_calibration_raw(shell);
 	} else {
 		int channel = atoi(argv[1]);
-		adc_print_channel(shell, channel, true);
+		adc_print_channel_raw_calibration(shell, channel, false);
 	}
 	return 0;
 }
