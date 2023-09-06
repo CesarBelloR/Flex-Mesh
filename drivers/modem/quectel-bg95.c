@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #define MDM_TCP_ERROR_NO_MEMORY		553
 #define MDM_TCP_ERROR_TIMEOUT		569
 #define MDM_TCP_ERROR_SOCKET_IN_USE	563
+#define MDM_TCP_ERROR_UNKNOWN		550
 
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
@@ -2127,6 +2128,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (ret != 0) {
 		bool force_close = false;
 		LOG_ERR("Closing the socket!!! error %d", ret);
+		__ASSERT_NO_MSG(ret != 550);
 		if (ret == MDM_TCP_ERROR_TIMEOUT) {
 			ret = -ETIMEDOUT;
 		} else if (ret == MDM_TCP_ERROR_SOCKET_IN_USE) {
