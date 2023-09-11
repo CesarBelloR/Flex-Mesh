@@ -6,6 +6,7 @@
 #include "events/sensor_event.h"
 #include "common.h"
 #include "etc_sensor.h"
+#include "etc_device.h"
 #include "adc.h"
 
 #include <zephyr/logging/log.h>
@@ -30,6 +31,13 @@ const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 const struct device *const ambient_i2c_dev = DEVICE_DT_GET_ANY(ti_tmp1075);
 #endif
+
+struct etc_sensor_adc_calibration_info {
+	float offset;
+	float high;
+	float ref;
+	bool loaded;
+};
 
 // Get any one sht31 in current bus. If NULL, SHT31 is not ready 
 const struct device *const sht31_i2c_dev = DEVICE_DT_GET_ANY(sensirion_sht31);
@@ -56,6 +64,7 @@ static float sensor_digital_humid;
 static int8_t sensor_digital_humid_port_index;
 static int sensor_ambient_raw_adc = 0;
 static int sensor_battery_raw_adc = 0;
+static struct etc_sensor_adc_calibration_info etc_sensor_adc_calibration_info= {0x00};
 
 /* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
 inline static int8_t remap_th_channel(int8_t channel)
@@ -236,12 +245,22 @@ static void etc_sensor_run_digital_sample(void) {
 	etc_sensor_gpios_one_wire_disable();
 }
 
+static int etc_sensor_get_calibrated_adc(int raw_adc) {
+	int calibrated_adc = raw_adc;
+	if (etc_sensor_adc_calibration_info.loaded) {
+		calibrated_adc = (int)(((float)(raw_adc) - etc_sensor_adc_calibration_info.offset) / 
+			(etc_sensor_adc_calibration_info.high - etc_sensor_adc_calibration_info.offset) * 
+			etc_sensor_adc_calibration_info.ref);
+	}
+	return calibrated_adc;
+}
+
 static void etc_sensor_run_analog_sample(void) {
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG) {
 			etc_sensor_adc_switch_channel(i);
 			k_msleep(50);
-			list_sensor_raw_adc[i] = adc_get_channel(ETC_ADC_CHANNEL_SENSOR);
+			list_sensor_raw_adc[i] = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_SENSOR));
 		} else {
 			list_sensor_raw_adc[i] = -1;
 		}
@@ -283,12 +302,33 @@ static float etc_sensor_ntc_converter(int data, float full_scale_v, int full_sca
 }
 #endif
 
+static void etc_sensor_load_calibration(void) {
+	int rc = 0;
+	etc_sensor_adc_calibration_info.loaded = false;
+	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID, &etc_sensor_adc_calibration_info.offset, sizeof(etc_sensor_adc_calibration_info.offset));
+	if (rc) {
+		LOG_ERR("Can't load the calibration for offset");
+		return;
+	}
+	rc = etc_device_read_setting(ETC_CALIBRATION_RAWHIGH_ID, &etc_sensor_adc_calibration_info.high, sizeof(etc_sensor_adc_calibration_info.high));
+	if (rc) {
+		LOG_ERR("Can't load the calibration for raw high offset");
+		return;
+	} 
+	rc = etc_device_read_setting(ETC_CALIBRATION_REF_ID, &etc_sensor_adc_calibration_info.ref, sizeof(etc_sensor_adc_calibration_info.ref));
+	if (rc) {
+		LOG_ERR("Can't load the calibration for reference");
+		return;
+	} 
+	etc_sensor_adc_calibration_info.loaded = true;
+}
+
 void etc_sensor_init(void) {
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 	__ASSERT(ambient_i2c_dev != NULL, "Failed to get device binding");
 	__ASSERT(device_is_ready(ambient_i2c_dev), "Device %s is not ready", ambient_i2c_dev->name);
 #endif
-
+	etc_sensor_load_calibration();
 	etc_sensor_adc_hw_init();
 	for (int i = 0; i < SENSOR_INPUT_IN4 + 1; i++) {
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
@@ -333,8 +373,7 @@ float etc_sensor_get_probe_temp(enum sensor_input input) {
 	if (list_sensor_type[input] == SENSOR_TYPE_ANALOG) {
 		#if defined(CONFIG_ETC_NTC_TABLE)
 				return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, 
-					table_offset, list_sensor_raw_adc[input], 
-					adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
+					table_offset, list_sensor_raw_adc[input], adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
 		#else
 				return etc_sensor_ntc_converter(list_sensor_raw_adc[input],
 					(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) / 1000.0f,
@@ -370,9 +409,9 @@ void etc_sensor_run_acquistion(void) {
 	/* Run detection sensor */
 	etc_sensor_run_detection();
 	/* Run sample for ambient ADC */
-	sensor_ambient_raw_adc = adc_get_channel(ETC_ADC_CHANNEL_AMB);
+	sensor_ambient_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_AMB));
 	/* Run sample for battery */
-	sensor_battery_raw_adc = adc_get_channel(ETC_ADC_CHANNEL_BATTERY);
+	sensor_battery_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_BATTERY));
 	/* Run sample sensor for all ports - analog part*/
 	etc_sensor_run_analog_sample();
 	LOG_INF("%d %d %d %d", list_sensor_raw_adc[0], list_sensor_raw_adc[1], list_sensor_raw_adc[2], list_sensor_raw_adc[3]);
