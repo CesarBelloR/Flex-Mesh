@@ -687,42 +687,61 @@ static int pm_resume_uart(void)
 }
 
 /**
- * @brief Work that needs to be performed when modem signals a wakeup from or
- * entering into PSM.
+ * @brief Handler for the PSM_IND modem signal. It signals a wakeup from or
+ * entering of PSM.
  * The modem changes the PSM_IND's pin status before sending APP RDY.
  * When entering PSM, there are two high -> low transitions with pulses of
  * ~50 ms. This is handled through a "debounce" mechanism.
+ * When this handler is called, save the current state of the pin and time
+ * and resume UART if needed. If last change was within the debouncing interval,
+ * (re-)schedule work to modem work queue.
+*/
+static void psm_ind_handler(struct psm_ind *psm_ind_data, int edge)
+{
+	int ret;
+	int64_t uptime_now = k_uptime_get();
+
+	psm_ind_data->edge = edge;
+	if (psm_ind_data->last_change_s != 0 && 
+	    (uptime_now - psm_ind_data->last_change_s) < PSM_IND_DEBOUNCE_INTERVAL_MS) {
+		psm_ind_data->last_change_s = uptime_now;
+		k_work_reschedule_for_queue(&modem_workq, &psm_ind_data->work, 
+					    K_MSEC(PSM_IND_DEBOUNCE_INTERVAL_MS));
+		return;
+	}
+	psm_ind_data->last_change_s = uptime_now;
+
+	/* If psm.edge is a negative value something went wrong and we can't
+	 * guarantee correct modem operation anymore. */
+	__ASSERT_NO_MSG(psm_ind_data->edge >= 0);
+	if (psm_ind_data->edge == 0) {
+		pm_resume_uart();
+	}
+}
+
+/**
+ * @brief Wake up modem UART if pin edge/level indicates a PSM wake up.
 */
 static void psm_ind_work_fn(struct k_work *work)
 {	
 	struct k_work_delayable *work_delayable = k_work_delayable_from_work(work);
-	struct psm_ind *ind = CONTAINER_OF(work_delayable, struct psm_ind, work);
-	int64_t uptime_now = k_uptime_get();
-
-	if (ind->last_change_s != 0 && 
-	    (uptime_now - ind->last_change_s) < PSM_IND_DEBOUNCE_INTERVAL_MS) {
-		k_work_reschedule_for_queue(&modem_workq, &ind->work, 
-					    K_MSEC(PSM_IND_DEBOUNCE_INTERVAL_MS));
-		return;
-	}
+	struct psm_ind *psm_ind_data = CONTAINER_OF(work_delayable, struct psm_ind, work);
 
 	/* If psm.edge is a negative value something went wrong and we can't
 	 * guarantee correct modem operation anymore. */
-	__ASSERT_NO_MSG(ind->edge >= 0);
-	if (ind->edge == 0) {
+	__ASSERT_NO_MSG(psm_ind_data->edge >= 0);
+	if (psm_ind_data->edge == 0) {
 		pm_resume_uart();
 	}
-
-	ind->last_change_s = uptime_now;
 }
 
 static void psm_ind_callback(const struct device *dev,
 			     struct gpio_callback *cb, uint32_t pins)
 {
-	psm_ind.edge = gpio_pin_get(dev, find_msb_set(pins) - 1);
-	/* Submit work to modem queue. If the work is currently executed, 
-	 * it is re-submitted/queued. */
-	k_work_reschedule_for_queue(&modem_workq, &psm_ind.work, K_NO_WAIT);
+	/* We need to wake up the UART when turning on as soon as possible to
+	   not miss the modem's APP RDY output. Task in work queue could be waiting
+	   for semaphore that might time out. */
+	psm_ind_handler(&psm_ind, gpio_pin_get(dev, find_msb_set(pins) - 1));
 }
 static struct gpio_callback psm_ind_gpio_callback;
 
@@ -2097,9 +2116,15 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	}
 
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
-		on_connect_tls_init(sock);
+		if (on_connect_tls_init(sock) != 0) {
+			errno = EAGAIN;
+			return -errno;
+		}
 	} else if (sock->ip_proto == IPPROTO_DTLS_1_2) {
-		on_connect_dtls_init(sock);
+		if (on_connect_dtls_init(sock) != 0) {
+			errno = EAGAIN;
+			return -errno;
+		}
 	}
 	
 
@@ -2411,6 +2436,8 @@ static void modem_rssi_query_work(struct k_work *work)
 			     &cmd, 1U, send_cmd, &mdata.sem_response,
 			     MDM_CMD_TIMEOUT);
 	if (ret < 0) {
+		/* Set RSSI to invalid if AT+CSQ returns with an error */
+		mdata.mdm_rssi = MDM_RSSI_INVALID;
 		LOG_ERR("AT+CSQ ret:%d", ret);
 	}
 
@@ -2484,6 +2511,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
 	SETUP_CMD_NOHANDLE("AT+CFUN=1"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
+	SETUP_CMD_NOHANDLE("AT+QURCCFG=\"urcport\",\"uart1\""),
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 	SETUP_CMD_NOHANDLE("AT+QCFG=\"psm/urc\",1"),
 #endif
