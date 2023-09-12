@@ -63,6 +63,25 @@ struct led_effect {
 		.loop_forever = true,					       \
 	}
 
+#define LED_EFFECT_LED_BLINK_2(_period, _color_1, _color_2)				       \
+	{								       \
+		.steps = ((struct led_effect_step[]) {		       \
+			{						       \
+				.color = _color_1,			       \
+				.substep_count = 1,			       \
+				.substep_time = (_period),		       \
+			},						       \
+			{						       \
+				.color = _color_2,			       \
+				.substep_count = 1,			       \
+				.substep_time = (_period),		       \
+			},						       \
+		}),							       \
+		.step_count = 2,					       \
+		.loop_forever = true,					       \
+	}
+
+
 /**
  * Flash an LED asymetrically, i.e. with different on and off periods.
  * 
@@ -80,6 +99,24 @@ struct led_effect {
 			},						       \
 			{						       \
 				.color = LED_NOCOLOR(),			       \
+				.substep_count = 1,			       \
+				.substep_time = (_period_off),		       \
+			},						       \
+		}),							       \
+		.step_count = 2,					       \
+		.loop_forever = true,					       \
+	}
+
+#define LED_EFFECT_LED_BLINK_ASYM_2(_period_on, _period_off, _color_1, _color_2)				       \
+	{								       \
+		.steps = ((struct led_effect_step[]) {		       \
+			{						       \
+				.color = _color_1,			       \
+				.substep_count = 1,			       \
+				.substep_time = (_period_on),		       \
+			},						       \
+			{						       \
+				.color = _color_2,			       \
 				.substep_count = 1,			       \
 				.substep_time = (_period_off),		       \
 			},						       \
@@ -114,6 +151,38 @@ struct led_effect {
 			},						       \
 			{						       \
 				.color = LED_NOCOLOR(),			       \
+				.substep_count = _BREATH_PAUSE_SUBSTEPS,       \
+				.substep_time = _pause,			       \
+			},						       \
+		}),							       \
+		.step_count = 4,					       \
+		.loop_forever = true,					       \
+	}
+
+#define LED_EFFECT_LED_BREATHE_2(_period, _pause, _color_1, _color_2)			       \
+	{								       \
+		.steps = ((struct led_effect_step[]) {			       \
+			{						       \
+				.color = _color_1,			       \
+				.substep_count = _BREATH_SUBSTEPS,	       \
+				.substep_time = ((_period +		       \
+					(_BREATH_SUBSTEPS - 1))		       \
+					/ _BREATH_SUBSTEPS),		       \
+			},						       \
+			{						       \
+				.color = _color_1,			       \
+				.substep_count = 1,			       \
+				.substep_time = _period,		       \
+			},						       \
+			{						       \
+				.color = _color_2,			       \
+				.substep_count = _BREATH_SUBSTEPS,	       \
+				.substep_time = ((_period +		       \
+					(_BREATH_SUBSTEPS - 1))		       \
+					/ _BREATH_SUBSTEPS),		       \
+			},						       \
+			{						       \
+				.color = _color_2,			       \
 				.substep_count = _BREATH_PAUSE_SUBSTEPS,       \
 				.substep_time = _pause,			       \
 			},						       \

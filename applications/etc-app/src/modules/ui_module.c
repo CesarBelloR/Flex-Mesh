@@ -358,6 +358,30 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
+	if (IS_EVENT(msg, lora, LORA_EVT_SEND)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_SEND, 2);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_ACK)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_ACK, 2);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_NACK)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_NACK, 2);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+	
+	if (IS_EVENT(msg, lora, LORA_EVT_ERROR)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_FAIL, 6);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_LORA_RECEIVING, 5);

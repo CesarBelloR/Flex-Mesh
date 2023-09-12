@@ -344,6 +344,7 @@ retry_recv:
 			if (response.reclaim_start_time == 0 || response.reclaim_end_time == 0) {
 				LOG_DBG("Receive the ACK message from the replay %d at %d",
 					response.relay_id, response.current_time);
+				SEND_EVENT(lora, LORA_EVT_ACK);
 			} else {
 				LOG_DBG("Receive the RECLAIM message from the replay %d from %d to "
 					"%d",
@@ -422,7 +423,7 @@ retry:
 		uint16_t tx_delay_remain = etc_get_tx_delay_msec() % 1000;
 		k_msleep(tx_delay_remain);
 	}
-
+	SEND_EVENT(lora, LORA_EVT_SEND);
 	rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc == 0) {
 		/* Backup decoded_buf before enter to wait packet API - erase decoded_buf */
@@ -432,6 +433,7 @@ retry:
 			return 0;
 		} else {
 			if (cnt++ >= LORA_RETRY_MAX_TIME) {
+				SEND_EVENT(lora, LORA_EVT_NACK);
 				return rc;
 			}
 			
@@ -442,6 +444,7 @@ retry:
 		}
 	} else {
 		LOG_ERR("Failed to transmit packet");
+		SEND_EVENT(lora, LORA_EVT_ERROR);
 		return rc;
 	}
 
