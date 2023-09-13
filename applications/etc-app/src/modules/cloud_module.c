@@ -522,7 +522,10 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 						   paths);
 			if (err) {
 				LOG_ERR("cloud_wrap_data_send, err: %d", err);
-				SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_FAIL);
+				struct cloud_event *evt = new_cloud_event();
+				evt->type = CLOUD_EVT_DATA_SEND_FAIL;
+				evt->data.err = err;
+				APP_EVENT_SUBMIT(evt);
 			}
 
 			return;
