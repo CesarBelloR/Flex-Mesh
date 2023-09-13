@@ -703,7 +703,7 @@ int lwm2m_codec_helpers_set_relay_data(const uint8_t *data, uint16_t data_len)
 	return err;
 }
 
-static int invalidate_sensor_value(struct cloud_codec_data *cloud_data,
+static int invalidate_temp_sensor_value(struct cloud_codec_data *cloud_data,
 				   int obj_inst_id, const struct lwm2m_obj_path *path,
 				   time_t timestamp)
 {
@@ -738,11 +738,51 @@ static int invalidate_sensor_value(struct cloud_codec_data *cloud_data,
 	return 0;
 }
 
+static int invalidate_humid_sensor_value(struct cloud_codec_data *cloud_data, const struct lwm2m_obj_path *path,
+	time_t timestamp)
+{
+	int err;
+	double val = NAN;
+
+	lwm2m_get_f64(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, SENSOR_VALUE_RID),
+		      &val);
+		      
+	if (!isnan(val)) {
+		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, SENSOR_VALUE_RID), NAN);
+		if (err) {
+			return err;
+		}
+					
+		err = lwm2m_set_time(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, TIMESTAMP_RID), timestamp);
+		if (err) {
+			return err;
+		}
+
+		err = lwm2m_set_s8(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, ETC_HUMID_OBJ_R_PORT), -1);
+		if (err) {
+			return err;
+		}
+
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							       path, 1);
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			return err;
+		}
+	}
+
+	return 0;
+}
+
 int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 					union etc_device_record *record)
 {
 	int err;
 
+	const struct lwm2m_obj_path humid_path_list[] = {
+		LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0),
+	};
+	
 	/* Set battery voltage in mV (required by resource spec) */
 	err = lwm2m_set_s32(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID),
 			    (int32_t)roundf(record->battery * 1000.0));
@@ -762,14 +802,12 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 		return err;
 	}
 
-	/* Set humidity and timestamp */
-	err = lwm2m_set_time(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, TIMESTAMP_RID),
-			(time_t)(record->timestamp));
-	if (err) {
-		return err;
-	}
-
 	if (data_codec_compare_humidity_is_valid(record->sensor[SENSOR_INPUT_HUMID])) {
+		err = lwm2m_set_time(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, TIMESTAMP_RID), (time_t)(record->timestamp));
+		if (err) {
+			return err;
+		}
+
 		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, SENSOR_VALUE_RID),
 			record->sensor[SENSOR_INPUT_HUMID]);
 		if (err) {
@@ -782,18 +820,16 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 			return err;
 		}
 
-	} else {
-		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, SENSOR_VALUE_RID),
-			NAN);
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							       humid_path_list,
+							       ARRAY_SIZE(humid_path_list));
 		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
 			return err;
 		}
 
-		err = lwm2m_set_s8(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0,
-							ETC_HUMID_OBJ_R_PORT), -1);
-		if (err) {
-			return err;
-		}
+	} else {
+		invalidate_humid_sensor_value(cloud_data, humid_path_list, (time_t)(record->timestamp));
 	}
 
 	/* Set external sensor temperature and timestamp */
@@ -804,7 +840,7 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 		};
 		
 		if (!data_codec_compare_temperature_is_valid(record->sensor[i])) {
-			invalidate_sensor_value(cloud_data, obj_inst_id, path_list,
+			invalidate_temp_sensor_value(cloud_data, obj_inst_id, path_list,
 						(time_t)(record->timestamp));
 			continue;
 		}

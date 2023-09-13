@@ -131,8 +131,8 @@ int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 	err = lwm2m_codec_helpers_set_sensor_data(cloud_data, record);
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
+			/* Always send first temperature object containing ambient data. */
 			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0),
-			LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0),
 			LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID)
 		};
 
