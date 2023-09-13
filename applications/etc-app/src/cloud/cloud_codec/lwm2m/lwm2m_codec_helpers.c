@@ -848,6 +848,17 @@ void lwm2m_codec_helpers_path_list_log(const struct lwm2m_obj_path path_list[],
 	}
 }
 
+int lwm2m_codec_helpers_object_path_list_is_empty(struct cloud_codec_data *data)
+{
+	__ASSERT_NO_MSG(data != NULL);
+
+	if (data->valid_object_paths == 0) {
+		return 1;
+	}
+
+	return 0;
+}
+
 int lwm2m_codec_helpers_object_path_list_clear(struct cloud_codec_data *output)
 {
 	if (output == NULL) {
@@ -890,18 +901,20 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 				}
 			}
 
-			/* Populate new path in index list */
-			if (new_path) {
+			/* Populate new path in index list, if valid */
+			if (new_path && (path[i].level > 0)) {
 				new_paths_idx[new_paths_len] = i;
 				new_paths_len++;
 			}
 		}
 	} else {
-		/* Populate new_paths_idx with all new path indices */
+		/* Populate new_paths_idx with all new path indices, if path is valid. */
 		for (int i = 0; i < path_size; i++) {
-			new_paths_idx[i] = i;
+			if (path[i].level > 0) {
+				new_paths_idx[new_paths_len] = i;
+				new_paths_len++;
+			}
 		}
-		new_paths_len = path_size;
 	}
 
 	if (new_paths_len == 0) {
@@ -933,6 +946,129 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 	 * also check if all entries in the incoming path[] list was added.
 	 */
 	if (!path_added || (added_cnt != new_paths_len)) {
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static inline bool is_path_measurement(struct lwm2m_obj_path *path)
+{
+	__ASSERT_NO_MSG(path != NULL);
+
+	if ((path->level > 0) &&
+	    ((path->obj_id == ETC_TEMP_OBJECT_ID) ||
+	     (path->obj_id == ETC_HUMID_OBJECT_ID))) {
+		return true;
+	}
+
+	return false;
+}
+
+bool lwm2m_codec_helpers_object_path_list_contains_measurement(struct cloud_codec_data *cloud_data)
+{
+	__ASSERT_NO_MSG(cloud_data != NULL);
+
+	for (int i = 0; i < cloud_data->valid_object_paths; i++) {
+		if (is_path_measurement(&cloud_data->paths[i])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * @return If success, index copied into place
+ *         If no valid entry found: -1.
+*/
+static int move_valid_entry(struct lwm2m_obj_path *path_list, size_t list_size)
+{
+	/* Skip first (invalid) entry*/
+	for (int i = 1; i < list_size; i++) {
+		if (path_list[i].level > 0) {			
+			path_list[0].obj_id = path_list[i].obj_id;
+			path_list[0].obj_inst_id = path_list[i].obj_inst_id;
+			path_list[0].res_id = path_list[i].res_id;
+			path_list[0].res_inst_id = path_list[i].res_inst_id;
+			path_list[0].level = path_list[i].level;
+
+			path_list[i].level = 0;
+			
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static void lwm2m_codec_helpers_object_path_list_remove_invalids(struct cloud_codec_data *cloud_data)
+{
+	int ret;
+
+	for (int i = 0; i < cloud_data->valid_object_paths; i++) {
+		/* If invalid entry is found, move next valid entry in its place. */
+		if (cloud_data->paths[i].level == 0) {
+			ret = move_valid_entry(&cloud_data->paths[i],
+					       cloud_data->valid_object_paths - i);
+			/* Set new size and exit if either no valid entry found
+			   or if last entry was copied into place. */
+			if (ret == -1 || 
+			    (ret + i + 1) == cloud_data->valid_object_paths) {
+				cloud_data->valid_object_paths = i + 1;
+				return;
+			}
+		}
+	}
+}
+
+int lwm2m_codec_helpers_object_path_list_split(struct cloud_codec_data *cloud_data,
+					       struct cloud_codec_data *backup_data)
+{
+	struct lwm2m_obj_path 
+		path_list[CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX] = { 0 };
+	size_t path_size = 0;
+	int ret;
+
+
+	/* Loop through valid paths and pick out any paths that do not contain
+	 * measurement data, copy them into the temporary path list, and invalidate
+	   them by setting the level to 0. */
+	for (int i = 0; i < cloud_data->valid_object_paths; i++) {
+		if (!is_path_measurement(&cloud_data->paths[i])) {
+			path_list[path_size].obj_id = cloud_data->paths[i].obj_id;
+			path_list[path_size].obj_inst_id = cloud_data->paths[i].obj_inst_id;
+			path_list[path_size].res_id = cloud_data->paths[i].res_id;
+			path_list[path_size].res_inst_id = cloud_data->paths[i].res_inst_id;
+			path_list[path_size].level = cloud_data->paths[i].level;
+
+			/* Invalidate/remove path from list by setting its level 
+			   to 0. */
+			cloud_data->paths[i].level = 0;
+
+			path_size++;
+
+			/* Exit when at least half the entries have been removed or
+			   when path_list array is full. */
+			if (path_size == sizeof(path_list) || 
+			    path_size >= round_int(cloud_data->valid_object_paths, 2U) / 2U) {
+				break;
+			}
+		}
+	}
+
+	/* Recalculate cloud_data->paths length */
+	for (int i = cloud_data->valid_object_paths - 1; i >= 0; i--) {
+		if (cloud_data->paths[i].level == 0) {
+			cloud_data->valid_object_paths--;
+		} else {
+			break;
+		}
+	}
+	lwm2m_codec_helpers_object_path_list_remove_invalids(cloud_data);
+
+	ret = lwm2m_codec_helpers_object_path_list_add(backup_data, path_list, path_size);
+	if (ret != 0) {
 		return -ENOMEM;
 	}
 

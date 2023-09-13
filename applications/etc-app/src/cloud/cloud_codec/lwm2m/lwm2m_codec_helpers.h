@@ -118,6 +118,27 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 					     size_t path_size);
 
 /**
+ * @brief Check if the path list is empty and return result.
+ * 
+ * @param[out] output Pointer to cloud data containing the path list.
+ * 
+ * @return 1 if empty, 0 if not empty.
+*/
+int lwm2m_codec_helpers_object_path_list_is_empty(struct cloud_codec_data *data);
+
+/**
+ * @brief Split the paths contained in cloud_data between cloud_data and backup_data
+ * 	  while keeping all measurement related objects in cloud_data.
+*/
+int lwm2m_codec_helpers_object_path_list_split(struct cloud_codec_data *cloud_data,
+					       struct cloud_codec_data *backup_data);
+
+/**
+ * @brief Return true if path list contains measurement data, false otherwise.
+*/
+bool lwm2m_codec_helpers_object_path_list_contains_measurement(struct cloud_codec_data *cloud_data);
+
+/**
  * @brief Set the static device data LwM2M object values, such as manufacturer, model,
  *       firmware version, etc.
  * @return 0 If successful, otherwise a negative value indicating the reason of failure.
