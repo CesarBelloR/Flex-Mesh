@@ -258,7 +258,7 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 		break;
 	}
 	case MODEM_API_DISCONNECTED_EVT: {
-		state_set(STATE_DISCONNECTED);
+		state_set(STATE_CONNECTING);
 		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
 		break;
 	}

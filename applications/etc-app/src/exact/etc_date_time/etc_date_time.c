@@ -218,7 +218,7 @@ static void date_time_handler(struct k_work *work)
 	}
 }
 
-static int date_time_init(const struct device *unused)
+static int date_time_init(void)
 {
 	pcf85263a_init("I2C_0");
 	k_work_init_delayable(&time_work, date_time_handler);

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "w1_ds248x.h"
+#include "w1_ds2482_84_common.h"
 
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
@@ -34,35 +34,35 @@ static int ds2484_reset_bus(const struct device *dev)
 {
 	const struct ds2484_config *config = dev->config;
 
-	return ds248x_reset_bus(&config->i2c_spec);
+	return ds2482_84_reset_bus(&config->i2c_spec);
 }
 
 static int ds2484_read_bit(const struct device *dev)
 {
 	const struct ds2484_config *config = dev->config;
 
-	return ds248x_read_bit(&config->i2c_spec);
+	return ds2482_84_read_bit(&config->i2c_spec);
 }
 
 static int ds2484_write_bit(const struct device *dev, bool bit)
 {
 	const struct ds2484_config *config = dev->config;
 
-	return ds248x_write_bit(&config->i2c_spec, bit);
+	return ds2482_84_write_bit(&config->i2c_spec, bit);
 }
 
 static int ds2484_read_byte(const struct device *dev)
 {
 	const struct ds2484_config *config = dev->config;
 
-	return ds248x_read_byte(&config->i2c_spec);
+	return ds2482_84_read_byte(&config->i2c_spec);
 }
 
 static int ds2484_write_byte(const struct device *dev, uint8_t byte)
 {
 	const struct ds2484_config *config = dev->config;
 
-	return ds248x_write_byte(&config->i2c_spec, byte);
+	return ds2482_84_write_byte(&config->i2c_spec, byte);
 }
 
 static int ds2484_configure(const struct device *dev, enum w1_settings_type type, uint32_t value)
@@ -93,7 +93,7 @@ static int ds2484_configure(const struct device *dev, enum w1_settings_type type
 			}
 		}
 
-		ret = ds248x_reset_device(&config->i2c_spec);
+		ret = ds2482_84_reset_device(&config->i2c_spec);
 		if (ret < 0) {
 			LOG_ERR("Device reset failed: %d", ret);
 			return ret;
@@ -101,7 +101,7 @@ static int ds2484_configure(const struct device *dev, enum w1_settings_type type
 
 		WRITE_BIT(data->reg_device_config, DEVICE_APU_pos, config->apu);
 
-		ret = ds248x_write_config(&config->i2c_spec, data->reg_device_config);
+		ret = ds2482_84_write_config(&config->i2c_spec, data->reg_device_config);
 		if (ret < 0) {
 			LOG_ERR("Device config update failed: %d", ret);
 			return ret;
@@ -112,7 +112,7 @@ static int ds2484_configure(const struct device *dev, enum w1_settings_type type
 		return -EINVAL;
 	}
 
-	return ds248x_write_config(&config->i2c_spec, data->reg_device_config);
+	return ds2482_84_write_config(&config->i2c_spec, data->reg_device_config);
 }
 
 #ifdef CONFIG_PM_DEVICE

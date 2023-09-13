@@ -270,7 +270,7 @@ static void ui_input_handler(enum etc_interface_event_type type) {
 	}
 }
 
-static int setup(const struct device *dev)
+static int setup(void)
 {
 	etc_interface_register_event_handler(ui_input_handler);
 	return 0;

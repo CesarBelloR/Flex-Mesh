@@ -8,7 +8,7 @@ LOG_MODULE_REGISTER(board, LOG_LEVEL_INF);
 
 static const struct gpio_dt_spec vsen_en_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 
-static int init(const struct device *dev)
+static int init(void)
 {
 	if (!device_is_ready(vsen_en_dt.port)) {
 		return -EINVAL;

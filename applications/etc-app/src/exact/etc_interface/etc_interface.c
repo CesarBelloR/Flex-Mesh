@@ -45,10 +45,8 @@ static void rtc_int_callback_handler(const struct device *port, struct gpio_call
 	k_work_submit(&event_data->work);
 }
 
-static int etc_interface_init(const struct device *unused)
+static int etc_interface_init(void)
 {
-	ARG_UNUSED(unused);
-
 	if (!device_is_ready(hall_sensor_dt.port)) {
 		LOG_ERR("HALL sensor device not ready");
 		return -EINVAL;

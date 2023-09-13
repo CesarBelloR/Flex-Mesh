@@ -17,7 +17,7 @@ index 0c7b970c8b..0e11fe6c79 100644
  struct cbor_nb_writer {
  	struct net_buf *nb;
 -	zcbor_state_t zs[2];
-+	zcbor_state_t zs[CONFIG_MGMT_MAX_DECODING_LEVELS + 2];
++	zcbor_state_t zs[CONFIG_MCUMGR_SMP_CBOR_MAX_DECODING_LEVELS + 2];
  };
  
  /**

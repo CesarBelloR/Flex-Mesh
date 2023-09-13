@@ -125,7 +125,7 @@ static struct lwm2m_engine_obj_inst *temp_sensor_create(uint16_t obj_inst_id)
 	return &inst[index];
 }
 
-static int etc_temp_sensor_init(const struct device *dev)
+static int etc_temp_sensor_init(void)
 {
 	etc_temp_sensor.obj_id = OBJECT_ID;
 	etc_temp_sensor.version_major = TEMP_VERSION_MAJOR;
