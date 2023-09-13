@@ -62,8 +62,43 @@ static const struct gpio_dt_spec s0_dt =
 static const struct gpio_dt_spec s1_dt =
 	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_sel1), control_gpios, 0);
 
+/* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
+inline static int8_t remap_th_channel(int8_t channel)
+{
+	__ASSERT(channel >= 0 && channel <= 3, "invalid channel number");
+
+#if !defined(CONFIG_BOARD_ETC_0_3_0)
+	switch (channel) {
+	case 0:
+		return 3;
+	case 1:
+		return 2;
+	case 2:
+		return 0;
+	case 3:
+		return 1;
+	default:
+		return 0;
+	}
+#else
+	switch (channel) {
+	case 0:
+		return 1;
+	case 1:
+		return 0;
+	case 2:
+		return 3;
+	case 3:
+		return 2;
+	default:
+		return 0;
+	}
+#endif
+}
+
 void sensor_adc_switch_channel(enum sensor_input channel)
 {
+	channel = remap_th_channel(channel);
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	gpio_pin_set_dt(&sense_dt, 0U);
 #endif

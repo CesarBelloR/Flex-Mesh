@@ -19,7 +19,7 @@
 #include "adc.h"
 #include "ds18b20.h"
 #include "etc_cape.h"
-
+#include "etc_device.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
 
@@ -39,6 +39,7 @@ char key[] = "ElL10TaC4T";
 
 void main(void)
 {
+	etc_device_nvs_init();
 	etc_cape_init(key, 10, 0);
 	etc_cape_set_key(key, 10); 
 	uint32_t dtr = 0;

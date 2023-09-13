@@ -104,3 +104,27 @@ int adc_get_full_scale_count(int channel)
 	}
 	return 0;
 }
+
+int adc_set_start_calibration(int channel) {
+	int16_t sample_buffer[1];
+	int err = 0;
+	struct adc_sequence sequence = {
+		.buffer      = sample_buffer,
+		/* buffer size in bytes, not number of samples */
+		.buffer_size = sizeof(sample_buffer),
+		.calibrate = true
+	};
+
+	if (channel >= 0 && channel < ADC_NUM_CHANNELS) {
+		(void)adc_sequence_init_dt(&adc_channels[channel], &sequence);
+
+		err = adc_read(adc_channels[channel].dev, &sequence);
+		if (err < 0) {
+			LOG_ERR("Could not read (%d)", err);
+			return -1;
+		} else {
+			return sample_buffer[0];
+		}
+	}
+	return -1;
+}
