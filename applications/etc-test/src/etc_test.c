@@ -1203,7 +1203,7 @@ static struct lora_modem_config etc_lora_rx_config = {
 	.datarate = SF_7,
 	.preamble_len = 8,
 	.coding_rate = CR_4_5,
-	.tx_power = 14,
+	.tx_power = 20,
 	.tx = false,
 };
 
@@ -1213,7 +1213,7 @@ static struct lora_modem_config etc_lora_tx_config  = {
 	.datarate = SF_7,
 	.preamble_len = 8,
 	.coding_rate = CR_4_5,
-	.tx_power = 14,
+	.tx_power = 20,
 	.tx = true,
 };
 
@@ -1461,7 +1461,8 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 			shell_print(shell, "%u: timeout", count);
 		} else {
 			rx_buf[MIN(ret, sizeof(rx_buf) - 1)] = '\0';
-			shell_print(shell, "%u: %d,%s", count, rssi, rx_buf);
+			shell_print(shell, "%u: %d", count, rssi);
+			shell_hexdump(shell, rx_buf, ret);
 		}
 		count++;
 	}
@@ -1476,6 +1477,7 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 
 	ret = k_mutex_lock(&lora_mutex, K_SECONDS(1));
 	if (ret != 0) {
+		shell_error(shell, "Can't lock lora mutex");
 		return -1;
 	}
 
