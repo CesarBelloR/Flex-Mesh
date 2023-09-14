@@ -2436,8 +2436,13 @@ static void modem_rssi_query_work(struct k_work *work)
 			     &cmd, 1U, send_cmd, &mdata.sem_response,
 			     MDM_CMD_TIMEOUT);
 	if (ret < 0) {
-		/* Set RSSI to invalid if AT+CSQ returns with an error */
-		mdata.mdm_rssi = MDM_RSSI_INVALID;
+		if (!mdata.is_connected) {
+			/* Set RSSI to invalid if AT+CSQ returns with an error
+			   and modem is currently not connected. 
+			   AT+CSQ can timeout when modem is busy downloading
+			   large amounts of data, e.g. firmware update. */
+			mdata.mdm_rssi = MDM_RSSI_INVALID;
+		}
 		LOG_ERR("AT+CSQ ret:%d", ret);
 	}
 
@@ -2506,7 +2511,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("ATH"),
 	SETUP_CMD_NOHANDLE("AT+CFUN=0"),
-	SETUP_CMD_NOHANDLE("AT+QCFG=\"nwscanmode\",0,1"),
+	SETUP_CMD_NOHANDLE("AT+QCFG=\"nwscanmode\",3,1"),
 	SETUP_CMD_NOHANDLE("AT+CEREG=4"),
 	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
 	SETUP_CMD_NOHANDLE("AT+CFUN=1"),
@@ -2979,17 +2984,6 @@ static int quectel_bg95_get_data(const struct device *dev,
 	}
 }
 
-static void quectel_bg95_mgt_rssi(const struct device *dev,
-				 int request)
-{
-	if (request == MODEM_API_STOP_RSSI) {
-		k_work_cancel_delayable(&mdata.rssi_query_work);
-	} else if (request == MODEM_API_START_RSSI) {
-		k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
-						K_NO_WAIT);
-	}
-}
-
 static struct modem_api api_funcs = {
 	.iface_api.init = modem_net_iface_init,
 
@@ -2997,7 +2991,6 @@ static struct modem_api api_funcs = {
 	.set_credentials = quectel_bg95_set_credentials,
 	.psm_cmd = quectel_bg95_psm_cmd,
 	.get_data = quectel_bg95_get_data,
-	.mgt_rssi = quectel_bg95_mgt_rssi
 };
 
 static bool offload_is_supported(int family, int type, int proto)
