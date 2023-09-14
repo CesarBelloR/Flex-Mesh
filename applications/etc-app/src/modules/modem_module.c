@@ -473,6 +473,16 @@ static void on_all_states(struct modem_msg_data *msg)
 		SEND_SHUTDOWN_ACK(modem, MODEM_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
 	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START)) {
+		LOG_DBG("Stop RSSI polling in FOTA downloading");
+		modem_api_mgt_rssi_work(modem_dev, MODEM_API_STOP_RSSI);
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DONE)) {
+		LOG_DBG("Restart RSSI polling after download FOTA done");
+		modem_api_mgt_rssi_work(modem_dev, MODEM_API_START_RSSI);
+	}
 }
 
 void modem_module_thread_fn(void)

@@ -21,7 +21,7 @@ mcuboot_pad:
   end_address: 0x10200
   placement:
     align:
-      start: 0x1000
+      start: 0x10000
     before:
     - mcuboot_primary_app
   region: flash_primary
@@ -45,12 +45,20 @@ mcuboot_primary_app:
   span: *id002
 memfault_storage:
   address: 0xf0000
+  end_address: 0xf80000
+  placement:
+    align:
+      start: 0x1000
+  region: flash_primary
+  size: 0x8000
+settings_storage:
+  address: 0xf8000
   end_address: 0x100000
   placement:
     align:
       start: 0x1000
   region: flash_primary
-  size: 0x10000
+  size: 0x8000
 mcuboot_secondary:
   address: 0x0
   device: MX25R1635
@@ -62,28 +70,19 @@ mcuboot_secondary:
   share_size:
   - mcuboot_primary
   size: 0xE0000
-settings_storage:
-  address: 0xE0000
-  device: MX25R1635
-  end_address: 0xF0000
-  placement:
-    before:
-    - etc_settings_storage
-  region: external_flash
-  size: 0x10000
 etc_settings_storage:
-  address: 0xF0000
-  device: MX25R1635
-  end_address: 0x110000
+  address: 0xE0000
+  device: DT_CHOSEN(nordic_pm_ext_flash)
+  end_address: 0x100000
   placement:
     before:
     - etc_settings_storage
   region: external_flash
   size: 0x20000
 etc_records_storage:
-  address: 0x110000
-  device: MX25R1635
-  end_address: 0x170000
+  address: 0x100000
+  device: DT_CHOSEN(nordic_pm_ext_flash)
+  end_address: 0x160000
   region: external_flash
   size: 0x60000
 sram_primary:

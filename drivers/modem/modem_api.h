@@ -95,6 +95,11 @@ enum modem_api_data_request {
 	MODEM_API_DATA_REQUEST_DYNAMIC
 };
 
+enum modem_api_mgt_rssi_request {
+	MODEM_API_STOP_RSSI,
+	MODEM_API_START_RSSI
+};
+
 struct modem_api_data {
 	union {
 		struct modem_static_info modem_info;
@@ -119,6 +124,9 @@ typedef int(*modem_api_get_data_t)(const struct device *dev,
 				   enum modem_api_data_request request,
 				   struct modem_api_data *data);
 
+typedef void(*modem_api_mgt_rssi_work_t)(const struct device *dev, 
+					int request);
+
 struct modem_api {
 	/**
 	 * Mandatory to get in first position.
@@ -139,6 +147,8 @@ struct modem_api {
 	modem_api_psm_t psm_cmd;
 	/* Get static information about the modem */
 	modem_api_get_data_t get_data;
+	/* API to control the poll CSQ network status */
+	modem_api_mgt_rssi_work_t mgt_rssi;
 };
 
 struct modem_psk {
@@ -218,6 +228,19 @@ inline static int modem_get_data(const struct device *dev,
 	}
 
 	return api->get_data(dev, request, data);
+}
+
+inline static void modem_api_mgt_rssi_work(const struct device *dev, 
+				int request)
+{
+	const struct modem_api *api =
+		(const struct modem_api *)dev->api;
+
+	if (api->mgt_rssi == NULL) {
+		return;
+	}
+
+	api->mgt_rssi(dev, request);
 }
 
 char* quectel_bg95_get_imei(void);
