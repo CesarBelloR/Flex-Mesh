@@ -61,15 +61,15 @@ memfault_storage:
   size: 0x10000
 mcuboot_secondary:
   address: 0x0
-  device: MX25R1635
-  end_address: 0xE0000
+  device: DT_CHOSEN(nordic_pm_ext_flash)
+  end_address: 0xD8000
   placement:
     align:
       start: 0x4
   region: external_flash
   share_size:
   - mcuboot_primary
-  size: 0xE0000
+  size: 0xD8000
 etc_settings_storage:
   address: 0xE0000
   device: DT_CHOSEN(nordic_pm_ext_flash)
