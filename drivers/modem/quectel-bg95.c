@@ -2436,8 +2436,13 @@ static void modem_rssi_query_work(struct k_work *work)
 			     &cmd, 1U, send_cmd, &mdata.sem_response,
 			     MDM_CMD_TIMEOUT);
 	if (ret < 0) {
-		/* Set RSSI to invalid if AT+CSQ returns with an error */
-		mdata.mdm_rssi = MDM_RSSI_INVALID;
+		if (!mdata.is_connected) {
+			/* Set RSSI to invalid if AT+CSQ returns with an error
+			   and modem is currently not connected. 
+			   AT+CSQ can timeout when modem is busy downloading
+			   large amounts of data, e.g. firmware update. */
+			mdata.mdm_rssi = MDM_RSSI_INVALID;
+		}
 		LOG_ERR("AT+CSQ ret:%d", ret);
 	}
 
