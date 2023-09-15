@@ -71,14 +71,14 @@ mcuboot_secondary:
   - mcuboot_primary
   size: 0xD8000
 etc_settings_storage:
-  address: 0xE0000
+  address: 0xD8000
   device: DT_CHOSEN(nordic_pm_ext_flash)
   end_address: 0x100000
   placement:
     before:
     - etc_settings_storage
   region: external_flash
-  size: 0x20000
+  size: 0x28000
 etc_records_storage:
   address: 0x100000
   device: DT_CHOSEN(nordic_pm_ext_flash)
