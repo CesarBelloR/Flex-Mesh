@@ -51,6 +51,7 @@ enum cloud_wrap_event_type {
 	/** Event received when data has been acknowledged by cloud. */
 	CLOUD_WRAP_EVT_DATA_SEND_ACK,
 	CLOUD_WRAP_EVT_DATA_SEND_FAIL,
+	CLOUD_WRAP_EVT_DATA_SEND_TIMEOUT,
 	/** Event received when a ping response has been received. */
 	CLOUD_WRAP_EVT_PING_ACK,
 	/** A-GPS data received from the cloud integration layer.

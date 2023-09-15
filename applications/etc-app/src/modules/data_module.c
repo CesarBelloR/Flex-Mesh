@@ -503,7 +503,8 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
 		ETC_MEMFAULT_TRACE_EVENT(send_fail);
 		bool split = false;
-		if (msg->module.cloud.data.err == -ENOMEM) {
+		if (msg->module.cloud.data.err == -ENOMEM ||
+		    msg->module.cloud.data.err == -ECONNREFUSED) {
 			split = true;
 		}
 		/* Reset send status on fail */

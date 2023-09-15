@@ -354,7 +354,20 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_DATA_SEND_FAIL %d", evt->message_id);
 		/* Cloud did not receive data */
-		SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_FAIL);
+		struct cloud_event *evt = new_cloud_event();
+		evt->type = CLOUD_EVT_DATA_SEND_FAIL;
+		evt->data.err = -ECONNREFUSED;
+		APP_EVENT_SUBMIT(evt);
+		break;
+	}
+	case CLOUD_WRAP_EVT_DATA_SEND_TIMEOUT:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_DATA_SEND_TIMEOUT %d", evt->message_id);
+		struct cloud_event *evt = new_cloud_event();
+		evt->type = CLOUD_EVT_DATA_SEND_FAIL;
+		evt->data.err = -ETIMEDOUT;
+		APP_EVENT_SUBMIT(evt);
+		break;
 	}
 	case CLOUD_WRAP_EVT_REBOOT_REQUEST:
 	{
