@@ -1571,12 +1571,11 @@ SHELL_CMD_ARG_REGISTER(etc_start_wdt, NULL, "Start feeding hardware watchdog", c
 
 static int cmd_ble_active(const struct shell *shell, size_t argc, char **argv) 
 {
-#if IS_ENABLED(CONFIG_MCUMGR_SMP_BT)
+#if IS_ENABLED(CONFIG_MCUMGR_TRANSPORT_BT)
 	extern void start_smp_bluetooth(void);
 	start_smp_bluetooth();
 	shell_print(shell, "Enable the BLE MCUMGR");
 	return 0;
-
 #endif	
 	shell_error(shell, "BLE is not supported");
 	return 0;
@@ -1586,12 +1585,11 @@ SHELL_CMD_ARG_REGISTER(etc_ble_active, NULL, "Active the BLE MCUMGR", cmd_ble_ac
 
 static int cmd_ble_deactive(const struct shell *shell, size_t argc, char **argv) 
 {
-#if IS_ENABLED(CONFIG_MCUMGR_SMP_BT)
+#if IS_ENABLED(CONFIG_MCUMGR_TRANSPORT_BT)
 	extern void stop_smp_bluetooth(void);
 	stop_smp_bluetooth();
 	shell_print(shell, "Deactive the BLE");
 	return 0;
-
 #endif	
 	shell_error(shell, "BLE is not supported");
 	return 0;
