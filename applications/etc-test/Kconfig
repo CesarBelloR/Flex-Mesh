@@ -13,6 +13,10 @@ config NTC_USE_OFFSET_1
 		bool "Use NTC table with offset 1 deg in C"
 		default y
 
+config LORA_MSG_IN_HALL_EVENT
+		bool "Trigger to send Lora Message when Hall sensor event"
+		default n
+
 endmenu
 
 menu "Zephyr Kernel"

@@ -116,7 +116,10 @@ void lora_tx_rx_fn() {
 	while (k_sem_take(&lora_sem, K_FOREVER) == 0) {
 		if (lora_action == LORA_ACTION_HALL_TRIGGERED) {
 			LOG_INF("Hall triggered");
+#if IS_ENABLED(CONFIG_LORA_MSG_IN_HALL_EVENT)
+			LOG_INF("Send Lora message");
 			shell_execute_cmd(shell_backend_uart_get_ptr(), "lora");
+#endif
 		} else if (lora_action == LORA_ACTION_RX) {
 			lora_rx();
 		}
