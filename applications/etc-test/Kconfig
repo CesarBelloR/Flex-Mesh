@@ -5,17 +5,21 @@ config TEST_VERSION
 	default "v1.0.0"
 
 config NTC_USE_TABLE
-		bool "Use NTC table to converter from raw ADC to temperature"
-		default y
+	bool "Use NTC table to converter from raw ADC to temperature"
+	default y
 	
 config NTC_USE_OFFSET_1
-		depends on NTC_USE_TABLE
-		bool "Use NTC table with offset 1 deg in C"
-		default y
+	depends on NTC_USE_TABLE
+	bool "Use NTC table with offset 1 deg in C"
+	default y
 
 config LORA_MSG_IN_HALL_EVENT
-		bool "Trigger to send Lora Message when Hall sensor event"
-		default n
+	bool "Trigger to send Lora Message when Hall sensor event"
+	default n
+
+config WDT_FEED_TIMEOUT_SECONDS
+	int "Number of seconds that system will feed for WDT"
+	default 1
 
 endmenu
 
@@ -24,6 +28,7 @@ source "$ZEPHYR_BASE/Kconfig.zephyr"
 endmenu
 
 rsource "src/etc_devices/Kconfig"
+rsource "src/modules/Kconfig"
 
 module = ETC_TEST
 module-str = ETC Test

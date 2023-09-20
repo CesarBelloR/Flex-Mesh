@@ -1,0 +1,3 @@
+module = ETC_WATCHDOG
+module-str = ETC Watchdog
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
