@@ -24,6 +24,7 @@
 #include "ds2484.h"
 #include "ds18b20.h"
 #include "etc_cape.h"
+#include "watchdog.h"
 #ifdef CONFIG_BQ25618
 #include "bq25618.h"
 #endif
@@ -39,7 +40,6 @@ LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 #define LORA_FREQ_US_MIN_HZ		902300000LU
 #define LORA_FREQ_US_MAX_HZ		927500000LU
 
-#define HW_WDT_FEED_INTERVAL_S		(10 * 60)
  
 /* Outputs */
 static const struct gpio_dt_spec hall_dt =
@@ -75,7 +75,6 @@ static const struct gpio_dt_spec hw_wdt_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hw_wdt), control_gpios, 0);
 #endif
 static const struct device *ext_flash = DEVICE_DT_GET(DT_NODELABEL(mx25r1635));
-
 static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
@@ -91,8 +90,6 @@ const struct device* dev_lora = DEVICE_DT_GET(DEFAULT_RADIO_NODE);
 static struct k_mutex lora_mutex;
 static struct gpio_callback hall_cb;
 static struct k_sem lora_sem;
-
-static uint16_t wdt_feed_interval_s = HW_WDT_FEED_INTERVAL_S;
 
 volatile enum lora_action {
 	LORA_ACTION_HALL_TRIGGERED,
@@ -116,7 +113,10 @@ void lora_tx_rx_fn() {
 	while (k_sem_take(&lora_sem, K_FOREVER) == 0) {
 		if (lora_action == LORA_ACTION_HALL_TRIGGERED) {
 			LOG_INF("Hall triggered");
+#if IS_ENABLED(CONFIG_LORA_MSG_IN_HALL_EVENT)
+			LOG_INF("Send Lora message");
 			shell_execute_cmd(shell_backend_uart_get_ptr(), "lora");
+#endif
 		} else if (lora_action == LORA_ACTION_RX) {
 			lora_rx();
 		}
@@ -132,45 +132,13 @@ static void hall_cb_fn(const struct device *dev,
 	k_sem_give(&lora_sem);
 }
 
-static void hw_wdt_feed(void)
-{
-#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_set_dt(&hw_wdt_dt, 0U);
-	k_busy_wait(10);
-	gpio_pin_set_dt(&hw_wdt_dt, 1U);
-	k_busy_wait(1);
-	gpio_pin_set_dt(&hw_wdt_dt, 0U);
-#else
-	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT);
-	gpio_pin_set_dt(&s0_dt, 0U);
-	k_busy_wait(10);
-	gpio_pin_set_dt(&s0_dt, 1U);
-	/* Minimum required pulse width according to datasheet is 100 ns. */
-	k_busy_wait(1);
-	gpio_pin_set_dt(&s0_dt, 0U);
-#endif	
-	LOG_INF("HW WDT fed");
-}
-
-void hw_wdt_work_handler(struct k_work *work) 
-{
-	struct k_work_delayable *work_delayable =
-		CONTAINER_OF(work, struct k_work_delayable, work);
-	hw_wdt_feed();
-	k_work_reschedule(work_delayable, K_SECONDS(wdt_feed_interval_s));
-}
-
-K_WORK_DELAYABLE_DEFINE(hw_wdt_work, hw_wdt_work_handler);
-
-static void hw_wdt_start_feed(void)
-{
-	k_work_reschedule(&hw_wdt_work, K_NO_WAIT);
-}
 
 void etc_test_init(void) 
 {
 	int ret;
 	
+	etc_watchdog_init();
+
 	if (!device_is_ready(dev_lora)) {
 		return;
 	}
@@ -180,9 +148,6 @@ void etc_test_init(void)
 	// Configure hall interrupt
 	gpio_pin_configure_dt(&hall_dt, GPIO_INPUT | GPIO_ACTIVE_LOW);
 	gpio_pin_configure_dt(&vsens_enable_dt, GPIO_OUTPUT_ACTIVE);
-#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_ACTIVE);
-#endif
 	gpio_init_callback(&hall_cb, hall_cb_fn, BIT(hall_dt.pin));
 	ret = gpio_add_callback(hall_dt.port, &hall_cb);
 	if (ret < 0) {
@@ -190,8 +155,8 @@ void etc_test_init(void)
 	}
 	gpio_pin_interrupt_configure_dt(&hall_dt, GPIO_INT_EDGE_TO_ACTIVE);
 
-	hw_wdt_start_feed();
-
+	etc_watchdog_start_work();
+	
 	sensor_adc_switch_channel(SENSOR_INPUT_AMBIENT);
 }
 
@@ -1203,7 +1168,7 @@ static struct lora_modem_config etc_lora_rx_config = {
 	.datarate = SF_7,
 	.preamble_len = 8,
 	.coding_rate = CR_4_5,
-	.tx_power = 14,
+	.tx_power = 20,
 	.tx = false,
 };
 
@@ -1213,7 +1178,7 @@ static struct lora_modem_config etc_lora_tx_config  = {
 	.datarate = SF_7,
 	.preamble_len = 8,
 	.coding_rate = CR_4_5,
-	.tx_power = 14,
+	.tx_power = 20,
 	.tx = true,
 };
 
@@ -1461,7 +1426,8 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 			shell_print(shell, "%u: timeout", count);
 		} else {
 			rx_buf[MIN(ret, sizeof(rx_buf) - 1)] = '\0';
-			shell_print(shell, "%u: %d,%s", count, rssi, rx_buf);
+			shell_print(shell, "%u: %d", count, rssi);
+			shell_hexdump(shell, rx_buf, ret);
 		}
 		count++;
 	}
@@ -1476,6 +1442,7 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 
 	ret = k_mutex_lock(&lora_mutex, K_SECONDS(1));
 	if (ret != 0) {
+		shell_error(shell, "Can't lock lora mutex");
 		return -1;
 	}
 
@@ -1550,7 +1517,7 @@ void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callbac
 
 static int cmd_stop_feed_wdt(const struct shell *shell, size_t argc, char **argv) 
 {
-	k_work_cancel_delayable(&hw_wdt_work);
+	etc_watchdog_stop_work();
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd_stop_feed_wdt, 1, 0);
@@ -1559,22 +1526,21 @@ static int cmd_start_feed_wdt(const struct shell *shell, size_t argc, char **arg
 {
 	if (argc == 2) {
 		uint16_t interval = atoi(argv[1]);
-		wdt_feed_interval_s = interval;
+		etc_watchdog_set_timeout(interval);
 		shell_print(shell, "WDT feed interval set to %u seconds", interval);
 	}
-	k_work_reschedule(&hw_wdt_work, K_NO_WAIT);
+	etc_watchdog_start_work();
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_start_wdt, NULL, "Start feeding hardware watchdog", cmd_start_feed_wdt, 1, 1);
 
 static int cmd_ble_active(const struct shell *shell, size_t argc, char **argv) 
 {
-#if IS_ENABLED(CONFIG_MCUMGR_SMP_BT)
+#if IS_ENABLED(CONFIG_MCUMGR_TRANSPORT_BT)
 	extern void start_smp_bluetooth(void);
 	start_smp_bluetooth();
 	shell_print(shell, "Enable the BLE MCUMGR");
 	return 0;
-
 #endif	
 	shell_error(shell, "BLE is not supported");
 	return 0;
@@ -1584,12 +1550,11 @@ SHELL_CMD_ARG_REGISTER(etc_ble_active, NULL, "Active the BLE MCUMGR", cmd_ble_ac
 
 static int cmd_ble_deactive(const struct shell *shell, size_t argc, char **argv) 
 {
-#if IS_ENABLED(CONFIG_MCUMGR_SMP_BT)
+#if IS_ENABLED(CONFIG_MCUMGR_TRANSPORT_BT)
 	extern void stop_smp_bluetooth(void);
 	stop_smp_bluetooth();
 	shell_print(shell, "Deactive the BLE");
 	return 0;
-
 #endif	
 	shell_error(shell, "BLE is not supported");
 	return 0;
