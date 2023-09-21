@@ -10,7 +10,7 @@ if MODEM_MODULE
 
 config MODEM_MODULE_MAX_CONNECTION_TIME_S
 	int "Maximum allowed modem connection time"
-	default 120
+	default 240
 	help
 	  The maximum amount of time in seconds that the modem is allowed
 	  to take from turning on to having established a network connection.
