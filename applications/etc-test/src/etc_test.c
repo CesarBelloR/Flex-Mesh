@@ -136,8 +136,6 @@ static void hall_cb_fn(const struct device *dev,
 void etc_test_init(void) 
 {
 	int ret;
-	
-	etc_watchdog_init();
 
 	if (!device_is_ready(dev_lora)) {
 		return;
@@ -154,8 +152,6 @@ void etc_test_init(void)
 		LOG_ERR("Failed to set gpio callback!");
 	}
 	gpio_pin_interrupt_configure_dt(&hall_dt, GPIO_INT_EDGE_TO_ACTIVE);
-
-	etc_watchdog_start_work();
 	
 	sensor_adc_switch_channel(SENSOR_INPUT_AMBIENT);
 }

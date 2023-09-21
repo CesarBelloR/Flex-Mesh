@@ -1,4 +1,6 @@
 #include <zephyr/kernel.h>
+#include <zephyr/init.h>
+#include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_watchdog, CONFIG_ETC_WATCHDOG_LOG_LEVEL);
@@ -24,12 +26,14 @@ void hw_wdt_work_handler(struct k_work *work)
 
 K_WORK_DELAYABLE_DEFINE(hw_wdt_work, hw_wdt_work_handler);
 
-void etc_watchdog_init(void) {
+static int etc_watchdog_init(void) {
     LOG_INF("Initialized WDT hardware with interval %d (s)", wdt_feed_interval_s);
 #if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_ACTIVE);
 #endif
-	etc_watchdog_feed();
+	etc_watchdog_start_work();
+	
+	return 0;
 }
 
 void etc_watchdog_feed(void) {
@@ -62,3 +66,5 @@ void etc_watchdog_start_work(void) {
 void etc_watchdog_stop_work(void) {
     k_work_cancel_delayable(&hw_wdt_work);
 }
+
+SYS_INIT(etc_watchdog_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
