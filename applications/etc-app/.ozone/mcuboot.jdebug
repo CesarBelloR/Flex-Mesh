@@ -24,7 +24,7 @@ void OnProjectLoad (void) {
   //
   Project.AddPathSubstitute ("/home/andi/git/exact/monitor2.0/etc-firmware/applications/etc-app/.ozone", "$(ProjectDir)");
   Project.AddPathSubstitute ("/home/andi/git/exact/monitor2.0/etc-firmware/applications/etc-app/.ozone", "$(ProjectDir)");
-  Project.SetDevice ("nRF52833_xxAA");
+  Project.SetDevice ("nRF52840_xxAA");
   Project.SetHostIF ("USB", "");
   Project.SetTargetIF ("SWD");
   Project.SetTIFSpeed ("4 MHz");
@@ -32,7 +32,9 @@ void OnProjectLoad (void) {
   //
   // User settings
   //
-  File.Open ("/home/andi/git/exact/monitor2.0/etc-firmware/applications/etc-app/build/zephyr/zephyr.elf");
+  Project.AddSvdFile ("../../../../modules/hal/nordic/nrfx/mdk/nrf52840.svd");
+  Project.SetOSPlugin("ZephyrPlugin");
+  File.Open ("../build/mcuboot/zephyr/zephyr.elf");
 }
 
 /*********************************************************************
