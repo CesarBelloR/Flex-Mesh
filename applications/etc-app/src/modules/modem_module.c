@@ -33,6 +33,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
+#define MODEM_RETRY_SUSPEND_COUNT	10
+
 struct modem_msg_data {
 	union {
 		struct app_event app;
@@ -60,6 +62,7 @@ static enum state_type {
 static enum sub_state_lte_connected {
 	SUB_STATE_MODEM_OFF,
 	SUB_STATE_MODEM_PSM,
+	SUB_STATE_MODEM_SLEEP
 } sub_state;
 
 
@@ -75,9 +78,11 @@ const k_tid_t module_thread;
 
 const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
 
+static void modem_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(modem_work, modem_work_fn);
+
 int64_t modem_wakeup_time = -1;
 
-static bool modem_module_is_sleep = false;
 /* Modem module message queue. */
 #define MODEM_QUEUE_ENTRY_COUNT		10
 #define MODEM_QUEUE_BYTE_ALIGNMENT	4
@@ -121,6 +126,8 @@ static char *sub_state2str(enum state_type state)
 		return "SUB_STATE_MODEM_OFF";
 	case SUB_STATE_MODEM_PSM:
 		return "SUB_STATE_MODEM_PSM";
+	case SUB_STATE_MODEM_SLEEP:
+		return "SUB_STATE_MODEM_SLEEP";
 	default:
 		return "Unknown";
 	}
@@ -215,6 +222,70 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static int modem_enter_sleep(void)
+{
+	int rc = -ENOTSUP;
+#ifdef CONFIG_PM_DEVICE
+	int count = 0;
+	do {
+		rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_SUSPEND);
+		count++;
+		if (rc == -EAGAIN) {
+			LOG_WRN("Modem suspend timed out.");
+		}
+	}
+	while (rc == -EAGAIN && count < MODEM_RETRY_SUSPEND_COUNT);
+#endif
+
+
+	/* If the modem can't enter sleep, we have no way of recovering
+		* and risk of draining the battery. Issue an assert in this case. */
+	__ASSERT_NO_MSG((rc == 0) || (rc == -EALREADY));
+	if ((rc == 0) || (rc == -EALREADY)) {
+		state_set(STATE_DISCONNECTED);
+		sub_state_lte_connected_set(SUB_STATE_MODEM_SLEEP);
+		k_work_cancel_delayable(&modem_work);
+
+		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
+	} else {
+		LOG_ERR("Failed to suspend the modem %d", rc);
+	}
+
+	return rc;
+}
+
+static int modem_enter_wakeup(void) 
+{
+	int rc = -ENOTSUP;
+#ifdef CONFIG_PM_DEVICE
+	rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_RESUME);
+	if (rc) {
+		LOG_ERR("Failed to suspend the modem %d", rc);
+	}
+#endif
+
+	/* If we can't turn on modem, we are in an unrecoverable state.
+	 * Issue assert in this case. */
+	__ASSERT_NO_MSG(rc == 0);
+	if (rc == 0) {
+		state_set(STATE_CONNECTING);
+		k_work_reschedule(&modem_work,
+				K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
+	}
+
+	return rc;
+}
+
+static void modem_work_fn(struct k_work *work)
+{
+	int ret;
+
+	if (state == STATE_CONNECTING) {
+		SEND_EVENT(modem, MODEM_EVT_CONNECT_TIMEOUT);
+	}
+}
+
 static void modem_set_connected(void)
 {
 	struct modem_event *module_event = new_modem_event();
@@ -223,6 +294,7 @@ static void modem_set_connected(void)
 	if (!(state == STATE_DISCONNECTED && sub_state == SUB_STATE_MODEM_PSM)) {
 		static_modem_data_get();
 	}
+	k_work_cancel_delayable(&modem_work);
 	state_set(STATE_CONNECTED);
 	
 	module_event->data.time_to_connect = modem_wakeup_time != -1 ?
@@ -251,21 +323,35 @@ static void new_dynamic_modem_data(const struct modem_network_data *mdm_data) {
 
 static void modem_evt_handler(const struct modem_api_evt *const evt)
 {
+	LOG_DBG("Modem event %s", modem_evt_to_str(evt->type));
 	switch (evt->type) {
 	case MODEM_API_CONNECTED_EVT: {
-		modem_module_is_sleep = false;
 		modem_set_connected();
 		break;
 	}
 	case MODEM_API_DISCONNECTED_EVT: {
-		state_set(STATE_DISCONNECTED);
+		state_set(STATE_CONNECTING);
+		k_work_reschedule(&modem_work,
+				  K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
 		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
 		break;
 	}
 	case MODEM_API_PSM_ENTERED_EVT: {
+		k_work_cancel_delayable(&modem_work);
 		state_set(STATE_DISCONNECTED);
 		sub_state_lte_connected_set(SUB_STATE_MODEM_PSM);
 		SEND_EVENT(modem, MODEM_EVT_PSM_ENTERED);
+		break;
+	}
+
+	case MODEM_API_PSM_WAKEUP_EVT: {
+		break;
+	}
+
+	/* Power down event is not sent on PSM power down, only on regular power down. */
+	case MODEM_API_POWER_DOWN_EVT: {
+		SEND_EVENT(modem, MODEM_EVT_POWERED_DOWN);
+		break;
 	}
 
 	case MODEM_API_DYNAMIC_DATA_UPDATE_EVT: {
@@ -277,11 +363,15 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 static int dynamic_modem_data_get(void)
 {
 	struct modem_api_data modem_data = {0};
+	int ret;
 
-	modem_get_data(modem_dev, MODEM_API_DATA_REQUEST_DYNAMIC, &modem_data);
+	ret = modem_get_data(modem_dev, MODEM_API_DATA_REQUEST_DYNAMIC, &modem_data);
+	if (ret != 0) {
+		LOG_ERR("Can't retrieve dynamic modem data: %d", ret);
+		return ret;
+	}
 
 	new_dynamic_modem_data(&modem_data.modem_network);
-	
 	return 0;
 }
 
@@ -356,41 +446,6 @@ static bool data_type_is_requested(enum app_data_type *data_list,
 	return false;
 }
 
-static int modem_enter_sleep(void)
-{
-	int rc = 0;
-#ifdef CONFIG_PM_DEVICE
-	rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_SUSPEND);
-	if (rc) {
-		LOG_ERR("Failed to suspend the modem %d", rc);
-	}
-#endif
-	modem_module_is_sleep = true;
-	return rc;
-}
-
-static int modem_enter_wakeup(void) 
-{
-	int rc = 0;
-#ifdef CONFIG_PM_DEVICE
-	rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_RESUME);
-	if (rc) {
-		LOG_ERR("Failed to suspend the modem %d", rc);
-	}
-#endif
-	modem_module_is_sleep = false;
-	return rc;
-}
-static int lte_connect(void)
-{
-	return 0;
-}
-
-static int modem_data_init(void)
-{
-	return 0;
-}
-
 static int setup(void)
 {
 	if (modem_dev != NULL) {
@@ -401,6 +456,8 @@ static int setup(void)
 		modem_set_connected();
 		dynamic_modem_data_get();
 	} else {
+		k_work_reschedule(&modem_work,
+				K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
 		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
 	}
 	return 0;
@@ -418,6 +475,19 @@ static void on_state_init(struct modem_msg_data *msg)
 /* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_OFF. */
 static void on_sub_state_modem_off(struct modem_msg_data *msg)
 {
+	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	     IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
+	     etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
+		int ret;
+
+		modem_wakeup_time = k_uptime_get();
+		ret = modem_cmd(modem_dev, MODEM_API_CMD_POWER_ON, NULL);
+		__ASSERT_NO_MSG(ret == 0);
+		k_work_reschedule(&modem_work,
+				K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
+		state_set(STATE_CONNECTING);
+		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
+	}
 }
 
 /* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_PSM. */
@@ -427,8 +497,23 @@ static void on_sub_state_modem_psm(struct modem_msg_data *msg)
 	     IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
 	     etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		modem_wakeup_time = k_uptime_get();
-		modem_psm_cmd(modem_dev, MODEM_API_PSM_CMD_WAKEUP, NULL);
+		modem_cmd(modem_dev, MODEM_API_CMD_PSM_WAKEUP, NULL);
+		k_work_reschedule(&modem_work,
+				K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
+		state_set(STATE_CONNECTING);
 		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
+	}
+}
+
+static void on_sub_state_modem_sleep(struct modem_msg_data *msg)
+{
+	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	     IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
+	     etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
+		int ret;
+
+		modem_wakeup_time = k_uptime_get();
+		ret = modem_enter_wakeup();
 	}
 }
 
@@ -444,11 +529,27 @@ static void on_state_connecting(struct modem_msg_data *msg)
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
 		state_set(STATE_CONNECTED);
 	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_CONNECT_TIMEOUT)) {
+		LOG_INF("Modem connect timeout. Put to sleep.");
+		/* Send modem to sleep when modem is still trying to connect
+		 * and work timer expired. */
+		modem_enter_sleep();
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_POWERED_DOWN)) {
+		LOG_DBG("Modem powered down. Sleeping.");
+		modem_enter_sleep();
+	}
 }
 
 /* Message handler for STATE_CONNECTED. */
 static void on_state_connected(struct modem_msg_data *msg)
 {
+	if (IS_EVENT(msg, modem, MODEM_EVT_POWERED_DOWN)) {
+		LOG_DBG("Modem powered down. Sleeping.");
+		modem_enter_sleep();
+	}
 }
 
 /* Message handler for STATE_SHUTDOWN. */
@@ -482,7 +583,7 @@ void modem_module_thread_fn(void)
 
 	self.thread_id = k_current_get();
 	LOG_INF("Go to modem");
-	state_set(STATE_DISCONNECTED);
+	state_set(STATE_CONNECTING);
 	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
 
 	err = setup();
@@ -506,6 +607,9 @@ void modem_module_thread_fn(void)
 				break;
 			case SUB_STATE_MODEM_PSM:
 				on_sub_state_modem_psm(&msg);
+				break;
+			case SUB_STATE_MODEM_SLEEP:
+				on_sub_state_modem_sleep(&msg);
 				break;
 			}
 			break;

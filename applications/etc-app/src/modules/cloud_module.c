@@ -291,6 +291,7 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	case CLOUD_WRAP_EVT_DISCONNECTED:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_DISCONNECTED");
+		SEND_EVENT(cloud, CLOUD_EVT_DISCONNECTED);
 		break;
 	}
 	case CLOUD_WRAP_EVT_PAUSED:
@@ -353,7 +354,20 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_DATA_SEND_FAIL %d", evt->message_id);
 		/* Cloud did not receive data */
-		SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_FAIL);
+		struct cloud_event *evt = new_cloud_event();
+		evt->type = CLOUD_EVT_DATA_SEND_FAIL;
+		evt->data.err = -ECONNREFUSED;
+		APP_EVENT_SUBMIT(evt);
+		break;
+	}
+	case CLOUD_WRAP_EVT_DATA_SEND_TIMEOUT:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_DATA_SEND_TIMEOUT %d", evt->message_id);
+		struct cloud_event *evt = new_cloud_event();
+		evt->type = CLOUD_EVT_DATA_SEND_FAIL;
+		evt->data.err = -ETIMEDOUT;
+		APP_EVENT_SUBMIT(evt);
+		break;
 	}
 	case CLOUD_WRAP_EVT_REBOOT_REQUEST:
 	{
@@ -452,44 +466,12 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
 		state_set(STATE_LTE_DISCONNECTED);
 
-		/* Explicitly disconnect cloud when you receive an LTE disconnected event.
-		 * This is to clear up the cloud library state.
-		 */
-		disconnect_cloud();
+		pause_cloud();
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
 		state_set(STATE_LTE_DISCONNECTED);
 		sub_state_lte_disconnected_set(SUB_STATE_LTE_PSM);
-	}
-
-
-	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) {
-		if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
-			int err;
-
-			struct lwm2m_obj_path paths[CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX];
-
-			__ASSERT(ARRAY_SIZE(paths) ==
-				 ARRAY_SIZE(msg->module.data.data.buffer.paths),
-				 "Path object list not the same size");
-
-			for (int i = 0; i < ARRAY_SIZE(paths); i++) {
-				paths[i] = msg->module.data.data.buffer.paths[i];
-			}
-
-			err = cloud_wrap_data_send(NULL,
-						   msg->module.data.data.buffer.valid_object_paths,
-						   true,
-						   0,
-						   paths);
-			if (err) {
-				LOG_ERR("cloud_wrap_data_send, err: %d", err);
-				SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_FAIL);
-			}
-
-			return;
-		}
 	}
 }
 
@@ -525,6 +507,42 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
 		pause_cloud();
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) {
+		if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
+			int err;
+
+			struct lwm2m_obj_path paths[CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX];
+
+			__ASSERT(ARRAY_SIZE(paths) ==
+				 ARRAY_SIZE(msg->module.data.data.buffer.paths),
+				 "Path object list not the same size");
+
+			for (int i = 0; i < ARRAY_SIZE(paths); i++) {
+				paths[i] = msg->module.data.data.buffer.paths[i];
+			}
+
+			err = cloud_wrap_data_send(NULL,
+						   msg->module.data.data.buffer.valid_object_paths,
+						   true,
+						   0,
+						   paths);
+			if (err) {
+				LOG_ERR("cloud_wrap_data_send, err: %d", err);
+				struct cloud_event *evt = new_cloud_event();
+				evt->type = CLOUD_EVT_DATA_SEND_FAIL;
+				evt->data.err = err;
+				APP_EVENT_SUBMIT(evt);
+			}
+
+			return;
+		}
 	}
 }
 

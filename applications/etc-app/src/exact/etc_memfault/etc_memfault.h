@@ -5,8 +5,8 @@
 #include <memfault/core/trace_event.h>
 
 #define ETC_MEMFAULT_TRACE_EVENT(reason)    MEMFAULT_TRACE_EVENT(reason)
-#endif
-
+#else
 #define ETC_MEMFAULT_TRACE_EVENT(reason)    
+#endif
 
 #endif /* ETC_MEMFAULT_H_ */

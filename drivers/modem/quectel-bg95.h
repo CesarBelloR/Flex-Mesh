@@ -16,6 +16,7 @@
 #include <zephyr/init.h>
 
 #include <zephyr/net/net_if.h>
+#include <zephyr/net/offloaded_netdev.h>
 #include <zephyr/net/net_offload.h>
 #include <zephyr/net/socket_offload.h>
 
@@ -49,6 +50,7 @@
 #define BUF_ALLOC_TIMEOUT		K_SECONDS(1)
 #define MDM_MAX_BOOT_TIME		K_SECONDS(15)
 #define MDM_RSSI_INVALID		-1000
+#define MDM_PDPDEACT_RECONNECT_DELAY	K_SECONDS(5)
 
 #define MDM_FILE_NAME_MAX_LENGTH	(80)
 

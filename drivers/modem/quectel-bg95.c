@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #define MDM_TCP_ERROR_NO_MEMORY		553
 #define MDM_TCP_ERROR_TIMEOUT		569
 #define MDM_TCP_ERROR_SOCKET_IN_USE	563
+#define MDM_TCP_ERROR_UNKNOWN		550
 
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
@@ -394,9 +395,9 @@ static void socket_close(struct modem_socket *sock, bool force_close)
 	char buf[sizeof("AT+Q###CLOSE=##")] = {0};
 	int  ret = 0;
 	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
-		snprintk(buf, sizeof(buf), "AT+QSSLCLOSE=%d", sock->sock_fd);
+		snprintk(buf, sizeof(buf), "AT+QSSLCLOSE=%d", sock->id);
 	} else {
-		snprintk(buf, sizeof(buf), "AT+QICLOSE=%d", sock->sock_fd);
+		snprintk(buf, sizeof(buf), "AT+QICLOSE=%d", sock->id);
 	}
 	
 	k_sem_reset(&mdata.sem_response);
@@ -655,6 +656,10 @@ static int pm_suspend_uart(void)
 	ret = pm_device_action_run(mctx.iface.dev, PM_DEVICE_ACTION_SUSPEND);
 	if (ret)
 	{
+		if (ret == -EALREADY) {
+			LOG_WRN("Device already suspended");
+			return 0;
+		}
 		LOG_ERR("Can't suspend device: %d", ret);
 		return ret;
 	}
@@ -686,42 +691,61 @@ static int pm_resume_uart(void)
 }
 
 /**
- * @brief Work that needs to be performed when modem signals a wakeup from or
- * entering into PSM.
+ * @brief Handler for the PSM_IND modem signal. It signals a wakeup from or
+ * entering of PSM.
  * The modem changes the PSM_IND's pin status before sending APP RDY.
  * When entering PSM, there are two high -> low transitions with pulses of
  * ~50 ms. This is handled through a "debounce" mechanism.
+ * When this handler is called, save the current state of the pin and time
+ * and resume UART if needed. If last change was within the debouncing interval,
+ * (re-)schedule work to modem work queue.
+*/
+static void psm_ind_handler(struct psm_ind *psm_ind_data, int edge)
+{
+	int ret;
+	int64_t uptime_now = k_uptime_get();
+
+	psm_ind_data->edge = edge;
+	if (psm_ind_data->last_change_s != 0 && 
+	    (uptime_now - psm_ind_data->last_change_s) < PSM_IND_DEBOUNCE_INTERVAL_MS) {
+		psm_ind_data->last_change_s = uptime_now;
+		k_work_reschedule_for_queue(&modem_workq, &psm_ind_data->work, 
+					    K_MSEC(PSM_IND_DEBOUNCE_INTERVAL_MS));
+		return;
+	}
+	psm_ind_data->last_change_s = uptime_now;
+
+	/* If psm.edge is a negative value something went wrong and we can't
+	 * guarantee correct modem operation anymore. */
+	__ASSERT_NO_MSG(psm_ind_data->edge >= 0);
+	if (psm_ind_data->edge == 0) {
+		pm_resume_uart();
+	}
+}
+
+/**
+ * @brief Wake up modem UART if pin edge/level indicates a PSM wake up.
 */
 static void psm_ind_work_fn(struct k_work *work)
 {	
 	struct k_work_delayable *work_delayable = k_work_delayable_from_work(work);
-	struct psm_ind *ind = CONTAINER_OF(work_delayable, struct psm_ind, work);
-	int64_t uptime_now = k_uptime_get();
-
-	if (ind->last_change_s != 0 && 
-	    (uptime_now - ind->last_change_s) < PSM_IND_DEBOUNCE_INTERVAL_MS) {
-		k_work_reschedule_for_queue(&modem_workq, &ind->work, 
-					    K_MSEC(PSM_IND_DEBOUNCE_INTERVAL_MS));
-		return;
-	}
+	struct psm_ind *psm_ind_data = CONTAINER_OF(work_delayable, struct psm_ind, work);
 
 	/* If psm.edge is a negative value something went wrong and we can't
 	 * guarantee correct modem operation anymore. */
-	__ASSERT_NO_MSG(ind->edge >= 0);
-	if (ind->edge == 0) {
+	__ASSERT_NO_MSG(psm_ind_data->edge >= 0);
+	if (psm_ind_data->edge == 0) {
 		pm_resume_uart();
 	}
-
-	ind->last_change_s = uptime_now;
 }
 
 static void psm_ind_callback(const struct device *dev,
 			     struct gpio_callback *cb, uint32_t pins)
 {
-	psm_ind.edge = gpio_pin_get(dev, find_msb_set(pins) - 1);
-	/* Submit work to modem queue. If the work is currently executed, 
-	 * it is re-submitted/queued. */
-	k_work_reschedule_for_queue(&modem_workq, &psm_ind.work, K_NO_WAIT);
+	/* We need to wake up the UART when turning on as soon as possible to
+	   not miss the modem's APP RDY output. Task in work queue could be waiting
+	   for semaphore that might time out. */
+	psm_ind_handler(&psm_ind, gpio_pin_get(dev, find_msb_set(pins) - 1));
 }
 static struct gpio_callback psm_ind_gpio_callback;
 
@@ -895,16 +919,16 @@ static ssize_t get_data_size(struct modem_socket *sock)
 	if ((sock->ip_proto == IPPROTO_TLS_1_2) || 
 		(sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", 
-				sock->sock_fd, 0);
+				sock->id, 0);
 	} else {
 		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", 
-				sock->sock_fd, 0);
+				sock->id, 0);
 	}
 
 	/* Socket read settings */
 	(void) memset(&sock_data, 0, sizeof(sock_data));
 	// sock->data	       = &sock_data;
-	// mdata.sock_fd	   = sock->sock_fd;
+	// mdata.sock_fd	   = sock->id;
 	/* Tell the modem to give us the available data's length */
 	/* (AT+QIRD=sock_fd,0). */
 	k_sem_reset(&mdata.sem_response);
@@ -965,6 +989,19 @@ MODEM_CMD_DEFINE(on_cmd_unsol_close)
 	/* Tell the modem to close the socket. */
 	socket_close(sock, false);
 	LOG_INF("Socket Closed: %d", sock_fd);
+	return 0;
+}
+
+MODEM_CMD_DEFINE(on_cmd_unsol_pdpdeact)
+{
+	quectel_bg95_set_connected(false);
+
+	if (mdata.power == MODEM_POWER_ON) {
+		k_work_reschedule_for_queue(&modem_workq,
+					&mdata.rssi_query_work,
+					MDM_PDPDEACT_RECONNECT_DELAY);
+	}
+
 	return 0;
 }
 
@@ -1093,9 +1130,9 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 	/* Create a buffer with the correct params. */
 	mdata.sock_written = buf_len;
 	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
-		snprintk(send_buf, sizeof(send_buf), "AT+QSSLSEND=%d,%ld", sock->sock_fd, (long)buf_len);
+		snprintk(send_buf, sizeof(send_buf), "AT+QSSLSEND=%d,%ld", sock->id, (long)buf_len);
 	} else {
-		snprintk(send_buf, sizeof(send_buf), "AT+QISEND=%d,%ld", sock->sock_fd, (long)buf_len);
+		snprintk(send_buf, sizeof(send_buf), "AT+QISEND=%d,%ld", sock->id, (long)buf_len);
 	}
 
 	/* Send the Modem command. */
@@ -1192,8 +1229,6 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 		return -1;
 	}
 
-	LOG_INF("len: %u", len);
-
 	ret = send_socket_data(sock, to, cmd, ARRAY_SIZE(cmd), buf, len,
 			       MDM_CMD_TIMEOUT);
 	if (ret < 0) {
@@ -1262,10 +1297,10 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	if ((sock->ip_proto == IPPROTO_TLS_1_2) || 
 		(sock->ip_proto == IPPROTO_DTLS_1_2)) {
 		snprintk(sendbuf, sizeof(sendbuf), "AT+QSSLRECV=%d,%zd", 
-				sock->sock_fd, len);
+				sock->id, len);
 	} else {
 		snprintk(sendbuf, sizeof(sendbuf), "AT+QIRD=%d,%zd", 
-				sock->sock_fd, len);
+				sock->id, len);
 	}
 
 	/* Take tx semaphore to ensure only one socket at a time can receive
@@ -1307,11 +1342,11 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	int new_size = get_data_size(sock);
 	ret = modem_socket_packet_size_update(&mdata.socket_config, sock, new_size);
 	if (ret < 0) {
-		LOG_ERR("socket_id:%d err: %d", sock->sock_fd, ret);
+		LOG_ERR("socket_id:%d err: %d", sock->id, ret);
 	}
 	if (new_size > 0) {
 		/* Data ready indication. */
-		LOG_DBG("Data Receive Indication for socket: %d", sock->sock_fd);
+		LOG_DBG("Data Receive Indication for socket: %d", sock->id);
 		modem_socket_data_ready(&mdata.socket_config, sock);
 	}
 
@@ -1462,7 +1497,7 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 	mdata.power = MODEM_POWER_PSM;
 	quectel_bg95_set_connected(false);
 	for(int i = 0; i < MDM_MAX_SOCKETS; i++) {
-		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_num) {
+		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_id) {
 			LOG_DBG("invalidating socket: %u", mdata.sockets[i].id);
 			modem_socket_put(&mdata.socket_config, mdata.sockets[i].sock_fd);
 		}
@@ -1480,6 +1515,7 @@ MODEM_CMD_DEFINE(on_cmd_power_down)
 {
 	k_sem_give(&mdata.sem_shutdown);
 	mdata.power = MODEM_POWER_OFF;
+	MODEM_SUBMIT_EVT(MODEM_API_POWER_DOWN_EVT);
 	return 0;
 }
 
@@ -1501,7 +1537,8 @@ static void modem_pin_on_off(void)
 	gpio_pin_set_dt(&power_gpio, 0);
 }
 
-static int quectel_bg95_power_down() {
+static int quectel_bg95_power_down() 
+{
 	const char *pw_dwn = "AT+QPOWD";
 	int ret;
 	int retries = 0;
@@ -1510,7 +1547,12 @@ static int quectel_bg95_power_down() {
 		MODEM_CMD("POWERED DOWN", on_cmd_power_down, 0U, ""),
 	};
 
-	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT) != 0) {
+	/* If modem is already powered off, return immediately. */
+	if (mdata.power == MODEM_POWER_OFF) {
+		return 0;
+	}
+
+	if (k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_REGISTRATION_TIMEOUT) != 0) {
 		LOG_ERR("Error taking semaphore");
 		return -EAGAIN;
 	}
@@ -1617,6 +1659,29 @@ static int quectel_bg95_set_cereg(uint8_t n)
 }
 #endif
 
+static int modem_set_psm_indication(bool enable)
+{
+	char sendbuf[sizeof("AT+QCFG=#psm/urc#,##")];
+	uint8_t en_val;
+	int ret;
+
+	if (enable) {
+		en_val = 1;
+	} else {
+		en_val = 0;
+	}
+
+	snprintk(sendbuf, sizeof(sendbuf), "AT+QCFG=\"psm/urc\",%u", en_val);
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_WRN("Error setting PSM indication");
+	}
+
+	return ret;
+}
+
 /**
  * @brief Set the PSM requested active and periodic TAU timer values.
  * 
@@ -1649,6 +1714,9 @@ static int quectel_bg95_set_psm(bool enable, char *req_rat, char *req_rptau)
 		LOG_ERR("Failed to set PSM requested values");
 	} else {
 		LOG_DBG("Set PSM requested values");
+		if (enable) {
+			modem_set_psm_indication(true);
+		}
 	}
 
 	return ret;
@@ -1813,7 +1881,7 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 	char buf[256];
 
 	// File name is <SSL context ID>_server.psk.
-	snprintk(psk_fn, sizeof(psk_fn), "%d_server.psk", sock->sock_fd);
+	snprintk(psk_fn, sizeof(psk_fn), "%d_server.psk", sock->id);
 	if (quectel_bg95_file_find(psk_fn) == 0) {
 		if (quectel_bg95_file_delete(psk_fn) != 0) {
 			return -1;
@@ -1843,7 +1911,7 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 		LOG_DBG("Failed to download PSK file %d", ret);
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0X00AE", "ciphersuite", sock->sock_fd);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0X00AE", "ciphersuite", sock->id);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1852,7 +1920,7 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtlsversion", sock->sock_fd, 1);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtlsversion", sock->id, 1);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1861,7 +1929,7 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 		return -1;
 	}
 		
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->sock_fd, 1);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->id, 1);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1871,7 +1939,7 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 	}
 
 	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "negotiatetime", 
-		 sock->sock_fd, CONFIG_MODEM_QUECTEL_BG95_M3_SSL_NEGOTIATION_TIMEOUT);
+		 sock->id, CONFIG_MODEM_QUECTEL_BG95_M3_SSL_NEGOTIATION_TIMEOUT);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1934,7 +2002,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XFFFF", "ciphersuite", sock->sock_fd);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XFFFF", "ciphersuite", sock->id);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1944,7 +2012,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 	}
 
 	/* Set CA path */
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "cacert", sock->sock_fd, MDM_TLS_CA_FILE_NAME);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "cacert", sock->id, MDM_TLS_CA_FILE_NAME);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1953,7 +2021,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "clientcert", sock->sock_fd, MDM_TLS_CLIENT_CERT_FILE_NAME);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "clientcert", sock->id, MDM_TLS_CLIENT_CERT_FILE_NAME);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1962,7 +2030,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "clientkey", sock->sock_fd, MDM_TLS_PRIV_KEY_FILE_NAME);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "clientkey", sock->id, MDM_TLS_PRIV_KEY_FILE_NAME);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1971,7 +2039,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "sslversion", sock->sock_fd, 3);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "sslversion", sock->id, 3);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1980,7 +2048,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->sock_fd, 0);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->id, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1989,7 +2057,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "negotiatetime", sock->sock_fd, 300);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "negotiatetime", sock->id, 300);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -1998,7 +2066,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "ignorelocaltime", sock->sock_fd, 0);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "ignorelocaltime", sock->id, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2008,7 +2076,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 	}
 
 	/* Disable DTLS when using TLS socket */
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->sock_fd, 0);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->id, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2031,11 +2099,11 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	struct modem_cmd    cmd[]     = {
 		MODEM_CMD("+QIOPEN: ", on_cmd_atcmdinfo_sockopen, 2U, ","),
 		MODEM_CMD("+QSSLOPEN: ", on_cmd_atcmdinfo_sslopen, 2U, ",") };
-	char		buf[sizeof("AT+Q###OPEN=#,##,!###!,!####:####:####:####:####:####:####:####!,######") + 256] = {0};
-	int		    ret;
-	char		ip_str[NET_IPV6_ADDR_LEN];
+	char	buf[sizeof("AT+Q###OPEN=#,##,!###!,!####:####:####:####:####:####:####:####!,######") + 256] = {0};
+	int	ret;
+	char	ip_str[NET_IPV6_ADDR_LEN];
 
-	if (sock->id < mdata.socket_config.base_socket_num - 1) {
+	if (modem_socket_is_allocated(&mdata.socket_config, sock) == false) {
 		LOG_ERR("Invalid socket_id(%d) from fd:%d",
 			sock->id, sock->sock_fd);
 		errno = EINVAL;
@@ -2057,9 +2125,15 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	}
 
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
-		on_connect_tls_init(sock);
+		if (on_connect_tls_init(sock) != 0) {
+			errno = EAGAIN;
+			return -errno;
+		}
 	} else if (sock->ip_proto == IPPROTO_DTLS_1_2) {
-		on_connect_dtls_init(sock);
+		if (on_connect_dtls_init(sock) != 0) {
+			errno = EAGAIN;
+			return -errno;
+		}
 	}
 	
 
@@ -2077,13 +2151,13 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	/* Formulate the complete string. */
 	/* Open the socket with buffer access mode */
 	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
-		snprintk(buf, sizeof(buf), "AT+QSSLOPEN=%d,%d,%d,\"%s\",%d,0", 1, sock->sock_fd, sock->sock_fd,
+		snprintk(buf, sizeof(buf), "AT+QSSLOPEN=%d,%d,%d,\"%s\",%d,0", 1, sock->id, sock->id,
 			ip_str, dst_port);
 	} else if (sock->ip_proto == IPPROTO_UDP) {
-		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, "UDP",
+		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->id, "UDP",
 			ip_str, dst_port);
 	} else {
-		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->sock_fd, "TCP",
+		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->id, "TCP",
 			ip_str, dst_port);
 	}
 
@@ -2127,6 +2201,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (ret != 0) {
 		bool force_close = false;
 		LOG_ERR("Closing the socket!!! error %d", ret);
+		__ASSERT_NO_MSG(ret != 550);
 		if (ret == MDM_TCP_ERROR_TIMEOUT) {
 			ret = -ETIMEDOUT;
 		} else if (ret == MDM_TCP_ERROR_SOCKET_IN_USE) {
@@ -2162,7 +2237,7 @@ static int offload_close(void *obj)
 	struct modem_socket *sock = (struct modem_socket *) obj;
 
 	/* Make sure we assigned an id */
-	if (sock->id < mdata.socket_config.base_socket_num) {
+	if (modem_socket_is_allocated(&mdata.socket_config, sock) == false) {
 		return 0;
 	}
 
@@ -2215,9 +2290,9 @@ static void modem_rx(void)
 	while (true) {
 
 		/* Wait for incoming data */
-		k_sem_take(&mdata.iface_data.rx_sem, K_FOREVER);
+		modem_iface_uart_rx_wait(&mctx.iface, K_FOREVER);
 
-		mctx.cmd_handler.process(&mctx.cmd_handler, &mctx.iface);
+		modem_cmd_handler_process(&mctx.cmd_handler, &mctx.iface);
 	}
 }
 
@@ -2370,6 +2445,13 @@ static void modem_rssi_query_work(struct k_work *work)
 			     &cmd, 1U, send_cmd, &mdata.sem_response,
 			     MDM_CMD_TIMEOUT);
 	if (ret < 0) {
+		if (!mdata.is_connected) {
+			/* Set RSSI to invalid if AT+CSQ returns with an error
+			   and modem is currently not connected. 
+			   AT+CSQ can timeout when modem is busy downloading
+			   large amounts of data, e.g. firmware update. */
+			mdata.mdm_rssi = MDM_RSSI_INVALID;
+		}
 		LOG_ERR("AT+CSQ ret:%d", ret);
 	}
 
@@ -2380,7 +2462,7 @@ static void modem_rssi_query_work(struct k_work *work)
 	}
 
 	/* Re-start RSSI query work */
-	if (work) {
+	if (work && (mdata.power == MODEM_POWER_ON)) {
 		k_work_reschedule_for_queue(&modem_workq,
 					    &mdata.rssi_query_work,
 					    timeout);
@@ -2416,6 +2498,7 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("+QSSLURC: \"recv\",",   on_cmd_unsol_recv,  1U, ""),
 	MODEM_CMD("+QSSLURC: \"closed\",", on_cmd_unsol_close, 1U, ""),
 	MODEM_CMD("+QIURC: \"dnsgip\",", on_cmd_dns, 0U, ""),
+	MODEM_CMD("+QIURC: \"pdpdeact\",", on_cmd_unsol_pdpdeact, 1U, ","),
 	MODEM_CMD_ARGS_MAX("+CEREG: ", on_cmd_unsol_cereg, 1U, 9U, ","),
 	MODEM_CMD("+QPSMTIMER: ", on_cmd_unsol_qpsmtimer, 2U, ","),
 	MODEM_CMD("APP RDY", on_cmd_unsol_rdy, 0U, ""),
@@ -2442,6 +2525,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
 	SETUP_CMD_NOHANDLE("AT+CFUN=1"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
+	SETUP_CMD_NOHANDLE("AT+QURCCFG=\"urcport\",\"uart1\""),
 #ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 	SETUP_CMD_NOHANDLE("AT+QCFG=\"psm/urc\",1"),
 #endif
@@ -2463,6 +2547,8 @@ static const struct setup_cmd setup_cmds[] = {
 static void modem_psm_wakeup_work(struct k_work *work)
 {
 	int ret;
+
+	MODEM_SUBMIT_EVT(MODEM_API_PSM_WAKEUP_EVT);
 
 	disable_psm_ind_interrupt();
 
@@ -2600,7 +2686,7 @@ static int map_credentials(struct modem_socket *sock, const void *optval, sockle
 static int modem_set_socket_timeout(struct modem_socket *sock, int timeout) {
 	char buf[sizeof("AT+QSSLCFG=#negotiatetime#,##,####")] = {0};
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
-		snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"negotiatetime\",%d,%d", sock->sock_fd, timeout);
+		snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"negotiatetime\",%d,%d", sock->id, timeout);
 	} else {
 		return -EINVAL;
 	}
@@ -2836,10 +2922,12 @@ static int quectel_bg95_set_credentials(const struct device *dev,
 }
 
 static int quectel_bg95_psm_cmd(const struct device *dev,
-				enum modem_api_psm_cmd cmd, void *psm_data)
+				enum modem_api_cmd cmd, void *psm_data)
 {
-	if (cmd == MODEM_API_PSM_CMD_WAKEUP) {
+	if (cmd == MODEM_API_CMD_PSM_WAKEUP) {
 		return quectel_bg95_psm_wakeup();
+	} else if (cmd == MODEM_API_CMD_POWER_ON) {
+		return modem_setup();
 	}
 
 	return -EINVAL;
@@ -2914,7 +3002,7 @@ static struct modem_api api_funcs = {
 
 	.evt_handler_init = quectel_bg95_evt_handler_init,
 	.set_credentials = quectel_bg95_set_credentials,
-	.psm_cmd = quectel_bg95_psm_cmd,
+	.cmd = quectel_bg95_psm_cmd,
 	.get_data = quectel_bg95_get_data,
 };
 
@@ -2960,34 +3048,41 @@ static int modem_init(const struct device *dev)
 			   K_PRIO_COOP(7), NULL);
 
 	/* socket config */
-	mdata.socket_config.sockets	    = &mdata.sockets[0];
-	mdata.socket_config.sockets_len	    = ARRAY_SIZE(mdata.sockets);
-	mdata.socket_config.base_socket_num = MDM_BASE_SOCKET_NUM;
-	ret = modem_socket_init(&mdata.socket_config, &offload_socket_fd_op_vtable);
+	ret = modem_socket_init(&mdata.socket_config, &mdata.sockets[0], ARRAY_SIZE(mdata.sockets),
+				MDM_BASE_SOCKET_NUM, true, &offload_socket_fd_op_vtable);
 	if (ret < 0) {
 		goto error;
 	}
 
-	/* cmd handler */
-	mdata.cmd_handler_data.cmds[CMD_RESP]	   = response_cmds;
-	mdata.cmd_handler_data.cmds_len[CMD_RESP]  = ARRAY_SIZE(response_cmds);
-	mdata.cmd_handler_data.cmds[CMD_UNSOL]	   = unsol_cmds;
-	mdata.cmd_handler_data.cmds_len[CMD_UNSOL] = ARRAY_SIZE(unsol_cmds);
-	mdata.cmd_handler_data.match_buf	   = &mdata.cmd_match_buf[0];
-	mdata.cmd_handler_data.match_buf_len	   = sizeof(mdata.cmd_match_buf);
-	mdata.cmd_handler_data.buf_pool		   = &mdm_recv_pool;
-	mdata.cmd_handler_data.alloc_timeout	   = BUF_ALLOC_TIMEOUT;
-	mdata.cmd_handler_data.eol		   = "\r";
-	ret = modem_cmd_handler_init(&mctx.cmd_handler, &mdata.cmd_handler_data);
+	/* cmd handler setup */
+	const struct modem_cmd_handler_config cmd_handler_config = {
+		.match_buf = &mdata.cmd_match_buf[0],
+		.match_buf_len = sizeof(mdata.cmd_match_buf),
+		.buf_pool = &mdm_recv_pool,
+		.alloc_timeout = BUF_ALLOC_TIMEOUT,
+		.eol = "\r",
+		.user_data = NULL,
+		.response_cmds = response_cmds,
+		.response_cmds_len = ARRAY_SIZE(response_cmds),
+		.unsol_cmds = unsol_cmds,
+		.unsol_cmds_len = ARRAY_SIZE(unsol_cmds),
+	};
+
+	ret = modem_cmd_handler_init(&mctx.cmd_handler, &mdata.cmd_handler_data,
+				     &cmd_handler_config);
 	if (ret < 0) {
 		goto error;
 	}
 
 	/* modem interface */
-	mdata.iface_data.rx_rb_buf     = &mdata.iface_rb_buf[0];
-	mdata.iface_data.rx_rb_buf_len = sizeof(mdata.iface_rb_buf);
-	ret = modem_iface_uart_init(&mctx.iface, &mdata.iface_data,
-				    MDM_UART_DEV);
+	const struct modem_iface_uart_config uart_config = {
+		.rx_rb_buf = &mdata.iface_rb_buf[0],
+		.rx_rb_buf_len = sizeof(mdata.iface_rb_buf),
+		.dev = MDM_UART_DEV,
+		.hw_flow_control = DT_PROP(MDM_UART_NODE, hw_flow_control),
+	};
+
+	ret = modem_iface_uart_init(&mctx.iface, &mdata.iface_data, &uart_config);
 	if (ret < 0) {
 		goto error;
 	}
@@ -2999,8 +3094,9 @@ static int modem_init(const struct device *dev)
 	mctx.data_imei	       = mdata.mdm_imei;
 	mctx.data_rssi	       = &mdata.mdm_rssi;
 
-	/* Set qual to 99 (means not known) */
+	/* Set qual and RSSI to 99 (means not known/not connected) */
 	mdata.mdm_qual = 99;
+	mdata.mdm_rssi = MDM_RSSI_INVALID;
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 	ret = gpio_pin_configure_dt(&on_off_gpio, GPIO_OUTPUT_LOW);
@@ -3092,29 +3188,6 @@ error:
 	return ret;
 }
 
-static int modem_set_psm_indication(bool enable)
-{
-	char sendbuf[sizeof("AT+QCFG=#psm/urc#,##")];
-	uint8_t en_val;
-	int ret;
-
-	if (enable) {
-		en_val = 1;
-	} else {
-		en_val = 0;
-	}
-
-	snprintk(sendbuf, sizeof(sendbuf), "AT+QCFG=\"psm/urc\",%u", en_val);
-
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
-			     &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0) {
-		LOG_WRN("Error setting PSM indication");
-	}
-
-	return ret;
-}
-
 int quectel_bg95_get_psm_timers(void)
 {
 	char *sendcmd = "AT+QPSMS?";
@@ -3126,30 +3199,6 @@ int quectel_bg95_get_psm_timers(void)
 		LOG_WRN("Error getting PSM parameters");
 	}
 	
-	return ret;
-}
-
-int quectel_bg95_psm(bool enable)
-{
-	char sendbuf[sizeof("AT+QPSMS=#,,,##########,###########")];
-	int ret;
-
-	modem_set_psm_indication(true);
-
-	if (enable) {
-		snprintk(sendbuf, sizeof(sendbuf), "AT+QPSMS=1,,,\"%s\",\"%s\"", 
-			CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU,
-			CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT);
-	} else {
-		snprintk(sendbuf, sizeof(sendbuf), "AT+QPSMS=0");
-	}
-
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0u, sendbuf,
-			     &mdata.sem_response, MDM_CMD_TIMEOUT);
-	if (ret < 0) {
-		LOG_ERR("Error requesting PSM");
-	}
-
 	return ret;
 }
 

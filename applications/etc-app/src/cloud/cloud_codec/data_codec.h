@@ -216,4 +216,50 @@ int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data);
 */
 int data_codec_clear_data(struct cloud_codec_data *cloud_data);
 
+/**
+ * @brief Check if cloud_data contains any data to be sent.
+ * 
+ * @param cloud_data Pointer to struct cloud_data instance.
+ * @return 1 if cloud_data contains data, 0 if not.
+*/
+int data_codec_has_data(struct cloud_codec_data *cloud_data);
+
+/**
+ * @brief Remove data to be sent from cloud_data and save it in backup_data.
+ * 
+ * This can be used if the message size would be otherwise too big to
+ * send all data at once.
+ * @param cloud_data Pointer to struct cloud_data instance that data will be removed from.
+ * @param backup_data Pointer to struct cloud_data instance that removed data
+ *                    from cloud_data will be added to.
+ * @return 0 on success, otherwise error.
+*/
+int data_codec_split_data(struct cloud_codec_data *cloud_data,
+			  struct cloud_codec_data *backup_data);
+
+/**
+ * @brief Add data from backup_data to cloud_data and clear backup_data data.
+ * 
+ * Use this to recover data previously saved in backup_data with
+ * @ref data_codec_split_data().
+ * 
+ * @param cloud_data Pointer to struct cloud_data instance that data will be added to.
+ * @param backup_data Pointer to struct cloud_data instance that with data
+ *                    to recover and copy into cloud_data.
+ * @return 0 on success, otherwise error.
+*/
+int data_codec_recover_data(struct cloud_codec_data *cloud_data,
+			    struct cloud_codec_data *backup_data);
+
+/**
+ * @brief Check if cloud_data contains any measurement data.
+ * 
+ * Temperature and humidity data is considered measurement data. Anything
+ * else is not.
+ * @param cloud_data Pointer to struct cloud_data instance to check for
+ *                   measurement data.
+ * @return 0 on success, otherwise error.
+*/
+int data_codec_contains_measurement_data(struct cloud_codec_data *cloud_data);
+
 #endif /* DATA_CODEC_H__ */

@@ -220,6 +220,7 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	sys_snode_t *node = sys_slist_get(&pattern_transition_list);
 
 	if (node == NULL) {
+		LOG_DBG("Empty node");
 		led_pattern_list[LED_STATE_TURN_OFF].led_state = LED_STATE_TURN_OFF;
 		led_pattern_list[LED_STATE_TURN_OFF].duration_sec = HOLD_FOREVER;
 		next_pattern = &led_pattern_list[LED_STATE_TURN_OFF];
@@ -227,7 +228,8 @@ static void led_pattern_update_work_fn(struct k_work *work)
 		next_pattern = CONTAINER_OF(node, struct led_pattern, header);
 	}
 
-
+	LOG_DBG("led update: %u, %d s, prev: %u", next_pattern->led_state, next_pattern->duration_sec,
+		previous_led_state);
 	/* Prevent the same LED led_state from being scheduled twice in a row. */
 	if (next_pattern->led_state != previous_led_state) {
 		update_led_pattern(next_pattern->led_state);
@@ -243,6 +245,7 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	if (!sys_slist_is_empty(&pattern_transition_list) ||
 	    ((next_pattern->led_state != LED_STATE_TURN_OFF) &&
 	     (next_pattern->duration_sec != HOLD_FOREVER))) {
+		LOG_DBG("k_work_reschedule led work");
 		if (next_pattern->duration_sec > 0) {
 			k_work_reschedule(&led_pattern_update_work, 
 					  K_SECONDS(next_pattern->duration_sec));
@@ -270,7 +273,7 @@ static void ui_input_handler(enum etc_interface_event_type type) {
 	}
 }
 
-static int setup(const struct device *dev)
+static int setup(void)
 {
 	etc_interface_register_event_handler(ui_input_handler);
 	return 0;
@@ -297,6 +300,8 @@ static void transition_list_append(enum led_state led_state, int16_t duration_se
 	led_pattern_list[led_state].led_state = led_state;
 	led_pattern_list[led_state].duration_sec = duration_sec;
 
+	/* Force to remove if it is here */
+	(void)sys_slist_find_and_remove(&pattern_transition_list, &led_pattern_list[led_state].header);	
 	sys_slist_append(&pattern_transition_list, &led_pattern_list[led_state].header);
 }
 

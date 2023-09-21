@@ -24,13 +24,14 @@
 #include "ds2484.h"
 #include "ds18b20.h"
 #include "etc_cape.h"
+#include "watchdog.h"
 #ifdef CONFIG_BQ25618
 #include "bq25618.h"
 #endif
 #ifdef CONFIG_BQ24195
 #include "bq24195.h"
 #endif
-
+#include "etc_device.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
@@ -39,7 +40,6 @@ LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 #define LORA_FREQ_US_MIN_HZ		902300000LU
 #define LORA_FREQ_US_MAX_HZ		927500000LU
 
-#define HW_WDT_FEED_INTERVAL_S		(10 * 60)
  
 /* Outputs */
 static const struct gpio_dt_spec hall_dt =
@@ -75,7 +75,6 @@ static const struct gpio_dt_spec hw_wdt_dt =
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(hw_wdt), control_gpios, 0);
 #endif
 static const struct device *ext_flash = DEVICE_DT_GET(DT_NODELABEL(mx25r1635));
-
 static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
@@ -92,14 +91,19 @@ static struct k_mutex lora_mutex;
 static struct gpio_callback hall_cb;
 static struct k_sem lora_sem;
 
-static uint16_t wdt_feed_interval_s = HW_WDT_FEED_INTERVAL_S;
-
 volatile enum lora_action {
 	LORA_ACTION_HALL_TRIGGERED,
 	LORA_ACTION_RX,
 	LORA_ACTION_RX_TX,
 } lora_action;
 
+struct adc_calibration_info {
+	float offset;
+	float high;
+	float ref;
+};
+
+static struct adc_calibration_info adc_calib_info;
 static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv);
 static int lora_rx(void);
 
@@ -109,7 +113,10 @@ void lora_tx_rx_fn() {
 	while (k_sem_take(&lora_sem, K_FOREVER) == 0) {
 		if (lora_action == LORA_ACTION_HALL_TRIGGERED) {
 			LOG_INF("Hall triggered");
+#if IS_ENABLED(CONFIG_LORA_MSG_IN_HALL_EVENT)
+			LOG_INF("Send Lora message");
 			shell_execute_cmd(shell_backend_uart_get_ptr(), "lora");
+#endif
 		} else if (lora_action == LORA_ACTION_RX) {
 			lora_rx();
 		}
@@ -125,45 +132,13 @@ static void hall_cb_fn(const struct device *dev,
 	k_sem_give(&lora_sem);
 }
 
-static void hw_wdt_feed(void)
-{
-#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_set_dt(&hw_wdt_dt, 0U);
-	k_busy_wait(10);
-	gpio_pin_set_dt(&hw_wdt_dt, 1U);
-	k_busy_wait(1);
-	gpio_pin_set_dt(&hw_wdt_dt, 0U);
-#else
-	gpio_pin_configure_dt(&s0_dt, GPIO_OUTPUT);
-	gpio_pin_set_dt(&s0_dt, 0U);
-	k_busy_wait(10);
-	gpio_pin_set_dt(&s0_dt, 1U);
-	/* Minimum required pulse width according to datasheet is 100 ns. */
-	k_busy_wait(1);
-	gpio_pin_set_dt(&s0_dt, 0U);
-#endif	
-	LOG_INF("HW WDT fed");
-}
-
-void hw_wdt_work_handler(struct k_work *work) 
-{
-	struct k_work_delayable *work_delayable =
-		CONTAINER_OF(work, struct k_work_delayable, work);
-	hw_wdt_feed();
-	k_work_reschedule(work_delayable, K_SECONDS(wdt_feed_interval_s));
-}
-
-K_WORK_DELAYABLE_DEFINE(hw_wdt_work, hw_wdt_work_handler);
-
-static void hw_wdt_start_feed(void)
-{
-	k_work_reschedule(&hw_wdt_work, K_NO_WAIT);
-}
 
 void etc_test_init(void) 
 {
 	int ret;
 	
+	etc_watchdog_init();
+
 	if (!device_is_ready(dev_lora)) {
 		return;
 	}
@@ -173,9 +148,6 @@ void etc_test_init(void)
 	// Configure hall interrupt
 	gpio_pin_configure_dt(&hall_dt, GPIO_INPUT | GPIO_ACTIVE_LOW);
 	gpio_pin_configure_dt(&vsens_enable_dt, GPIO_OUTPUT_ACTIVE);
-#if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_ACTIVE);
-#endif
 	gpio_init_callback(&hall_cb, hall_cb_fn, BIT(hall_dt.pin));
 	ret = gpio_add_callback(hall_dt.port, &hall_cb);
 	if (ret < 0) {
@@ -183,8 +155,8 @@ void etc_test_init(void)
 	}
 	gpio_pin_interrupt_configure_dt(&hall_dt, GPIO_INT_EDGE_TO_ACTIVE);
 
-	hw_wdt_start_feed();
-
+	etc_watchdog_start_work();
+	
 	sensor_adc_switch_channel(SENSOR_INPUT_AMBIENT);
 }
 
@@ -200,9 +172,10 @@ static int cmd_version(const struct shell *shell, size_t argc, char **argv)
 
 SHELL_CMD_ARG_REGISTER(etc_version, NULL, "Show kernel version", cmd_version, 1, 0);
 
-static void adc_print_channel(const struct shell *shell, int channel)
+static void adc_print_channel(const struct shell *shell, int channel, bool converted)
 {
 	int adc_raw = sensor_get_raw_value(channel);
+	int val_mv;
 	float val;
 
 	if ((channel == ETC_ADC_CHANNEL_AMB) || (channel == ETC_ADC_CHANNEL_SENSOR)) {
@@ -214,13 +187,64 @@ static void adc_print_channel(const struct shell *shell, int channel)
 #else
 		val = sensor_ntc_converter(channel, adc_raw);
 #endif
-		shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
-			    channel, adc_raw, val);
+		if (converted) {
+			shell_print(shell, "ADC Channel %d - Value %d - Temperature %.2f deg C", 
+					channel, adc_raw, val);
+		} else {
+			shell_print(shell, "ADC Channel %d - Value %d:  %d", 
+					channel, channel, adc_raw);
+		}
 	} else {
-		adc_get_raw_to_millivolts(channel, &adc_raw);
-		val = (float)adc_raw / 1000.0f;
-		shell_print(shell, "ADC Channel %d - Value %d - Voltage %.2f V",
-			    channel, adc_raw, val);
+		val_mv = adc_raw;
+		adc_get_raw_to_millivolts(channel, &val_mv);
+		val = (float)val_mv / 1000.0f;
+		if (converted) {
+			shell_print(shell, "ADC Channel %d - Value %d - Voltage %.2f V",
+					channel, adc_raw, val);
+		} else {
+			shell_print(shell, "ADC Channel %d - Value %d: %d",
+					channel, channel, adc_raw);
+		}
+
+	}
+}
+
+static void adc_print_channel_raw_calibration(const struct shell *shell, int channel, bool converted)
+{
+	int adc_raw = sensor_get_raw_value(channel);
+	int calibrated_value = (int)(((float)(adc_raw) - adc_calib_info.offset) / 
+		(adc_calib_info.high - adc_calib_info.offset) * adc_calib_info.ref);
+	int val_mv;
+	float val;
+
+	if ((channel == ETC_ADC_CHANNEL_AMB) || (channel == ETC_ADC_CHANNEL_SENSOR)) {
+#if defined(CONFIG_NTC_USE_TABLE)
+		extern const float table_ntc_resistance_temp[];
+		extern const int table_offset;
+		extern const int table_length;
+		val =  sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, calibrated_value);
+#else
+		val = sensor_ntc_converter(channel, calibrated_value);
+#endif
+		if (converted) {
+			shell_print(shell, "Calibrated ADC Channel %d - Value %d - Temperature %.2f deg C", 
+					channel, calibrated_value, val);
+		} else {
+			shell_print(shell, "Calibrated ADC Channel %d - Value %d: %d ", 
+					channel, channel,  calibrated_value);
+		}
+	} else {
+		val_mv = calibrated_value;
+		adc_get_raw_to_millivolts(channel, &val_mv);
+		val = (float)val_mv / 1000.0f;
+		if (converted) {
+			shell_print(shell, "Calibrated ADC Channel %d - Value %d - Voltage %.2f V",
+					channel, calibrated_value, val);
+		} else {
+			shell_print(shell, "Calibrated ADC Channel %d - Value %d: %d",
+					channel, channel, calibrated_value);
+		}
+
 	}
 }
 
@@ -391,18 +415,50 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_etc_gpio,
 SHELL_CMD_REGISTER(etc_gpio, &sub_etc_gpio, "ETC GPIO commands", NULL);	
 #endif		       
 
-static void adc_print_all_channels(const struct shell *shell) 
+static void adc_print_all_channels(const struct shell *shell, bool converted) 
 {
 	for (int chan = 0; chan < ETC_ADC_CHANNEL_MAX; chan++) {
 		if (chan == ETC_ADC_CHANNEL_SENSOR) {
-			for (int input = 0; input < SENSOR_INPUT_MAX; input++) {
+			for (int input = 0; input < (SENSOR_INPUT_MAX - SENSOR_INPUT_IN1); input++) {
+				sensor_adc_switch_channel(input);
+				k_msleep(100);
+				shell_print(shell, "Probe %u:", (input + SENSOR_INPUT_IN1));
+				adc_print_channel(shell, chan, converted);
+			}
+		} else {
+			adc_print_channel(shell, chan, converted);
+		}
+	}
+}
+
+static void adc_print_all_channels_calibration_raw(const struct shell *shell) 
+{
+	for (int chan = 0; chan < ETC_ADC_CHANNEL_MAX; chan++) {
+		if (chan == ETC_ADC_CHANNEL_SENSOR) {
+			for (int input = 0; input < (SENSOR_INPUT_MAX - SENSOR_INPUT_IN1); input++) {
+				sensor_adc_switch_channel(input);
+				k_msleep(100);
+				shell_print(shell, "Probe %u:", (input + SENSOR_INPUT_IN1));
+				adc_print_channel_raw_calibration(shell, chan, false);
+			}
+		} else {
+			adc_print_channel_raw_calibration(shell, chan, false);
+		}
+	}
+}
+
+static void adc_print_all_channels_calibration_converted(const struct shell *shell) 
+{
+	for (int chan = 0; chan < ETC_ADC_CHANNEL_MAX; chan++) {
+		if (chan == ETC_ADC_CHANNEL_SENSOR) {
+			for (int input = 0; input < (SENSOR_INPUT_MAX - SENSOR_INPUT_IN1); input++) {
 				sensor_adc_switch_channel(input);
 				k_msleep(100);
 				shell_print(shell, "Sensor input %u:", input);
-				adc_print_channel(shell, chan);
+				adc_print_channel_raw_calibration(shell, chan, true);
 			}
 		} else {
-			adc_print_channel(shell, chan);
+			adc_print_channel_raw_calibration(shell, chan, true);
 		}
 	}
 }
@@ -419,15 +475,163 @@ static int cmd_adc_request(const struct shell *shell, size_t argc, char **argv)
 	}
 
 	if (strstr(argv[1], "all") != NULL) {
-		adc_print_all_channels(shell);
+		adc_print_all_channels_calibration_raw(shell);
 	} else {
 		int channel = atoi(argv[1]);
-		adc_print_channel(shell, channel);
+		adc_print_channel_raw_calibration(shell, channel, false);
 	}
 	return 0;
 }
 
 SHELL_CMD_ARG_REGISTER(etc_adc, NULL, "Get ADC raw data", cmd_adc_request, 1, 1);
+
+static int cmd_adc_start_calibration(const struct shell *shell, size_t argc, char **argv)
+{
+	/* Start calibration to CHANNEL AMB */
+	/* It will process 2 events -> CALIBRATION DONE -> EVENT END */
+	int adc = adc_set_start_calibration(ETC_ADC_CHANNEL_AMB);
+	shell_print(shell, "Calibration status %s", adc != -1 ? "okay" : "not okay");
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_adc_cal, NULL, "Start ADC calibration process", cmd_adc_start_calibration, 0, 1);
+
+static int cmd_adc_load_calibration(const struct shell *shell, size_t argc, char **argv)
+{
+	int rc = 0;
+	rc = etc_device_read_calib(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
+	if (rc) {
+		adc_calib_info.offset = 0;
+		etc_device_write_calib(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
+	}
+	shell_print(shell, "The offset calibration: %.6f", adc_calib_info.offset);
+	rc = etc_device_read_calib(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
+	if (rc) {
+		adc_calib_info.high = 4014.548130;
+		etc_device_write_calib(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
+	} 
+	shell_print(shell, "The high raw calibration: %.6f", adc_calib_info.high);
+	rc = etc_device_read_calib(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
+	if (rc) {
+		adc_calib_info.ref = 4014.548130;
+		etc_device_write_calib(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
+	} 
+	shell_print(shell, "The reference calibration: %.6f", adc_calib_info.ref);
+
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_adc_load_cal, NULL, "Load ADC calibration information", cmd_adc_load_calibration, 0, 1);
+
+static int cmd_adc_set_offset(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc != 2) {
+		shell_print(shell, 
+			    "Usage:\n"
+			    "%s <offset>\n"
+			    "offset: The offset value for calibration calculation", argv[0]);
+		return -EINVAL;
+	}
+
+	adc_calib_info.offset = atof(argv[1]);
+	int rc = etc_device_write_calib(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
+	if (rc) {
+		shell_error(shell, "Failed to save calibration for offset to NVS %d", rc);
+	} else {
+		shell_print(shell, "Saved the calibration for offset to NVS successful");
+	}
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_adc_offset, NULL, "Set the offset value for the calibration calculation", cmd_adc_set_offset, 1, 1);
+
+static int cmd_adc_set_high(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc != 2) {
+		shell_print(shell, 
+			    "Usage:\n"
+			    "%s <high>\n"
+			    "high: The raw high value for calibration calculation", argv[0]);
+		return -EINVAL;
+	}
+
+	adc_calib_info.high = atof(argv[1]);
+	int rc = etc_device_write_calib(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
+	if (rc) {
+		shell_error(shell, "Failed to save calibration for high to NVS %d", rc);
+	} else {
+		shell_print(shell, "Saved the calibration for high to NVS successful");
+	}
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_adc_high, NULL, "Set the RAW high value for the calibration calculation", cmd_adc_set_high, 1, 1);
+
+static int cmd_adc_set_ref(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc != 2) {
+		shell_print(shell, 
+			    "Usage:\n"
+			    "%s <ref>\n"
+			    "ref: The raw ref value for calibration calculation", argv[0]);
+		return -EINVAL;
+	}
+
+	adc_calib_info.ref = atof(argv[1]);
+	int rc = etc_device_write_calib(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
+	if (rc) {
+		shell_error(shell, "Failed to save calibration for reference to NVS %d", rc);
+	} else {
+		shell_print(shell, "Saved the calibration for reference to NVS successful");
+	}
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_adc_ref, NULL, "Set the reference value for the calibration calculation", cmd_adc_set_ref, 1, 1);
+
+static int cmd_adc_get_raw(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc != 2) {
+		shell_print(shell, 
+			    "Usage:\n"
+			    "%s <channel>\n"
+			    "channel: - all\n"
+			    "         - value between 0 and 3", argv[0]);
+		return -EINVAL;
+	}
+
+	if (strstr(argv[1], "all") != NULL) {
+		adc_print_all_channels(shell, false);
+	} else {
+		int channel = atoi(argv[1]);
+		adc_print_channel(shell, channel, false);
+	}
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_adc_raw, NULL, "Get the RAW adc value", cmd_adc_get_raw, 0, 1);
+
+static int cmd_adc_get_calibrated(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc != 2) {
+		shell_print(shell, 
+			    "Usage:\n"
+			    "%s <channel>\n"
+			    "channel: - all\n"
+			    "         - value between 0 and 3", argv[0]);
+		return -EINVAL;
+	}
+
+	if (strstr(argv[1], "all") != NULL) {
+		adc_print_all_channels_calibration_converted(shell);
+	} else {
+		int channel = atoi(argv[1]);
+		adc_print_channel_raw_calibration(shell, channel, true);
+	}
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_adc_calibrated, NULL, "Get the ADC result based on calibrated value", cmd_adc_get_calibrated, 0, 1);
 
 static int cmd_vsens_enable(const struct shell *shell, size_t argc, char **argv) 
 {
@@ -964,7 +1168,7 @@ static struct lora_modem_config etc_lora_rx_config = {
 	.datarate = SF_7,
 	.preamble_len = 8,
 	.coding_rate = CR_4_5,
-	.tx_power = 14,
+	.tx_power = 20,
 	.tx = false,
 };
 
@@ -974,7 +1178,7 @@ static struct lora_modem_config etc_lora_tx_config  = {
 	.datarate = SF_7,
 	.preamble_len = 8,
 	.coding_rate = CR_4_5,
-	.tx_power = 14,
+	.tx_power = 20,
 	.tx = true,
 };
 
@@ -1222,7 +1426,8 @@ static int cmd_lora_rx(const struct shell *shell, size_t argc, char **argv) {
 			shell_print(shell, "%u: timeout", count);
 		} else {
 			rx_buf[MIN(ret, sizeof(rx_buf) - 1)] = '\0';
-			shell_print(shell, "%u: %d,%s", count, rssi, rx_buf);
+			shell_print(shell, "%u: %d", count, rssi);
+			shell_hexdump(shell, rx_buf, ret);
 		}
 		count++;
 	}
@@ -1237,6 +1442,7 @@ static int cmd_lora_tx_rx(const struct shell *shell, size_t argc, char **argv) {
 
 	ret = k_mutex_lock(&lora_mutex, K_SECONDS(1));
 	if (ret != 0) {
+		shell_error(shell, "Can't lock lora mutex");
 		return -1;
 	}
 
@@ -1311,7 +1517,7 @@ void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callbac
 
 static int cmd_stop_feed_wdt(const struct shell *shell, size_t argc, char **argv) 
 {
-	k_work_cancel_delayable(&hw_wdt_work);
+	etc_watchdog_stop_work();
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd_stop_feed_wdt, 1, 0);
@@ -1320,22 +1526,21 @@ static int cmd_start_feed_wdt(const struct shell *shell, size_t argc, char **arg
 {
 	if (argc == 2) {
 		uint16_t interval = atoi(argv[1]);
-		wdt_feed_interval_s = interval;
+		etc_watchdog_set_timeout(interval);
 		shell_print(shell, "WDT feed interval set to %u seconds", interval);
 	}
-	k_work_reschedule(&hw_wdt_work, K_NO_WAIT);
+	etc_watchdog_start_work();
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_start_wdt, NULL, "Start feeding hardware watchdog", cmd_start_feed_wdt, 1, 1);
 
 static int cmd_ble_active(const struct shell *shell, size_t argc, char **argv) 
 {
-#if IS_ENABLED(CONFIG_MCUMGR_SMP_BT)
+#if IS_ENABLED(CONFIG_MCUMGR_TRANSPORT_BT)
 	extern void start_smp_bluetooth(void);
 	start_smp_bluetooth();
 	shell_print(shell, "Enable the BLE MCUMGR");
 	return 0;
-
 #endif	
 	shell_error(shell, "BLE is not supported");
 	return 0;
@@ -1345,12 +1550,11 @@ SHELL_CMD_ARG_REGISTER(etc_ble_active, NULL, "Active the BLE MCUMGR", cmd_ble_ac
 
 static int cmd_ble_deactive(const struct shell *shell, size_t argc, char **argv) 
 {
-#if IS_ENABLED(CONFIG_MCUMGR_SMP_BT)
+#if IS_ENABLED(CONFIG_MCUMGR_TRANSPORT_BT)
 	extern void stop_smp_bluetooth(void);
 	stop_smp_bluetooth();
 	shell_print(shell, "Deactive the BLE");
 	return 0;
-
 #endif	
 	shell_error(shell, "BLE is not supported");
 	return 0;

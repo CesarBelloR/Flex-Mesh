@@ -91,6 +91,9 @@ enum {
 	ETC_SETTING_RX_DURATION_SECS_ID,
 	ETC_SETTING_ALARM_THRESHOLD_ID,
 	ETC_SETTING_DEVICE_NEXT_JOB_ID,
+	ETC_CALIBRATION_OFFSET_ID = 0xFF0,
+	ETC_CALIBRATION_RAWHIGH_ID,
+	ETC_CALIBRATION_REF_ID,
 	ETC_RECORD_HEADER = 0x1000,
 };
 
@@ -149,4 +152,5 @@ int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_devi
 int etc_device_reclaim_record(int start_time, int stop_time);
 int etc_device_reclaim_work(int start_time, int stop_time);
 int etc_device_erase_cfg(void);
+
 #endif /* ETC_DEVICE_H_ */

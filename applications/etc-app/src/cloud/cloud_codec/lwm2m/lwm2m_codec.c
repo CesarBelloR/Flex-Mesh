@@ -131,8 +131,8 @@ int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 	err = lwm2m_codec_helpers_set_sensor_data(cloud_data, record);
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
+			/* Always send first temperature object containing ambient data. */
 			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0),
-			LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0),
 			LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID)
 		};
 
@@ -288,4 +288,54 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 						ARRAY_SIZE(path_list));
 
 	return err;
+}
+
+int data_codec_has_data(struct cloud_codec_data *cloud_data)
+{
+	__ASSERT_NO_MSG(cloud_data != NULL);
+
+	return !lwm2m_codec_helpers_object_path_list_is_empty(cloud_data);
+}
+
+int data_codec_split_data(struct cloud_codec_data *cloud_data,
+			  struct cloud_codec_data *backup_data)
+{
+	__ASSERT_NO_MSG(cloud_data != NULL);
+	__ASSERT_NO_MSG(backup_data != NULL);
+
+	int ret;
+
+	ret = lwm2m_codec_helpers_object_path_list_split(cloud_data, backup_data);
+	if (ret != 0) {
+		LOG_ERR("Could not split paths");
+		return ret;
+	}
+
+	return 0;
+}
+
+int data_codec_recover_data(struct cloud_codec_data *cloud_data,
+			    struct cloud_codec_data *backup_data)
+{
+	__ASSERT_NO_MSG(cloud_data != NULL);
+	__ASSERT_NO_MSG(backup_data != NULL);
+
+	int ret;
+	ret = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+						       backup_data->paths,
+						       backup_data->valid_object_paths);
+	__ASSERT_NO_MSG(ret == 0);
+	if (ret != 0) {
+		LOG_ERR("Unable to recover paths");
+	}
+	lwm2m_codec_helpers_object_path_list_clear(backup_data);
+
+	return 0;
+}
+
+int data_codec_contains_measurement_data(struct cloud_codec_data *cloud_data)
+{
+	__ASSERT_NO_MSG(cloud_data != NULL);
+
+	return lwm2m_codec_helpers_object_path_list_contains_measurement(cloud_data);
 }

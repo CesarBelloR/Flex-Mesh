@@ -51,6 +51,13 @@ struct data_msg_data {
 	} module;
 };
 
+struct send_msg_status {
+	/* Current record id being sent */
+	uint16_t record_id;
+	/* Is there a send ongoing? */
+	bool active_send;
+};
+
 /* Data module super states. */
 static enum state_type {
 	STATE_CLOUD_DISCONNECTED,
@@ -78,9 +85,9 @@ static int head_modem_dyn_buf = 0;
 static int head_bat_buf = 0;
 
 struct cloud_codec_data codec = { 0 };
+struct cloud_codec_data codec_backup = { 0 };
 
-/** Current record id */
-uint16_t record_id;
+struct send_msg_status send_status;
 
 /* Initialize publish timeout for data publish as forever */
 static k_timeout_t data_publish_timeout = K_FOREVER; 
@@ -275,6 +282,12 @@ static void data_module_send_message_id(uint32_t message_id)
 	APP_EVENT_SUBMIT(data_event);
 }
 
+static inline void reset_send_status(struct send_msg_status *status)
+{
+	status->active_send = false;
+	status->record_id = 0;
+}
+
 static void data_send(enum data_event_type event,
 		      struct cloud_codec_data *data)
 {
@@ -289,6 +302,8 @@ static void data_send(enum data_event_type event,
 	BUILD_ASSERT((sizeof(data->paths[0]) == sizeof(module_event->data.buffer.paths[0])),
 			"Size of an entry in the object path list does not match");
 
+	send_status.active_send = true;
+
 	if (IS_ENABLED(CONFIG_CLOUD_CODEC_LWM2M)) {
 		memcpy(module_event->data.buffer.paths, data->paths, sizeof(data->paths));
 		module_event->data.buffer.valid_object_paths = data->valid_object_paths;
@@ -300,14 +315,20 @@ static void data_send(enum data_event_type event,
 	APP_EVENT_SUBMIT(module_event);
 }
 
-static void data_encode(void) 
+/**
+ * Encode the current LwM2M data to be sent in a message.
+ * 
+ * @param split If true, split new record for transmission, as it might
+ * 		be too large to fit into one message.
+*/
+static void data_encode(bool split) 
 {
 	union etc_device_record record;
 	int ret;
 
-	if (record_id != 0) {
+	if (send_status.active_send) {
 		LOG_WRN("Not sending new record."
-			"Record ID %u is already being sent.", record_id);
+			"Record ID %u is already being sent.", send_status.record_id);
 		return;
 	}
 
@@ -316,20 +337,33 @@ static void data_encode(void)
 		first_send = false;
 	}
 
-	record_id = etc_device_read_record(&record);
-	if (record_id == 0) {
-		LOG_INF("No record found");
-		return;
+	/* Send previously stored data first, then send new measurement record. */
+	if (data_codec_has_data(&codec_backup) && 
+	    (!split || !data_codec_has_data(&codec))) {
+		LOG_DBG("Recovering previously backed up data.");
+		data_codec_recover_data(&codec, &codec_backup);
+	} else {
+		modem_dynamic.rsrp = quectel_bg95_get_rssi();
+		modem_dynamic.qual = quectel_bg95_get_qual();
+		modem_dynamic.queued = 1;
+
+		send_status.record_id = etc_device_read_record(&record);
+		if (send_status.record_id == 0) {
+			LOG_INF("No record found");
+			return;
+		}
+
+		ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
+		if (ret != 0) {
+			LOG_WRN("No message to publish");
+			return;
+		}
 	}
 	
-	modem_dynamic.rsrp = quectel_bg95_get_rssi();
-	modem_dynamic.qual = quectel_bg95_get_qual();
-	modem_dynamic.queued = 1;
-
-	ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
-	if (ret != 0) {
-		LOG_WRN("No message to publish");
-		return;
+	/* If splitting data is requested, move data to backup codec */
+	if (split) {
+		LOG_DBG("Data is too large, split.");
+		data_codec_split_data(&codec, &codec_backup);
 	}
 
 	data_send(DATA_EVT_DATA_SEND, &codec);
@@ -359,7 +393,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) &&
 	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		state_set(STATE_CLOUD_CONNECTED);	
-		data_encode();
+		data_encode(false);
 		return;
 	}
 }
@@ -369,7 +403,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) &&
 	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
-		data_encode();
+		data_encode(false);
 		return;
 	}
 
@@ -378,9 +412,10 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) ||
-	    IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
-		/* Reset record_id to allow future sends. */
-		record_id = 0;
+	    IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
+		/* Reset send status to allow future sends. */
+		reset_send_status(&send_status);
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
 	}
@@ -455,27 +490,32 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
 		data_codec_clear_data(&codec);
-		/* Acknowledge record and encode more data, if connected to cloud */
-		etc_device_set_ack_record(record_id);
-		record_id = 0;
+		if (send_status.record_id > 0) {
+			/* Acknowledge record and encode more data, if connected to cloud */
+			etc_device_set_ack_record(send_status.record_id);
+		}
+		reset_send_status(&send_status);
 		if (state == STATE_CLOUD_CONNECTED) {
-			data_encode();
+			data_encode(false);
 		}
 	}
 		
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
 		ETC_MEMFAULT_TRACE_EVENT(send_fail);
-		/* Reset record ID on fail */
-		record_id = 0;
+		bool split = false;
+		if (msg->module.cloud.data.err == -ENOMEM ||
+		    msg->module.cloud.data.err == -ECONNREFUSED) {
+			split = true;
+		}
+		/* Reset send status on fail */
+		reset_send_status(&send_status);
 		if (state == STATE_CLOUD_CONNECTED) {
-			data_encode();
+			data_encode(split);
 		}
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
-		if (record_id != 0) {
-			record_id = 0;
-		}
+		reset_send_status(&send_status);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED)) {
