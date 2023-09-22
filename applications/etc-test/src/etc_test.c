@@ -136,8 +136,6 @@ static void hall_cb_fn(const struct device *dev,
 void etc_test_init(void) 
 {
 	int ret;
-	
-	etc_watchdog_init();
 
 	if (!device_is_ready(dev_lora)) {
 		return;
@@ -154,8 +152,6 @@ void etc_test_init(void)
 		LOG_ERR("Failed to set gpio callback!");
 	}
 	gpio_pin_interrupt_configure_dt(&hall_dt, GPIO_INT_EDGE_TO_ACTIVE);
-
-	etc_watchdog_start_work();
 	
 	sensor_adc_switch_channel(SENSOR_INPUT_AMBIENT);
 }
@@ -844,15 +840,24 @@ static int cmd_ds2484_enable(const struct shell *shell, size_t argc, char **argv
 static int cmd_ds2484_convert_temp(const struct shell *shell, size_t argc, char **argv)
 {
 	uint8_t data[9];
-	const uint8_t MAX_ATTEMPTS = 10;
+	uint8_t MAX_ATTEMPTS = 10;
 	uint8_t attempt = 0;
 	bool success = false;
 	uint16_t temperature;
 	int8_t resolution, digit, minus = 0;
 	float decimal;
 
+	if (argc > 1) {
+		MAX_ATTEMPTS = atoi(argv[1]);
+	}
+
 	while (attempt < MAX_ATTEMPTS && !success) {
-		if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
+		attempt++;
+		if (ds2484_request_reset() != 0) {
+			shell_print(shell, "Error issuing reset to 1-wire device");
+			/* If reset fails, skip trying to read temperature and try again. */
+			continue;
+		}
 		/* Send command to all devices*/
 		if (ds2484_request_skip() != 0) {shell_print(shell, "Error sending ROM skip command");}		
 		if (ds2484_write_byte(0x44) != 0) {shell_print(shell, "Error requesting temperature measurement");}
@@ -882,12 +887,15 @@ static int cmd_ds2484_convert_temp(const struct shell *shell, size_t argc, char 
 		
 		if (crc != data[8]) {
 			shell_print(shell, "Invalid CRC value returned: %u", crc);
-			attempt++;
 			k_sleep(K_MSEC(10));
 		} else {
 			success = true;
 		}
-		//if (ds2484_request_reset() != 0) {shell_print(shell, "Error issuing reset to 1-wire device");}
+	}
+
+	if (!success) {
+		shell_print(shell, "Reading temperature failed!");
+		return -1;
 	}
 
 	/* First two bytes of scratchpad are temperature values */
@@ -936,7 +944,7 @@ static int cmd_ds2484_convert_temp(const struct shell *shell, size_t argc, char 
 		decimal = 0 - decimal;
 	}
 
-	shell_print(shell, "Temperature: %02f°C --> %u attempts", decimal, attempt + 1);
+	shell_print(shell, "Temperature: %02f°C --> %u attempts", decimal, attempt);
 
 	if (success) {
 		return 0;
@@ -961,7 +969,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(ds2484_sub,
 	SHELL_CMD_ARG(config, NULL, "Get/set the config register", cmd_ds2484_config, 1, 2),
 	SHELL_CMD(reset, NULL, "Reset DS2484", cmd_ds2484_reset),
 	SHELL_CMD(req_reset, NULL, "Request a 1-wire reset", cmd_ds2484_req_reset),
-	SHELL_CMD(get_temp, NULL, "Request temperature from a one device bus", cmd_ds2484_convert_temp),
+	SHELL_CMD_ARG(get_temp, NULL, "Request temperature from a one device bus", cmd_ds2484_convert_temp, 1, 1),
 	SHELL_SUBCMD_SET_END
 );
 SHELL_CMD_REGISTER(ds2484, &ds2484_sub, "DS2484 1-wire commands", NULL);

@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-void etc_watchdog_init(void);
 void etc_watchdog_feed(void);
 void etc_watchdog_set_timeout(uint16_t timeout);
 void etc_watchdog_start_work(void);
