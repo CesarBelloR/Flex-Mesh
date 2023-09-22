@@ -67,4 +67,4 @@ void etc_watchdog_stop_work(void) {
     k_work_cancel_delayable(&hw_wdt_work);
 }
 
-SYS_INIT(etc_watchdog_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+SYS_INIT(etc_watchdog_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

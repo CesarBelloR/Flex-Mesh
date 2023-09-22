@@ -13,3 +13,9 @@
 		};
 	};
 };
+
+zephyr_udc0: &usbd {
+	cdc_acm_uart1 {
+		status = "disabled";
+	};
+};
