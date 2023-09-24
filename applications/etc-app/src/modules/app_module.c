@@ -30,6 +30,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "events/ui_event.h"
 #include "events/util_event.h"
 #include "events/modem_event.h"
+#include "events/debug_event.h"
 #include "modules_common.h"
 
 #define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
@@ -45,6 +46,7 @@ struct app_msg_data {
 		struct util_event util;
 		struct modem_event modem;
 		struct lora_event lora;
+		struct debug_event debug;
 	} module;
 };
 
@@ -203,6 +205,14 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct lora_event *evt = cast_lora_event(aeh);
 
 		msg.module.lora = *evt;
+		enqueue_msg = true;
+	}
+	
+	if (is_debug_event(aeh))
+	{
+		struct debug_event *evt = cast_debug_event(aeh);
+
+		msg.module.debug = *evt;
 		enqueue_msg = true;
 	}
 
@@ -534,7 +544,9 @@ static void on_sub_state_active(struct app_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_events(struct app_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
+	if ((IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED) 
+	    && !IS_ENABLED(CONFIG_DEBUG_MODULE)) ||
+	    IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE)) {
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 		date_time_start_work();
 #endif
@@ -627,6 +639,9 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
+#ifdef CONFIG_DEBUG_MODULE
+APP_EVENT_SUBSCRIBE(MODULE, debug_event);
+#endif
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, sensor_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, lora_event);

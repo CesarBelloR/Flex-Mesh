@@ -9,4 +9,6 @@
 #define ETC_MEMFAULT_TRACE_EVENT(reason)    
 #endif
 
+int memfault_etc_device_id_set(const char *device_id, size_t len);
+
 #endif /* ETC_MEMFAULT_H_ */

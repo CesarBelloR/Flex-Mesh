@@ -1,0 +1,40 @@
+#
+# Copyright (c) 2023 EXACT Technology
+#
+
+module = MEMFAULT_ETC
+
+config $(module)
+	bool
+	depends on MEMFAULT
+	prompt "Memfault ETC config"
+
+if MEMFAULT_ETC
+
+config MEMFAULT_ETC_FW_TYPE
+	string "Firmware type"
+	default "m2-fw"
+	help
+	  Firmware type running on the board
+
+config MEMFAULT_ETC_DEVICE_ID_MAX_LEN
+	int "Memfault device ID max length"
+	default 30
+	help
+	  Maximum length for the device ID
+
+config MEMFAULT_ETC_HW_VERSION_MAX_LEN
+	int "Memfault HW version max length"
+	default 10
+	help
+	  Maximum length for the hardware version
+
+config MEMFAULT_ETC_HW_VERSION_PREFIX
+	string "Prefix added onto device HW version"
+	default "flex-"
+
+module-dep = LOG
+module-str = Memfault ETC module
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # MEMFAULT

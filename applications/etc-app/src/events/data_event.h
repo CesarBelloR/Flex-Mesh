@@ -30,14 +30,11 @@ enum data_event_type {
 	 */
 	DATA_EVT_DATA_SEND,
 
-	/** Send older batched data.
-	 *  The event has an associated payload of type @ref data_module_data_buffers in
-	 *  the `data.buffer` member.
-	 *
-	 *  If a non LwM2M build is used the data is heap allocated and must be freed after use by
-	 *  calling k_free() on `data.buffer.buf`.
+	/**
+	 * Sending data is complete and there is no more data to send
+	 * currently.
 	 */
-	DATA_EVT_DATA_SEND_BATCH,
+	DATA_EVT_SEND_COMPLETE,
 
 	/** Send UI button data.
 	 *  The event has an associated payload of type @ref data_module_data_buffers in

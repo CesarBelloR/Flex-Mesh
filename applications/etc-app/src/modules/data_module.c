@@ -350,6 +350,10 @@ static void data_encode(bool split)
 		send_status.record_id = etc_device_read_record(&record);
 		if (send_status.record_id == 0) {
 			LOG_INF("No record found");
+			/* Report data send complete, so other modules can start
+			 * sending data.
+			 */
+			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
 			return;
 		}
 

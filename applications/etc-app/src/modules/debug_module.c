@@ -12,6 +12,7 @@
 #include <memfault/core/trace_event.h>
 #include <memfault/ports/watchdog.h>
 #include <memfault/panics/coredump.h>
+#include "etc_memfault.h"
 #endif
 #include <memfault_ncs.h>
 
@@ -64,12 +65,16 @@ entry:
 		if (memfault_coredump_has_valid_coredump(NULL)) {
 			LOG_DBG("Sending a coredump to Memfault!");
 		} else {
+			SEND_EVENT(debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE);
 			LOG_DBG("No coredump available.");
 			goto entry;
 		}
 	}
 
 	memfault_zephyr_port_post_data();
+	if (send_type == COREDUMP) {
+		SEND_EVENT(debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE);
+	}
 	goto entry;
 }
 
@@ -167,6 +172,8 @@ static void send_memfault_data(void)
 	/* Offload sending of Memfault data to a dedicated thread. */
 	if (memfault_packetizer_data_available()) {
 		k_sem_give(&mflt_internal_send_sem);
+	} else if (send_type == COREDUMP) {
+		SEND_EVENT(debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE);
 	}
 }
 
@@ -176,7 +183,7 @@ static void set_device_id(void)
 	char device_id[ETC_SETTINGS_DEVICE_ID_LEN] = {0};
 
 	etc_get_device_id(device_id, sizeof(device_id));
-	memfault_ncs_device_id_set(device_id, strlen(device_id));
+	memfault_etc_device_id_set(device_id, strlen(device_id));
 }
 
 static void add_modem_metrics(int64_t time_to_connect) 
@@ -199,7 +206,7 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 	 * compared to having Memfault SDK trigger regular updates independently. All data
 	 * should preferably be sent within the same LTE RRC connected window.
 	 */
-	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) {
+	if (IS_EVENT(msg, data, DATA_EVT_SEND_COMPLETE)) {
 		/* Limit how often non-coredump memfault data (events and metrics) are sent
 		 * to memfault. Updates can never occur more often than the interval set by
 		 * CONFIG_DEBUG_MODULE_MEMFAULT_UPDATES_MIN_INTERVAL_SEC and the first update is
