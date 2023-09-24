@@ -8,6 +8,7 @@
 
 menuconfig DEBUG_MODULE
 	bool "Debug module"
+	depends on MEMFAULT
 
 if DEBUG_MODULE && MEMFAULT
 

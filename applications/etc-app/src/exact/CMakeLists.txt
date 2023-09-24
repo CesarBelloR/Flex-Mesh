@@ -7,5 +7,4 @@ add_subdirectory_ifdef(CONFIG_ETC_NTC_TABLE etc_ntc_db)
 add_subdirectory(etc_devices)
 add_subdirectory(etc_util)
 add_subdirectory(etc_sensor)
-
-target_include_directories(app PRIVATE etc_memfault)
+add_subdirectory(etc_memfault)

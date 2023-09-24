@@ -23,6 +23,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "events/modem_event.h"
 #include "events/util_event.h"
 #include "events/modem_event.h"
+#include "events/debug_event.h"
 #include "modules_common.h"
 #include "app_version.h"
 #include "etc_settings.h"
@@ -36,6 +37,7 @@ struct cloud_msg_data
 		struct cloud_event cloud;
 		struct modem_event modem;
 		struct util_event util;
+		struct debug_event debug;
 	} module;
 };
 
@@ -52,7 +54,7 @@ static enum sub_state_lte_connected {
 	SUB_STATE_CLOUD_DISCONNECTED,
 	SUB_STATE_CLOUD_CONNECTED,
 	SUB_STATE_CLOUD_PAUSED
-} sub_state_lte_connected;
+} sub_state_lte_connected = SUB_STATE_CLOUD_DISCONNECTED;
 
 /* Cloud module sub states. */
 static enum sub_state_lte_disconnected {
@@ -231,6 +233,14 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct cloud_event *evt = cast_cloud_event(aeh);
 
 		msg.module.cloud = *evt;
+		enqueue_msg = true;
+	}
+
+	if (is_debug_event(aeh))
+	{
+		struct debug_event *evt = cast_debug_event(aeh);
+
+		msg.module.debug = *evt;
 		enqueue_msg = true;
 	}
 
@@ -469,6 +479,15 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 		pause_cloud();
 	}
 
+	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE)) {
+		if (sub_state_lte_connected == SUB_STATE_CLOUD_PAUSED) {
+			resume_cloud();
+		} else {
+			/* LTE is now connected, cloud connection can be attempted */
+			connect_cloud();
+		}
+	}
+
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
 		state_set(STATE_LTE_DISCONNECTED);
 		sub_state_lte_disconnected_set(SUB_STATE_LTE_PSM);
@@ -478,15 +497,18 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 /* Message handler for STATE_LTE_DISCONNECTED. */
 static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 {
-	if ((IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)))
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED))
 	{
 		state_set(STATE_LTE_CONNECTED);
-
-		if (sub_state_lte_connected == SUB_STATE_CLOUD_PAUSED) {
-			resume_cloud();
-		} else {
-			/* LTE is now connected, cloud connection can be attempted */
-			connect_cloud();
+		 /* If we are using the debug module, delay connecting to cloud
+		  * until debug module has completed work. */
+		if (!IS_ENABLED(CONFIG_DEBUG_MODULE)) {
+			if (sub_state_lte_connected == SUB_STATE_CLOUD_PAUSED) {
+				resume_cloud();
+			} else {
+				/* LTE is now connected, cloud connection can be attempted */
+				connect_cloud();
+			}
 		}
 	}
 
@@ -597,9 +619,6 @@ static void on_all_states(struct cloud_msg_data *msg)
 	{
 		last_message_id = msg->module.data.data.message_id;
 		LOG_INF("Last data send message id %d", last_message_id);
-#if !defined(CONFIG_APP_AWS_IOT)
-		SEND_EVENT(cloud, CLOUD_EVT_DATA_SEND_ACK);
-#endif
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
@@ -685,4 +704,7 @@ APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
+#ifdef CONFIG_DEBUG_MODULE
+APP_EVENT_SUBSCRIBE(MODULE, debug_event);
+#endif
 APP_EVENT_SUBSCRIBE_FIRST(MODULE, cloud_event);
