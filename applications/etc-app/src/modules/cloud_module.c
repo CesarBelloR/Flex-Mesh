@@ -11,7 +11,7 @@
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE cloud
-#define MODULE_CLOUD_CONNECT_RETRIES 5
+#define MODULE_CLOUD_CONNECT_RETRIES 3
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -341,7 +341,6 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	case CLOUD_WRAP_EVT_ERROR:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_ERROR, %d", evt->err);
-		SEND_ERROR(cloud, CLOUD_EVT_ERROR, evt->err);
 		break;
 	}
 	case CLOUD_WRAP_EVT_FOTA_ERROR:
@@ -624,6 +623,10 @@ static void on_all_states(struct cloud_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
 	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_ERROR)) {
+		SEND_EVENT(cloud, CLOUD_EVT_REBOOT_REQUEST);
+	}
 }
 
 static void shadow_work_fn(struct k_work *work) {
@@ -704,7 +707,7 @@ APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
-#ifdef CONFIG_DEBUG_MODULE
+#if IS_ENABLED(CONFIG_DEBUG_MODULE)
 APP_EVENT_SUBSCRIBE(MODULE, debug_event);
 #endif
 APP_EVENT_SUBSCRIBE_FIRST(MODULE, cloud_event);
