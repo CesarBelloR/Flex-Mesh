@@ -8,6 +8,7 @@ LOG_MODULE_REGISTER(etc_interface, CONFIG_ETC_INTERFACE_LOG_LEVEL);
 #include "etc_interface.h"
 
 #define ETC_INTERFACE_STACK_SIZE 512
+#define ETC_INTERFACE_HALL_SENSOR_DEBOUNCE_IN_SEC 2
 
 struct etc_interface_event_callback {
 	sys_snode_t node;
@@ -27,14 +28,22 @@ static struct etc_interface_event_data rtc_int_event_data;
 
 static sys_slist_t etc_interface_callback_list = SYS_SLIST_STATIC_INIT(&etc_interface_callback_list);
 static void etc_interface_work_handler(struct k_work *work);
+static void etc_interface_hall_sensor_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(etc_interface_work, etc_interface_work_handler);
+K_WORK_DELAYABLE_DEFINE(etc_interface_hall_sensor_work, etc_interface_hall_sensor_work_handler);
+
+static void etc_interface_hall_sensor_work_handler(struct k_work *work)
+{
+	struct etc_interface_event_data *event_data = 
+		CONTAINER_OF(&hall_sensor_event_data, struct etc_interface_event_data, callback);
+	event_data->event_type = ETC_INTERFACE_EVENT_HALL;
+	k_work_submit(&event_data->work);
+}
 
 static void hall_sensor_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
 {
-	struct etc_interface_event_data *event_data = 
-		CONTAINER_OF(cb, struct etc_interface_event_data, callback);
-	event_data->event_type = ETC_INTERFACE_EVENT_HALL;
-	k_work_submit(&event_data->work);
+	k_work_reschedule(&etc_interface_hall_sensor_work, 
+		K_SECONDS(ETC_INTERFACE_HALL_SENSOR_DEBOUNCE_IN_SEC));
 }
 
 static void rtc_int_callback_handler(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins)
