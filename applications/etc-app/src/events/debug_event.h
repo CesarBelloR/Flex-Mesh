@@ -49,7 +49,9 @@ enum debug_event_type {
 	/** An irrecoverable error has occurred in the debug module. Error details are
 	 *  attached in the event structure.
 	 */
-	DEBUG_EVT_ERROR
+	DEBUG_EVT_ERROR,
+
+	DEBUG_EVT_WDT_ACK
 };
 
 struct debug_memfault_data {
@@ -66,6 +68,8 @@ struct debug_event {
 		struct debug_memfault_data memfault;
 		/** Code signifying the cause of error. */
 		int err;
+		/* Module ID, used when acknowledging watchdog feeds. */
+		uint32_t id;
 	} data;
 };
 

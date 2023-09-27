@@ -11,6 +11,33 @@ menuconfig WATCHDOG_APPLICATION
 
 if WATCHDOG_APPLICATION
 
+choice WATCHDOG_APPLICATION_FEED_TYPE
+	prompt "Select direct feed or feed request"
+	default WATCHDOG_APPLICATION_FEED_WORKQUEUE
+
+config WATCHDOG_APPLICATION_FEED_WORKQUEUE
+	bool "Feed watchdog through work queue item"
+
+config WATCHDOG_APPLICATION_FEED_REQUEST
+	bool "Request watchdog feed from application"
+	help
+		Instead of directly feeding the watchdog from the main workqueue,
+		issue an event instead and leave the actual watchdog feed
+		up to the application.
+
+endchoice
+
+config WATCHDOG_APPLICATION_FEED_DELAY_SEC
+	int "Amount of seconds between expected and actual feed"
+	default 0 if WATCHDOG_APPLICATION_FEED_WORKQUEUE
+	default 60 if WATCHDOG_APPLICATION_FEED_REQUEST
+	help
+		When using WATCHDOG_APPLICATION_FEED_REQUEST, this is the delay
+		in seconds that the watchdog module expects the application to take
+		to feed the watchdog.
+		The feed request event in this case is issued
+		WATCHDOG_APPLICATION_FEED_DELAY_SEC earlier than the regular worker delay.
+
 config WATCHDOG_APPLICATION_TIMEOUT_SEC
 	int "Application watchdog timeout in seconds"
 	default 600

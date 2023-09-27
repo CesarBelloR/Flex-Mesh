@@ -21,6 +21,8 @@ static char *get_evt_type_str(enum debug_event_type type)
 		return "DEBUG_EVT_EMULATOR_NETWORK_CONNECTED";
 	case DEBUG_EVT_ERROR:
 		return "DEBUG_EVT_ERROR";
+	case DEBUG_EVT_WDT_ACK:
+		return "DEBUG_EVT_WDT_ACK";
 	default:
 		return "Unknown event";
 	}

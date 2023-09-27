@@ -69,10 +69,23 @@ extern "C" {
 	event->data.id = _id;								\
 	APP_EVENT_SUBMIT(event)
 
+/** @brief Macro used to submit a wdt acknowledgment event.
+ *
+ * @param _mod Name of module that the event corresponds to.
+ * @param _type Name of the type of shutdown event.
+ * @param _id ID of the module that acknowledges the shutdown.
+ */
+#define SEND_WDT_ACK(_mod, _type, _id)						\
+	struct _mod ## _event *event = new_ ## _mod ## _event();		\
+	event->type = _type;								\
+	event->data.id = _id;								\
+	APP_EVENT_SUBMIT(event)
+
 /** @brief Structure that contains module metadata. */
 struct module_data {
 	/* Variable used to construct a linked list of module metadata. */
 	sys_snode_t header;
+	sys_snode_t wdt_header;
 	/* ID specific to each module. Internally assigned when calling module_start(). */
 	uint32_t id;
 	/* The ID of the module thread. */
@@ -83,6 +96,8 @@ struct module_data {
 	struct k_msgq *msg_q;
 	/* Flag signifying if the module supports shutdown. */
 	bool supports_shutdown;
+	/* Flag signifying if the module supports the watchdog */
+	bool supports_watchdog;
 };
 
 /** @brief Purge a module's queue.
@@ -133,6 +148,31 @@ int module_start(struct module_data *module);
  *  @return Number of active modules in the application.
  */
 uint32_t module_active_count_get(void);
+
+/** @brief Reset the wdt ack list.
+ * Fill the list with modules that support wdt feedback. This needs to be
+ * called before asking modules to ack a WDT feed request.
+ * 
+*/
+void modules_reset_wdt_list(void);
+
+/** @brief Register that module acknowledged WDT feed request.
+ * 
+ *  @param[in] id_reg Identifier of module.
+ *
+ *  @return true If this API has been called for all modules supporting WDT
+ * 	    feed acknowledgements in the application.
+*/
+bool modules_wdt_register(uint32_t id_reg);
+
+/** @brief Check if the watchdog list is empty.
+ * If the watchdog list is empty, not all modules have acknowledged the
+ * watchdog feed.
+ * 
+ * @return true if list is empty, false otherwise.
+ * 
+*/
+bool modules_wdt_list_is_empty(void);
 
 /**
  *@}

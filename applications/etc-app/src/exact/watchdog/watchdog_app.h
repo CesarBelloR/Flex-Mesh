@@ -21,7 +21,8 @@ extern "C" {
 enum watchdog_evt_type {
 	WATCHDOG_EVT_START,
 	WATCHDOG_EVT_TIMEOUT_INSTALLED,
-	WATCHDOG_EVT_FEED
+	WATCHDOG_EVT_FEED,
+	WATCHDOG_EVT_FEED_REQUEST
 };
 
 struct watchdog_evt {
@@ -40,6 +41,11 @@ typedef void (*watchdog_evt_handler_t)(const struct watchdog_evt *evt);
  *  @return Zero on success, otherwise a negative error code is returned.
  */
 int watchdog_init_and_start(void);
+
+/** @brief Feed the watchdog
+ * 
+*/
+void watchdog_feed_from_request(void);
 
 /** @brief Register handler to receive watchdog callback events.
  *

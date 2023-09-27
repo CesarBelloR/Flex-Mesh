@@ -88,6 +88,7 @@ static struct module_data self = {
 	.name = "debug",
 	.msg_q = NULL,
 	.supports_shutdown = false,
+	.supports_watchdog = true
 };
 
 /* Handlers */
@@ -245,6 +246,13 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 }
 #endif /* defined(CONFIG_MEMFAULT) */
 
+static void handle_wdt_feed_evt(struct debug_msg_data *msg)
+{
+	if (IS_EVENT(msg, util, UTIL_EVT_WATCHDOG_FEED_REQUEST)) {
+		SEND_WDT_ACK(debug, DEBUG_EVT_WDT_ACK, self.id);
+	}
+}
+
 static void message_handler(struct debug_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_START)) {
@@ -264,6 +272,7 @@ static void message_handler(struct debug_msg_data *msg)
 		}
 	}
 
+	handle_wdt_feed_evt(msg);
 #if defined(CONFIG_MEMFAULT)
 	memfault_handle_event(msg);
 #endif
