@@ -27,7 +27,7 @@ enum watchdog_evt_type {
 
 struct watchdog_evt {
 	enum watchdog_evt_type type;
-	uint32_t timeout;
+	uint32_t timeout_ms;
 };
 
 /** @brief Watchdog library event handler.

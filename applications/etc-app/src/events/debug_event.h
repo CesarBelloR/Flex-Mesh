@@ -34,6 +34,9 @@ enum debug_event_type {
 	/* Sending coredump completed */
 	DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE,
 
+	/* Thread is done and waiting for the next send event */
+	DEBUG_EVT_MEMFAULT_THREAD_DONE,
+
 	/** Event sent after boot when building for PC. This event acts as a placeholder for
 	 *  MODEM_EVT_INITIALIZED which is not sent due to the modem module being disabled for
 	 *  PC builds.

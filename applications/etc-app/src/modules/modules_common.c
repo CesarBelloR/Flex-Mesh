@@ -155,7 +155,12 @@ void modules_reset_wdt_list(void)
 	/* List should always be empty, as otherwise a watchdog timeout would
 	 * have triggered a reset */
 	k_mutex_lock(&module_list_lock, K_FOREVER);
-	__ASSERT_NO_MSG(sys_slist_is_empty(&wdt_module_list));
+	if (!sys_slist_is_empty(&wdt_module_list)) {
+		/* If the wdt list is not empty, we are still waiting for a feed
+		   ack from at least one module. */
+		LOG_WRN("wdt list not empty");
+		return;
+	}
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&module_list, module, next_module, header) {
 		if (module->supports_watchdog) {
 			/* Fill the wdt shutdown list with the support modules.

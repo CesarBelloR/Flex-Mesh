@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/device.h>
@@ -14,7 +15,8 @@
 
 #define MODULE util_module
 #define MODULE_REBOOT_TIMEOUT 30
-#define MODULE_WATCHDOG_FEED_TIMEOUT CONFIG_WATCHDOG_APPLICATION_FEED_DELAY_SEC
+/* Time left before the device resets due to the watchdog timeout expiring */
+#define MODULE_WATCHDOG_EARLY_WARNING_S	10
 
 #if defined(CONFIG_WATCHDOG_APPLICATION)
 #include "watchdog_app.h"
@@ -53,16 +55,17 @@ static enum state_type {
 
 /* Forward declarations. */
 static void reboot_work_fn(struct k_work *work);
-static void watchdog_feed_work_fn(struct k_work *work);
+static void watchdog_feed_check_fn(struct k_work *work);
 static void message_handler(struct util_msg_data *msg);
 static void send_reboot_request(enum shutdown_reason reason);
 static void send_watchdog_feed_request(void);
 
 /* Delayed work that is used to trigger a reboot. */
 static K_WORK_DELAYABLE_DEFINE(reboot_work, reboot_work_fn);
-/* Delayed work that is used to feed the watchdog when all modules responded */
-static K_WORK_DELAYABLE_DEFINE(watchdog_feed_work, watchdog_feed_work_fn);
-
+/* Delayed work that emits a warning MODULE_WATCHDOG_EARLY_WARNING_S before
+   the device is reset by the watchdog */
+static K_WORK_DELAYABLE_DEFINE(watchdog_feed_check, watchdog_feed_check_fn);
+uint32_t wdt_feed_check_timeout_s = 0;
 
 static struct module_data self = {
 	.name = "util",
@@ -174,9 +177,15 @@ void watchdog_evt_handler(const struct watchdog_evt *evt)
 		break;
 	case WATCHDOG_EVT_TIMEOUT_INSTALLED:
 		LOG_DBG("WATCHDOG_EVT_TIMEOUT_INSTALLED");
+		wdt_feed_check_timeout_s = (evt->timeout_ms / 1000) - 
+					   MODULE_WATCHDOG_EARLY_WARNING_S;
+		k_work_reschedule(&watchdog_feed_check, 
+				  K_SECONDS(wdt_feed_check_timeout_s));
 		break;
 	case WATCHDOG_EVT_FEED:
 		LOG_DBG("WATCHDOG_EVT_FEED");
+		k_work_reschedule(&watchdog_feed_check, 
+				  K_SECONDS(wdt_feed_check_timeout_s));
 		break;
 	case WATCHDOG_EVT_FEED_REQUEST:
 		LOG_DBG("WATCHDOG_EVT_FEED_REQUEST");
@@ -236,13 +245,13 @@ static void send_reboot_request(enum shutdown_reason reason)
 	}
 }
 
-static void watchdog_feed_work_fn(struct k_work *work)
+static void watchdog_feed_check_fn(struct k_work *work)
 {
-	if (modules_wdt_list_is_empty()) {
-		watchdog_feed_from_request();
-	} else {
-		LOG_WRN("Not all modules ack'd wdt feed. Do not feed watchdog.");
-	}
+	/* If we get here, not all modules have been reported back to wdt. 
+	   In the future, we can send an event that other modules can react to
+	   e.g. to back up data before a wdt reset. */
+	LOG_WRN("Not all modules ack'd wdt feed. Resetting in %u s",
+		MODULE_WATCHDOG_EARLY_WARNING_S);
 }
 
 static void send_watchdog_feed_request(void)
@@ -251,9 +260,6 @@ static void send_watchdog_feed_request(void)
 			new_util_event();
 
 	util_event->type = UTIL_EVT_WATCHDOG_FEED_REQUEST;
-
-	k_work_reschedule(&watchdog_feed_work,
-				K_SECONDS(MODULE_WATCHDOG_FEED_TIMEOUT));
 
 	modules_reset_wdt_list();
 
@@ -271,7 +277,7 @@ static void watchdog_ack_check(uint32_t module_id)
 	 */
 	if (modules_wdt_register(module_id)) {
 		LOG_INF("All modules have ACKed the wdt feed request. Feed now.");
-		k_work_reschedule(&watchdog_feed_work, K_NO_WAIT);
+		watchdog_feed_from_request();
 	}
 }
 

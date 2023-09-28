@@ -111,7 +111,7 @@ static int watchdog_timeout_install(const struct wdt_config_storage *config,
 	};
 	struct watchdog_evt evt = {
 		.type = WATCHDOG_EVT_TIMEOUT_INSTALLED,
-		.timeout = WATCHDOG_TIMEOUT_MSEC
+		.timeout_ms = WATCHDOG_TIMEOUT_MSEC
 	};
 
 	__ASSERT_NO_MSG(config != NULL);
@@ -325,7 +325,7 @@ void watchdog_register_handler(watchdog_evt_handler_t evt_handler)
 		watchdog_notify_event(&evt);
 
 		evt.type = WATCHDOG_EVT_TIMEOUT_INSTALLED;
-		evt.timeout = WATCHDOG_TIMEOUT_MSEC;
+		evt.timeout_ms = WATCHDOG_TIMEOUT_MSEC;
 
 		watchdog_notify_event(&evt);
 	}
