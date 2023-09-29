@@ -34,6 +34,9 @@ enum debug_event_type {
 	/* Sending coredump completed */
 	DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE,
 
+	/* Thread is done and waiting for the next send event */
+	DEBUG_EVT_MEMFAULT_THREAD_DONE,
+
 	/** Event sent after boot when building for PC. This event acts as a placeholder for
 	 *  MODEM_EVT_INITIALIZED which is not sent due to the modem module being disabled for
 	 *  PC builds.
@@ -49,7 +52,9 @@ enum debug_event_type {
 	/** An irrecoverable error has occurred in the debug module. Error details are
 	 *  attached in the event structure.
 	 */
-	DEBUG_EVT_ERROR
+	DEBUG_EVT_ERROR,
+
+	DEBUG_EVT_WDT_ACK
 };
 
 struct debug_memfault_data {
@@ -66,6 +71,8 @@ struct debug_event {
 		struct debug_memfault_data memfault;
 		/** Code signifying the cause of error. */
 		int err;
+		/* Module ID, used when acknowledging watchdog feeds. */
+		uint32_t id;
 	} data;
 };
 

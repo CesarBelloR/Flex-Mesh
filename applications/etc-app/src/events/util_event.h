@@ -13,6 +13,7 @@ extern "C" {
 enum util_module_event_type {
 	UTIL_EVT_SHUTDOWN_REQUEST,
 	UTIL_EVT_WAKEUP_REQUEST,
+	UTIL_EVT_WATCHDOG_FEED_REQUEST,
 };
 
 /** @brief Shutdown reason included in shutdown requests from the utility module. */

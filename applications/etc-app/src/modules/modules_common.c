@@ -20,6 +20,7 @@ struct event_prototype {
 
 /* List containing metadata on active modules in the application. */
 static sys_slist_t module_list = SYS_SLIST_STATIC_INIT(&module_list);
+static sys_slist_t wdt_module_list = SYS_SLIST_STATIC_INIT(&wdt_module_list);
 static K_MUTEX_DEFINE(module_list_lock);
 
 /* Structure containing general information about the modules in the application. */
@@ -28,6 +29,8 @@ static struct modules_info {
 	atomic_t shutdown_supported_count;
 	/* Number of active modules in the application. */
 	atomic_t active_modules_count;
+	/* Number of active wdt modules in the application. */
+	atomic_t wdt_modules_count;
 } modules_info;
 
 /* Public interface */
@@ -143,6 +146,68 @@ bool modules_shutdown_register(uint32_t id_reg)
 exit:
 	k_mutex_unlock(&module_list_lock);
 	return retval;
+}
+
+void modules_reset_wdt_list(void)
+{
+	struct module_data *module, *next_module = NULL;
+	
+	/* List should always be empty, as otherwise a watchdog timeout would
+	 * have triggered a reset */
+	k_mutex_lock(&module_list_lock, K_FOREVER);
+	if (!sys_slist_is_empty(&wdt_module_list)) {
+		/* If the wdt list is not empty, we are still waiting for a feed
+		   ack from at least one module. */
+		LOG_WRN("wdt list not empty");
+		return;
+	}
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&module_list, module, next_module, header) {
+		if (module->supports_watchdog) {
+			/* Fill the wdt shutdown list with the support modules.
+			 */
+			sys_slist_append(&wdt_module_list, &module->wdt_header);
+			atomic_inc(&modules_info.wdt_modules_count);
+		}
+	};
+
+	k_mutex_unlock(&module_list_lock);
+}
+
+bool modules_wdt_register(uint32_t id_reg)
+{
+	bool retval = false;
+	struct module_data *module, *next_module = NULL;
+
+	if (id_reg == 0) {
+		LOG_WRN("Passed in module ID cannot be 0");
+		return false;
+	}
+
+	k_mutex_lock(&module_list_lock, K_FOREVER);
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&wdt_module_list, module, next_module, wdt_header) {
+		/* Fill the wdt shutdown list with the support modules.
+			*/
+		sys_slist_find_and_remove(&wdt_module_list, &module->wdt_header);
+		atomic_dec(&modules_info.wdt_modules_count);
+		LOG_INF("Module \"%s\" wdt registered", module->name);
+	};
+
+	if (modules_info.wdt_modules_count == 0) {
+		/* All modules in the application have reported back. */
+		retval = true;
+	}
+
+	k_mutex_unlock(&module_list_lock);
+	return retval;
+}
+
+bool modules_wdt_list_is_empty(void)
+{
+	if (atomic_get(&modules_info.wdt_modules_count) == 0) {
+		return true;
+	}
+
+	return false;
 }
 
 int module_start(struct module_data *module)

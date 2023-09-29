@@ -7,6 +7,8 @@ static char *get_evt_type_str(enum util_module_event_type type)
 	switch (type) {
 	case UTIL_EVT_SHUTDOWN_REQUEST:
 		return "UTIL_EVT_SHUTDOWN_REQUEST";
+	case UTIL_EVT_WATCHDOG_FEED_REQUEST:
+		return "UTIL_EVT_WATCHDOG_FEED_REQUEST";
 	default:
 		return "Unknown event";
 	}

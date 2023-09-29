@@ -8,6 +8,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/drivers/gpio.h>
+#include <assert.h>
 
 #include "watchdog_app.h"
 
@@ -15,9 +16,15 @@
 LOG_MODULE_REGISTER(watchdog, CONFIG_WATCHDOG_LOG_LEVEL);
 
 #define WDT_FEED_WORKER_DELAY_MS					\
-	((CONFIG_WATCHDOG_APPLICATION_TIMEOUT_SEC * 1000) / 2)
+	(((CONFIG_WATCHDOG_APPLICATION_TIMEOUT_SEC * 1000) / 2) -	\
+	 (CONFIG_WATCHDOG_APPLICATION_FEED_DELAY_SEC * 1000))
 #define WATCHDOG_TIMEOUT_MSEC						\
 	(CONFIG_WATCHDOG_APPLICATION_TIMEOUT_SEC * 1000)
+
+BUILD_ASSERT(WDT_FEED_WORKER_DELAY_MS > 0,
+	     "WDT feed worker delay is 0 or negative. Check the values of"
+	     "CONFIG_WATCHDOG_APPLICATION_TIMEOUT_SEC and "
+	     "CONFIG_WATCHDOG_APPLICATION_FEED_DELAY_SEC");
 
 #define HW_WDT_TIMEOUT_S (17 * 60)
 #define HW_WDT_WORK_INTERVAL_S (HW_WDT_TIMEOUT_S - (2 * 60))
@@ -60,7 +67,7 @@ static const struct wdt_config_storage wdt_config = {
 
 static struct wdt_data_storage wdt_data;
 
-static void primary_feed_worker(struct k_work *work_desc)
+static void watchdog_feed(void)
 {
 	struct watchdog_evt evt = {
 		.type = WATCHDOG_EVT_FEED,
@@ -72,12 +79,23 @@ static void primary_feed_worker(struct k_work *work_desc)
 
 	if (err) {
 		LOG_ERR("Cannot feed watchdog. Error code: %d", err);
-	} else {
-		k_work_reschedule(&wdt_data.system_workqueue_work,
-				      K_MSEC(WDT_FEED_WORKER_DELAY_MS));
 	}
 
 	watchdog_notify_event(&evt);
+}
+
+static void primary_feed_worker(struct k_work *work_desc)
+{
+#if IS_ENABLED(CONFIG_WATCHDOG_APPLICATION_FEED_WORKQUEUE)
+	watchdog_feed();
+	k_work_reschedule(&wdt_data.system_workqueue_work,
+				K_MSEC(WDT_FEED_WORKER_DELAY_MS));
+#elif IS_ENABLED(CONFIG_WATCHDOG_APPLICATION_FEED_REQUEST)
+	struct watchdog_evt evt = {
+		.type = WATCHDOG_EVT_FEED_REQUEST,
+	};
+	watchdog_notify_event(&evt);
+#endif
 }
 
 static int watchdog_timeout_install(const struct wdt_config_storage *config,
@@ -93,7 +111,7 @@ static int watchdog_timeout_install(const struct wdt_config_storage *config,
 	};
 	struct watchdog_evt evt = {
 		.type = WATCHDOG_EVT_TIMEOUT_INSTALLED,
-		.timeout = WATCHDOG_TIMEOUT_MSEC
+		.timeout_ms = WATCHDOG_TIMEOUT_MSEC
 	};
 
 	__ASSERT_NO_MSG(config != NULL);
@@ -271,6 +289,15 @@ int watchdog_init_and_start(void)
 	return 0;
 }
 
+void watchdog_feed_from_request(void)
+{
+	watchdog_feed();
+
+	/* Reschedule next feed request. */
+	k_work_reschedule(&wdt_data.system_workqueue_work,
+				K_MSEC(WDT_FEED_WORKER_DELAY_MS));
+}
+
 void watchdog_register_handler(watchdog_evt_handler_t evt_handler)
 {
 	if (evt_handler == NULL) {
@@ -298,7 +325,7 @@ void watchdog_register_handler(watchdog_evt_handler_t evt_handler)
 		watchdog_notify_event(&evt);
 
 		evt.type = WATCHDOG_EVT_TIMEOUT_INSTALLED;
-		evt.timeout = WATCHDOG_TIMEOUT_MSEC;
+		evt.timeout_ms = WATCHDOG_TIMEOUT_MSEC;
 
 		watchdog_notify_event(&evt);
 	}

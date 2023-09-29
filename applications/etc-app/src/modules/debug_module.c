@@ -41,8 +41,12 @@ struct debug_msg_data {
 		struct data_event data;
 		struct app_event app;
 		struct modem_event modem;
+		struct debug_event debug;
 	} module;
 };
+
+atomic_t mflt_thread_busy = ATOMIC_INIT(0);
+bool wdt_request_pending = false;
 
 /* Forward declarations. */
 static void message_handler(struct debug_msg_data *msg);
@@ -71,10 +75,17 @@ entry:
 		}
 	}
 
+	/* Use an atomic variable to set the memfault status to busy. This provides
+	   a memory barrier (makes sure it's set before the next line). */
+	atomic_set(&mflt_thread_busy, 1);
 	memfault_zephyr_port_post_data();
+	atomic_set(&mflt_thread_busy, 0);
 	if (send_type == COREDUMP) {
 		SEND_EVENT(debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE);
+	} else {
+		SEND_EVENT(debug, DEBUG_EVT_MEMFAULT_THREAD_DONE);
 	}
+
 	goto entry;
 }
 
@@ -88,6 +99,7 @@ static struct module_data self = {
 	.name = "debug",
 	.msg_q = NULL,
 	.supports_shutdown = false,
+	.supports_watchdog = true
 };
 
 /* Handlers */
@@ -152,6 +164,15 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct util_event *event = cast_util_event(aeh);
 		struct debug_msg_data debug_msg = {
 			.module.util = *event
+		};
+
+		message_handler(&debug_msg);
+	}
+
+	if (is_debug_event(aeh)) {
+		struct debug_event *event = cast_debug_event(aeh);
+		struct debug_msg_data debug_msg = {
+			.module.debug = *event
 		};
 
 		message_handler(&debug_msg);
@@ -245,6 +266,24 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 }
 #endif /* defined(CONFIG_MEMFAULT) */
 
+static void handle_wdt_feed_evt(struct debug_msg_data *msg)
+{
+	if (IS_EVENT(msg, util, UTIL_EVT_WATCHDOG_FEED_REQUEST)) {
+		if (!atomic_get(&mflt_thread_busy)) {
+			SEND_WDT_ACK(debug, DEBUG_EVT_WDT_ACK, self.id);
+		} else {
+			wdt_request_pending = true;
+		}
+	}
+
+	if ((IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_THREAD_DONE) ||
+	     IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE)) &&
+	    wdt_request_pending) {
+		SEND_WDT_ACK(debug, DEBUG_EVT_WDT_ACK, self.id);
+		wdt_request_pending = false;
+	}
+}
+
 static void message_handler(struct debug_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_START)) {
@@ -264,6 +303,7 @@ static void message_handler(struct debug_msg_data *msg)
 		}
 	}
 
+	handle_wdt_feed_evt(msg);
 #if defined(CONFIG_MEMFAULT)
 	memfault_handle_event(msg);
 #endif
@@ -277,3 +317,4 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, sensor_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, data_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, util_event);
+APP_EVENT_SUBSCRIBE_EARLY(MODULE, debug_event);

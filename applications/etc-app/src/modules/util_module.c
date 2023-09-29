@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/device.h>
@@ -14,6 +15,8 @@
 
 #define MODULE util_module
 #define MODULE_REBOOT_TIMEOUT 30
+/* Time left before the device resets due to the watchdog timeout expiring */
+#define MODULE_WATCHDOG_EARLY_WARNING_S	10
 
 #if defined(CONFIG_WATCHDOG_APPLICATION)
 #include "watchdog_app.h"
@@ -27,6 +30,7 @@
 #include "events/modem_event.h"
 #include "events/ui_event.h"
 #include "events/lora_event.h"
+#include "events/debug_event.h"
 
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -39,6 +43,7 @@ struct util_msg_data {
 		struct app_event app;
 		struct modem_event modem;
 		struct lora_event lora;
+		struct debug_event debug;
 	} module;
 };
 
@@ -50,12 +55,17 @@ static enum state_type {
 
 /* Forward declarations. */
 static void reboot_work_fn(struct k_work *work);
+static void watchdog_feed_check_fn(struct k_work *work);
 static void message_handler(struct util_msg_data *msg);
 static void send_reboot_request(enum shutdown_reason reason);
+static void send_watchdog_feed_request(void);
 
 /* Delayed work that is used to trigger a reboot. */
 static K_WORK_DELAYABLE_DEFINE(reboot_work, reboot_work_fn);
-
+/* Delayed work that emits a warning MODULE_WATCHDOG_EARLY_WARNING_S before
+   the device is reset by the watchdog */
+static K_WORK_DELAYABLE_DEFINE(watchdog_feed_check, watchdog_feed_check_fn);
+uint32_t wdt_feed_check_timeout_s = 0;
 
 static struct module_data self = {
 	.name = "util",
@@ -147,7 +157,43 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		message_handler(&util_msg);
 	}
 
+	if (is_debug_event(aeh)) {
+		struct debug_event *event = cast_debug_event(aeh);
+		struct util_msg_data util_msg = {
+			.module.debug = *event
+		};
+
+		message_handler(&util_msg);
+	}
+
 	return false;
+}
+
+void watchdog_evt_handler(const struct watchdog_evt *evt)
+{
+	switch (evt->type) {
+	case WATCHDOG_EVT_START:
+		LOG_DBG("WATCHDOG_EVT_START");
+		break;
+	case WATCHDOG_EVT_TIMEOUT_INSTALLED:
+		LOG_DBG("WATCHDOG_EVT_TIMEOUT_INSTALLED");
+		wdt_feed_check_timeout_s = (evt->timeout_ms / 1000) - 
+					   MODULE_WATCHDOG_EARLY_WARNING_S;
+		k_work_reschedule(&watchdog_feed_check, 
+				  K_SECONDS(wdt_feed_check_timeout_s));
+		break;
+	case WATCHDOG_EVT_FEED:
+		LOG_DBG("WATCHDOG_EVT_FEED");
+		k_work_reschedule(&watchdog_feed_check, 
+				  K_SECONDS(wdt_feed_check_timeout_s));
+		break;
+	case WATCHDOG_EVT_FEED_REQUEST:
+		LOG_DBG("WATCHDOG_EVT_FEED_REQUEST");
+		send_watchdog_feed_request();
+		break;
+	default:
+		LOG_DBG("Unknown watchdog event");
+	}
 }
 
 void bsd_recoverable_error_handler(uint32_t err)
@@ -199,6 +245,42 @@ static void send_reboot_request(enum shutdown_reason reason)
 	}
 }
 
+static void watchdog_feed_check_fn(struct k_work *work)
+{
+	/* If we get here, not all modules have been reported back to wdt. 
+	   In the future, we can send an event that other modules can react to
+	   e.g. to back up data before a wdt reset. */
+	LOG_WRN("Not all modules ack'd wdt feed. Resetting in %u s",
+		MODULE_WATCHDOG_EARLY_WARNING_S);
+}
+
+static void send_watchdog_feed_request(void)
+{
+	struct util_event *util_event =
+			new_util_event();
+
+	util_event->type = UTIL_EVT_WATCHDOG_FEED_REQUEST;
+
+	modules_reset_wdt_list();
+
+	APP_EVENT_SUBMIT(util_event);
+}
+
+/* This API should be called exactly once for each _WDT_ACK event received from
+ * supported modules in the application. When this API has been called a set number
+ * of times equal to the number of supported modules, the watchdog will be fed.
+ */
+static void watchdog_ack_check(uint32_t module_id)
+{
+	/* Feed after a shorter timeout if all modules have acknowledged that they are
+	 * operating properly.
+	 */
+	if (modules_wdt_register(module_id)) {
+		LOG_INF("All modules have ACKed the wdt feed request. Feed now.");
+		watchdog_feed_from_request();
+	}
+}
+
 /* This API should be called exactly once for each _SHUTDOWN_READY event received from active
  * modules in the application. When this API has been called a set number of times equal to the
  * number of active modules, a reboot will be scheduled.
@@ -220,6 +302,7 @@ static void reboot_ack_check(uint32_t module_id)
 static int setup(void)
 {
 #if defined(CONFIG_WATCHDOG_APPLICATION)
+	watchdog_register_handler(watchdog_evt_handler);
 	int err = watchdog_init_and_start();
 
 	if (err) {
@@ -296,6 +379,11 @@ static void on_all_states(struct util_msg_data *msg)
 
 		state_set(STATE_INIT);
 	}
+
+	if (IS_EVENT(msg, debug, DEBUG_EVT_WDT_ACK)) {
+		watchdog_ack_check(msg->module.debug.data.id);
+		return;
+	}
 }
 
 static void message_handler(struct util_msg_data *msg)
@@ -323,5 +411,6 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, gnss_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, sensor_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, data_event);
+APP_EVENT_SUBSCRIBE_EARLY(MODULE, debug_event);
 
 SYS_INIT(setup, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
