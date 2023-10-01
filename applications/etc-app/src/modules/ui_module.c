@@ -404,6 +404,18 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 		state_set(STATE_FOTA_UPDATE);
 	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_CHARGING)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_BATTERY_CHARGING, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_BATTERY_CHARGE_COMPLETE, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+	}
 }
 
 /* Message handler for STATE_CLOUD_CONNECTING. */

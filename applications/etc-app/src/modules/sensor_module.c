@@ -10,6 +10,7 @@
 #include "etc_settings.h"
 #include "etc_device.h"
 #include "etc_sensor.h"
+#include "etc_battery.h"
 #include "watchdog_app.h"
 #define MODULE sensor_module
 #include "cloud/cloud_codec/data_codec.h"
@@ -154,6 +155,24 @@ static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 	APP_EVENT_SUBMIT(sensor_event);
 }
 
+static void sensor_module_battery_handler(enum battery_status status) {
+	switch (status) {
+		case BATTERY_CHARGE_IN_PROCESS: {
+			LOG_DBG("BATTERY_CHARGE_IN_PROCESS");
+			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_IN_CHARGING);
+			break;
+		}
+		case BATTERY_CHARGE_COMPLETE: {
+			LOG_DBG("BATTERY_CHARGE_COMPLETE");
+			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE);
+			break;
+		}
+		default:
+			LOG_DBG("Battery Status %d", status);
+			break;
+	}
+}
+
 static void sensor_module_evt_handler(enum etc_sensor_status status) {
 	LOG_INF("Sensor status %d", status);
 	if (status == SENSOR_NO_CONNECTION) {
@@ -166,6 +185,7 @@ static void sensor_module_evt_handler(enum etc_sensor_status status) {
 static int setup(void)
 {
 	etc_sensor_init(sensor_module_evt_handler);
+	etc_battery_init(sensor_module_battery_handler);
 	return 0;
 }
 
@@ -188,7 +208,7 @@ static int sensor_poll_handler(bool is_test) {
 	int utc_timestamp = date_time_now_second();
 	data->timestamp = utc_timestamp == -1 ? 0 : utc_timestamp;
 	data->sensor[SENSOR_INPUT_AMBIENT] = etc_sensor_get_ambient_temp();
-
+	
 	if (data_codec_compare_temperature_is_valid(data->sensor[SENSOR_INPUT_AMBIENT])) {
 		LOG_DBG("Ambient temp %2.2f", data->sensor[SENSOR_INPUT_AMBIENT]);
 	}
@@ -203,7 +223,7 @@ static int sensor_poll_handler(bool is_test) {
 
 	data->sensor[SENSOR_INPUT_HUMID] = etc_sensor_get_probe_humid();
 	LOG_DBG("Humid %2.2f%% at port %d", data->sensor[SENSOR_INPUT_HUMID], etc_sensor_get_probe_humid_index());
-	data->battery_mV = etc_sensor_get_battery();
+	data->battery_mV = etc_battery_get_voltage_mV();
 	sensor_module_send_sensor(data, is_test);
 	sensor_is_processing = false;
 
