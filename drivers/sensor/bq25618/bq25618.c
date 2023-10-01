@@ -185,8 +185,9 @@ static void bq25618_work_fn(struct k_work *work)
 
 	pm_device_runtime_get(cfg->i2c.bus);
 
-	ret = bq25618_is_power_good(drv_data->dev);
-	if (ret != 1) {
+	uint8_t power_status = 0;
+	ret = bq25618_is_power_good(drv_data->dev, &power_status);
+	if ((ret) || (power_status != 1)) {
 		return;
 	}
 
@@ -831,10 +832,11 @@ int bq25618_voltage_bus_status(const struct device *dev, uint8_t *status)
 	return 0;
 }
 
-int bq25618_is_power_good(const struct device *dev) 
+int bq25618_is_power_good(const struct device *dev, uint8_t* status) 
 {
 	int ret = 0;
 	uint8_t reg = 0x00;
+	*status = 0;
 	ret = read_register(dev, BQ25618_CHARGER_STATUS0_REG, &reg);
 	if (ret != 0) {
 		LOG_ERR("Failed to read reg BQ25618_CHARGER_STATUS0_REG error %d", ret);
@@ -842,7 +844,7 @@ int bq25618_is_power_good(const struct device *dev)
 	}
 
 	if (reg & 0x04) {
-		return 1;
+		*status = 1;
 	}
 
 	return 0;
