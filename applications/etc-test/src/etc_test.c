@@ -1687,5 +1687,5 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings,
 	SHELL_CMD(get_device_id, NULL, "Get device ID", cmd_get_device_id),
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
-SHELL_CMD_REGISTER(etc_setting, &sub_settings, "ETC Settings", NULL);
+SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);
 
