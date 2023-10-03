@@ -65,6 +65,8 @@ struct sensor_data {
 	float sensor[SENSOR_EVENT_NUM_DEV_MAX];
 	/** Voltage of battery in mV */
 	uint16_t battery_mV;
+	/** Battery status */
+	uint8_t battery_status;
 };
 
 struct battery_data {

@@ -71,6 +71,8 @@ enum bq25618_chg_timer_mask {
 #define round(x)     ((x)>=0?(long)((x)+0.5):(long)((x)-0.5))
 #endif
 
+static bq25618_evt_handler_t bq25618_evt_cb = NULL;
+
 static int read_register(const struct device *dev,
 			uint8_t addr, uint8_t *val)
 {
@@ -173,6 +175,10 @@ void bq25618_print_all_registers(const struct device *dev)
 	}
 }
 
+void bq25618_register_callback(bq25618_evt_handler_t evt) {
+	bq25618_evt_cb = evt;
+}
+
 static void bq25618_work_fn(struct k_work *work)
 {
 	struct bq25618_data *drv_data =
@@ -186,9 +192,21 @@ static void bq25618_work_fn(struct k_work *work)
 	pm_device_runtime_get(cfg->i2c.bus);
 
 	uint8_t power_status = 0;
+	uint8_t battery_status = 0;
+	uint8_t bus_status = 0;
 	ret = bq25618_is_power_good(drv_data->dev, &power_status);
-	if ((ret) || (power_status != 1)) {
-		return;
+	if (ret) {
+		LOG_ERR("Error in get power (err %d)", ret);
+	}
+
+	ret = bq25618_charge_status(drv_data->dev, &battery_status);
+	if (ret) {
+		LOG_ERR("Error in get charge status (err %d)", ret);
+	}
+
+	ret = bq25618_voltage_bus_status(drv_data->dev, &bus_status);
+	if (ret) {
+		LOG_ERR("Error in get voltage bus status (err %d)", ret);
 	}
 
 	ret = bq25618_get_input_current_limit(drv_data->dev, &curr_lim);
@@ -200,6 +218,10 @@ static void bq25618_work_fn(struct k_work *work)
 	}
 
 	bq25618_get_fault_reg(dev, NULL);
+
+	if (bq25618_evt_cb) {
+		bq25618_evt_cb(bus_status, battery_status, power_status);
+	}
 
 	pm_device_runtime_put(cfg->i2c.bus);
 }

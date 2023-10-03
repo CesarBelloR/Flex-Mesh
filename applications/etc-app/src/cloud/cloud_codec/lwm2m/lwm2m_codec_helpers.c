@@ -831,7 +831,7 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 
 	/* Set the battery status */
 	err = lwm2m_set_s32(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, BATTERY_STATUS_RID),
-			(int32_t)etc_battery_get_status());
+			(int32_t)record->flag);
 	if (err) {
 		return err;
 	}

@@ -5,17 +5,13 @@ menuconfig ETC_BATTERY
 
 if ETC_BATTERY
 
-config BATTERY_POLL_TIME_SEC
-	int "Interval time to polling battery status"
-	default 5
-
 config BATTERY_LOW_VOLTAGE_MV
 	int "The voltage in mV to determine battery in low power"
-	default 3750
+	default 3450
 
 config BATTERY_NOT_INSTALL_MV
 	int "The voltage in mV to determine battery in not installed"
-	default 3500
+	default 2800
 
 module = ETC_BATTERY
 module-str = battery

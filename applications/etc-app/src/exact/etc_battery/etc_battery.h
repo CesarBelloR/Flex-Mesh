@@ -21,6 +21,7 @@ enum battery_status {
 };
 
 typedef void(*etc_battery_evt_handler_t)(enum battery_status status);
+
 /**
  * @brief Initialize the battery management
  */

@@ -63,6 +63,12 @@ struct bq25618_dev_config {
 	uint8_t charge_timer_val;
 };
 
+/** @brief Callback function for BQ25618
+ * 
+*/
+typedef void(*bq25618_evt_handler_t)(uint8_t bus_status, 
+	uint8_t battery_status, uint8_t power_status);
+
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
@@ -279,4 +285,8 @@ int bq25618_set_charge_timer_value(const struct device *dev, uint8_t hrs);
 */
 void bq25618_print_all_registers(const struct device *dev);
 
+/** @brief Register a callback to update the power charger IC
+ * 
+*/
+void bq25618_register_callback(bq25618_evt_handler_t evt);
 #endif /* BQ25618_H_ */

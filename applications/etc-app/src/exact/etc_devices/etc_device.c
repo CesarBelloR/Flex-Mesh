@@ -225,7 +225,7 @@ int etc_device_write_record_sensor(struct sensor_data *sensor)
 {
 	union etc_device_record record;
 	record.battery = (float)sensor->battery_mV / 1000.0;
-	record.flag = 0;
+	record.flag = (uint32_t)(sensor->battery_status);
 	record.timestamp = (uint32_t)sensor->timestamp;
 	for (uint8_t i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		record.sensor[i] = sensor->sensor[i];

@@ -83,11 +83,12 @@ extern void lora_module_thread_fn(void);
 extern void modem_module_thread_fn(void);
 extern void sensor_module_thread_fn(void);
 
-void main(void)
+int main(void)
 {
 	int rc = STATS_INIT_AND_REG(smp_svr_stats, STATS_SIZE_32, "smp_svr_stats");
 	if (rc < 0) {
 		LOG_ERR("Error initializing stats system [%d]", rc);
+		return -EINVAL;
 	}
 
 	/* Work around for nRF52840 errata 
@@ -113,6 +114,7 @@ void main(void)
 	rc = boot_read_bank_header(FLASH_AREA_ID(image_0), &img_hdr, sizeof(img_hdr));
 	if (rc) {
 		LOG_ERR("Failed to get header %d", rc);
+		return -EINVAL;
 	} else {
 		if (APP_VERSION_MAJOR != img_hdr.h.v1.sem_ver.major ||
 		    APP_VERSION_MINOR != img_hdr.h.v1.sem_ver.minor ||
@@ -173,4 +175,7 @@ void main(void)
 	while (true) {
 		k_sleep(K_FOREVER);
 	}
+
+	/* Never reach here */
+	return 0;
 }
