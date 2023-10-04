@@ -78,13 +78,13 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 	return -EINVAL;
 }
 
-int etc_device_write_calib(uint16_t calib_id, void *calib, int calib_size)
+int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size)
 {
-	return etc_nvs_write(calib_id, calib, calib_size);
+	return etc_nvs_write(setting_id, setting, setting_size);
 }
 
-int etc_device_read_calib(uint16_t calib_id, void *calib, int calib_size)
+int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size)
 {
-	LOG_DBG("Read calibration ID %d", calib_id);
-	return etc_nvs_read(calib_id, calib, calib_size);
+	LOG_DBG("Read setting ID %d", setting_id);
+	return etc_nvs_read(setting_id, setting, setting_size);
 }

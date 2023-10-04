@@ -495,22 +495,22 @@ SHELL_CMD_ARG_REGISTER(etc_adc_cal, NULL, "Start ADC calibration process", cmd_a
 static int cmd_adc_load_calibration(const struct shell *shell, size_t argc, char **argv)
 {
 	int rc = 0;
-	rc = etc_device_read_calib(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
+	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
 	if (rc) {
 		adc_calib_info.offset = 0;
-		etc_device_write_calib(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
+		etc_device_write_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
 	}
 	shell_print(shell, "The offset calibration: %.6f", adc_calib_info.offset);
-	rc = etc_device_read_calib(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
+	rc = etc_device_read_setting(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
 	if (rc) {
 		adc_calib_info.high = 4014.548130;
-		etc_device_write_calib(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
+		etc_device_write_setting(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
 	} 
 	shell_print(shell, "The high raw calibration: %.6f", adc_calib_info.high);
-	rc = etc_device_read_calib(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
+	rc = etc_device_read_setting(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
 	if (rc) {
 		adc_calib_info.ref = 4014.548130;
-		etc_device_write_calib(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
+		etc_device_write_setting(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
 	} 
 	shell_print(shell, "The reference calibration: %.6f", adc_calib_info.ref);
 
@@ -530,7 +530,7 @@ static int cmd_adc_set_offset(const struct shell *shell, size_t argc, char **arg
 	}
 
 	adc_calib_info.offset = atof(argv[1]);
-	int rc = etc_device_write_calib(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
+	int rc = etc_device_write_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for offset to NVS %d", rc);
 	} else {
@@ -552,7 +552,7 @@ static int cmd_adc_set_high(const struct shell *shell, size_t argc, char **argv)
 	}
 
 	adc_calib_info.high = atof(argv[1]);
-	int rc = etc_device_write_calib(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
+	int rc = etc_device_write_setting(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for high to NVS %d", rc);
 	} else {
@@ -574,7 +574,7 @@ static int cmd_adc_set_ref(const struct shell *shell, size_t argc, char **argv)
 	}
 
 	adc_calib_info.ref = atof(argv[1]);
-	int rc = etc_device_write_calib(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
+	int rc = etc_device_write_setting(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for reference to NVS %d", rc);
 	} else {
@@ -1644,3 +1644,48 @@ static int cmd_etc_sleep(const struct shell *shell, size_t argc, char **argv)
 }
 
 SHELL_CMD_ARG_REGISTER(etc_sleep, NULL, "Make the system to sleep mode", cmd_etc_sleep, 1, 1);
+
+#define ETC_SETTINGS_DEVICE_ID_LEN (32)
+static char tmp_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
+
+static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		size_t input_len = strlen(argv[1]);
+		if (input_len > 6 || input_len < 1) {
+			shell_error(shell, "Device ID Input exceeds maximum number of digits");
+			return 0;
+		}
+
+		char *input = argv[1];
+		for (int i = 0; i < input_len; i++) {
+			if (!isdigit((unsigned char)input[i])) {
+				shell_error(shell, "Invalid input, non-numeric characters detected");
+				return 0;
+			}
+		}
+		shell_print(shell, "OK");
+		snprintf(tmp_device_id, sizeof(tmp_device_id), "%02d%06d", CONFIG_PRODUCTION_GROUP_VALUE, atoi(argv[1]));
+		etc_device_write_setting(ETC_SETTING_DEVICE_ID, (char *)tmp_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+	} else {
+		shell_error(shell, "Invalid device id");
+	}
+
+	return 0;
+}
+
+static int cmd_get_device_id(const struct shell *shell, size_t argc, char **argv)
+{
+	memset(tmp_device_id, 0, sizeof(tmp_device_id));
+	etc_device_read_setting(ETC_SETTING_DEVICE_ID, (char *)tmp_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+	shell_print(shell, "Device ID %s", tmp_device_id);
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings, 
+	SHELL_CMD(set_device_id, NULL, "Set device ID", cmd_set_device_id),
+	SHELL_CMD(get_device_id, NULL, "Get device ID", cmd_get_device_id),
+	SHELL_SUBCMD_SET_END);
+/* Creating root (level 0) command "demo" */
+SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);
+
