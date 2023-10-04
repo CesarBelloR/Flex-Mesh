@@ -194,20 +194,16 @@ static void bq25618_work_fn(struct k_work *work)
 	uint8_t power_status = 0;
 	uint8_t battery_status = 0;
 	uint8_t bus_status = 0;
-	ret = bq25618_is_power_good(drv_data->dev, &power_status);
-	if (ret) {
-		LOG_ERR("Error in get power (err %d)", ret);
+	uint8_t reg = 0x00;
+	ret = read_register(dev, BQ25618_CHARGER_STATUS0_REG, &reg);
+	if (ret != 0) {
+		LOG_ERR("Failed to read reg BQ25618_CHARGER_STATUS0_REG error %d", ret);
+		return ret;
 	}
-
-	ret = bq25618_charge_status(drv_data->dev, &battery_status);
-	if (ret) {
-		LOG_ERR("Error in get charge status (err %d)", ret);
-	}
-
-	ret = bq25618_voltage_bus_status(drv_data->dev, &bus_status);
-	if (ret) {
-		LOG_ERR("Error in get voltage bus status (err %d)", ret);
-	}
+	
+	power_status = (reg >> 2) & 0x01;
+	battery_status = (reg >> 3) & 0x03;
+	bus_status = (reg >> 5) & 0x07;
 
 	ret = bq25618_get_input_current_limit(drv_data->dev, &curr_lim);
 	if (curr_lim != cfg->max_current) {
