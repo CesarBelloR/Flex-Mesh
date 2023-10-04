@@ -1615,8 +1615,7 @@ static int cmd_etc_sleep(const struct shell *shell, size_t argc, char **argv)
 		DEVICE_DT_GET(DT_NODELABEL(uart0)),
 #endif
 		DEVICE_DT_GET(DT_NODELABEL(uart1)),
-		DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart0)),
-		DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart1))
+		DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart0))
 	};
 	int ret;
 
