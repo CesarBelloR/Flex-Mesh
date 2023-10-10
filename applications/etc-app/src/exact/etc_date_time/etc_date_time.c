@@ -9,7 +9,6 @@
 #include <zephyr/sys/timeutil.h>
 #include <zephyr/posix/time.h>
 #include <zephyr/logging/log.h>
-#include "app_version.h"
 #include "etc_date_time.h"
 #include "pcf85263a.h"
 LOG_MODULE_REGISTER(date_time, CONFIG_DATE_TIME_LOG_LEVEL);
