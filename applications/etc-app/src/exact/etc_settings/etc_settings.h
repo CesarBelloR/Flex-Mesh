@@ -47,7 +47,6 @@ enum etc_serial_number_types {
 #define ETC_SETTING_TX_PROBE_SECS 21600
 
 int etc_settings_init(void);
-void etc_settings_refresh();
 void etc_set_hw_version(const char *hw_version);
 void etc_set_fw_version(const char *fw_version);
 void etc_set_device_id(const char *device_id);
