@@ -240,7 +240,7 @@ static void hw_wdt_work_fn(struct k_work *work)
 static void init_hw_wdt(void)
 {
 #if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_ACTIVE);
+	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_INACTIVE);
 #else
 	k_sem_init(&sens_sel0_wdt_sem, 1, 1);
 	gpio_pin_configure_dt(&s0_watchdog_dt, GPIO_OUTPUT_INACTIVE);
