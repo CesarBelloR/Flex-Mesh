@@ -220,7 +220,14 @@ static void date_time_handler(struct k_work *work)
 
 static int date_time_init(void)
 {
+	time_t now = 0;
 	pcf85263a_init("I2C_0");
+	int rc = pcf85263a_rtc_get_time(&now);
+	if (rc) {
+		/* RTC doesn't sync yet */
+		rc = pcf85263a_rtc_set_time(0);
+		LOG_INF("RTC didn't sync yet. Need to set time 0 (err: %d)", rc);
+	}
 	k_work_init_delayable(&time_work, date_time_handler);
 	return 0;
 }
