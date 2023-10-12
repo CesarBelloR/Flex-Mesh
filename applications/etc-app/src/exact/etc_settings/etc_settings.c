@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <zephyr/drivers/hwinfo.h>
+#include <zephyr/random/rand32.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include "app_version.h"
@@ -198,7 +199,14 @@ int etc_settings_init(void)
 	ret = etc_device_read_setting(ETC_SETTING_TX_DELAY_MSEC_ID, &etc_cfg.tx_delay_msec,
 				      sizeof(etc_cfg.tx_delay_msec));
 	if (ret) {
-		etc_set_tx_delay_msec(ETC_SETTING_TX_DELAY_MSEC_DEFAULT);
+		/* Generate the TX delay for all modes (LTE or Lora) */
+		uint16_t tx_delay_msec =
+			(uint16_t)(sys_rand32_get() % ETC_SETTING_TX_DELAY_MSEC_MAX);
+		enum etc_device_mode device_mode = etc_get_device_mode();
+		if (device_mode == ETC_DEVICE_MODE_LTE_LOGGER && tx_delay_msec < ETC_SETTING_TX_DELAY_MSEC_MIN_LTE) {
+			tx_delay_msec = ETC_SETTING_TX_DELAY_MSEC_MIN_LTE;
+		}
+		etc_set_tx_delay_msec(tx_delay_msec);
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_RX_DURATION_SECS_ID, &etc_cfg.rx_duration_secs,
