@@ -2,7 +2,6 @@ menuconfig POWER_MODULE
 	bool "Enable Power module"
 	select PM
 	select PM_DEVICE
-	default y
 	help
 		Enable the Power Management Module
 

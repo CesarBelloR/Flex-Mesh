@@ -1,4 +1,3 @@
-add_subdirectory(counter)
 add_subdirectory(io)
 add_subdirectory(lora)
 add_subdirectory(modem)

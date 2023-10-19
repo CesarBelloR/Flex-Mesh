@@ -266,8 +266,8 @@ static void ui_module_send(void)
 static void ui_input_handler(enum etc_interface_event_type type) {
 	if (type == ETC_INTERFACE_EVENT_RTC) {
 		LOG_INF("UI -> ETC_INTERFACE_EVENT_RTC");
-	} else if ((type == ETC_INTERFACE_EVENT_RTC) || (type == ETC_INTERFACE_EVENT_HALL)) {
-		ui_module_send();
+	} else if (type == ETC_INTERFACE_EVENT_HALL) {
+		LOG_INF("UI -> ETC_INTERFACE_EVENT_HALL");
 	} else {
 		/* No action required */
 	}

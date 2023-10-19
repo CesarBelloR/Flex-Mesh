@@ -4,7 +4,6 @@
 
 config TMP1826
 	bool "TMP1826 Temperature Sensor"
-	default y
 	depends on DT_HAS_TI_TMP1826_ENABLED
 	depends on W1_NET
 	help

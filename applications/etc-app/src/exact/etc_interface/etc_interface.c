@@ -35,7 +35,7 @@ K_WORK_DELAYABLE_DEFINE(etc_interface_hall_sensor_work, etc_interface_hall_senso
 static void etc_interface_hall_sensor_work_handler(struct k_work *work)
 {
 	struct etc_interface_event_data *event_data = 
-		CONTAINER_OF(&hall_sensor_event_data, struct etc_interface_event_data, callback);
+		&hall_sensor_event_data;
 	event_data->event_type = ETC_INTERFACE_EVENT_HALL;
 	k_work_submit(&event_data->work);
 }
