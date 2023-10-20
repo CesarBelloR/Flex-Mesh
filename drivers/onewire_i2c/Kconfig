@@ -1,6 +1,5 @@
 menuconfig ONEWIRE_I2C
 	bool "Bridge One-wire to I2C driver"
-	default y
 	depends on W1_NET
 	depends on DT_HAS_MAXIM_DS28E18_ENABLED
 	help

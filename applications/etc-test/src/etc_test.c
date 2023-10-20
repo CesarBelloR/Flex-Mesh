@@ -1600,10 +1600,9 @@ static int cmd_last_reset_reason(const struct shell *shell, size_t argc, char **
 
 SHELL_CMD_ARG_REGISTER(etc_reset_reason, NULL, "Get the reset reason", cmd_last_reset_reason, 1, 0);
 
-static int cmd_etc_sleep(const struct shell *shell, size_t argc, char **argv)
+void etc_sleep(void)
 {
 	static const struct device *pm_devs[] = {
-		DEVICE_DT_GET(DT_NODELABEL(mx25r1635)),
 #ifdef CONFIG_BOARD_ETC_0_3_0
 		DEVICE_DT_GET(DT_NODELABEL(spi3)),
 #else
@@ -1617,6 +1616,8 @@ static int cmd_etc_sleep(const struct shell *shell, size_t argc, char **argv)
 		DEVICE_DT_GET(DT_NODELABEL(uart1)),
 		DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart0))
 	};
+	const struct gpio_dt_spec rtc_int = 
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rtc_int), control_gpios, 0);
 	int ret;
 
 	/* Set all GPIOs to consume the least amount of power. */
@@ -1629,21 +1630,27 @@ static int cmd_etc_sleep(const struct shell *shell, size_t argc, char **argv)
 	gpio_pin_configure_dt(&s1_dt, GPIO_OUTPUT_INACTIVE);
 	gpio_pin_configure_dt(&power_gpio_dt, GPIO_DISCONNECTED);
 	gpio_pin_configure_dt(&pon_trig_gpio_dt, GPIO_DISCONNECTED);
+	gpio_pin_configure_dt(&rtc_int, GPIO_INPUT);
 #if DT_NODE_EXISTS(DT_NODELABEL(modem_uart_oe))
 	gpio_pin_configure_dt(&modem_uart_oe_dt, GPIO_ACTIVE_LOW | GPIO_OUTPUT_INACTIVE);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
+	gpio_pin_configure_dt(&onewire_slpz_dt, GPIO_OUTPUT_ACTIVE);
 #endif
 
 	gpio_pin_interrupt_configure_dt(&hall_dt, GPIO_INT_DISABLE);	
 
 	for (int i = 0; i < ARRAY_SIZE(pm_devs); i++) {
 		ret = pm_device_action_run(pm_devs[i], PM_DEVICE_ACTION_SUSPEND);
-		if (ret != 0) {
-			shell_error(shell, "Error suspending device: %s", pm_devs[i]->name);
-		}
 	}
 }
 
-SHELL_CMD_ARG_REGISTER(etc_sleep, NULL, "Make the system to sleep mode", cmd_etc_sleep, 1, 1);
+static int cmd_etc_sleep(const struct shell *shell, size_t argc, char **argv)
+{
+	etc_sleep();
+}
+
+SHELL_CMD_ARG_REGISTER(etc_sleep, NULL, "Put the system into sleep mode", cmd_etc_sleep, 1, 1);
 
 #define ETC_SETTINGS_DEVICE_ID_LEN (32)
 static char tmp_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
@@ -1688,4 +1695,3 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings,
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
 SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);
-

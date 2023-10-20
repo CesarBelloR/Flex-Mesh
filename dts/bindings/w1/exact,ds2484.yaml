@@ -6,9 +6,3 @@ description: Custom DS2484 Single-Channel 1-Wire Master
 compatible: "exact,ds2484"
 
 include: [i2c-device.yaml, w1-master.yaml]
-
-properties:
-  slpz-gpios:
-    type: phandle-array
-    description: |
-      Enable sleep mode, only available on DS2484.

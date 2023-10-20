@@ -29,7 +29,7 @@ K_WORK_DELAYABLE_DEFINE(hw_wdt_work, hw_wdt_work_handler);
 static int etc_watchdog_init(void) {
     LOG_INF("Initialized WDT hardware with interval %d (s)", wdt_feed_interval_s);
 #if DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
-	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_ACTIVE);
+	gpio_pin_configure_dt(&hw_wdt_dt, GPIO_OUTPUT_INACTIVE);
 #endif
 	etc_watchdog_start_work();
 	
@@ -52,7 +52,6 @@ void etc_watchdog_feed(void) {
 	k_busy_wait(1);
 	gpio_pin_set_dt(&s0_dt, 0U);
 #endif
-	LOG_DBG("HW WDT fed");
 }
 
 void etc_watchdog_set_timeout(uint16_t timeout) {

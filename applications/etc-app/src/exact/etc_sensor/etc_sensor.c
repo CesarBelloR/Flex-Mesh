@@ -131,7 +131,6 @@ static void etc_sensor_adc_hw_init(void)
 	if (!device_is_ready(onewire_slpz_dt.port)) {
 		return;
 	}
-	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_ACTIVE);
 #endif
 
 	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_INACTIVE);

@@ -3,4 +3,3 @@ config EXACT_DS2484
 	select W1
 	select I2C
 	depends on DT_HAS_EXACT_DS2484_ENABLED
-	default y
