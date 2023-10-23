@@ -157,6 +157,11 @@ static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 
 static void sensor_module_battery_handler(enum battery_status status) {
 	switch (status) {
+		case BATTERY_NORMAL: {
+			LOG_DBG("BATTERY_NORMAL");
+			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_IN_NORMAL);
+			break;
+		}
 		case BATTERY_CHARGE_IN_PROCESS: {
 			LOG_DBG("BATTERY_CHARGE_IN_PROCESS");
 			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_IN_CHARGING);

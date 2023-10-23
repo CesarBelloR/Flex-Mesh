@@ -218,9 +218,9 @@ static void bq25618_work_fn(struct k_work *work)
 
 	bq25618_get_fault_reg(dev, NULL);
 	
-	if (last_status != reg) {
-		last_status = reg;
-		if (bq25618_evt_cb) {
+	if (bq25618_evt_cb) {
+		if (last_status != reg) {
+			last_status = reg;
 			bq25618_evt_cb(bus_status, battery_status, power_status);
 		}
 	}
@@ -342,6 +342,13 @@ exit:
 	pm_device_runtime_put(cfg->i2c.bus);
 
 	return retval;
+}
+
+void bq25618_poll_status(const struct device *dev) 
+{
+	struct bq25618_data *drv_data = dev->data;
+	/* Need to sync immediately */
+	bq25618_work_fn(&drv_data->work);
 }
 
 int bq25618_enable_buck(const struct device *dev) 

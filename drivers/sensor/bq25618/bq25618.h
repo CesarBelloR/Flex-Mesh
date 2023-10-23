@@ -72,7 +72,10 @@ typedef void(*bq25618_evt_handler_t)(uint8_t bus_status,
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
-
+/** @brief Run the poll job for PMIC
+ * 
+ */
+void bq25618_poll_status(const struct device *dev);
 /** @brief Enable the Buck Regulator
  *
  * @retval return 0 on success, or a negative error code from an I2C

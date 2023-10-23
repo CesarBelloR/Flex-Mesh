@@ -27,6 +27,10 @@ typedef void(*etc_battery_evt_handler_t)(enum battery_status status);
  */
 void etc_battery_init(etc_battery_evt_handler_t handler);
 
+/** @brief Poll the status from PMIC
+ *
+ */
+void etc_battery_poll_status(void);
 /**
  * @brief Get the battery status based on LwM2M spec
  * 

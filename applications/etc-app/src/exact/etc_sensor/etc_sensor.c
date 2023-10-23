@@ -8,6 +8,7 @@
 #include "common.h"
 #include "etc_sensor.h"
 #include "etc_device.h"
+#include "etc_battery.h"
 #include "adc.h"
 
 #include <zephyr/logging/log.h>
@@ -450,6 +451,8 @@ void etc_sensor_run_acquisition(void) {
 	etc_sensor_run_digital_sample();
 	/* Disable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_disable();
+	/* Sync battery status */
+	etc_battery_poll_status();
 	/* Check probe connection */
 	etc_sensor_probe_check();
 }

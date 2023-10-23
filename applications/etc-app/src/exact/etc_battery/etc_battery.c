@@ -25,6 +25,10 @@ void etc_battery_init(etc_battery_evt_handler_t handler) {
 	bq25618_register_callback(etc_battery_charger_handler);
 }
 
+void etc_battery_poll_status(void) {
+	bq25618_poll_status(battery_dev);
+}
+
 enum battery_status etc_battery_get_status(void) {
 	return last_battery_status;
 }
@@ -40,7 +44,7 @@ static void etc_battery_charger_handler(uint8_t bus_status,
 	if (battery_mV < CONFIG_BATTERY_NOT_INSTALL_MV) {
 		current_status = BATTERY_NO_INSTALLED;
 	} else {
-		if (bus_status == USB_HOST_MODE) {
+		if (bus_status == USB_HOST_MODE || bus_status == ADAPTER_PORT_MODE) {
 			if (battery_status == CHARGE_TERMINATION_DONE)  {
 				current_status = BATTERY_CHARGE_COMPLETE;
 			} else if (battery_status == FAST_CHARGING || battery_status == PRE_CHARGING) {
