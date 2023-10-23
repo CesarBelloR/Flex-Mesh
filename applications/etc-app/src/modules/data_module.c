@@ -521,10 +521,7 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
 		reset_send_status(&send_status);
 	}
-
-	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED)) {
-	}
-
+	
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
 		#if 0 /* NO MVP */
 		struct data_lora_sensors new_lora_data = {

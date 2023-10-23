@@ -65,7 +65,8 @@ static int8_t sensor_digital_humid_port_index;
 static int sensor_ambient_raw_adc = 0;
 static int sensor_battery_raw_adc = 0;
 static struct etc_sensor_adc_calibration_info etc_sensor_adc_calibration_info= {0x00};
-
+static etc_sensor_evt_handler_t sensor_evt_handler;
+static enum sensor_status last_sensor_status = SENSOR_CONNECTED;
 /* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
 inline static int8_t remap_th_channel(int8_t channel)
 {
@@ -182,16 +183,30 @@ static void etc_sensor_gpios_one_wire_disable(void)
 
 static void etc_sensor_run_detection(void) {
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
+	int no_connected_counter = 0;
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		etc_sensor_adc_switch_channel(i);
 		k_msleep(50);
 		int raw_adc = adc_get_channel(ETC_ADC_CHANNEL_SENSOR);
 		if (raw_adc >= SENSOR_ADC_NO_CONNECTED) {
 			list_sensor_type[i] = SENSOR_TYPE_UNDEF;
+			no_connected_counter += 1;
 		} else if (raw_adc <= SENSOR_ADC_ONE_WIRE_CONNECTED) {
 			list_sensor_type[i] = SENSOR_TYPE_DIGITAL;
 		} else {
 			list_sensor_type[i] = SENSOR_TYPE_ANALOG;
+		}
+	}
+
+	enum sensor_status sensor_status = SENSOR_NO_CONNECTION;
+	if (no_connected_counter != ETC_SENSOR_NUM_PROBE_SENSOR) {
+		sensor_status = SENSOR_CONNECTED;
+	}
+
+	if (sensor_evt_handler) {
+		if (sensor_status != last_sensor_status) {
+			sensor_evt_handler(sensor_status);
+			last_sensor_status = sensor_status;
 		}
 	}
 #endif
@@ -322,7 +337,7 @@ static void etc_sensor_load_calibration(void) {
 	etc_sensor_adc_calibration_info.loaded = true;
 }
 
-void etc_sensor_init(void) {
+void etc_sensor_init(etc_sensor_evt_handler_t handler) {
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 	__ASSERT(ambient_i2c_dev != NULL, "Failed to get device binding");
 	__ASSERT(device_is_ready(ambient_i2c_dev), "Device %s is not ready", ambient_i2c_dev->name);
@@ -336,6 +351,8 @@ void etc_sensor_init(void) {
 		list_sensor_type[i] = SENSOR_TYPE_ANALOG;
 #endif
 	}
+
+	sensor_evt_handler = handler;
 }
 
 float etc_sensor_get_ambient_temp(void) {
@@ -401,7 +418,7 @@ uint16_t etc_sensor_get_battery(void) {
 	return adc_mv_battery;
 }
 
-void etc_sensor_run_acquistion(void) {
+void etc_sensor_run_acquisition(void) {
 	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	/* Enable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_enable();
@@ -411,11 +428,14 @@ void etc_sensor_run_acquistion(void) {
 	sensor_ambient_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_AMB));
 	/* Run sample for battery */
 	sensor_battery_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_BATTERY));
-	/* Run sample sensor for all ports - analog part*/
-	etc_sensor_run_analog_sample();
-	LOG_INF("%d %d %d %d", list_sensor_raw_adc[0], list_sensor_raw_adc[1], list_sensor_raw_adc[2], list_sensor_raw_adc[3]);
-	/* Run sample sensor for all ports - digital part */
-	etc_sensor_run_digital_sample();
+	/* Only calculate analog and digital sensor when it connected */
+	if (last_sensor_status == SENSOR_CONNECTED) {
+		/* Run sample sensor for all ports - analog part*/
+		etc_sensor_run_analog_sample();
+		/* Run sample sensor for all ports - digital part */
+		etc_sensor_run_digital_sample();
+	}
+
 	/* Disable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_disable();
 }

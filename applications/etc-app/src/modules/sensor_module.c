@@ -154,9 +154,20 @@ static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 	APP_EVENT_SUBMIT(sensor_event);
 }
 
+static void sensor_module_evt_handler(enum sensor_status status) {
+	LOG_INF("Sensor status %d", status);
+	if (status == SENSOR_NO_CONNECTION) {
+		etc_set_power_mode(ETC_POWER_MODE_HIBERNATE);
+		SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_NO_CONNECT);
+	} else if (status == SENSOR_CONNECTED) {
+		etc_set_power_mode(ETC_POWER_MODE_POWER_SAVER);
+		SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_CONNECTED);
+	}
+}
+
 static int setup(void)
 {
-	etc_sensor_init();
+	etc_sensor_init(sensor_module_evt_handler);
 	return 0;
 }
 
@@ -173,7 +184,7 @@ static int sensor_poll_handler(bool is_test) {
 #endif
 	sensor_is_processing = true;
 
-	etc_sensor_run_acquistion();
+	etc_sensor_run_acquisition();
 
 	struct sensor_data* data = &static_sensor_data;
 	int utc_timestamp = date_time_now_second();

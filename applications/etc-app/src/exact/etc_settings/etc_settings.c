@@ -221,6 +221,8 @@ int etc_settings_init(void)
 		etc_set_alarm_threshold(ETC_SETTING_ALARM_THRESHOLD_DEFAULT);
 	}
 
+	etc_set_log_interval_secs(60);
+
 	LOG_DBG("Load setting successfully");
 	return 0;
 }
