@@ -4,9 +4,9 @@
 		<Name>EXACT Configuration</Name>
 		<Description1 />
 		<ObjectID>48931</ObjectID>
-		<ObjectURN>urn:oma:lwm2m:x:48931:1.0</ObjectURN>
+		<ObjectURN>urn:oma:lwm2m:x:48931:1.1</ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.0</ObjectVersion>
+		<ObjectVersion>1.1</ObjectVersion>
 		<MultipleInstances>Single</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>

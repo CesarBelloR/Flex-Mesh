@@ -315,6 +315,19 @@ static int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_d
 		return err;
 	}
 
+	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 
+						 0, ETC_CFG_OBJ_R_TX_PROBE),
+						 callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 
+						 0, ETC_CFG_OBJ_R_TX_PROBE),
+						 lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
+
 	return 0;
 }
 
@@ -437,6 +450,12 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 		return err;
 	}
 
+	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_TX_PROBE),
+		     cfg->tx_probe_secs);
+	if (err) {
+		return err;
+	}
+
 	err = lwm2m_codec_helpers_set_callback_for_config_object(callback);
 	if (err) {
 		return err;
@@ -502,6 +521,12 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 
 	err = lwm2m_get_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, RX_DURATION_RID),
 		     	    &cfg->rx_duration_secs);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_get_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_TX_PROBE),
+		     	    &cfg->tx_probe_secs);
 	if (err) {
 		return err;
 	}
