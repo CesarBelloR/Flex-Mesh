@@ -134,6 +134,10 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_INTERVAL_ALARM_MIN_VAL,
 			    ETC_CFG_OBJ_R_TX_INTERVAL_ALARM_MAX_VAL);
 		break;
+	case ETC_CFG_OBJ_R_TX_PROBE:
+		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_PROBE_MIN_VAL,
+			    ETC_CFG_OBJ_R_TX_PROBE_MAX_VAL);
+		break;
 	}
 
 	return rc;

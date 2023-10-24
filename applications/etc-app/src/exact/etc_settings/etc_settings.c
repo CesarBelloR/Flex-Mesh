@@ -190,6 +190,12 @@ int etc_settings_init(void)
 		etc_set_tx_interval_alarm_secs(ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT);
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_TX_PROBE_SEC_ID, &etc_cfg.tx_probe_secs,
+				      sizeof(etc_cfg.tx_probe_secs));
+	if (ret) {
+		etc_set_tx_probe_secs(ETC_SETTING_TX_PROBE_SECS);
+	}
+
 	ret = etc_device_read_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
 				      sizeof(etc_cfg.wake_early_secs));
 	if (ret) {
@@ -220,8 +226,6 @@ int etc_settings_init(void)
 	if (ret) {
 		etc_set_alarm_threshold(ETC_SETTING_ALARM_THRESHOLD_DEFAULT);
 	}
-
-	etc_set_log_interval_secs(60);
 
 	LOG_DBG("Load setting successfully");
 	return 0;
@@ -257,6 +261,9 @@ void etc_settings_update(const struct etc_config *new_config)
 	}
 	if (etc_cfg.tx_interval_alarm_secs != new_config->tx_interval_alarm_secs) {
 		rc = etc_set_tx_interval_alarm_secs(new_config->tx_interval_alarm_secs);
+	}
+	if (etc_cfg.tx_probe_secs != new_config->tx_probe_secs) {
+		rc = etc_set_tx_probe_secs(new_config->tx_probe_secs);
 	}
 	if (etc_cfg.wake_early_secs != new_config->wake_early_secs) {
 		rc = etc_set_wake_early_secs(new_config->wake_early_secs);
@@ -426,6 +433,24 @@ int etc_set_tx_interval_alarm_secs(uint32_t second)
 	return rc;
 }
 
+int etc_set_tx_probe_secs(uint32_t second) {
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.tx_probe_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	etc_cfg.tx_probe_secs = second;
+	rc = etc_device_write_setting(ETC_SETTING_TX_PROBE_SEC_ID,
+				      &etc_cfg.tx_probe_secs,
+				      sizeof(etc_cfg.tx_probe_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 int etc_set_wake_early_secs(uint16_t second)
 {
 	if ((second > ETC_SETTING_WAKEUP_EARLY_SECS_MAX) ||
@@ -587,6 +612,15 @@ uint32_t etc_get_tx_interval_alarm_secs(void)
 	uint32_t second = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	second = etc_cfg.tx_interval_alarm_secs;
+	k_mutex_unlock(&setting_mutex);
+	return second;
+}
+
+uint32_t etc_get_tx_probe_secs(void) 
+{
+	uint32_t second = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	second = etc_cfg.tx_probe_secs;
 	k_mutex_unlock(&setting_mutex);
 	return second;
 }

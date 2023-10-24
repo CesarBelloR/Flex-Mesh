@@ -157,10 +157,10 @@ static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 static void sensor_module_evt_handler(enum sensor_status status) {
 	LOG_INF("Sensor status %d", status);
 	if (status == SENSOR_NO_CONNECTION) {
-		etc_set_power_mode(ETC_POWER_MODE_HIBERNATE);
+		etc_set_power_mode(ETC_POWER_MODE_PROBE);
 		SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_NO_CONNECT);
 	} else if (status == SENSOR_CONNECTED) {
-		etc_set_power_mode(ETC_POWER_MODE_POWER_SAVER);
+		etc_set_power_mode(ETC_POWER_MODE_INTERVAL);
 		SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_CONNECTED);
 	}
 }

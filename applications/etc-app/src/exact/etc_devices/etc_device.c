@@ -46,6 +46,7 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_DEFAULT_RX_DURATION_SECONDS (5)
 #define ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS (60)
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
+#define ETC_RECORD_DEFAULT_TX_PROBE_SECONDS (21600)
 
 struct etc_device_reclaim_info {
 	uint16_t current_index;
@@ -571,6 +572,12 @@ int etc_device_get_tx_interval_second(void)
 {
 	int second = etc_get_tx_interval_secs();
 	return second == 0 ? ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS : second;
+}
+
+int etc_device_get_tx_probe_second(void) 
+{
+	int second = etc_get_tx_probe_secs();
+	return second == 0 ? ETC_RECORD_DEFAULT_TX_PROBE_SECONDS : second;
 }
 
 void etc_device_set_job(enum etc_logger_job job) {

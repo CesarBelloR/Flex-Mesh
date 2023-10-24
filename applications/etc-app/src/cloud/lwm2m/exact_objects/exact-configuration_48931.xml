@@ -29,11 +29,12 @@
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>0..1</RangeEnumeration>
+				<RangeEnumeration>0..2</RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[Selection between:
 - 0: Always On (AO) mode
-- 1: Hibernate mode]]></Description>
+- 1: Interval mode
+- 2: Probe mode]]></Description>
 			</Item>
 			<Item ID="3">
 				<Name>TX_INTERVAL</Name>
@@ -43,8 +44,7 @@
 				<Type>Integer</Type>
 				<RangeEnumeration>60..86400</RangeEnumeration>
 				<Units>s</Units>
-				<Description><![CDATA[Frequency device wakes up, takes readings, and stores to flash.
-Interval is always synched to the clock. E.g. interval of 900 seconds (15 mintues) will log readings at 12:00:00, 12:15:00, 12:30:00, etc. Interval of 1 at 12:00:00, 12:01:00, 12:02:00, etc.
+				<Description><![CDATA[Frequency device wakes up, transmit stored NACK data to cloud via Cellular or Lora in Interval Mode
 ]]></Description>
 			</Item>
 			<Item ID="4">
@@ -110,6 +110,16 @@ How long Relay stays in RX mode.  Only valid for DEVICE_MODE = 0.]]></Descriptio
 				<RangeEnumeration>60..86400</RangeEnumeration>
 				<Units>s</Units>
 				<Description><![CDATA[Frequency readings are recorded and reported when an ALARM_THRESHOLD is crossed.]]></Description>
+			</Item>
+			<Item ID="10">
+				<Name>TX_PROBE</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>21600..86400</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Frequency device wakes up, transmit stored NACK data to cloud via Cellular or Lora in Probe Mode]]></Description>
 			</Item>
 		</Resources>
 		<Description2 />
