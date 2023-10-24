@@ -46,8 +46,8 @@
 struct bq25618_data {
 	struct gpio_callback gpio_cb;
 	const struct device *dev;
-
-	struct k_work work;
+	struct k_mutex status_lock;
+	struct k_work_delayable work;
 };
 
 struct bq25618_dev_config {
@@ -74,6 +74,7 @@ typedef void(*bq25618_evt_handler_t)(uint8_t bus_status,
 /***************************************************************************/
 /** @brief Run the poll job for PMIC
  * 
+ * Notice: Call this API before get PM
  */
 void bq25618_poll_status(const struct device *dev);
 /** @brief Enable the Buck Regulator
