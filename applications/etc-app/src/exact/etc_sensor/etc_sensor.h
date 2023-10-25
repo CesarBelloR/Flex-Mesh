@@ -10,7 +10,7 @@
 #include <zephyr/device.h>
 #include "events/sensor_event.h"
 
-enum sensor_status {
+enum etc_sensor_status {
 	SENSOR_NO_CONNECTION,
 	SENSOR_CONNECTED,
 };
@@ -18,7 +18,7 @@ enum sensor_status {
 /* Define a maximum probe sensor in hardware */
 #define ETC_SENSOR_NUM_PROBE_SENSOR (4)
 
-typedef void(*etc_sensor_evt_handler_t)(enum sensor_status status);
+typedef void(*etc_sensor_evt_handler_t)(enum etc_sensor_status status);
 
 /**
  * @brief Initialize the sensor system.
@@ -87,4 +87,10 @@ void etc_sensor_run_acquisition(void);
  */
 enum sensor_type etc_sensor_get_probe_type(enum sensor_input input);
 
+/**
+ * @brief Get the current probe sensor status 
+ * 
+ * @return the status of probed sensor (connected or no connect)
+ */
+enum etc_sensor_status etc_sensor_get_status(void);
 #endif /*  ETC_SENSOR_H_ */

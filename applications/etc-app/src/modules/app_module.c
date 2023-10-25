@@ -8,11 +8,11 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/policy.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/random/rand32.h>
 #include "pcf85263a.h"
 #include "etc_settings.h"
 #include "etc_interface.h"
 #include "etc_device.h"
+#include "etc_sensor.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
@@ -36,6 +36,12 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
 #define MINIMUM_TIME_TO_WAKEUP_S   (30)
+
+enum app_wakeup_tx_work_type {
+	APP_WAKEUP_TX_INTERVAL_WORK,
+	APP_WAKEUP_TX_PROBE_WORK,
+	APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK,
+};
 
 struct app_msg_data {
 	union {
@@ -67,6 +73,9 @@ static enum sub_state_type {
 #define APP_QUEUE_ENTRY_COUNT	 10
 #define APP_QUEUE_BYTE_ALIGNMENT 4
 
+/* Get min of 3 integer values */
+#define MIN_OF_3(a,b,c)  ((a) < (b) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)))
+
 K_MSGQ_DEFINE(msgq_app, sizeof(struct app_msg_data), APP_QUEUE_ENTRY_COUNT,
 	      APP_QUEUE_BYTE_ALIGNMENT);
 
@@ -78,13 +87,15 @@ static struct module_data self = {
 
 /* Store the next wakup */
 static int next_wakeup = 0;
+static enum app_wakeup_tx_work_type wakeup_tx_type = APP_WAKEUP_TX_INTERVAL_WORK;
 
 K_MUTEX_DEFINE(next_wakeup_mutex);
 
 /* Defind functions for set/get next wake up */
-static void app_set_next_wakekup(int wakeup) {
+static void app_set_next_wakekup(int wakeup, enum app_wakeup_tx_work_type work_type) {
 	k_mutex_lock(&next_wakeup_mutex, K_FOREVER);
 	next_wakeup = wakeup;
+	wakeup_tx_type = work_type;
 	k_mutex_unlock(&next_wakeup_mutex);
 }
 
@@ -94,6 +105,14 @@ static int app_get_next_wakeup(void) {
 	wakeup = next_wakeup;
 	k_mutex_unlock(&next_wakeup_mutex);
 	return wakeup;
+}
+
+static enum app_wakeup_tx_work_type app_get_wakeup_tx_work_type(void) {
+	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
+	k_mutex_lock(&next_wakeup_mutex, K_FOREVER);
+	type = wakeup_tx_type;
+	k_mutex_unlock(&next_wakeup_mutex);
+	return type;
 }
 
 /* Convenience functions used in internal state handling. */
@@ -276,20 +295,39 @@ static time_t align_wakeup(time_t now, int interval_s)
 	return wakeup_time;
 }
 
-static int app_get_next_hour_wakeup_for_hibernate_job(int current_hour) {
-	enum etc_device_mode mode = etc_get_device_mode();
-	if (mode == ETC_DEVICE_MODE_LORA_LOGGER) {
-		return 16;
-	} else {
-		int next_hour = ((current_hour / 6) + 1) * 6;
-		if (next_hour >= 24) {
-			next_hour = 0;
-		}
-		return next_hour;
-	}
+static time_t app_get_next_transmit_for_inteval(time_t next_transmit) {
+	uint16_t tx_delay_msec = etc_get_tx_delay_msec();
+	return (time_t)(next_transmit + (tx_delay_msec / 1000));
 }
 
-static void app_set_next_wakeup_time_for_job(enum etc_power_mode_e power_mode, enum etc_logger_job job) 
+static time_t app_get_next_transmit_for_no_probe(time_t now, uint16_t tx_no_probe_mins, 
+	enum etc_sensor_status sensor_status) {
+	if ((sensor_status == SENSOR_CONNECTED) || (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER)) {
+		return (time_t)-1;
+	}
+	struct tm tm_time = {0};
+	gmtime_r(&now, &tm_time);
+	return (time_t)(now + etc_device_get_tx_probe_second() + 
+		(tx_no_probe_mins - tm_time.tm_min) * 60 - tm_time.tm_sec); 
+}
+
+static time_t app_get_next_transmit_for_logger_lora_sync_cloud(time_t now, uint16_t tx_logger_lora_mins) {
+	if (etc_get_device_mode() != ETC_DEVICE_MODE_LORA_LOGGER) {
+		return (time_t)-1;
+	}
+	struct tm tm_time = {0};
+	gmtime_r(&now, &tm_time);
+	int tx_logger_lora_hours = 0;
+	if (tm_time.tm_hour <= ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR) {
+		tx_logger_lora_hours = ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR - tm_time.tm_hour;
+	} else {
+		tx_logger_lora_hours = (24 - tm_time.tm_hour) + ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR;
+	}
+	return (time_t)(now + tx_logger_lora_hours * 3600 + 
+		(tx_logger_lora_mins  - tm_time.tm_min) * 60 - tm_time.tm_sec);
+}
+
+static void app_set_next_wakeup_time_for_job(enum etc_logger_job job) 
 {
 #if defined(CONFIG_PCF85263)
 	time_t now = 0;
@@ -297,28 +335,46 @@ static void app_set_next_wakeup_time_for_job(enum etc_power_mode_e power_mode, e
 	pcf85263a_rtc_get_time(&now);
 	int wakeup_for_log = etc_device_get_log_interval_second();
 	int wakeup_for_transmit = etc_device_get_tx_interval_second();
+	uint16_t tx_offset_logger_lora_mins = etc_device_get_tx_logger_lora();
+	uint16_t tx_offset_no_probe_mins = etc_device_get_tx_no_probe();
 	time_t next_log = 0;
+	time_t next_transmit_normal = 0;
+	time_t next_transmit_logger_lora_sync_cloud = 0;
+	time_t next_transmit_no_probe = 0;
 	time_t next_transmit = 0;
-	int next_hour = -1;
+	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
+	enum etc_sensor_status sensor_status = etc_sensor_get_status();
 	int wakeup = 0;
 
 	struct tm tm_time = {0};
 	gmtime_r(&now, &tm_time);
-
+	
 	switch (job) {
 		case ETC_LOGGER_JOB_LOG: {
 			next_log = align_wakeup(now, wakeup_for_log);
 			break;
 		}
 		case ETC_LOGGER_JOB_TX: {
-			next_transmit = align_wakeup(now, wakeup_for_transmit);
-			next_hour = app_get_next_hour_wakeup_for_hibernate_job(tm_time.tm_hour);
+			next_transmit_normal = app_get_next_transmit_for_inteval(align_wakeup(now, wakeup_for_transmit));
+			next_transmit_logger_lora_sync_cloud = app_get_next_transmit_for_logger_lora_sync_cloud(now, 
+				tx_offset_logger_lora_mins);
+			next_transmit_no_probe = app_get_next_transmit_for_no_probe(now, tx_offset_no_probe_mins, 
+				sensor_status);
+			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
+				(uint32_t)next_transmit_logger_lora_sync_cloud, 
+				(uint32_t)next_transmit_no_probe);
 			break;
 		}
 		case ETC_LOGGER_JOB_BOTH: {
-			next_log = align_wakeup(now, wakeup_for_log);
-			next_transmit = align_wakeup(now, wakeup_for_transmit);
-			next_hour = app_get_next_hour_wakeup_for_hibernate_job(tm_time.tm_hour);
+			next_log = app_get_next_transmit_for_inteval(align_wakeup(now, wakeup_for_log));
+			next_transmit_normal = align_wakeup(now, wakeup_for_transmit);
+			next_transmit_logger_lora_sync_cloud = app_get_next_transmit_for_logger_lora_sync_cloud(now, 
+				tx_offset_logger_lora_mins);
+			next_transmit_no_probe = app_get_next_transmit_for_no_probe(now, tx_offset_no_probe_mins, 
+				sensor_status);
+			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
+				(uint32_t)next_transmit_logger_lora_sync_cloud, 
+				(uint32_t)next_transmit_no_probe);
 			break;
 		}
 	}
@@ -358,64 +414,46 @@ static void app_set_next_wakeup_time_for_job(enum etc_power_mode_e power_mode, e
 		LOG_DBG("Next wakeup for logging at: %02d:%02d:%02d", tm_log_time.tm_hour, tm_log_time.tm_min, 0);
 	}
 
-	uint8_t alarm_hour = 0, alarm_min = 0, alarm_sec = 0;
-	bool alarm_transmit = false;
-	struct tm tm_transmit_time = tm_time;
-	if (power_mode == ETC_POWER_MODE_PROBE) {
-		if (next_hour != -1) {
-			uint16_t tx_interval_offset_mins = 0;
-			enum etc_device_mode mode = etc_get_device_mode();
-			if (mode == ETC_DEVICE_MODE_LORA_LOGGER) {
-				tx_interval_offset_mins = (uint16_t)(sys_rand32_get() % 60);
-			} else {
-				tx_interval_offset_mins = (uint16_t)(sys_rand32_get() % 30);
-			}
-			tm_transmit_time.tm_sec = 0;
-			tm_transmit_time.tm_hour = next_hour;
-			tm_transmit_time.tm_min = tx_interval_offset_mins;
-			next_transmit = timeutil_timegm(&tm_transmit_time);
-			alarm_hour = next_hour;
-			alarm_min = tx_interval_offset_mins;
-			alarm_transmit = true;
-		}
-	} else {
-		if (next_transmit != 0) {
-			uint16_t tx_delay_msec = etc_get_tx_delay_msec();
-			next_transmit = next_transmit + (tx_delay_msec / 1000);
-			gmtime_r(&next_transmit, &tm_transmit_time);
-			alarm_hour = tm_transmit_time.tm_hour;
-			alarm_min = tm_transmit_time.tm_min;
-			alarm_sec = tm_transmit_time.tm_sec;
-			alarm_transmit = true;
-		}
-	}
-
-	if (alarm_transmit) {
+	if (next_transmit != 0) {
+		struct tm tm_transmit_time = {0x00};
+		enum etc_device_mode device_mode = etc_get_device_mode();
+		gmtime_r(&next_transmit, &tm_transmit_time);
 		pcf85263a_alarm_type_1_config_t config_1 = {
-			.seconds = alarm_sec,
-			.minutes = alarm_min,
-			.hours = alarm_hour,
+			.seconds = tm_transmit_time.tm_sec,
+			.minutes = tm_transmit_time.tm_min,
+			.hours = tm_transmit_time.tm_hour,
 			.days = 0,
 			.months = 0,
 		};
 
 		pcf85263a_alarm_type_1_flag_t flag_1 = {
-			.enable_seconds = 1,
+			.enable_seconds = tm_transmit_time.tm_sec != 0 ? 1 : 0,
 			.enable_minutes = 1,
 			.enable_hours = 1,
 			.enable_days = 0,
 			.enable_months = 0,
 		};
+
 		pcf85263a_alarm_config_type_1(config_1);
 		pcf85263a_alarm_enable_type_1(flag_1);
+		if (next_transmit == next_transmit_logger_lora_sync_cloud) {
+			type = APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK;
+		} else if (next_transmit == next_transmit_no_probe) {
+			type = APP_WAKEUP_TX_PROBE_WORK;
+		} else {
+			type = APP_WAKEUP_TX_INTERVAL_WORK;
+		}
+		LOG_DBG("Transmit time for each mode [%d] %d %d %d", type, (int)next_transmit_logger_lora_sync_cloud, 
+			(int)next_transmit_no_probe, (int)next_transmit_normal);
 		LOG_DBG("Next wakeup for transmitting at: %02d:%02d:%02d", tm_transmit_time.tm_hour, tm_transmit_time.tm_min, tm_transmit_time.tm_sec);
+
 
 		if ((wakeup == 0) || (wakeup > next_transmit)) {
 			wakeup = next_transmit;
 		}
 	}
 
-	app_set_next_wakekup(wakeup);
+	app_set_next_wakekup(wakeup, type);
 	
 	LOG_DBG("Now at: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
 	LOG_DBG("Log %u - Transmit %u", (uint32_t)next_log, (uint32_t)next_transmit);
@@ -471,27 +509,31 @@ static void app_peripheral_on(bool is_rtc)
 		job = ETC_LOGGER_JOB_LOG;
 	} 
 
-	enum etc_power_mode_e power_mode = etc_get_power_mode();
+	enum app_wakeup_tx_work_type tx_work_type = app_get_wakeup_tx_work_type();
 	LOG_DBG("UTC time %d - Job %d", (int)now, job);
 	switch (job) {
 		case ETC_LOGGER_JOB_LOG: {
 			LOG_DBG("Doing log");
 			etc_device_set_job(ETC_LOGGER_JOB_LOG);
-			app_set_next_wakeup_time_for_job(power_mode, ETC_LOGGER_JOB_LOG);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_LOG);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
 			break;
 		}
 		case ETC_LOGGER_JOB_TX: {
 			LOG_DBG("Doing transmit");
 			etc_device_set_job(ETC_LOGGER_JOB_TX);
-			app_set_next_wakeup_time_for_job(power_mode, ETC_LOGGER_JOB_TX);
-			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_TX);
+			if (tx_work_type == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+				SEND_EVENT(app, APP_EVT_DATA_TRANSMIT_CLOUD_IN_LORA);
+			} else {
+				SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+			}
 			break;
 		}
 		case ETC_LOGGER_JOB_BOTH: {
 			LOG_DBG("Doing both job");
 			etc_device_set_job(ETC_LOGGER_JOB_BOTH);
-			app_set_next_wakeup_time_for_job(power_mode, ETC_LOGGER_JOB_BOTH);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
 			break;
 		}
@@ -524,11 +566,10 @@ void date_time_handler(const struct date_time_evt *evt)
 		int now = date_time_now_second();
 		int wakeup = app_get_next_wakeup();
 		int now_wakeup_diff = abs(wakeup - now);
-		enum etc_power_mode_e power_mode = etc_get_power_mode();
 		int tx_interval_sec = etc_device_get_tx_interval_second();
 		int tx_probe_sec = etc_device_get_tx_probe_second();
 		int tx_sec = 0;
-		if (power_mode == ETC_POWER_MODE_PROBE) {
+		if (etc_get_power_mode() == ETC_POWER_MODE_PROBE) {
 			tx_sec = tx_probe_sec;
 		} else {
 			tx_sec = tx_interval_sec;
@@ -537,19 +578,18 @@ void date_time_handler(const struct date_time_evt *evt)
 		    ((now_wakeup_diff > etc_device_get_log_interval_second()) &&
 		    (now_wakeup_diff > tx_sec))) {
 			LOG_INF("Update wakeup time after date/time synced");
-			app_set_next_wakeup_time_for_job(power_mode, ETC_LOGGER_JOB_BOTH);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
 		} else if (now_wakeup_diff > etc_device_get_log_interval_second()) {
 			LOG_INF("Update log wakeup time after date/time synced");
-			app_set_next_wakeup_time_for_job(power_mode, ETC_LOGGER_JOB_LOG);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_LOG);
 		} else if (now_wakeup_diff > tx_sec) {
 			LOG_INF("Update tx wakeup time after date/time synced");
-			app_set_next_wakeup_time_for_job(power_mode, ETC_LOGGER_JOB_TX);
+			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_TX);
 		}
 		break;
 	}
 	case DATE_TIME_SYSTEM_RELOAD: {
-		enum etc_power_mode_e power_mode = etc_get_power_mode();
-		app_set_next_wakeup_time_for_job(power_mode, ETC_LOGGER_JOB_BOTH);
+		app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
 		break;
 	}
 	case DATE_TIME_NOT_OBTAINED: 
@@ -569,7 +609,7 @@ static int setup(void)
 	if (is_send == false) {
 		LOG_DBG("Request to transmit records");
 		is_send = true;
-		app_set_next_wakeup_time_for_job(ETC_POWER_MODE_INTERVAL, ETC_LOGGER_JOB_BOTH);
+		app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
 		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
 	}
 	return 0;
@@ -635,12 +675,12 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_NO_CONNECT)) {
-		app_set_next_wakeup_time_for_job(ETC_POWER_MODE_PROBE, ETC_LOGGER_JOB_BOTH);
+		app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
 		return;
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_CONNECTED)) {
-		app_set_next_wakeup_time_for_job(ETC_POWER_MODE_INTERVAL, ETC_LOGGER_JOB_BOTH);
+		app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_BOTH);
 		return;
 	}
 }

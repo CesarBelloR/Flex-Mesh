@@ -15,6 +15,9 @@ LOG_MODULE_REGISTER(etc_sensor, CONFIG_ETC_SENSOR_LOG_LEVEL);
 /* Sensor Analog constant information */
 #define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
 
+/* Mutex to lock write/read from tasks */
+K_MUTEX_DEFINE(etc_sensor_mtx);
+
 /* Battery constant information */
 const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
 const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
@@ -66,7 +69,7 @@ static int sensor_ambient_raw_adc = 0;
 static int sensor_battery_raw_adc = 0;
 static struct etc_sensor_adc_calibration_info etc_sensor_adc_calibration_info= {0x00};
 static etc_sensor_evt_handler_t sensor_evt_handler;
-static enum sensor_status last_sensor_status = SENSOR_CONNECTED;
+static enum etc_sensor_status last_sensor_status = SENSOR_CONNECTED;
 /* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
 inline static int8_t remap_th_channel(int8_t channel)
 {
@@ -198,16 +201,18 @@ static void etc_sensor_run_detection(void) {
 		}
 	}
 
-	enum sensor_status sensor_status = SENSOR_NO_CONNECTION;
+	enum etc_sensor_status sensor_status = SENSOR_NO_CONNECTION;
 	if (no_connected_counter != ETC_SENSOR_NUM_PROBE_SENSOR) {
 		sensor_status = SENSOR_CONNECTED;
 	}
 
 	if (sensor_evt_handler) {
+		k_mutex_lock(&etc_sensor_mtx, K_FOREVER);
 		if (sensor_status != last_sensor_status) {
 			sensor_evt_handler(sensor_status);
 			last_sensor_status = sensor_status;
 		}
+		k_mutex_unlock(&etc_sensor_mtx);
 	}
 #endif
 }
@@ -443,4 +448,12 @@ void etc_sensor_run_acquisition(void) {
 enum sensor_type etc_sensor_get_probe_type(enum sensor_input input) {
 	__ASSERT(input >= 0 && input <= 3, "invalid channel number");
 	return list_sensor_type[input];
+}
+
+enum etc_sensor_status etc_sensor_get_status(void) {
+	enum etc_sensor_status status;
+	k_mutex_lock(&etc_sensor_mtx, K_FOREVER);
+	status = last_sensor_status;
+	k_mutex_unlock(&etc_sensor_mtx);
+	return status;
 }

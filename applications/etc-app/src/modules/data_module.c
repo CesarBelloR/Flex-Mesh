@@ -405,8 +405,11 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 /* Message handler for STATE_CLOUD_CONNECTED. */
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
-	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) &&
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
+	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) &&
+	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
+		(IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT_CLOUD_IN_LORA) &&
+	    etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER)) 
+	{
 		data_encode(false);
 		return;
 	}

@@ -32,6 +32,9 @@ enum app_event_type {
 	/** Request transmit the log to lora/cloud */
 	APP_EVT_DATA_TRANSMIT,
 
+	/** Request transmit the log to cloud in Logger Lora */
+	APP_EVT_DATA_TRANSMIT_CLOUD_IN_LORA,
+
 	/** Create a list with all available sensor types in the system and
 	 *  distribute it as an APP_EVT_DATA_GET event.
 	 */

@@ -815,6 +815,18 @@ static int cmd_set_tx_interval(const struct shell *shell, size_t argc, char **ar
 	return 0;
 }
 
+static int cmd_set_tx_probe(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		if (etc_set_tx_probe_secs((uint32_t)atoi(argv[1])) == 0) {
+			shell_print(shell, "OK");
+			return 0;
+		}
+	}
+	shell_error(shell, "Invalid parameter for setting tx probe");
+	return 0;
+}
+
 static int cmd_set_tx_interval_alarm(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
@@ -917,6 +929,13 @@ static int cmd_get_tx_interval(const struct shell *shell, size_t argc, char **ar
 	return 0;
 }
 
+static int cmd_get_tx_probe(const struct shell *shell, size_t argc, char **argv)
+{
+	uint32_t second = etc_get_tx_probe_secs();
+	shell_print(shell, "Tx probe in seconds %d", second);
+	return 0;
+}
+
 static int cmd_get_tx_interval_alarm(const struct shell *shell, size_t argc, char **argv)
 {
 	uint32_t second = etc_get_tx_interval_alarm_secs();
@@ -968,6 +987,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(set_log_interval_alarm, NULL, "Set log interval alarm in second",
 		  cmd_set_log_interval_alarm),
 	SHELL_CMD(set_tx_interval, NULL, "Set tx interval in second", cmd_set_tx_interval),
+	SHELL_CMD(set_tx_probe, NULL, "Set tx probe in second", cmd_set_tx_probe),
 	SHELL_CMD(set_tx_interval_alarm, NULL, "Set tx interval alarm in second",
 		  cmd_set_tx_interval_alarm),
 	SHELL_CMD(set_wakeup_early, NULL, "Set wakeup early in second", cmd_set_wakeup_early),
@@ -978,9 +998,11 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(get_power, NULL, "Get power mode", cmd_get_power),
 	SHELL_CMD(get_alarm_direction, NULL, "Get alarm direction", cmd_get_alarm_direction),
 	SHELL_CMD(get_log_interval, NULL, "Get log interval in second", cmd_get_log_interval),
+	
 	SHELL_CMD(get_log_interval_alarm, NULL, "Get log interval alarm in second",
 		  cmd_get_log_interval_alarm),
 	SHELL_CMD(get_tx_interval, NULL, "Get tx interval in second", cmd_get_tx_interval),
+	SHELL_CMD(get_tx_probe, NULL, "Get tx probe in second", cmd_get_tx_probe),
 	SHELL_CMD(get_tx_interval_alarm, NULL, "Get tx interval alarm in second",
 		  cmd_get_tx_interval_alarm),
 	SHELL_CMD(get_wakeup_early, NULL, "Get wakeup early in second", cmd_get_wakeup_early),

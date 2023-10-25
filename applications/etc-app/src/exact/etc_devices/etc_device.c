@@ -6,7 +6,7 @@
 #include <zephyr/drivers/flash.h>
 #include <zephyr/fs/nvs.h>
 #include <zephyr/storage/flash_map.h>
-
+#include <zephyr/random/rand32.h>
 #include <zephyr/fs/nvs.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
@@ -64,6 +64,8 @@ static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
 static uint16_t ram_nack_record_id;
 static enum etc_logger_job logger_job = ETC_LOGGER_JOB_LOG;
+static uint16_t tx_logger_lora_mins = 0;
+static uint16_t tx_no_probe_mins = 0;
 static struct etc_device_reclaim_info etc_reclaim_info = {0x00};
 
 void etc_device_nvs_init(void)
@@ -193,7 +195,8 @@ void etc_device_init(void)
 	char *dev_str = "Unknown";
 	enum etc_device_mode dev_mode = etc_get_device_mode();
 	logger_job = ETC_LOGGER_JOB_TX;
-
+	tx_logger_lora_mins = (uint16_t)(sys_rand32_get() % 60);
+	tx_no_probe_mins = (uint16_t)(sys_rand32_get() % 30);
 	if (dev_mode == ETC_DEVICE_MODE_RELAY) {
 		dev_str = "Relay";
 	} else if (dev_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
@@ -703,6 +706,14 @@ int etc_device_reclaim_work(int start_time, int stop_time) {
 
 int etc_device_erase_cfg(void) {
 	return nvs_clear(&etc_fs);
+}
+
+uint16_t etc_device_get_tx_logger_lora(void) {
+	return tx_logger_lora_mins;
+}
+
+uint16_t etc_device_get_tx_no_probe(void) {
+	return tx_no_probe_mins;
 }
 
 #ifdef CONFIG_SHELL

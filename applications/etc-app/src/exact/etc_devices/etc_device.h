@@ -12,6 +12,7 @@
 #define ETC_CONFIG_TYPE_SIZE   (32)
 #define ETC_DEVICE_RECORD_SIZE (36)
 #define ETC_DEVICE_NUM_SENSOR  (6) // 5 temperatures + 1 humidity
+#define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR (16)
 
 /* Define an enum to describe the job of logger currently */
 enum etc_logger_job {
@@ -155,5 +156,6 @@ int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_devi
 int etc_device_reclaim_record(int start_time, int stop_time);
 int etc_device_reclaim_work(int start_time, int stop_time);
 int etc_device_erase_cfg(void);
-
+uint16_t etc_device_get_tx_logger_lora(void);
+uint16_t etc_device_get_tx_no_probe(void);
 #endif /* ETC_DEVICE_H_ */
