@@ -197,9 +197,9 @@ void etc_device_init(void)
 	enum etc_device_mode dev_mode = etc_get_device_mode();
 	logger_job = ETC_LOGGER_JOB_TX;
 	/* Logger Lora mode will sync with interval quarter hour */
-	tx_logger_lora_offset_mins = (uint16_t)((sys_rand32_get() % 3) *
+	tx_logger_lora_offset_mins = (uint16_t)((sys_rand32_get() % 4) *
 		ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE);
-	tx_no_probe_offset_mins = (uint16_t)(sys_rand32_get() % 59);
+	tx_no_probe_offset_mins = (uint16_t)(sys_rand32_get() % 60);
 	if (dev_mode == ETC_DEVICE_MODE_RELAY) {
 		dev_str = "Relay";
 	} else if (dev_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
