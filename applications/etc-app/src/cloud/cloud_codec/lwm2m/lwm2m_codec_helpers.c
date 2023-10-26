@@ -813,6 +813,27 @@ static int invalidate_humid_sensor_value(struct cloud_codec_data *cloud_data, co
 	return 0;
 }
 
+static inline int set_resource_if_changed_s32(struct cloud_codec_data *cloud_data,
+					      const struct lwm2m_obj_path *path,
+					      int32_t new_value)
+{
+	int32_t value;
+	int err;
+
+	err = lwm2m_get_s32(path, &value);
+	if (err) {
+		return -1;
+	}
+	if (value != new_value) {
+		err = lwm2m_set_s32(path,
+				    new_value);
+		lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							 path,
+							 1);
+	}
+	return err;
+}
+
 int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 					union etc_device_record *record)
 {
@@ -823,15 +844,17 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 	};
 	
 	/* Set battery voltage in mV (required by resource spec) */
-	err = lwm2m_set_s32(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID),
-			    (int32_t)roundf(record->battery * 1000.0));
+	err = set_resource_if_changed_s32(cloud_data,
+					  &LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID),
+					  (int32_t)roundf(record->battery * 1000.0));
 	if (err) {
 		return err;
 	}
 
 	/* Set the battery status */
-	err = lwm2m_set_s32(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, BATTERY_STATUS_RID),
-			(int32_t)record->flag);
+	err = set_resource_if_changed_s32(cloud_data,
+					  &LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, BATTERY_STATUS_RID),
+					  (int32_t)record->flag);
 	if (err) {
 		return err;
 	}
