@@ -6,7 +6,7 @@
 #include <zephyr/drivers/flash.h>
 #include <zephyr/fs/nvs.h>
 #include <zephyr/storage/flash_map.h>
-
+#include <zephyr/random/rand32.h>
 #include <zephyr/fs/nvs.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
@@ -46,6 +46,8 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_DEFAULT_RX_DURATION_SECONDS (5)
 #define ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS (60)
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
+#define ETC_RECORD_DEFAULT_TX_PROBE_SECONDS (21600)
+#define ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE (15)
 
 struct etc_device_reclaim_info {
 	uint16_t current_index;
@@ -63,6 +65,8 @@ static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
 static uint16_t ram_nack_record_id;
 static enum etc_logger_job logger_job = ETC_LOGGER_JOB_LOG;
+static uint16_t tx_logger_lora_offset_mins = 0;
+static uint16_t tx_no_probe_offset_mins = 0;
 static struct etc_device_reclaim_info etc_reclaim_info = {0x00};
 
 void etc_device_nvs_init(void)
@@ -192,7 +196,10 @@ void etc_device_init(void)
 	char *dev_str = "Unknown";
 	enum etc_device_mode dev_mode = etc_get_device_mode();
 	logger_job = ETC_LOGGER_JOB_TX;
-
+	/* Logger Lora mode will sync with interval quarter hour */
+	tx_logger_lora_offset_mins = (uint16_t)((sys_rand32_get() % 4) *
+		ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE);
+	tx_no_probe_offset_mins = (uint16_t)(sys_rand32_get() % 60);
 	if (dev_mode == ETC_DEVICE_MODE_RELAY) {
 		dev_str = "Relay";
 	} else if (dev_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
@@ -573,6 +580,12 @@ int etc_device_get_tx_interval_second(void)
 	return second == 0 ? ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS : second;
 }
 
+int etc_device_get_tx_probe_second(void) 
+{
+	int second = etc_get_tx_probe_secs();
+	return second == 0 ? ETC_RECORD_DEFAULT_TX_PROBE_SECONDS : second;
+}
+
 void etc_device_set_job(enum etc_logger_job job) {
 	logger_job = job;
 }
@@ -696,6 +709,14 @@ int etc_device_reclaim_work(int start_time, int stop_time) {
 
 int etc_device_erase_cfg(void) {
 	return nvs_clear(&etc_fs);
+}
+
+uint16_t etc_device_get_tx_logger_lora_offset_mins(void) {
+	return tx_logger_lora_offset_mins;
+}
+
+uint16_t etc_device_get_tx_no_probe_offset_mins(void) {
+	return tx_no_probe_offset_mins;
 }
 
 #ifdef CONFIG_SHELL

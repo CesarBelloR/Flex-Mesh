@@ -190,6 +190,12 @@ int etc_settings_init(void)
 		etc_set_tx_interval_alarm_secs(ETC_SETTING_TX_INTERVAL_ALARMS_SECS_DEFAULT);
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_TX_PROBE_SEC_ID, &etc_cfg.tx_probe_secs,
+				      sizeof(etc_cfg.tx_probe_secs));
+	if (ret) {
+		etc_set_tx_probe_secs(ETC_SETTING_TX_PROBE_SECS);
+	}
+
 	ret = etc_device_read_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
 				      sizeof(etc_cfg.wake_early_secs));
 	if (ret) {
@@ -255,6 +261,9 @@ void etc_settings_update(const struct etc_config *new_config)
 	}
 	if (etc_cfg.tx_interval_alarm_secs != new_config->tx_interval_alarm_secs) {
 		rc = etc_set_tx_interval_alarm_secs(new_config->tx_interval_alarm_secs);
+	}
+	if (etc_cfg.tx_probe_secs != new_config->tx_probe_secs) {
+		rc = etc_set_tx_probe_secs(new_config->tx_probe_secs);
 	}
 	if (etc_cfg.wake_early_secs != new_config->wake_early_secs) {
 		rc = etc_set_wake_early_secs(new_config->wake_early_secs);
@@ -424,6 +433,24 @@ int etc_set_tx_interval_alarm_secs(uint32_t second)
 	return rc;
 }
 
+int etc_set_tx_probe_secs(uint32_t second) {
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.tx_probe_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	etc_cfg.tx_probe_secs = second;
+	rc = etc_device_write_setting(ETC_SETTING_TX_PROBE_SEC_ID,
+				      &etc_cfg.tx_probe_secs,
+				      sizeof(etc_cfg.tx_probe_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 int etc_set_wake_early_secs(uint16_t second)
 {
 	if ((second > ETC_SETTING_WAKEUP_EARLY_SECS_MAX) ||
@@ -585,6 +612,15 @@ uint32_t etc_get_tx_interval_alarm_secs(void)
 	uint32_t second = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	second = etc_cfg.tx_interval_alarm_secs;
+	k_mutex_unlock(&setting_mutex);
+	return second;
+}
+
+uint32_t etc_get_tx_probe_secs(void) 
+{
+	uint32_t second = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	second = etc_cfg.tx_probe_secs;
 	k_mutex_unlock(&setting_mutex);
 	return second;
 }
@@ -779,6 +815,18 @@ static int cmd_set_tx_interval(const struct shell *shell, size_t argc, char **ar
 	return 0;
 }
 
+static int cmd_set_tx_probe(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		if (etc_set_tx_probe_secs((uint32_t)atoi(argv[1])) == 0) {
+			shell_print(shell, "OK");
+			return 0;
+		}
+	}
+	shell_error(shell, "Invalid parameter for setting tx probe");
+	return 0;
+}
+
 static int cmd_set_tx_interval_alarm(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
@@ -881,6 +929,13 @@ static int cmd_get_tx_interval(const struct shell *shell, size_t argc, char **ar
 	return 0;
 }
 
+static int cmd_get_tx_probe(const struct shell *shell, size_t argc, char **argv)
+{
+	uint32_t second = etc_get_tx_probe_secs();
+	shell_print(shell, "Tx probe in seconds %d", second);
+	return 0;
+}
+
 static int cmd_get_tx_interval_alarm(const struct shell *shell, size_t argc, char **argv)
 {
 	uint32_t second = etc_get_tx_interval_alarm_secs();
@@ -932,6 +987,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(set_log_interval_alarm, NULL, "Set log interval alarm in second",
 		  cmd_set_log_interval_alarm),
 	SHELL_CMD(set_tx_interval, NULL, "Set tx interval in second", cmd_set_tx_interval),
+	SHELL_CMD(set_tx_probe, NULL, "Set tx probe in second", cmd_set_tx_probe),
 	SHELL_CMD(set_tx_interval_alarm, NULL, "Set tx interval alarm in second",
 		  cmd_set_tx_interval_alarm),
 	SHELL_CMD(set_wakeup_early, NULL, "Set wakeup early in second", cmd_set_wakeup_early),
@@ -942,9 +998,11 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(get_power, NULL, "Get power mode", cmd_get_power),
 	SHELL_CMD(get_alarm_direction, NULL, "Get alarm direction", cmd_get_alarm_direction),
 	SHELL_CMD(get_log_interval, NULL, "Get log interval in second", cmd_get_log_interval),
+	
 	SHELL_CMD(get_log_interval_alarm, NULL, "Get log interval alarm in second",
 		  cmd_get_log_interval_alarm),
 	SHELL_CMD(get_tx_interval, NULL, "Get tx interval in second", cmd_get_tx_interval),
+	SHELL_CMD(get_tx_probe, NULL, "Get tx probe in second", cmd_get_tx_probe),
 	SHELL_CMD(get_tx_interval_alarm, NULL, "Get tx interval alarm in second",
 		  cmd_get_tx_interval_alarm),
 	SHELL_CMD(get_wakeup_early, NULL, "Get wakeup early in second", cmd_get_wakeup_early),

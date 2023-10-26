@@ -12,6 +12,7 @@
 #define ETC_CONFIG_TYPE_SIZE   (32)
 #define ETC_DEVICE_RECORD_SIZE (36)
 #define ETC_DEVICE_NUM_SENSOR  (6) // 5 temperatures + 1 humidity
+#define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR (16)
 
 /* Define an enum to describe the job of logger currently */
 enum etc_logger_job {
@@ -30,8 +31,8 @@ enum etc_device_mode {
 /* Define a enum to describe about power mode */
 enum etc_power_mode_e {
 	ETC_POWER_MODE_AWLAYS_ON = 0x00,
-	ETC_POWER_MODE_POWER_SAVER = 0x01,
-	ETC_POWER_MODE_HIBERNATE = 0x02,
+	ETC_POWER_MODE_INTERVAL = 0x01,
+	ETC_POWER_MODE_PROBE = 0x02,
 };
 
 /* Define a enum to describe about alarm condition (direction) */
@@ -91,6 +92,7 @@ enum {
 	ETC_SETTING_RX_DURATION_SECS_ID,
 	ETC_SETTING_ALARM_THRESHOLD_ID,
 	ETC_SETTING_DEVICE_NEXT_JOB_ID,
+	ETC_SETTING_TX_PROBE_SEC_ID,
 	ETC_CALIBRATION_OFFSET_ID = 0xFF0,
 	ETC_CALIBRATION_RAWHIGH_ID,
 	ETC_CALIBRATION_REF_ID,
@@ -105,6 +107,7 @@ struct etc_config {
 	uint32_t log_interval_alarm_secs;
 	uint32_t tx_interval_secs;
 	uint32_t tx_interval_alarm_secs;
+	uint32_t tx_probe_secs;
 	uint16_t wake_early_secs;
 	uint16_t tx_delay_msec;
 	uint16_t rx_duration_secs;
@@ -137,6 +140,7 @@ bool etc_device_is_logger_lora(void);
 int etc_device_get_rx_timeout(void);
 int etc_device_get_log_interval_second(void);
 int etc_device_get_tx_interval_second(void);
+int etc_device_get_tx_probe_second(void);
 int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data);
 enum etc_device_mode etc_device_get_mode(void);
 void etc_device_set_job(enum etc_logger_job job);
@@ -152,5 +156,6 @@ int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_devi
 int etc_device_reclaim_record(int start_time, int stop_time);
 int etc_device_reclaim_work(int start_time, int stop_time);
 int etc_device_erase_cfg(void);
-
+uint16_t etc_device_get_tx_logger_lora_offset_mins(void);
+uint16_t etc_device_get_tx_no_probe_offset_mins(void);
 #endif /* ETC_DEVICE_H_ */
