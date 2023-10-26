@@ -1,0 +1,13 @@
+config ETC_MCUBOOT_ACTION_HOOK
+        bool "Enable the ETC mcuboot action hook"
+        depends on MCUBOOT_ACTION_HOOKS
+
+if ETC_MCUBOOT_ACTION_HOOK
+
+config MCUBOOT_PWM_FREQUENCY
+	int "LED PWM frequency for mcuboot"
+	range 100 1000000
+	default UI_LED_PWM_FREQUENCY if UI_MODULE
+	default 5000 if !UI_MODULE
+
+endif

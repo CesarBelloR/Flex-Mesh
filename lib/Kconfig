@@ -4,4 +4,5 @@ rsource "power/Kconfig"
 rsource "sensor/ds18b20/Kconfig"
 rsource "ui/Kconfig"
 rsource "etc_lwm2m/Kconfig"
+rsource "mcuboot_hook/Kconfig"
 endmenu
