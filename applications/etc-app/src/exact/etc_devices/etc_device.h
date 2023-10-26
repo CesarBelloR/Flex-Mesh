@@ -156,6 +156,6 @@ int etc_device_get_record_header(uint8_t element, uint8_t sector, union etc_devi
 int etc_device_reclaim_record(int start_time, int stop_time);
 int etc_device_reclaim_work(int start_time, int stop_time);
 int etc_device_erase_cfg(void);
-uint16_t etc_device_get_tx_logger_lora(void);
-uint16_t etc_device_get_tx_no_probe(void);
+uint16_t etc_device_get_tx_logger_lora_offset_mins(void);
+uint16_t etc_device_get_tx_no_probe_offset_mins(void);
 #endif /* ETC_DEVICE_H_ */

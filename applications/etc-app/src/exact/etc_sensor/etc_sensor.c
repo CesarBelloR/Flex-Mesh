@@ -4,6 +4,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 #include "events/sensor_event.h"
+#include "cloud/cloud_codec/data_codec.h"
 #include "common.h"
 #include "etc_sensor.h"
 #include "etc_device.h"
@@ -186,18 +187,27 @@ static void etc_sensor_gpios_one_wire_disable(void)
 
 static void etc_sensor_run_detection(void) {
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
-	int no_connected_counter = 0;
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		etc_sensor_adc_switch_channel(i);
 		k_msleep(50);
 		int raw_adc = adc_get_channel(ETC_ADC_CHANNEL_SENSOR);
 		if (raw_adc >= SENSOR_ADC_NO_CONNECTED) {
 			list_sensor_type[i] = SENSOR_TYPE_UNDEF;
-			no_connected_counter += 1;
 		} else if (raw_adc <= SENSOR_ADC_ONE_WIRE_CONNECTED) {
 			list_sensor_type[i] = SENSOR_TYPE_DIGITAL;
 		} else {
 			list_sensor_type[i] = SENSOR_TYPE_ANALOG;
+		}
+	}
+#endif
+}
+
+static void etc_sensor_probe_check(void) {
+	int no_connected_counter = 0;
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		float temp = etc_sensor_get_probe_temp(i);
+		if (!data_codec_compare_temperature_is_valid(temp)) {
+			no_connected_counter += 1;
 		}
 	}
 
@@ -214,7 +224,6 @@ static void etc_sensor_run_detection(void) {
 		}
 		k_mutex_unlock(&etc_sensor_mtx);
 	}
-#endif
 }
 
 static void etc_sensor_run_digital_sample(void) {
@@ -433,16 +442,14 @@ void etc_sensor_run_acquisition(void) {
 	sensor_ambient_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_AMB));
 	/* Run sample for battery */
 	sensor_battery_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_BATTERY));
-	/* Only calculate analog and digital sensor when it connected */
-	if (last_sensor_status == SENSOR_CONNECTED) {
-		/* Run sample sensor for all ports - analog part*/
-		etc_sensor_run_analog_sample();
-		/* Run sample sensor for all ports - digital part */
-		etc_sensor_run_digital_sample();
-	}
-
+	/* Run sample sensor for all ports - analog part*/
+	etc_sensor_run_analog_sample();
+	/* Run sample sensor for all ports - digital part */
+	etc_sensor_run_digital_sample();
 	/* Disable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_disable();
+	/* Check probe connection */
+	etc_sensor_probe_check();
 }
 
 enum sensor_type etc_sensor_get_probe_type(enum sensor_input input) {
