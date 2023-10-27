@@ -191,6 +191,17 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 	return -EINVAL;
 }
 
+static int etc_nvs_read_with_len(uint16_t element_id, void *data, size_t len)
+{
+	ssize_t read_len = 0;
+	read_len = nvs_read(&etc_fs, element_id, data, len);
+	if (read_len < 0) {
+		LOG_ERR("Failed in reading NVS %d", read_len);
+	}
+
+	return read_len;
+}
+
 void etc_device_init(void)
 {
 	char *dev_str = "Unknown";
@@ -539,7 +550,7 @@ static struct etc_device_record_index etc_device_get_next_index(void)
 	return etc_device_record_table.newest;
 }
 
-int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size)
+int etc_device_write_setting(uint16_t setting_id, const void *setting, int setting_size)
 {
 	return etc_nvs_write(setting_id, setting, setting_size);
 }
@@ -549,6 +560,13 @@ int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size
 	LOG_DBG("Read setting ID %d", setting_id);
 	return etc_nvs_read(setting_id, setting, setting_size);
 }
+
+int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int setting_size)
+{
+	LOG_DBG("Read setting ID %d", setting_id);
+	return etc_nvs_read_with_len(setting_id, setting, setting_size);
+}
+
 
 enum etc_device_mode etc_device_get_mode(void)
 {

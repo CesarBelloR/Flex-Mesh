@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/random/rand32.h>
 #include <zephyr/logging/log.h>
@@ -23,6 +24,8 @@ static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
+static uint8_t saved_psk[ETC_SETTING_PSK_LEN];
+static uint8_t saved_psk_len;
 static int flag_etc_config_load;
 static enum etc_serial_number_types saved_serial_number_type;
 struct etc_config etc_cfg;
@@ -50,6 +53,15 @@ void etc_set_device_id(const char *device_id)
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	strncpy(saved_device_id, device_id, ETC_SETTINGS_DEVICE_ID_LEN);
 	etc_device_write_setting(SETTINGS_DEVICE_ID, (char *)device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+	k_mutex_unlock(&setting_mutex);
+}
+
+void etc_set_psk(const uint8_t *psk, uint8_t psk_len)
+{
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	memcpy(saved_psk, psk, psk_len);
+	saved_psk_len = psk_len;
+	etc_device_write_setting(ETC_PSK_ID, psk, psk_len);
 	k_mutex_unlock(&setting_mutex);
 }
 
@@ -102,6 +114,21 @@ int etc_get_device_id(char *buf, int buf_len)
 	return copy_size;
 }
 
+int etc_get_psk(uint8_t *psk_buf, uint8_t buf_len)
+{
+	int copy_size; 
+	/* Application should always ensure to use the maximum supported key length
+	   for the buffer size */
+	__ASSERT_NO_MSG(buf_len >= ETC_SETTING_PSK_LEN);
+
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	copy_size = saved_psk_len < buf_len ? saved_psk_len : buf_len;
+	memcpy(psk_buf, saved_psk, copy_size);
+	k_mutex_unlock(&setting_mutex);
+
+	return copy_size;
+}
+
 int etc_settings_init(void)
 {
 	int ret;
@@ -125,6 +152,14 @@ int etc_settings_init(void)
 	if (ret) {
 		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%08d", CONFIG_SERIAL_NUMBER_DEFAULT_VALUE);
 		etc_set_device_id(tmp_saved_value);
+	}
+
+	ret = etc_device_read_setting_with_len(ETC_PSK_ID, saved_psk, sizeof(saved_psk));
+	if (ret > 0) {
+		saved_psk_len = ret;
+	} else {
+		etc_set_psk(CONFIG_LWM2M_INTEGRATION_PSK, 
+			    sizeof(CONFIG_LWM2M_INTEGRATION_PSK) - 1);
 	}
 
 	ret = etc_device_read_setting(ETC_SERIAL_NUMBER_TYPE, &saved_serial_number_type, 
@@ -727,6 +762,39 @@ static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv
 	return 0;
 }
 
+static int cmd_set_psk(const struct shell *shell, size_t argc, char **argv)
+{
+	int input_len;
+
+	if ((argc == 2) && ((input_len = strlen(argv[1])) != 0)) {
+		if ((input_len / 2) > ETC_SETTING_PSK_LEN) {
+			shell_error(shell, "Key is too long. Max length is %u",
+				    ETC_SETTING_PSK_LEN * 2);
+			return -1;
+		}
+		uint8_t tmp_psk[ETC_SETTING_PSK_LEN];
+		int ret;
+
+		ret = hex2bin(argv[1], input_len, tmp_psk, ETC_SETTING_PSK_LEN);
+		if (ret < 0) {
+			shell_error(shell, "Key is too long. Max length is %u",
+				    ETC_SETTING_PSK_LEN * 2);
+			return -1;
+		}
+
+		etc_set_psk(tmp_psk, ret);
+		shell_print(shell, "OK, len %d", input_len);
+		shell_hexdump(shell, tmp_psk, ret);
+
+		return 0;
+	}
+
+	shell_print(shell, "Usage: %s <psk in hex>\n"
+			   "  Max psk size: %u characters", argv[0],
+			   ETC_SETTING_PSK_LEN * 2);
+	return -1;
+}
+
 static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
@@ -982,6 +1050,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(factory_reset, NULL, "Factory reset", cmd_factory_reset),
 	SHELL_CMD(set_serial_type, NULL, "Set serial number type", cmd_set_serial_type),
 	SHELL_CMD(set_device_id, NULL, "Set device ID", cmd_set_device_id),
+	SHELL_CMD(set_psk, NULL, "Set PSK used for cloud connection", cmd_set_psk),
 	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),
 	SHELL_CMD(set_power, NULL, "Set power mode", cmd_set_power),
 	SHELL_CMD(set_alarm_direction, NULL, "Set alarm direction", cmd_set_alarm_direction),
