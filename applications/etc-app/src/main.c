@@ -91,12 +91,6 @@ int main(void)
 		return -EINVAL;
 	}
 
-	/* Work around for nRF52840 errata 
-	 * [246] System: Intermittent extra current consumption when going to sleep
-	 * https://docs.nordicsemi.com/bundle/errata_nRF52840_Rev2/page/ERR/nRF52840/Rev2/latest/anomaly_840_246.html#anomaly_840_246 
-	 */
-	*(volatile uint32_t *)0x4007AC84ul = 0x00000002ul;
-
 	LOG_INF("EXACT Monitor 2.0 version %s", APP_VERSION_STR);
 #ifdef CONFIG_MCUMGR_CMD_ETC_MGMT
 	etc_mgmt_register_group();
