@@ -2,7 +2,7 @@
 #define ETC_DEVICE_H_
 
 #include "events/sensor_event.h"
-
+#include "etc_sensor.h"
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -30,7 +30,7 @@ enum etc_device_mode {
 
 /* Define a enum to describe about power mode */
 enum etc_power_mode_e {
-	ETC_POWER_MODE_AWLAYS_ON = 0x00,
+	ETC_POWER_MODE_ALWAYS_ON = 0x00,
 	ETC_POWER_MODE_INTERVAL = 0x01,
 	ETC_POWER_MODE_PROBE = 0x02,
 };
@@ -124,6 +124,13 @@ union etc_device_record {
 	};
 };
 
+enum etc_device_transmit_type {
+	ETC_DEVICE_TRANSMIT_INVALID,
+	ETC_DEVICE_TRANSMIT_NORMAL,
+	ETC_DEVICE_TRANSMIT_NO_PROBE,
+	ETC_DEVICE_TRANSMIT_SYNC_LORA_LOGGER
+};
+
 /* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
 BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
 
@@ -158,4 +165,8 @@ int etc_device_reclaim_work(int start_time, int stop_time);
 int etc_device_erase_cfg(void);
 uint16_t etc_device_get_tx_logger_lora_offset_mins(void);
 uint16_t etc_device_get_tx_no_probe_offset_mins(void);
+enum etc_device_transmit_type etc_device_get_transmit_type_cloud(
+	enum etc_sensor_status probeStatus);
+enum etc_device_transmit_type etc_device_get_transmit_type_lora(
+	enum etc_sensor_status probeStatus);
 #endif /* ETC_DEVICE_H_ */

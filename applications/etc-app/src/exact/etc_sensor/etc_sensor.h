@@ -13,6 +13,7 @@
 enum etc_sensor_status {
 	SENSOR_NO_CONNECTION,
 	SENSOR_CONNECTED,
+	SENSOR_NA,
 };
 
 /* Define a maximum probe sensor in hardware */
