@@ -192,6 +192,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
+		__ASSERT_NO_MSG(err == 0);
 		if (err) {
 			LOG_ERR("Message could not be enqueued");
 			SEND_ERROR(lora, LORA_EVT_ERROR, err);

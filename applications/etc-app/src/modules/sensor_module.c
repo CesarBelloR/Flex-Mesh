@@ -43,6 +43,8 @@ static enum state_type {
 static struct k_work_delayable sensor_poll_work;
 static struct sensor_data static_sensor_data;
 
+int64_t last_poll_complete_time_ms = 0;
+
 /* Sensor module message queue. */
 #define SENSOR_QUEUE_ENTRY_COUNT	10
 #define SENSOR_QUEUE_BYTE_ALIGNMENT	4
@@ -50,6 +52,8 @@ static struct sensor_data static_sensor_data;
 #define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
 
 #define SENSOR_HANDLER_MAX_WAIT_S 10
+/* The minimum interval that needs to pass between two sensor readings */
+#define SENSOR_MIN_INTERVAL_MS 2000
 
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
@@ -136,6 +140,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
+		__ASSERT_NO_MSG(err == 0);
 		if (err) {
 			LOG_ERR("Message could not be enqueued");
 			SEND_ERROR(sensor, SENSOR_EVT_ERROR, err);
@@ -173,6 +178,19 @@ static int sensor_poll_handler(bool is_test) {
 	if (sensor_is_processing) {
 		return 0;
 	}
+	int64_t now_ms;
+	int ret;
+	
+	ret = date_time_now(&now_ms);
+	if (!ret && 
+	    (now_ms - last_poll_complete_time_ms) < SENSOR_MIN_INTERVAL_MS) {
+		/* Ignore sample request if last reading finished
+		 * < SENSOR_MIN_INTERVAL_MS ago. Re-enabling VCC_SENS within
+		 * quick succession causes issues with the linear regulator
+		 * supplying VCC_A (voltage for analog sensors)
+		 */
+		return 0;
+	}
 
 #if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	if (watchdog_sens_sel0_wdt_sem_take(K_SECONDS(SENSOR_HANDLER_MAX_WAIT_S)) != 0) {
@@ -206,6 +224,11 @@ static int sensor_poll_handler(bool is_test) {
 	data->battery_mV = etc_sensor_get_battery();
 	sensor_module_send_sensor(data, is_test);
 	sensor_is_processing = false;
+
+	ret = date_time_now(&now_ms);
+	if (!ret) {
+		last_poll_complete_time_ms = now_ms;
+	}
 
 #if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	watchdog_sens_sel0_wdt_sem_give();
