@@ -12,7 +12,11 @@ else()
 project(app LANGUAGES C VERSION 0.3.0)
 endif()
 
+<<<<<<< HEAD
 # set(PROJECT_VERSION_RC 9)
+=======
+set(PROJECT_VERSION_RC 2)
+>>>>>>> fad9f10 (Increment RC revision to 2)
 
 if(PROJECT_VERSION_RC)
   set(PROJECT_VERSION_SUFFIX "rc${PROJECT_VERSION_RC}")
