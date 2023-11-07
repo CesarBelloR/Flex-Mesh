@@ -29,18 +29,6 @@ struct etc_config etc_cfg;
 
 K_MUTEX_DEFINE(setting_mutex);
 
-void etc_settings_refresh()
-{
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
-	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
-	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
-	etc_device_read_setting(SETTINGS_HW_VERSION, saved_hw_version, ETC_SETTING_HW_VER_LEN);
-	etc_device_read_setting(SETTINGS_FW_VERSION, saved_fw_version, ETC_SETTING_FW_VER_LEN);
-	etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
-	k_mutex_unlock(&setting_mutex);
-}
-
 void etc_set_hw_version(const char *hw_version)
 {
 	k_mutex_lock(&setting_mutex, K_FOREVER);
@@ -117,7 +105,6 @@ int etc_get_device_id(char *buf, int buf_len)
 int etc_settings_init(void)
 {
 	int ret;
-	bool flag_config_set_default = false;
 	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
 	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
 	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
@@ -971,6 +958,20 @@ static int cmd_get_alarm_threshold(const struct shell *shell, size_t argc, char 
 	return 0;
 }
 
+static int cmd_factory_reset(const struct shell *shell, size_t argc, char **argv)
+{
+	int rc = etc_device_erase_cfg();
+	if (rc != 0) {
+		shell_error(shell, "Failed to erase all configuration");
+		return 0;
+	}
+
+	/* Re-set all configuration */
+	etc_settings_init();
+	shell_print(shell, "Factory reset successfully");
+	return 0;
+}
+
 /* Creating subcommands (level 1 command) array for command "demo". */
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_settings, SHELL_CMD(info, NULL, "Get ETC settings.", cmd_info),
@@ -978,6 +979,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(hardware, NULL, "Set hardware version", cmd_set_hardware_version),
 	SHELL_CMD(firmware, NULL, "Set firmware version", cmd_set_firmware_version),
 #endif
+	SHELL_CMD(factory_reset, NULL, "Factory reset", cmd_factory_reset),
 	SHELL_CMD(set_serial_type, NULL, "Set serial number type", cmd_set_serial_type),
 	SHELL_CMD(set_device_id, NULL, "Set device ID", cmd_set_device_id),
 	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),
