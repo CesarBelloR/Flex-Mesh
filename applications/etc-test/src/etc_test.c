@@ -17,6 +17,7 @@
 #include <zephyr/pm/pm.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/policy.h>
+#include <zephyr/sys/util.h>
 #include <stdio.h>
 #include "pcf85263a.h"
 #include "adc.h"
@@ -1652,6 +1653,7 @@ static int cmd_etc_sleep(const struct shell *shell, size_t argc, char **argv)
 
 SHELL_CMD_ARG_REGISTER(etc_sleep, NULL, "Put the system into sleep mode", cmd_etc_sleep, 1, 1);
 
+#define ETC_SETTING_PSK_LEN	   (33)
 #define ETC_SETTINGS_DEVICE_ID_LEN (32)
 static char tmp_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
@@ -1681,6 +1683,31 @@ static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv
 	return 0;
 }
 
+static int cmd_set_psk(const struct shell *shell, size_t argc, char **argv)
+{
+	int input_len;
+
+	if ((argc == 2) && ((input_len = strlen(argv[1])) != 0)) {
+		if ((input_len / 2) > ETC_SETTING_PSK_LEN) {
+			shell_error(shell, "Key is too long. Max length is %u",
+				    ETC_SETTING_PSK_LEN * 2);
+			return -1;
+		}
+		uint8_t tmp_psk[ETC_SETTING_PSK_LEN];
+		int ret;
+
+		ret = hex2bin(argv[1], input_len, tmp_psk, sizeof(tmp_psk));
+		if (ret < 0) {
+			shell_error(shell, "Key is too long. Max length is %u",
+				    ETC_SETTING_PSK_LEN * 2);
+			return -1;
+		}
+
+		etc_device_write_setting(ETC_PSK_ID, tmp_psk, ret);
+		shell_print(shell, "OK");
+	}
+}
+
 static int cmd_get_device_id(const struct shell *shell, size_t argc, char **argv)
 {
 	memset(tmp_device_id, 0, sizeof(tmp_device_id));
@@ -1691,6 +1718,7 @@ static int cmd_get_device_id(const struct shell *shell, size_t argc, char **argv
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings, 
 	SHELL_CMD(set_device_id, NULL, "Set device ID", cmd_set_device_id),
+	SHELL_CMD(set_psk, NULL, "Set the PSK used for cloud authentication", cmd_set_psk),
 	SHELL_CMD(get_device_id, NULL, "Get device ID", cmd_get_device_id),
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */

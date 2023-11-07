@@ -5,6 +5,11 @@
 #include <zephyr/device.h>
 #include <zephyr/net/lwm2m.h>
 
+struct dtls_psk {
+	uint8_t psk[CONFIG_LWM2M_SECURITY_KEY_SIZE];
+	uint8_t psk_len;
+};
+
 #if defined(CONFIG_EXACT_LWM2M_CLIENT_UTILS_SECURITY_OBJ_SUPPORT)
 
 /**
@@ -14,8 +19,9 @@
  * @param ctx Pointer to lwm2m client struct.
  * @return 0: success,
  *         <0: error.
-*/
-int lwm2m_load_credentials_to_modem(struct lwm2m_ctx *ctx);
+ */
+int lwm2m_init_security(struct lwm2m_ctx *client, const char *ep_name,
+			struct dtls_psk *psk);
 
 #endif /* defined(CONFIG_EXACT_LWM2M_CLIENT_UTILS_SECURITY_OBJ_SUPPORT) */
 

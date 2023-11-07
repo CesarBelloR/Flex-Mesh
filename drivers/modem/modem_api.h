@@ -81,8 +81,16 @@ struct modem_api_evt {
 };
 
 enum modem_api_cred_type {
-	MODEM_API_CRED_TYPE_PSK_ID,
 	MODEM_API_CRED_TYPE_PSK
+};
+
+struct modem_api_psk {
+	/* Null-terminated string with the PSK ID*/
+	char *psk_id;
+	/* Binary key */
+	uint8_t *psk;
+	/* Length of PSK */
+	uint16_t psk_len;
 };
 
 enum modem_api_cmd {
@@ -117,8 +125,9 @@ typedef int(*modem_api_evt_handler_init_t)(const struct device *dev,
                                            modem_api_evt_handler_t evt_handler);
 
 typedef int(*modem_api_set_credentials_t)(const struct device *dev,
+					  uint8_t cid,
 					  enum modem_api_cred_type type,
-					  uint8_t *cred_buf, uint8_t cred_len);
+					  void *cred_data);
 
 typedef int(*modem_api_cmd_t)(const struct device *dev,
 			      enum modem_api_cmd cmd,
@@ -205,14 +214,16 @@ inline int modem_evt_handler_init(const struct device *dev,
  * @brief Set the modem security credentials
  * 
  * @param dev Pointer to the modem device
+ * @param cid SSL Context ID for the modem to use
  * @param type Type of the credential to set
- * @param cred_buf Credential buffer
- * @param cred_len Length of the credential buffer
+ * @param cred_data Pointer to the credential data. Supported types:
+ * 	- struct modem_api_psk if `type == MODEM_API_CRED_TYPE_PSK`
  * @return 0 on success, negative on error
 */
 inline static int modem_set_credentials(const struct device *dev,
-				 enum modem_api_cred_type type,
-				 uint8_t *cred_buf, uint8_t cred_len)
+					uint8_t cid,
+					enum modem_api_cred_type type,
+					void *cred_data)
 {
 	const struct modem_api *api =
 		(const struct modem_api *)dev->api;
@@ -221,7 +232,7 @@ inline static int modem_set_credentials(const struct device *dev,
 		return -ENOSYS;
 	}
 
-	return api->set_credentials(dev, type, cred_buf, cred_len);
+	return api->set_credentials(dev, cid, type, cred_data);
 }
 
 inline static int modem_cmd(const struct device *dev,

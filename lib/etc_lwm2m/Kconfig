@@ -12,6 +12,10 @@ config EXACT_LWM2M_CLIENT_UTILS_SECURITY_OBJ_SUPPORT
 	bool "Security object support"
 	default y
 
+config EXACT_LWM2M_CLIENT_UTILS_TLS_CID
+	int "TLS context ID used on the modem for LwM2M"
+	default 5
+
 module = EXACT_LWM2M_CLIENT_UTILS
 module-dep = LOG
 module-str = EXACT LwM2M client utilities library

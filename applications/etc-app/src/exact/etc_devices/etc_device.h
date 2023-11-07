@@ -68,12 +68,13 @@ struct etc_device_record_table {
  */
 typedef int (*etc_device_record_reading_callback)(uint16_t record_id, void* user_data);
 
-enum {
+enum etc_setting_id {
 	ETC_CONFIG_ID = 0x01,
 	ETC_RECORD_STAT = 0x02,
 	ETC_RECORD_RECLAIM = 0x03,
 	ETC_SERIAL_NUMBER_TYPE = 0x04,
 	ETC_SERIAL_NUMBER_ID = 0x05,
+	ETC_PSK_ID = 0x06,
 	ETC_SETTING_HW_VERSION_ID = 0x100,
 	ETC_SETTING_FW_VERSION_ID,
 	ETC_SETTING_DEVICE_ID,
@@ -130,8 +131,21 @@ BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
 void etc_device_nvs_init(void);
 void etc_device_init(void);
 
-int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size);
+int etc_device_write_setting(uint16_t setting_id, const void *setting, int setting_size);
 int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size);
+
+/**
+ * @brief Read a setting from non-volatile storage and return the data's length.
+ * Same as @ref etc_device_read_setting, but returning the length of the setting.
+ * 
+ * @param setting_id NVS ID of the setting to be read. One of @ref enum etc_setting_id
+ * @param setting Buffer to store the retrieved setting
+ * @param setting_size Size of the setting buffer
+ * 
+ * @return Number of bytes read on success. Negative on error.
+*/
+int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int setting_size);
+
 int etc_device_write_record_sensor(struct sensor_data *sensor);
 int etc_device_write_record(union etc_device_record *record);
 int etc_device_read_record(union etc_device_record *record);
