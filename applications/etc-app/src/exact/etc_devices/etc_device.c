@@ -56,37 +56,6 @@ struct etc_device_reclaim_info {
 	uint16_t flag_in_process;
 };
 
-// Structure to represent a combination.
-struct etc_device_power_matrix_element {
-	enum etc_device_mode device_mode;
-	enum etc_power_mode_e power_mode;
-	enum etc_sensor_status probe_status;
-	enum etc_device_transmit_type transmit_type;
-};
-
-// Array to hold all possible combinations.
-struct etc_device_power_matrix_element cloud_matrix_combinations[] = {
-	{ETC_DEVICE_MODE_LTE_LOGGER, ETC_POWER_MODE_ALWAYS_ON, SENSOR_NA, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_LTE_LOGGER, ETC_POWER_MODE_INTERVAL, SENSOR_NA, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_LTE_LOGGER, ETC_POWER_MODE_PROBE, SENSOR_CONNECTED, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_LTE_LOGGER, ETC_POWER_MODE_PROBE, SENSOR_NO_CONNECTION, ETC_DEVICE_TRANSMIT_NO_PROBE},
-	{ETC_DEVICE_MODE_RELAY, ETC_POWER_MODE_ALWAYS_ON, SENSOR_NA, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_RELAY, ETC_POWER_MODE_INTERVAL, SENSOR_NA, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_RELAY, ETC_POWER_MODE_PROBE, SENSOR_CONNECTED, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_RELAY, ETC_POWER_MODE_PROBE, SENSOR_NO_CONNECTION, ETC_DEVICE_TRANSMIT_NO_PROBE},
-	{ETC_DEVICE_MODE_LORA_LOGGER, ETC_POWER_MODE_ALWAYS_ON, SENSOR_NA, ETC_DEVICE_TRANSMIT_SYNC_LORA_LOGGER},
-	{ETC_DEVICE_MODE_LORA_LOGGER, ETC_POWER_MODE_INTERVAL, SENSOR_NA, ETC_DEVICE_TRANSMIT_SYNC_LORA_LOGGER},
-	{ETC_DEVICE_MODE_LORA_LOGGER, ETC_POWER_MODE_PROBE, SENSOR_CONNECTED, ETC_DEVICE_TRANSMIT_SYNC_LORA_LOGGER},
-	{ETC_DEVICE_MODE_LORA_LOGGER, ETC_POWER_MODE_PROBE, SENSOR_NO_CONNECTION, ETC_DEVICE_TRANSMIT_SYNC_LORA_LOGGER}
-};
-
-struct etc_device_power_matrix_element lora_matrix_combinations[] = {
-	{ETC_DEVICE_MODE_LORA_LOGGER, ETC_POWER_MODE_ALWAYS_ON, SENSOR_NA, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_LORA_LOGGER, ETC_POWER_MODE_INTERVAL, SENSOR_NA, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_LORA_LOGGER, ETC_POWER_MODE_PROBE, SENSOR_CONNECTED, ETC_DEVICE_TRANSMIT_NORMAL},
-	{ETC_DEVICE_MODE_LORA_LOGGER, ETC_POWER_MODE_PROBE, SENSOR_NO_CONNECTION, ETC_DEVICE_TRANSMIT_NO_PROBE},
-};
-
 static union etc_device_record_header etc_device_record_header;
 static struct etc_device_record_table etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
@@ -790,44 +759,6 @@ uint16_t etc_device_get_tx_logger_lora_offset_mins(void) {
 
 uint16_t etc_device_get_tx_no_probe_offset_mins(void) {
 	return tx_no_probe_offset_mins;
-}
-
-enum etc_device_transmit_type etc_device_get_transmit_type_cloud(
-	enum etc_sensor_status probeStatus)
-{
-	enum etc_device_mode deviceMode = etc_device_get_mode();
-	enum etc_power_mode_e powerMode = etc_get_power_mode();
-	for (int i = 0; i < ARRAY_SIZE(cloud_matrix_combinations); i++) {
-		if (cloud_matrix_combinations[i].device_mode == deviceMode &&
-			cloud_matrix_combinations[i].power_mode == powerMode) 
-		{
-			if (cloud_matrix_combinations[i].probe_status == SENSOR_NA) {
-				return cloud_matrix_combinations[i].transmit_type;
-			} else if (cloud_matrix_combinations[i].probe_status == probeStatus) {
-				return cloud_matrix_combinations[i].transmit_type;
-			}
-		}
-	}
-	return ETC_DEVICE_TRANSMIT_INVALID; // Combination not found
-}
-
-enum etc_device_transmit_type etc_device_get_transmit_type_lora(
-	enum etc_sensor_status probeStatus)
-{
-	enum etc_device_mode deviceMode = etc_device_get_mode();
-	enum etc_power_mode_e powerMode = etc_get_power_mode();
-	for (int i = 0; i < ARRAY_SIZE(lora_matrix_combinations); i++) {
-		if (lora_matrix_combinations[i].device_mode == deviceMode &&
-			lora_matrix_combinations[i].power_mode == powerMode) 
-		{
-			if (lora_matrix_combinations[i].probe_status == SENSOR_NA) {
-				return lora_matrix_combinations[i].transmit_type;
-			} else if (lora_matrix_combinations[i].probe_status == probeStatus) {
-				return lora_matrix_combinations[i].transmit_type;
-			}
-		}
-	}
-	return ETC_DEVICE_TRANSMIT_INVALID; // Combination not found
 }
 
 #ifdef CONFIG_SHELL
