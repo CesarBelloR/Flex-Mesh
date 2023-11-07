@@ -41,6 +41,9 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
  * ETC_RECORD_MAX_PER_SECTOR) + 1
  */
 #define ETC_RECORD_MAX_SECTOR	  ((int)((ETC_RECORD_MAX_RECORD) / (ETC_RECORD_MAX_PER_SECTOR)) + 1)
+
+#define MAX_RECORD_ID ( ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER )
+#define MIN_RECORD_ID ( ETC_RECORD_HEADER )
 #endif
 
 #define ETC_RECORD_DEFAULT_RX_DURATION_SECONDS (5)
@@ -394,17 +397,41 @@ static int etc_device_reclaim_data(etc_device_record_reading_callback reading_ca
 	return -ENOENT;
 }
 
+static inline void get_current_record_ids(uint16_t *last_id,
+					  uint16_t *newest_id)
+{
+	*newest_id = etc_device_record_table.newest.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
+			etc_device_record_table.newest.element_idx + ETC_RECORD_HEADER;
+	*last_id = ram_nack_record_id;
+}
+
+uint16_t etc_device_nack_count(void)
+{
+	uint16_t last_id;
+	uint16_t newest_id;
+	uint16_t nacks;
+
+	get_current_record_ids(&last_id, &newest_id);
+
+	if (newest_id >= last_id) {
+		nacks = newest_id - last_id;
+	} else {
+		nacks = (MAX_RECORD_ID - last_id) + (newest_id - MIN_RECORD_ID);
+	}
+
+	return nacks;
+}
+
 int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void *data)
 {
 	int rc = 0;
-	int newest_id = etc_device_record_table.newest.sector_idx * ETC_RECORD_MAX_PER_SECTOR +
-			etc_device_record_table.newest.element_idx + ETC_RECORD_HEADER;
-	uint16_t max_id = ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR + ETC_RECORD_HEADER;
-	uint16_t min_id = ETC_RECORD_HEADER;
-	uint16_t last_id = ram_nack_record_id;
-	uint16_t check_id = 0;
+	uint16_t last_id;
+	uint16_t check_id;
+	uint16_t newest_id;
 	bool find_next = false;
 	LOG_INF("Reclaim is running %d", etc_reclaim_info.flag_in_process);
+
+	get_current_record_ids(&last_id, &newest_id);
 
 	if (etc_reclaim_info.flag_in_process == 1) {
 		return etc_device_reclaim_data(reading_callback, data);
@@ -414,9 +441,9 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 		return 0;
 	}
 
-	check_id = last_id == 0 ? min_id : last_id + 1;
-	if (check_id > max_id) {
-		check_id = min_id;
+	check_id = last_id == 0 ? MIN_RECORD_ID : last_id + 1;
+	if (check_id > MAX_RECORD_ID) {
+		check_id = MIN_RECORD_ID;
 	}
 
 next_id:
@@ -446,8 +473,8 @@ next_id:
 		if (newest_id != check_id) {
 			/* Increase the ram_nack_record_id */
 			check_id += 1;
-			if (check_id > max_id) {
-				check_id = min_id;
+			if (check_id > MAX_RECORD_ID) {
+				check_id = MIN_RECORD_ID;
 			}
 			goto next_id;
 		} 

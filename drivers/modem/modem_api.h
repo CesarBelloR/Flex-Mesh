@@ -269,6 +269,19 @@ char* quectel_bg95_get_sim_number(void);
 bool quectel_bg95_is_ready(void);
 int quectel_bg95_get_time(char* time_buf);
 int quectel_bg95_get_rssi(void);
-int quectel_bg95_get_qual(void);
+
+/**
+ * Retrieve the Modem RSRP (signal strength)
+ * 
+ * @return RSRP in dBm
+*/
+int quectel_bg95_get_rsrp(void);
+
+/**
+ * Retrieve the Modem RSRQ (signal quality)
+ * 
+ * @return RSRQ in dBm
+*/
+int quectel_bg95_get_rsrq(void);
 
 #endif // MODEM_API_H

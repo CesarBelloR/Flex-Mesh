@@ -614,7 +614,7 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 		return err;
 	}
 	
-	err = lwm2m_set_u8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, QUAL),
+	err = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, QUAL),
 			   modem_dynamic->qual);
 
 	err = date_time_now(&current_time);

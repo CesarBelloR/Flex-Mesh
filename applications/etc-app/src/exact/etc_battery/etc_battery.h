@@ -45,4 +45,13 @@ enum battery_status etc_battery_get_status(void);
  */
 uint16_t etc_battery_get_voltage_mV(void);
 
+/**
+ * Convert a battery voltage into a percentage.
+ * 
+ * @param voltage_mv Battery voltage in mV
+ * 
+ * @return Percentage value from 0 to 100.
+*/
+uint8_t etc_battery_percentage_from_voltage(uint16_t voltage_mv);
+
 #endif /* ETC_BATTERY_H_ */

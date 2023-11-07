@@ -344,8 +344,8 @@ static void data_encode(bool split)
 		LOG_DBG("Recovering previously backed up data.");
 		data_codec_recover_data(&codec, &codec_backup);
 	} else {
-		modem_dynamic.rsrp = quectel_bg95_get_rssi();
-		modem_dynamic.qual = quectel_bg95_get_qual();
+		modem_dynamic.rsrp = quectel_bg95_get_rsrp();
+		modem_dynamic.qual = quectel_bg95_get_rsrq();
 		modem_dynamic.queued = 1;
 
 		send_status.record_id = etc_device_read_record(&record);

@@ -2,5 +2,44 @@
  * Please refer to https://docs.memfault.com/docs/embedded/metrics-api for more details.
  */
 
-MEMFAULT_METRICS_KEY_DEFINE(ModemTimeToConnect, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_STRING_KEY_DEFINE(battery_status, sizeof("charging"))
 MEMFAULT_METRICS_KEY_DEFINE(BatteryMv, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(Battery_ChargeLevelDrop,
+                                       kMemfaultMetricType_Unsigned,
+                                       0, 100)
+MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(Battery_ChargeLevel,
+                                       kMemfaultMetricType_Unsigned,
+                                       0, 100)
+
+MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(nRF_Temp_C, kMemfaultMetricType_Signed, 
+                                       -40, 85)
+
+MEMFAULT_METRICS_KEY_DEFINE(failed_sends, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(successful_sends, kMemfaultMetricType_Unsigned)
+
+MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(modem_avg_rsrp,
+                                       kMemfaultMetricType_Signed, -140, -40)
+MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(modem_avg_rsrq,
+                                       kMemfaultMetricType_Signed, -1, -25)
+MEMFAULT_METRICS_KEY_DEFINE(modem_mcc,
+                            kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(modem_mnc,
+                            kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(modem_time_to_connect_ms, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(modem_on_time_ms, kMemfaultMetricType_Unsigned)
+
+MEMFAULT_METRICS_KEY_DEFINE(heartbeat_interval_s, kMemfaultMetricType_Unsigned)
+
+MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(device_mode,
+                                       kMemfaultMetricType_Unsigned, 0, 2)
+MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(device_power_mode,
+                                       kMemfaultMetricType_Unsigned, 0, 2)
+MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(device_tx_interval_s,
+                                       kMemfaultMetricType_Unsigned, 0, 86400)
+MEMFAULT_METRICS_KEY_DEFINE(device_unacked_messages,
+                            kMemfaultMetricType_Unsigned)
+
+MEMFAULT_METRICS_KEY_DEFINE(ota_attempts,
+                            kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(failed_ota_attempts,
+                            kMemfaultMetricType_Unsigned)

@@ -81,7 +81,7 @@ const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
 static void modem_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(modem_work, modem_work_fn);
 
-int64_t modem_wakeup_time = -1;
+int64_t modem_wakeup_time_ms = -1;
 
 /* Modem module message queue. */
 #define MODEM_QUEUE_ENTRY_COUNT		20
@@ -298,8 +298,8 @@ static void modem_set_connected(void)
 	k_work_cancel_delayable(&modem_work);
 	state_set(STATE_CONNECTED);
 	
-	module_event->data.time_to_connect = modem_wakeup_time != -1 ?
-				k_uptime_get() - modem_wakeup_time : -1;
+	module_event->data.time_to_connect_ms = modem_wakeup_time_ms != -1 ?
+				k_uptime_get() - modem_wakeup_time_ms : -1;
 	module_event->type = MODEM_EVT_LTE_CONNECTED;
 	APP_EVENT_SUBMIT(module_event);
 }
@@ -322,6 +322,32 @@ static void new_dynamic_modem_data(const struct modem_network_data *mdm_data) {
 	APP_EVENT_SUBMIT(modem_event);
 }
 
+/**
+ * Get the current modem on time and reset, if requested.
+ * 
+ * @param reset Reset the modem wakeup time to an invalid value. To be used
+ * when the modem turns off.
+ * 
+ * @retval modem on time in ms
+ * @retval -1 on error
+*/
+static int64_t get_modem_on_time_ms(bool reset)
+{
+	int64_t on_time;
+
+	if (modem_wakeup_time_ms < 0) {
+		return -1;
+	}
+	
+	on_time = k_uptime_get() - modem_wakeup_time_ms;
+
+	if (reset) {
+		modem_wakeup_time_ms = -1;
+	}
+
+	return on_time;
+}
+
 static void modem_evt_handler(const struct modem_api_evt *const evt)
 {
 	LOG_DBG("Modem event %s", modem_evt_to_str(evt->type));
@@ -338,10 +364,15 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 		break;
 	}
 	case MODEM_API_PSM_ENTERED_EVT: {
+		struct modem_event *module_event = new_modem_event();
+
 		k_work_cancel_delayable(&modem_work);
 		state_set(STATE_DISCONNECTED);
 		sub_state_lte_connected_set(SUB_STATE_MODEM_PSM);
-		SEND_EVENT(modem, MODEM_EVT_PSM_ENTERED);
+
+		module_event->data.on_time_ms = get_modem_on_time_ms(true);
+		module_event->type = MODEM_EVT_PSM_ENTERED;
+		APP_EVENT_SUBMIT(module_event);
 		break;
 	}
 
@@ -351,7 +382,11 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 
 	/* Power down event is not sent on PSM power down, only on regular power down. */
 	case MODEM_API_POWER_DOWN_EVT: {
-		SEND_EVENT(modem, MODEM_EVT_POWERED_DOWN);
+		struct modem_event *module_event = new_modem_event();		
+		
+		module_event->data.on_time_ms = get_modem_on_time_ms(true);
+		module_event->type = MODEM_EVT_POWERED_DOWN;
+		APP_EVENT_SUBMIT(module_event);
 		break;
 	}
 
@@ -487,7 +522,7 @@ static void on_sub_state_modem_off(struct modem_msg_data *msg)
 	{
 		int ret;
 
-		modem_wakeup_time = k_uptime_get();
+		modem_wakeup_time_ms = k_uptime_get();
 		ret = modem_cmd(modem_dev, MODEM_API_CMD_POWER_ON, NULL);
 		__ASSERT_NO_MSG(ret == 0);
 		k_work_reschedule(&modem_work,
@@ -509,7 +544,7 @@ static void on_sub_state_modem_psm(struct modem_msg_data *msg)
 		etc_device_get_mode() == ETC_DEVICE_MODE_LORA_LOGGER)
 		)
 	{
-		modem_wakeup_time = k_uptime_get();
+		modem_wakeup_time_ms = k_uptime_get();
 		modem_cmd(modem_dev, MODEM_API_CMD_PSM_WAKEUP, NULL);
 		k_work_reschedule(&modem_work,
 				K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
@@ -531,7 +566,7 @@ static void on_sub_state_modem_sleep(struct modem_msg_data *msg)
 	{
 		int ret;
 
-		modem_wakeup_time = k_uptime_get();
+		modem_wakeup_time_ms = k_uptime_get();
 		ret = modem_enter_wakeup();
 	}
 }

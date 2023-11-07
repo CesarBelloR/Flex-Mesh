@@ -67,8 +67,8 @@ struct data_modem_dynamic {
 	uint32_t cell;
 	/** Reference Signal Received Power. */
 	int16_t rsrp;
-	/** Signal quality*/
-	uint8_t qual;
+	/** Signal quality, RSRQ */
+	int16_t qual;
 	/* Access technology (NB-IoT or LTE-M) */
 	enum access_technology nw_mode;
 	/* PSM Active timer value in s */

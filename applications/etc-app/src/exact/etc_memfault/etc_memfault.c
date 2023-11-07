@@ -2,6 +2,7 @@
 #include <stdbool.h>
 
 #include "etc_memfault.h"
+#include "etc_date_time.h"
 #include "app_version.h"
 
 #include <zephyr/kernel.h>
@@ -13,10 +14,11 @@
 #include <memfault/core/platform/device_info.h>
 #include <memfault/http/http_client.h>
 #include <memfault/ports/zephyr/http.h>
+#include <memfault/core/platform/system_time.h>
 
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(memfault_etc, CONFIG_MEMFAULT_ETC_LOG_LEVEL);
+LOG_MODULE_REGISTER(etc_memfault, CONFIG_MEMFAULT_ETC_LOG_LEVEL);
 
 
 static char device_serial[CONFIG_MEMFAULT_ETC_DEVICE_ID_MAX_LEN + 1];
@@ -77,4 +79,19 @@ int memfault_etc_device_id_set(const char *device_id, size_t len)
 	device_serial[MIN(sizeof(device_serial) - 1, len)] = '\0';
 
 	return 0;
+}
+
+bool memfault_platform_time_get_current(sMemfaultCurrentTime *thistime)
+{
+	int64_t time_ms;
+	int ret;
+
+	ret = date_time_now(&time_ms);
+	if (ret != 0) {
+		return false;
+	}
+
+	thistime->type = kMemfaultCurrentTimeType_UnixEpochTimeSec;
+	thistime->info.unix_timestamp_secs = time_ms / 1000;
+	return true;
 }
