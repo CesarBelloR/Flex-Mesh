@@ -44,6 +44,7 @@ struct util_msg_data {
 		struct modem_event modem;
 		struct lora_event lora;
 		struct debug_event debug;
+		struct util_event util;
 	} module;
 };
 
@@ -161,6 +162,15 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct debug_event *event = cast_debug_event(aeh);
 		struct util_msg_data util_msg = {
 			.module.debug = *event
+		};
+
+		message_handler(&util_msg);
+	}
+		
+	if (is_util_event(aeh)) {
+		struct util_event *event = cast_util_event(aeh);
+		struct util_msg_data util_msg = {
+			.module.util = *event
 		};
 
 		message_handler(&util_msg);
@@ -384,6 +394,14 @@ static void on_all_states(struct util_msg_data *msg)
 		watchdog_ack_check(msg->module.debug.data.id);
 		return;
 	}
+	
+	if (IS_EVENT(msg, util, UTIL_EVT_WATCHDOG_FEED_REQUEST)) {
+		if (modules_wdt_list_is_empty()) {
+			/* No module supports watchdog acks. Feed watchdog. */
+			watchdog_feed_from_request();
+		}
+		return;
+	}
 }
 
 static void message_handler(struct util_msg_data *msg)
@@ -412,5 +430,6 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, sensor_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, data_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, debug_event);
+APP_EVENT_SUBSCRIBE_EARLY(MODULE, util_event);
 
 SYS_INIT(setup, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
