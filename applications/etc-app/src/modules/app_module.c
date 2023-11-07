@@ -314,30 +314,14 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_logger_job job)
 
 static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transmit_interval_s, 
 	enum etc_sensor_status sensor_status) {
-	if (etc_device_get_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
-		if (etc_device_get_transmit_type_lora(sensor_status) != ETC_DEVICE_TRANSMIT_NORMAL) {
-			return -1;
-		}
-	} else {
-		LOG_INF("Type %d", etc_device_get_transmit_type_cloud(sensor_status));
-		if (etc_device_get_transmit_type_cloud(sensor_status) != ETC_DEVICE_TRANSMIT_NORMAL) {
-			return -1;
-		}
-	}
+	if (sensor_status != SENSOR_CONNECTED) return -1;
 	return align_wakeup(now, transmit_interval_s, ETC_LOGGER_JOB_TX);
 }
 
 static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mins, 
-enum etc_sensor_status sensor_status) {
-	if (sensor_status != SENSOR_NO_CONNECTION) return -1;
-	if (etc_device_get_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
-		if (etc_device_get_transmit_type_lora(SENSOR_NO_CONNECTION) != ETC_DEVICE_TRANSMIT_NO_PROBE) {
-			return -1;
-		}
-	} else {
-		if (etc_device_get_transmit_type_cloud(SENSOR_NO_CONNECTION) != ETC_DEVICE_TRANSMIT_NO_PROBE) {
-			return -1;
-		}
+	enum etc_sensor_status sensor_status) {
+	if ((sensor_status != SENSOR_NO_CONNECTION) || (etc_get_power_mode() != ETC_POWER_MODE_PROBE)) {
+		return -1;
 	}
 
 	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
@@ -355,9 +339,7 @@ enum etc_sensor_status sensor_status) {
 
 static time_t app_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logger_lora_mins,
 	enum etc_sensor_status sensor_status) {
-	if (etc_device_get_transmit_type_cloud(sensor_status) != ETC_DEVICE_TRANSMIT_SYNC_LORA_LOGGER) {
-		return -1;
-	}
+	if (etc_get_device_mode() != ETC_DEVICE_MODE_LORA_LOGGER) return -1;
 	struct tm tm_time = {0};
 	gmtime_r(&now, &tm_time);
 	int tx_logger_lora_diff_hours = 0;
@@ -392,7 +374,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	time_t next_transmit = 0;
 	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
 	enum etc_sensor_status sensor_status = etc_sensor_get_status();
-	LOG_DBG("mode %d %d %d", etc_device_get_mode(), etc_get_power_mode(), sensor_status);
+	LOG_DBG("Mode %d %d %d", etc_device_get_mode(), etc_get_power_mode(), sensor_status);
 	int wakeup = 0;
 
 	struct tm tm_time = {0};
