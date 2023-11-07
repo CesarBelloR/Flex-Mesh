@@ -42,12 +42,13 @@ static enum state_type {
 
 /* UI module sub states. */
 static enum sub_state_type {
-	SUB_STATE_ACTIVE,
-	SUB_STATE_PASSIVE,
+	SUB_STATE_NORMAL,
+	SUB_STATE_CHARGE_IN_PROCESS,
+	SUB_STATE_CHARGE_COMPLETE
 } sub_state;
 
 static int ui_module_gen_num_of_sample = 0;
-
+static enum sensor_event_type last_battery_sensor_event;
 /* Forward declarations */
 static void led_pattern_update_work_fn(struct k_work *work);
 
@@ -107,10 +108,12 @@ static char *state2str(enum state_type new_state)
 static char *sub_state2str(enum sub_state_type new_state)
 {
 	switch (new_state) {
-	case SUB_STATE_ACTIVE:
-		return "SUB_STATE_ACTIVE";
-	case SUB_STATE_PASSIVE:
-		return "SUB_STATE_PASSIVE";
+	case SUB_STATE_NORMAL:
+		return "SUB_STATE_NORMAL";
+	case SUB_STATE_CHARGE_IN_PROCESS:
+		return "SUB_STATE_CHARGE_IN_PROCESS";
+	case SUB_STATE_CHARGE_COMPLETE:
+		return "SUB_STATE_CHARGE_COMPLETE";
 	default:
 		return "Unknown";
 	}
@@ -142,6 +145,10 @@ static void sub_state_set(enum sub_state_type new_state)
 		sub_state2str(new_state));
 
 	sub_state = new_state;
+}
+
+static enum sub_state_type sub_state_get(void) {
+	return sub_state;
 }
 
 /* Handlers */
@@ -221,9 +228,19 @@ static void led_pattern_update_work_fn(struct k_work *work)
 
 	if (node == NULL) {
 		LOG_DBG("Empty node");
-		led_pattern_list[LED_STATE_TURN_OFF].led_state = LED_STATE_TURN_OFF;
-		led_pattern_list[LED_STATE_TURN_OFF].duration_sec = HOLD_FOREVER;
-		next_pattern = &led_pattern_list[LED_STATE_TURN_OFF];
+		if (sub_state_get() == SUB_STATE_CHARGE_COMPLETE) {
+			led_pattern_list[LED_STATE_BATTERY_CHARGE_COMPLETE].led_state = LED_STATE_BATTERY_CHARGE_COMPLETE;
+			led_pattern_list[LED_STATE_BATTERY_CHARGE_COMPLETE].duration_sec = HOLD_FOREVER;
+			next_pattern = &led_pattern_list[LED_STATE_BATTERY_CHARGE_COMPLETE];
+		} else if (sub_state_get() == SUB_STATE_CHARGE_IN_PROCESS) {
+			led_pattern_list[LED_STATE_BATTERY_CHARGING].led_state = LED_STATE_BATTERY_CHARGING;
+			led_pattern_list[LED_STATE_BATTERY_CHARGING].duration_sec = HOLD_FOREVER;
+			next_pattern = &led_pattern_list[LED_STATE_BATTERY_CHARGING];
+		} else {
+			led_pattern_list[LED_STATE_TURN_OFF].led_state = LED_STATE_TURN_OFF;
+			led_pattern_list[LED_STATE_TURN_OFF].duration_sec = HOLD_FOREVER;
+			next_pattern = &led_pattern_list[LED_STATE_TURN_OFF];
+		}
 	} else {
 		next_pattern = CONTAINER_OF(node, struct led_pattern, header);
 	}
@@ -243,8 +260,11 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	 *   reschedule handler to turn off LED after specified time (save power)
 	 */
 	if (!sys_slist_is_empty(&pattern_transition_list) ||
-	    ((next_pattern->led_state != LED_STATE_TURN_OFF) &&
-	     (next_pattern->duration_sec != HOLD_FOREVER))) {
+	    (((next_pattern->led_state != LED_STATE_TURN_OFF) &&
+			(next_pattern->led_state != LED_STATE_BATTERY_CHARGING) && 
+			(next_pattern->led_state != LED_STATE_BATTERY_CHARGE_COMPLETE)) &&
+			(next_pattern->duration_sec != HOLD_FOREVER)
+		)) {
 		LOG_DBG("k_work_reschedule led work");
 		if (next_pattern->duration_sec > 0) {
 			k_work_reschedule(&led_pattern_update_work, 
@@ -317,7 +337,7 @@ static void on_state_init(struct ui_msg_data *msg)
 		}
 
 		state_set(STATE_RUNNING);
-		sub_state_set(SUB_STATE_ACTIVE);
+		sub_state_set(SUB_STATE_NORMAL);
 	}
 }
 
@@ -394,7 +414,13 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
+		if (sub_state_get() == SUB_STATE_CHARGE_IN_PROCESS) {
+			transition_list_append(LED_STATE_BATTERY_CHARGING, HOLD_FOREVER);
+		} else if (sub_state_get() == SUB_STATE_CHARGE_COMPLETE) {
+			transition_list_append(LED_STATE_BATTERY_CHARGE_COMPLETE, HOLD_FOREVER);
+		} else {
+			transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
+		}
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 	}
 
@@ -403,6 +429,26 @@ static void on_state_running(struct ui_msg_data *msg)
 		transition_list_append(LED_STATE_FOTA_UPDATING, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 		state_set(STATE_FOTA_UPDATE);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_CHARGING)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_BATTERY_CHARGING, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+		sub_state_set(SUB_STATE_CHARGE_IN_PROCESS);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_BATTERY_CHARGE_COMPLETE, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+		sub_state_set(SUB_STATE_CHARGE_COMPLETE);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_NORMAL)) {
+		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+		sub_state_set(SUB_STATE_NORMAL);
 	}
 }
 

@@ -120,7 +120,7 @@ union etc_device_record {
 		float battery;
 		float sensor[ETC_DEVICE_NUM_SENSOR];
 		uint32_t timestamp;
-		uint32_t flag; // Counter or PCB Fault
+		uint32_t flag; /* Use 8 bytes to save battery status */
 	};
 };
 

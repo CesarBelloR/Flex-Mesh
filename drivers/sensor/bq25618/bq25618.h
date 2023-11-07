@@ -44,29 +44,39 @@
 #define BOOST_MODE 0x07
 
 struct bq25618_data {
-        struct gpio_callback gpio_cb;
+	struct gpio_callback gpio_cb;
 	const struct device *dev;
-
-        struct k_work work;
+	struct k_mutex status_lock;
+	struct k_work_delayable work;
 };
 
 struct bq25618_dev_config {
-        struct i2c_dt_spec i2c;
-        struct gpio_dt_spec interrupt;
+	struct i2c_dt_spec i2c;
+	struct gpio_dt_spec interrupt;
 
-        uint16_t charge_current_limit;
-        uint16_t charge_voltage_limit;
-        uint16_t max_current;
-        uint16_t min_voltage;
-        uint16_t precharge_current;
-        bool charge_timer_en;
-        uint8_t charge_timer_val;
+	uint16_t charge_current_limit;
+	uint16_t charge_voltage_limit;
+	uint16_t max_current;
+	uint16_t min_voltage;
+	uint16_t precharge_current;
+	bool charge_timer_en;
+	uint8_t charge_timer_val;
 };
+
+/** @brief Callback function for BQ25618
+ * 
+*/
+typedef void(*bq25618_evt_handler_t)(uint8_t bus_status, 
+	uint8_t battery_status, uint8_t power_status);
 
 /***************************************************************************/
 /* Prototypes                                                              */
 /***************************************************************************/
-
+/** @brief Run the poll job for PMIC
+ * 
+ * Notice: Call this API before get PM
+ */
+void bq25618_poll_status(const struct device *dev);
 /** @brief Enable the Buck Regulator
  *
  * @retval return 0 on success, or a negative error code from an I2C
@@ -227,10 +237,11 @@ int bq25618_voltage_bus_status(const struct device *dev, uint8_t *status);
 
 /** @brief Check if the power is good
  *
- * @retval return 1 if power good, 0 if not good,
- *  otherwise error
+ * @param status 1 if power good, 0 if not good
+ * @retval return 0 on success, or a negative error code from an I2C
+ * transaction or invalid parameter.
  */
-int bq25618_is_power_good(const struct device *dev);
+int bq25618_is_power_good(const struct device *dev, uint8_t* status) ;
 
 /** @brief Query the PMIC and return charge fault status
  *
@@ -278,4 +289,8 @@ int bq25618_set_charge_timer_value(const struct device *dev, uint8_t hrs);
 */
 void bq25618_print_all_registers(const struct device *dev);
 
+/** @brief Register a callback to update the power charger IC
+ * 
+*/
+void bq25618_register_callback(bq25618_evt_handler_t evt);
 #endif /* BQ25618_H_ */

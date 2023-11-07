@@ -32,7 +32,9 @@ enum sensor_event_type {
 	SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY,
 	SENSOR_EVT_ENVIRONMENTAL_NO_CONNECT,
 	SENSOR_EVT_ENVIRONMENTAL_CONNECTED,
-	SENSOR_EVT_BATTERY_DATA_READY,
+	SENSOR_EVT_BATTERY_IN_NORMAL,
+	SENSOR_EVT_BATTERY_IN_CHARGING,
+	SENSOR_EVT_BATTERY_CHARGE_COMPLETE,
 	SENSOR_EVT_SHUTDOWN_READY,
 	SENSOR_EVT_ERROR,
 };
@@ -64,6 +66,8 @@ struct sensor_data {
 	float sensor[SENSOR_EVENT_NUM_DEV_MAX];
 	/** Voltage of battery in mV */
 	uint16_t battery_mV;
+	/** Battery status */
+	uint8_t battery_status;
 };
 
 struct battery_data {

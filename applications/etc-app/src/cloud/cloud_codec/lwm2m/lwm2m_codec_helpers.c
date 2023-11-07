@@ -18,12 +18,14 @@
 #include "etc_util.h"
 #include "etc_settings.h"
 #include "etc_sensor.h"
+#include "etc_battery.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lwm2m_codec_helpers, CONFIG_CLOUD_CODEC_LOG_LEVEL);
 
 /* Some resources does not have designated buffers. Therefore we define those in here. */
 static uint8_t bearers[2] = { LTE_FDD_BEARER, NB_IOT_BEARER };
 static int battery_voltage;
+static int battery_status;
 static time_t button_ts;
 
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
@@ -339,6 +341,14 @@ int lwm2m_codec_helpers_setup_resources(void)
 					   POWER_SOURCE_VOLTAGE_RID),
 				&battery_voltage, sizeof(battery_voltage),
 				sizeof(battery_voltage), LWM2M_RES_DATA_FLAG_RW);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
+					   BATTERY_STATUS_RID),
+				&battery_status, sizeof(battery_status),
+				sizeof(battery_status), LWM2M_RES_DATA_FLAG_RW);
 	if (err) {
 		return err;
 	}
@@ -803,6 +813,27 @@ static int invalidate_humid_sensor_value(struct cloud_codec_data *cloud_data, co
 	return 0;
 }
 
+static inline int set_resource_if_changed_s32(struct cloud_codec_data *cloud_data,
+					      const struct lwm2m_obj_path *path,
+					      int32_t new_value)
+{
+	int32_t value;
+	int err;
+
+	err = lwm2m_get_s32(path, &value);
+	if (err) {
+		return -1;
+	}
+	if (value != new_value) {
+		err = lwm2m_set_s32(path,
+				    new_value);
+		lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							 path,
+							 1);
+	}
+	return err;
+}
+
 int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 					union etc_device_record *record)
 {
@@ -813,8 +844,17 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 	};
 	
 	/* Set battery voltage in mV (required by resource spec) */
-	err = lwm2m_set_s32(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID),
-			    (int32_t)roundf(record->battery * 1000.0));
+	err = set_resource_if_changed_s32(cloud_data,
+					  &LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID),
+					  (int32_t)roundf(record->battery * 1000.0));
+	if (err) {
+		return err;
+	}
+
+	/* Set the battery status */
+	err = set_resource_if_changed_s32(cloud_data,
+					  &LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, BATTERY_STATUS_RID),
+					  (int32_t)record->flag);
 	if (err) {
 		return err;
 	}
@@ -823,6 +863,7 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 	err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, TIMESTAMP_RID),
 			(time_t)(record->timestamp));
 	if (err) {
+		
 		return err;
 	}
 	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0, SENSOR_VALUE_RID),

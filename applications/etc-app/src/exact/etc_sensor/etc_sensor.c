@@ -8,6 +8,7 @@
 #include "common.h"
 #include "etc_sensor.h"
 #include "etc_device.h"
+#include "etc_battery.h"
 #include "adc.h"
 
 #include <zephyr/logging/log.h>
@@ -348,6 +349,7 @@ static void etc_sensor_load_calibration(void) {
 		LOG_ERR("Can't load the calibration for reference");
 		return;
 	} 
+	LOG_INF("Calibration value %f %f %f", etc_sensor_adc_calibration_info.offset, etc_sensor_adc_calibration_info.high, etc_sensor_adc_calibration_info.ref);
 	etc_sensor_adc_calibration_info.loaded = true;
 }
 
@@ -427,8 +429,9 @@ int8_t etc_sensor_get_probe_humid_index(void) {
 
 
 uint16_t etc_sensor_get_battery(void) {
-	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &sensor_battery_raw_adc);
-	int adc_mv_battery = sensor_battery_raw_adc * (sFullOhms / sOutputOhms);
+	int raw_battery_adc = sensor_battery_raw_adc;
+	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_battery_adc);
+	int adc_mv_battery = raw_battery_adc * (sFullOhms / sOutputOhms);
 	return adc_mv_battery;
 }
 
@@ -448,6 +451,8 @@ void etc_sensor_run_acquisition(void) {
 	etc_sensor_run_digital_sample();
 	/* Disable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_disable();
+	/* Sync battery status */
+	etc_battery_poll_status();
 	/* Check probe connection */
 	etc_sensor_probe_check();
 }
