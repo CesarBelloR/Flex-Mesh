@@ -314,7 +314,11 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_logger_job job)
 
 static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transmit_interval_s, 
 	enum etc_sensor_status sensor_status) {
-	if (sensor_status != SENSOR_CONNECTED) return -1;
+	if ((sensor_status == SENSOR_NO_CONNECTION) && 
+		(etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
+		return -1;
+	}
+	
 	return align_wakeup(now, transmit_interval_s, ETC_LOGGER_JOB_TX);
 }
 
