@@ -1,5 +1,5 @@
 #include "etc_device.h"
-
+#include "etc_sensor.h"
 #include <string.h>
 
 #include <zephyr/device.h>

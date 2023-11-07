@@ -2,7 +2,7 @@
 #define ETC_DEVICE_H_
 
 #include "events/sensor_event.h"
-
+#include "etc_sensor.h"
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -30,7 +30,7 @@ enum etc_device_mode {
 
 /* Define a enum to describe about power mode */
 enum etc_power_mode_e {
-	ETC_POWER_MODE_AWLAYS_ON = 0x00,
+	ETC_POWER_MODE_ALWAYS_ON = 0x00,
 	ETC_POWER_MODE_INTERVAL = 0x01,
 	ETC_POWER_MODE_PROBE = 0x02,
 };
