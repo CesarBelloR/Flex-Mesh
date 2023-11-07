@@ -708,7 +708,31 @@ int etc_device_reclaim_work(int start_time, int stop_time) {
 }
 
 int etc_device_erase_cfg(void) {
-	return nvs_clear(&etc_fs);
+	int rc = 0;
+	/* Erase config, record and reclaim */
+	for (int id = ETC_CONFIG_ID; id <= ETC_RECORD_RECLAIM; id ++ ) {
+		rc = nvs_delete(&etc_fs, id);
+		__ASSERT_NO_MSG(rc == 0);
+	}
+
+	/* Erase setting */
+	for (int id = ETC_SETTING_TIME_MEASURE_INTERVAL_ID; id <= ETC_SETTING_TX_PROBE_SEC_ID; id ++ ) {
+		rc = nvs_delete(&etc_fs, id);
+		__ASSERT_NO_MSG(rc == 0);
+	}
+
+	/* Erase record stat */
+	etc_device_record_table.newest.sector_idx = 0;
+	etc_device_record_table.oldest.sector_idx = 0;
+	etc_device_record_table.newest.element_idx = 0;
+	etc_device_record_table.oldest.element_idx = 0;
+	etc_device_record_table.total = 0;
+	etc_device_record_table.last_nack_record_id = 0;
+	ram_nack_record_id = 0;
+	rc = etc_nvs_write(ETC_RECORD_STAT, &etc_device_record_table,
+			       sizeof(etc_device_record_table));
+	__ASSERT_NO_MSG(rc == 0);
+	return 0;
 }
 
 uint16_t etc_device_get_tx_logger_lora_offset_mins(void) {
