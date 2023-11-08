@@ -5,6 +5,7 @@
 * [ Hardware ](#Hardware) <br>
 * [ Instruction ](#Instruction) <br>
 * [ Flash ](#Flash) <br>
+* [ Upload symbol file to Memfault ](#Memfault)  
 * [ Retrieve data ](#Retrieve) <br>
   
 <a name="Prerequisites"></a>
@@ -12,6 +13,7 @@
 * **Python 3.9 and above** : Download and install Python from <a href="https://www.python.org/downloads/">here</a>
 * **Git** : Get the latest git from <a href ="https://git-scm.com/downloads">here</a>
 * **nRF Command Line Tools** : Get the latest nrfprog from <a href ="https://www.nordicsemi.com/Products/Development-tools/nRF-Command-Line-Tools">here</a>
+* **[Memfault CLI](https://docs.memfault.com/docs/ci/install-memfault-cli/)**
 
 
 **Note:** Make sure West, Python and Git are available on the system environment PATH.
@@ -74,6 +76,36 @@ pip3 install -r {ROOT}\bootloader\mcuboot\scripts\requirements.txt
 ```
 west flash
 ```
+
+<a name="Memfault"></a>
+# Upload Symbol File to Memfault
+
+Symbol files are automatically uploaded for firmware compiled by the Bitbucket
+pipeline. Use these instructions if you would like to upload locally compiled
+firmware.
+
+## Add environment variables
+
+Add these variables to your .profile file (if using Ubuntu), or define them
+as environment variables in Windows through the settings.  
+These can also be loaded as part of your venv, if you are using one for Zephyr
+already.
+
+```
+$ export MEMFAULT_ORG_TOKEN=<Organization Token>
+$ export MEMFAULT_ORG=exact-technologyq8yb
+$ export MEMFAULT_PROJECT=monitor-2-0
+```
+
+You will need to create an organization token (`MEMFAULT_ORG_TOKEN`) through
+the Memfault app [here](https://app.memfault.com/organizations/exact-technologyq8yb/settings/auth-tokens)
+
+## Upload symbol file
+
+`memfault upload-mcu-symbols <file-to-zephyr.elf>`
+
+For example, if your working directory is etc-app:  
+`memfault upload-mcu-symbols build/zephyr/zephyr.elf`
 
 <a name="Retrieve"></a>
 # Retrieve Data
