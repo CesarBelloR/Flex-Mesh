@@ -1874,7 +1874,7 @@ exit:
 	return ret;
 }
 
-static int dtls_init_psk(uint8_t cid, const struct modem_api_psk *psk)
+static int dtls_set_psk(uint8_t cid, const struct modem_api_psk *psk)
 {
 	char psk_fn[sizeof("!##_server.psk!")];
 	char buf[256];
@@ -1899,6 +1899,27 @@ static int dtls_init_psk(uint8_t cid, const struct modem_api_psk *psk)
 	if (ret != 0) {
 		LOG_DBG("Failed to download PSK file %d", ret);
 	}
+
+	return 0;
+}
+
+static int dtls_init(uint8_t cid, enum modem_api_cred_type type, void *data)
+{
+	if (type == MODEM_API_CRED_TYPE_PSK) {
+		struct modem_api_psk *psk = (struct modem_api_psk *)data;
+		return dtls_set_psk(cid, psk);
+	} else {
+		return -ENOTSUP;
+	}
+}
+
+static int dtls_configure(struct modem_socket *sock)
+{
+	char buf[256];
+	int ret;
+	uint8_t cid = sock->tls_tag;
+
+	__ASSERT_NO_MSG(sock->tls_tag >= 0);
 
 	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0X00AE", "ciphersuite", cid);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
@@ -1938,16 +1959,6 @@ static int dtls_init_psk(uint8_t cid, const struct modem_api_psk *psk)
 	}
 
 	return 0;
-}
-
-static int dtls_init(uint8_t cid, enum modem_api_cred_type type, void *data)
-{
-	if (type == MODEM_API_CRED_TYPE_PSK) {
-		struct modem_api_psk *psk = (struct modem_api_psk *)data;
-		return dtls_init_psk(cid, psk);
-	} else {
-		return -ENOTSUP;
-	}
 }
 
 static int on_connect_tls_init(struct modem_socket *sock)
@@ -2142,8 +2153,8 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 			return -errno;
 		}
 	} else if (sock->ip_proto == IPPROTO_DTLS_1_2) {
-		if (sock->tls_tag < 0) {
-			LOG_ERR("TLS tag is not set, fd: %d", sock->sock_fd);
+		if (dtls_configure(sock) != 0) {
+			LOG_ERR("Error configuring DTLS, fd: %d", sock->sock_fd);
 			errno = ENOENT;
 			return -errno;
 		}
