@@ -456,7 +456,8 @@ retry:
 static void on_all_states(struct lora_msg_data *msg)
 {
 	if (etc_device_is_logger_lora()) {
-		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
+		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) || 
+			IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD)) {
 			LOG_INF("Logger sending data");
 			int rc = 0;
 			do {

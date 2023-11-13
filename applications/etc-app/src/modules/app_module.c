@@ -97,6 +97,12 @@ static void app_set_next_wakekup(int wakeup, enum app_wakeup_tx_work_type work_t
 	wakeup_tx_type = work_type;
 }
 
+static void app_set_tx_work_type(enum app_wakeup_tx_work_type work_type) {
+	k_mutex_lock(&app_module_lock, K_FOREVER);
+	wakeup_tx_type = work_type;
+	k_mutex_unlock(&app_module_lock);
+}
+
 static int app_get_next_wakeup(void) {
 	int wakeup = 0;
 	k_mutex_lock(&app_module_lock, K_FOREVER);
@@ -315,6 +321,7 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_logger_job job)
 
 static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transmit_interval_s, 
 	enum etc_sensor_status sensor_status) {
+	LOG_DBG("%d %d", sensor_status, etc_get_power_mode());
 	if ((sensor_status == SENSOR_NO_CONNECTION) && 
 		(etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
 		return -1;
@@ -377,7 +384,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	time_t next_transmit_logger_lora_sync_cloud = 0;
 	time_t next_transmit_no_probe = 0;
 	time_t next_transmit = 0;
-	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
+	enum app_wakeup_tx_work_type type = app_get_wakeup_tx_work_type();
 	enum etc_sensor_status sensor_status = etc_sensor_get_status();
 	LOG_DBG("Mode %d %d %d", etc_device_get_mode(), etc_get_power_mode(), sensor_status);
 	int wakeup = 0;
@@ -570,7 +577,14 @@ static void app_peripheral_on(bool is_rtc)
 			LOG_DBG("Doing transmit");
 			etc_device_set_job(ETC_LOGGER_JOB_TX);
 			app_set_next_wakeup_time_for_job(ETC_LOGGER_JOB_TX);
-			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
+				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
+			} else {
+				etc_device_set_transmit_sub_job(ETC_TRANSMIT_NORMAL);
+				SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+			}
+			
 			break;
 		}
 		case ETC_LOGGER_JOB_BOTH: {
@@ -703,8 +717,15 @@ static void on_all_events(struct app_msg_data *msg)
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
 		enum etc_logger_job job = etc_device_get_job();
 		if ((job == ETC_LOGGER_JOB_BOTH) || (job == ETC_LOGGER_JOB_TX)) {
-			LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
-			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+				LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_SYNC_CLOUD");
+				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
+				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
+			} else {
+				LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
+				etc_device_set_transmit_sub_job(ETC_TRANSMIT_NORMAL);
+				SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+			}
 		} else if (job == ETC_LOGGER_JOB_LOG) {
 			app_peripheral_off();
 		}
@@ -712,11 +733,7 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 	
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
-		if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
-			SEND_EVENT(app, APP_EVT_DATA_TRANSMIT_CLOUD_IN_LORA);
-		} else {
-			app_peripheral_off();
-		}
+		app_peripheral_off();
 		return;
 	}
 
