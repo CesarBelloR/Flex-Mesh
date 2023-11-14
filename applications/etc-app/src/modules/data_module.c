@@ -122,7 +122,7 @@ enum coneval_supported_data_type {
 };
 
 /* Data module message queue. */
-#define DATA_QUEUE_ENTRY_COUNT		10
+#define DATA_QUEUE_ENTRY_COUNT		20
 #define DATA_QUEUE_BYTE_ALIGNMENT	4
 
 K_MSGQ_DEFINE(msgq_data, sizeof(struct data_msg_data),
