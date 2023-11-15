@@ -223,6 +223,8 @@ bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length)
 
 int etc_device_write_record_sensor(struct sensor_data *sensor)
 {
+	int ret;
+	int64_t time_start = k_uptime_get();
 	union etc_device_record record;
 	record.battery = (float)sensor->battery_mV / 1000.0;
 	record.flag = 0;
@@ -232,7 +234,10 @@ int etc_device_write_record_sensor(struct sensor_data *sensor)
 	}
 	LOG_HEXDUMP_DBG((uint8_t *)&record, sizeof(record), "SAVE");
 
-	return etc_device_write_record(&record);
+	ret = etc_device_write_record(&record);
+
+	LOG_DBG("NVS time record: %lld", k_uptime_get() - time_start);
+	return ret;
 }
 
 int etc_device_write_record(union etc_device_record *record)
@@ -476,6 +481,7 @@ int etc_device_read_record(union etc_device_record *record)
 
 int etc_device_set_ack_record(int record_id)
 {
+	int64_t time_start = k_uptime_get();
 	int rc = etc_nvs_read(record_id, &etc_device_record_header,
 			      sizeof(etc_device_record_header));
 	if (rc != 0) {
@@ -504,6 +510,8 @@ int etc_device_set_ack_record(int record_id)
 	} else {
 		LOG_DBG("Updated the last NACK record id %d successful", record_id);
 	}
+
+	LOG_DBG("NVS time ack: %lld", k_uptime_get() - time_start);
 	return rc;
 }
 static struct etc_device_record_index etc_device_get_next_index(void)
