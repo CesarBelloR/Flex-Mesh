@@ -84,7 +84,7 @@ static K_WORK_DELAYABLE_DEFINE(modem_work, modem_work_fn);
 int64_t modem_wakeup_time = -1;
 
 /* Modem module message queue. */
-#define MODEM_QUEUE_ENTRY_COUNT		10
+#define MODEM_QUEUE_ENTRY_COUNT		20
 #define MODEM_QUEUE_BYTE_ALIGNMENT	4
 
 K_MSGQ_DEFINE(msgq_modem, sizeof(struct modem_msg_data),
