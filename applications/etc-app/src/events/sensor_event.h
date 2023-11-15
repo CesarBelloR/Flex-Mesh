@@ -24,7 +24,7 @@ extern "C" {
 /* No probe connected in DVT2 - etc@0.3.0 */
 #define SENSOR_ADC_NO_CONNECTED 4090
 /* One-wire probe connected in DVT2 - etc@0.3.0 */
-#define SENSOR_ADC_ONE_WIRE_CONNECTED 10
+#define SENSOR_ADC_ONE_WIRE_CONNECTED 50
 
 /** @brief Sensor event types submitted by the Sensor module. */
 enum sensor_event_type {
