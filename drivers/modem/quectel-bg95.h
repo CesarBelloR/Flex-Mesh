@@ -74,13 +74,6 @@
 #define ATOI(s_, value_, desc_)		modem_atoi(s_, value_, desc_, __func__, 10)
 #define ATOI_HEX(s_, value_, desc_)	modem_atoi(s_, value_, desc_, __func__, 16)
 
-enum modem_power_state {
-	MODEM_POWER_OFF,
-	MODEM_POWER_ON,
-	MODEM_POWER_PSM_PENDING,
-	MODEM_POWER_PSM
-};
-
 /* driver data */
 struct modem_data {
 	struct net_if *net_iface;
