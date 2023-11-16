@@ -41,6 +41,7 @@ enum app_wakeup_tx_work_type {
 	APP_WAKEUP_TX_INTERVAL_WORK,
 	APP_WAKEUP_TX_PROBE_WORK,
 	APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK,
+	APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK,
 };
 
 struct app_msg_data {
@@ -608,6 +609,7 @@ static void app_input_handler(enum etc_interface_event_type type)
 	if (type == ETC_INTERFACE_EVENT_RTC) {
 		app_peripheral_on(true);
 	} else if (type == ETC_INTERFACE_EVENT_HALL) {
+		app_set_tx_work_type(APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK);
 		app_peripheral_on(false);
 	} else {
 		/* No action required */
@@ -720,6 +722,9 @@ static void on_all_events(struct app_msg_data *msg)
 			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_SYNC_CLOUD");
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
+				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
+			} else if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK) {
+				LOG_DBG("DATA_EVT_DATA_READY -> APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK");
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else {
 				LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
