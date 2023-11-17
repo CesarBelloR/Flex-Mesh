@@ -118,7 +118,8 @@ struct modem_data {
 #endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */
 	char mdm_time[MDM_TIME_LENGTH];
 	int mdm_rssi;
-	uint8_t mdm_qual;
+	int mdm_rsrp;
+	int mdm_rsrq;
 
 	struct modem_network_data mdm_network;
 	struct k_mutex mdm_network_mutex;

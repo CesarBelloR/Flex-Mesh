@@ -454,9 +454,34 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 	} else {
 		mdata.mdm_rssi = MDM_RSSI_INVALID;
 	}
-	mdata.mdm_qual = qual;
 
-	LOG_INF("RSSI: %d, qual: %d", mdata.mdm_rssi, mdata.mdm_qual);
+	LOG_INF("RSSI: %d", mdata.mdm_rssi);
+
+	return 0;
+}
+
+/* Handler: +QCSQ: <sysmode>, <rssi>[1], <rsrp>[2], <sinr>[3], <rsrq>[4] */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_qcsq)
+{
+	if (argc < 5) {
+		LOG_WRN("QCSQ: not enough args");
+		return -1;
+	}
+	int rssi = ATOI(argv[1], 0, "rssi");
+	int rsrp = ATOI(argv[2], 0, "rsrp");
+	int rsrq = ATOI(argv[4], 0, "rsrq");
+
+	/* -125 and lower is considered invalid, anything larger is valid. */
+	if (rssi <= -125) {
+		mdata.mdm_rssi = MDM_RSSI_INVALID;
+	} else {
+		mdata.mdm_rssi = rssi;
+	}
+
+	mdata.mdm_rsrp = rsrp;
+	mdata.mdm_rsrq = rsrq;
+
+	LOG_INF("RSSI: %d, RSRP: %d, RSRQ: %d", rssi, rsrp, rsrq);
 
 	return 0;
 }
@@ -2454,20 +2479,49 @@ static void modem_connect_work(void)
 	quectel_bg95_set_connected(true);
 }
 
-/* Func: modem_rssi_query_work
- * Desc: Routine to get Modem RSSI.
- */
-static void modem_rssi_query_work(struct k_work *work)
+static int modem_csq(void) 
 {
 	struct modem_cmd cmd  = MODEM_CMD("+CSQ: ", on_cmd_atcmdinfo_rssi_csq, 2U, ",");
 	static char *send_cmd = "AT+CSQ";
 	int ret;
-	k_timeout_t timeout = K_SECONDS(RSSI_TIMEOUT_SECS);
 
 	/* query modem RSSI */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     &cmd, 1U, send_cmd, &mdata.sem_response,
 			     MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+CSQ ret:%d", ret);
+	}
+	return ret;
+}
+
+static int modem_qcsq(void) 
+{
+	struct modem_cmd cmd  = 
+		MODEM_CMD_ARGS_MAX("+QCSQ: ", on_cmd_atcmdinfo_qcsq, 1U, 5U, ",");
+	static char *send_cmd = "AT+QCSQ";
+	int ret;
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     &cmd, 1U, send_cmd, &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+QCSQ ret:%d", ret);
+	}
+	
+	return ret;
+}
+
+/* Func: modem_rssi_query_work
+ * Desc: Routine to get Modem RSSI.
+ */
+static void modem_rssi_query_work(struct k_work *work)
+{
+	int ret;
+	k_timeout_t timeout = K_SECONDS(RSSI_TIMEOUT_SECS);
+
+	/* query modem RSSI */
+	ret = modem_qcsq();
 	if (ret < 0) {
 		if (!mdata.is_connected) {
 			/* Set RSSI to invalid if AT+CSQ returns with an error
@@ -2476,7 +2530,6 @@ static void modem_rssi_query_work(struct k_work *work)
 			   large amounts of data, e.g. firmware update. */
 			mdata.mdm_rssi = MDM_RSSI_INVALID;
 		}
-		LOG_ERR("AT+CSQ ret:%d", ret);
 	}
 
 	modem_connect_work();
@@ -3108,7 +3161,6 @@ static int modem_init(const struct device *dev)
 	mctx.data_rssi	       = &mdata.mdm_rssi;
 
 	/* Set qual and RSSI to 99 (means not known/not connected) */
-	mdata.mdm_qual = 99;
 	mdata.mdm_rssi = MDM_RSSI_INVALID;
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
@@ -3385,7 +3437,12 @@ int quectel_bg95_get_rssi(void)
 	return mdata.mdm_rssi;
 }
 
-int quectel_bg95_get_qual(void)
+int quectel_bg95_get_rsrp(void)
 {
-	return mdata.mdm_qual;
+	return mdata.mdm_rsrp;
+}
+
+int quectel_bg95_get_rsrq(void)
+{
+	return mdata.mdm_rsrq;
 }

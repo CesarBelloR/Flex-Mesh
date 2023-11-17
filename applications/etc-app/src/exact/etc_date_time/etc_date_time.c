@@ -491,7 +491,7 @@ void date_time_force_event(enum date_time_evt_type event)
 	date_time_notify_event(&evt);
 }
 
-SYS_INIT(date_time_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+SYS_INIT(date_time_init, APPLICATION, CONFIG_DATE_TIME_INIT_PRIORITY);
 
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>

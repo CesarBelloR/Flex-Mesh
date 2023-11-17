@@ -156,6 +156,15 @@ int etc_device_get_log_interval_second(void);
 int etc_device_get_tx_interval_second(void);
 int etc_device_get_tx_probe_second(void);
 int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data);
+
+/**
+ * Get the current number of not acknowledged samples (nacks) stored on the
+ * device.
+ * 
+ * @return Number of not acknowledged samples.
+*/
+uint16_t etc_device_nack_count(void);
+
 enum etc_device_mode etc_device_get_mode(void);
 void etc_device_set_job(enum etc_logger_job job);
 enum etc_logger_job etc_device_get_job(void);
