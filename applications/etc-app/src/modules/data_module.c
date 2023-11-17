@@ -122,7 +122,7 @@ enum coneval_supported_data_type {
 };
 
 /* Data module message queue. */
-#define DATA_QUEUE_ENTRY_COUNT		10
+#define DATA_QUEUE_ENTRY_COUNT		20
 #define DATA_QUEUE_BYTE_ALIGNMENT	4
 
 K_MSGQ_DEFINE(msgq_data, sizeof(struct data_msg_data),
@@ -230,6 +230,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
+		__ASSERT_NO_MSG(err == 0);
 		if (err) {
 			LOG_ERR("Message could not be enqueued");
 			SEND_ERROR(data, DATA_EVT_ERROR, err);

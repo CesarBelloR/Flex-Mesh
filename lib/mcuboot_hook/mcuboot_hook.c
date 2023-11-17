@@ -18,8 +18,10 @@ LOG_MODULE_REGISTER(mcuboot_hook, LOG_LEVEL_INF);
 
 #define UI_LED_COLOR_OFF		LED_COLOR(0, 0, 0)
 #define UI_LED_COLOR_PURPLE		LED_COLOR(UI_LED_MAX, 0, UI_LED_MAX)
+#define UI_LED_COLOR_RED		LED_COLOR(UI_LED_MAX, 0, 0)
 
 #define UI_UPDATE_IN_PROGRESS_COLOR	UI_LED_COLOR_PURPLE
+#define UI_ERROR_COLOR			UI_LED_COLOR_RED
 
 static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
@@ -55,5 +57,10 @@ void mcuboot_status_change(mcuboot_status_type_t status)
 	if (status == MCUBOOT_STATUS_UPGRADING) {
 		struct led_color new_color = UI_UPDATE_IN_PROGRESS_COLOR;
 		pwm_out(&led, &new_color);
+	} else if (status == MCUBOOT_STATUS_BOOT_FAILED) {
+		struct led_color new_color = UI_ERROR_COLOR;
+		pwm_out(&led, &new_color);
+	} else {
+		pwm_off(&led);
 	}
 }

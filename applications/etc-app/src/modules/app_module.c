@@ -237,6 +237,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
+		__ASSERT_NO_MSG(err == 0);
 		if (err) {
 			LOG_ERR("Message could not be enqueued");
 			SEND_ERROR(app, APP_EVT_ERROR, err);
@@ -312,20 +313,22 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_logger_job job)
 	return wakeup_time;
 }
 
-static time_t app_get_next_transmit_for_interval_or_probe(time_t now, 
-							  int transmit_interval_s,
-							  enum etc_sensor_status sensor_status) {
-	if (sensor_status == SENSOR_NO_CONNECTION) {
+static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transmit_interval_s, 
+	enum etc_sensor_status sensor_status) {
+	if ((sensor_status == SENSOR_NO_CONNECTION) && 
+		(etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
 		return -1;
 	}
+	
 	return align_wakeup(now, transmit_interval_s, ETC_LOGGER_JOB_TX);
 }
 
-static time_t app_get_next_transmit_for_no_probe(time_t now, uint16_t tx_no_probe_mins, 
+static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mins, 
 	enum etc_sensor_status sensor_status) {
-	if ((sensor_status == SENSOR_CONNECTED) || (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER)) {
-		return (time_t)-1;
+	if ((sensor_status != SENSOR_NO_CONNECTION) || (etc_get_power_mode() != ETC_POWER_MODE_PROBE)) {
+		return -1;
 	}
+
 	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
 	struct tm tm_time = {0};
 	gmtime_r(&now, &tm_time);
@@ -339,10 +342,9 @@ static time_t app_get_next_transmit_for_no_probe(time_t now, uint16_t tx_no_prob
 		(tx_no_probe_mins - tm_time.tm_min) * 60 - tm_time.tm_sec + tx_delay_sec); 
 }
 
-static time_t app_get_next_transmit_for_logger_lora_sync_cloud(time_t now, uint16_t tx_logger_lora_mins) {
-	if (etc_get_device_mode() != ETC_DEVICE_MODE_LORA_LOGGER) {
-		return (time_t)-1;
-	}
+static time_t app_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logger_lora_mins,
+	enum etc_sensor_status sensor_status) {
+	if (etc_get_device_mode() != ETC_DEVICE_MODE_LORA_LOGGER) return -1;
 	struct tm tm_time = {0};
 	gmtime_r(&now, &tm_time);
 	int tx_logger_lora_diff_hours = 0;
@@ -365,6 +367,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	pcf85263a_rtc_get_time(&now);
 	/* Now >= 0 required for calculations below. */
 	__ASSERT_NO_MSG(now >= 0);
+	
 	int wakeup_for_log = etc_device_get_log_interval_second();
 	int wakeup_for_transmit = etc_device_get_tx_interval_second();
 	uint16_t tx_offset_logger_lora_mins = etc_device_get_tx_logger_lora_offset_mins();
@@ -376,6 +379,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 	time_t next_transmit = 0;
 	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
 	enum etc_sensor_status sensor_status = etc_sensor_get_status();
+	LOG_DBG("Mode %d %d %d", etc_device_get_mode(), etc_get_power_mode(), sensor_status);
 	int wakeup = 0;
 
 	struct tm tm_time = {0};
@@ -388,14 +392,13 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 		}
 		case ETC_LOGGER_JOB_TX: {
 			/* Get next transmit in normal case */
-			next_transmit_normal = app_get_next_transmit_for_interval_or_probe(now,
-											   wakeup_for_transmit,
-											   sensor_status);
+			next_transmit_normal = app_get_next_transmit_for_interval_or_probe(now, wakeup_for_transmit,
+				sensor_status);
 			/* Get next transmit in logger lora case (-1 is no plan for next transmit) */
-			next_transmit_logger_lora_sync_cloud = app_get_next_transmit_for_logger_lora_sync_cloud(now, 
-				tx_offset_logger_lora_mins);
+			next_transmit_logger_lora_sync_cloud = app_get_next_transmit_lora_sync_cloud(now, 
+				tx_offset_logger_lora_mins, sensor_status);
 			/* Get next transmit in no probe case (-1 is no plan for next transmit) */
-			next_transmit_no_probe = app_get_next_transmit_for_no_probe(now, tx_offset_no_probe_mins, 
+			next_transmit_no_probe = app_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
 				sensor_status);
 			/* Cast all next transmit to highest integer value if -1 */
 			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
@@ -407,14 +410,13 @@ static void app_set_next_wakeup_time_for_job(enum etc_logger_job job)
 			/* Get next log */
 			next_log = align_wakeup(now, wakeup_for_log, ETC_LOGGER_JOB_LOG);
 			/* Get next transmit in normal case */
-			next_transmit_normal = app_get_next_transmit_for_interval_or_probe(now,
-											   wakeup_for_transmit,
-											   sensor_status);
+			next_transmit_normal = app_get_next_transmit_for_interval_or_probe(now, wakeup_for_transmit,
+				sensor_status);
 			/* Get next transmit in logger lora case (-1 is no plan for next transmit) */
-			next_transmit_logger_lora_sync_cloud = app_get_next_transmit_for_logger_lora_sync_cloud(now, 
-				tx_offset_logger_lora_mins);
+			next_transmit_logger_lora_sync_cloud = app_get_next_transmit_lora_sync_cloud(now, 
+				tx_offset_logger_lora_mins, sensor_status);
 			/* Get next transmit in no probe case (-1 is no plan for next transmit) */
-			next_transmit_no_probe = app_get_next_transmit_for_no_probe(now, tx_offset_no_probe_mins, 
+			next_transmit_no_probe = app_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
 				sensor_status);
 			/* Cast all next transmit to highest integer value if -1 */
 			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
