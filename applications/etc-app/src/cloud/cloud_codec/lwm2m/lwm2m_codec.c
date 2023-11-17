@@ -339,3 +339,16 @@ int data_codec_contains_measurement_data(struct cloud_codec_data *cloud_data)
 
 	return lwm2m_codec_helpers_object_path_list_contains_measurement(cloud_data);
 }
+
+int data_codec_update_reclaim_state(struct cloud_codec_data *cloud_data,
+				    enum data_reclaim_state new_state)
+{
+	int ret;
+
+	ret = lwm2m_codec_helpers_update_reclaim_state(cloud_data, new_state);
+	if (ret != 0) {
+		LOG_ERR("update reclaim status");
+	}
+
+	return ret;
+}

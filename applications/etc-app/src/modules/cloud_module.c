@@ -381,7 +381,19 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	}
 	case CLOUD_WRAP_EVT_REBOOT_REQUEST:
 	{
+		LOG_DBG("CLOUD_WRAP_EVT_REBOOT_REQUEST");
 		SEND_EVENT(cloud, CLOUD_EVT_REBOOT_REQUEST);
+		break;
+	}
+	case CLOUD_WRAP_EVT_RECLAIM_REQUEST:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_RECLAIM_REQUEST %d %d", 
+			evt->reclaim.start_time_s, evt->reclaim.end_time_s);
+		struct cloud_event *cloud_evt = new_cloud_event();
+		cloud_evt->type = CLOUD_EVT_RECLAIM_REQUEST;
+		cloud_evt->data.reclaim.start_time_s = evt->reclaim.start_time_s;
+		cloud_evt->data.reclaim.end_time_s = evt->reclaim.end_time_s;
+		APP_EVENT_SUBMIT(cloud_evt);
 		break;
 	}
 	default:

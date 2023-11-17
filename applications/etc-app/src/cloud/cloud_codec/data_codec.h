@@ -129,6 +129,15 @@ enum json_common_buffer_type {
 	JSON_COMMON_COUNT
 };
 
+/** Used to indicate current state of reclaim.
+*/
+enum data_reclaim_state {
+	RECLAIM_IDLE,
+	RECLAIM_IN_PROGRESS,
+	RECLAIM_SUCCESS,
+	RECLAIM_ERROR
+};
+
 typedef union {
 	struct data_lora_sensors lora;
 	struct data_battery battery;
@@ -261,5 +270,18 @@ int data_codec_recover_data(struct cloud_codec_data *cloud_data,
  * @return 0 on success, otherwise error.
 */
 int data_codec_contains_measurement_data(struct cloud_codec_data *cloud_data);
+
+/**
+ * Update the current reclaim state. New reclaim state will be included
+ * in next send action.
+ * 
+ * @param cloud_data Pointer to struct cloud_data instance. Reclaim status path
+ * will be added to the paths saved in cloud_data.
+ * @param new_state The new reclaim status.
+ * 
+ * @return 0 on success, otherwise error.
+*/
+int data_codec_update_reclaim_state(struct cloud_codec_data *cloud_data,
+				    enum data_reclaim_state new_state);
 
 #endif /* DATA_CODEC_H__ */

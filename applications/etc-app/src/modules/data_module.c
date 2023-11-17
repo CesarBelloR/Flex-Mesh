@@ -121,6 +121,11 @@ enum coneval_supported_data_type {
 	COUNT,
 };
 
+/* Save the current/previous reclaim state, so we can change the LwM2M reclaim
+ * status accordingly.
+ */
+static bool reclaim_active;
+
 /* Data module message queue. */
 #define DATA_QUEUE_ENTRY_COUNT		20
 #define DATA_QUEUE_BYTE_ALIGNMENT	4
@@ -344,23 +349,40 @@ static void data_encode(bool split)
 		LOG_DBG("Recovering previously backed up data.");
 		data_codec_recover_data(&codec, &codec_backup);
 	} else {
+		bool reclaim_status;
 		modem_dynamic.rsrp = quectel_bg95_get_rsrp();
 		modem_dynamic.qual = quectel_bg95_get_rsrq();
 		modem_dynamic.queued = 1;
 
-		send_status.record_id = etc_device_read_record(&record);
-		if (send_status.record_id == 0) {
+		send_status.record_id = etc_device_read_record(&record, 
+							       &reclaim_status);
+		/* Only add a record if it is valid. */
+		if (send_status.record_id != 0) {
+			ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
+			if (ret != 0) {
+				LOG_WRN("No message to publish");
+				return;
+			}	
+		}
+
+		/* Update reclaim status */							   
+		if (reclaim_status != reclaim_active) {
+			if (reclaim_status) {
+				data_codec_update_reclaim_state(&codec,
+								RECLAIM_IN_PROGRESS);
+				reclaim_active = true;
+			} else {
+				data_codec_update_reclaim_state(&codec,
+								RECLAIM_SUCCESS);
+				reclaim_active = false;
+			}
+		} else if (send_status.record_id == 0) {
 			LOG_INF("No record found");
-			/* Report data send complete, so other modules can start
+			/* Return early and report data send complete if we don't
+			 * have any new data to send, so other modules can start
 			 * sending data.
 			 */
 			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
-			return;
-		}
-
-		ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
-		if (ret != 0) {
-			LOG_WRN("No message to publish");
 			return;
 		}
 	}
@@ -535,6 +557,30 @@ static void on_all_states(struct data_msg_data *msg)
 		memcpy(new_lora_data.sensor_msg, msg->module.lora.data.sensor_msg, LORA_EVENT_MSG_DATA_LEN);
 		data_codec_populate_lora_sensor_buffer(lora_buf, &new_lora_data, &head_lora_buf, ARRAY_SIZE(lora_buf));
 		#endif
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_RECLAIM_REQUEST)) {
+		int ret;
+		bool err = false;
+		
+		ret = etc_device_reclaim_record(
+			msg->module.cloud.data.reclaim.start_time_s,
+			msg->module.cloud.data.reclaim.end_time_s);
+		if (ret != 0) {
+			LOG_ERR("Reclaim failed, %d", err);
+			err = true;
+		}
+
+		if (!err) {
+			data_codec_update_reclaim_state(&codec,
+							RECLAIM_IN_PROGRESS);
+			reclaim_active = true;
+			data_encode(false);
+		} else {
+			data_codec_update_reclaim_state(&codec,
+							RECLAIM_ERROR);
+			reclaim_active = false;
+		}
 	}
 }
 

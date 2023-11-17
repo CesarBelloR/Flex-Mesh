@@ -164,6 +164,14 @@ int lwm2m_codec_helpers_set_relay_data(const uint8_t *data, uint16_t data_len);
 void lwm2m_codec_helpers_path_list_log(const struct lwm2m_obj_path path_list[],
 				       uint8_t path_list_size);
 
+/**
+ * Set new reclaim status and add resource to next send.
+ * 
+ * @return true if success, false if fail
+*/
+bool lwm2m_codec_helpers_update_reclaim_state(struct cloud_codec_data *cloud_data,
+					      enum data_reclaim_state new_state);
+
 #ifdef __cplusplus
 }
 #endif
