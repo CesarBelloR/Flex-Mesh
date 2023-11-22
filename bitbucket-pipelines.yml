@@ -41,8 +41,15 @@ pipelines:
             - west build -b etc@0.3.0 -s applications/etc-app -p -- -DOVERLAY_CONFIG="debug.conf rtt.conf overlay-1nce.conf"
             - cp build/zephyr/merged.hex ".out/monitor2.0_etc_0_3_0_vX.X.X_${BITBUCKET_COMMIT_SHORT}_debug.hex"
             - cp build/zephyr/app_update.bin ".out/update/update_monitor2.0_etc_0_3_0_vX.X.X_${BITBUCKET_COMMIT_SHORT}_debug.bin"
+
             ### Build for 1NCE SIM and RTT debug output with Memfault support
-            - west build -b etc@0.3.0 -s applications/etc-app -p -- -DOVERLAY_CONFIG="debug.conf rtt.conf overlay-memfault.conf overlay-1nce.conf"
+            # Write private key stored as secret to file
+            - echo ${MCUBOOT_PRIVATE_KEY_BASE64} | base64 --decode > mcuboot.pem
+            - export MCUBOOT_KEY_PATH="$(realpath mcuboot.pem)"
+            - >
+              west build -b etc@0.3.0 -s applications/etc-app -p -- 
+              -DOVERLAY_CONFIG="debug.conf rtt.conf overlay-memfault.conf overlay-1nce.conf"
+              -Dmcuboot_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"${MCUBOOT_KEY_PATH}\"
             # Upload to Memfault
             - > 
               memfault 
