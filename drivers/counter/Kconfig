@@ -1,8 +1,0 @@
-# PCF85263A Nano Power Real time Clock configuration options
-
-menuconfig PCF85263A
-	bool "PCF85263A Real Time Clock"
-	depends on I2C
-	depends on COUNTER
-	help
-	  Enable SPI/I2C-based driver for PCF85263A based RTC

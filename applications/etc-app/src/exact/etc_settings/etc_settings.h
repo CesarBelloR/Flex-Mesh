@@ -14,7 +14,7 @@ enum etc_serial_number_types {
 
 #define ETC_SETTING_SERIAL_NUMBER_DEFAULT       (enum etc_serial_number_types)CONFIG_SERIAL_NUMBER_TYPE
 #define ETC_SETTING_DEVICE_MODE_DEFAULT		    ETC_DEVICE_MODE_LTE_LOGGER
-#define ETC_SETTING_POWER_MODE_DEFAULT		    ETC_POWER_MODE_POWER_SAVER
+#define ETC_SETTING_POWER_MODE_DEFAULT		    ETC_POWER_MODE_INTERVAL
 #define ETC_SETTING_ALARM_DIRECTION_DEFAULT	    ETC_ALARM_DIR_GREATER
 #define ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT	    900
 #define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT 900
@@ -40,8 +40,11 @@ enum etc_serial_number_types {
 #define ETC_SETTING_TX_INTERVAL_ALARMS_SECS_MIN 60
 #define ETC_SETTING_WAKEUP_EARLY_SECS_MIN	0
 #define ETC_SETTING_TX_DELAY_MSEC_MIN		0
+#define ETC_SETTING_TX_DELAY_MSEC_MIN_LTE   5000
 #define ETC_SETTING_RX_DURATION_SECS_MIN	30
 #define ETC_SETTING_ALARM_THRESHOLD_MIN		-20
+
+#define ETC_SETTING_TX_PROBE_SECS 21600
 
 int etc_settings_init(void);
 void etc_settings_refresh();
@@ -73,6 +76,7 @@ int etc_set_log_interval_secs(uint32_t second);
 int etc_set_log_interval_alarm_secs(uint32_t second);
 int etc_set_tx_interval_secs(uint32_t second);
 int etc_set_tx_interval_alarm_secs(uint32_t second);
+int etc_set_tx_probe_secs(uint32_t second);
 int etc_set_wake_early_secs(uint16_t second);
 int etc_set_tx_delay_msec(uint16_t msecond);
 int etc_set_rx_duration_secs(uint16_t second);
@@ -90,6 +94,7 @@ uint32_t etc_get_log_interval_secs(void);
 uint16_t etc_get_log_interval_alarm_secs(void);
 uint32_t etc_get_tx_interval_secs(void);
 uint32_t etc_get_tx_interval_alarm_secs(void);
+uint32_t etc_get_tx_probe_secs(void);
 uint16_t etc_get_wake_early_secs(void);
 uint16_t etc_get_tx_delay_msec(void);
 uint16_t etc_get_rx_duration_secs(void);

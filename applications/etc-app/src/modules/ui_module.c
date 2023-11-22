@@ -266,8 +266,8 @@ static void ui_module_send(void)
 static void ui_input_handler(enum etc_interface_event_type type) {
 	if (type == ETC_INTERFACE_EVENT_RTC) {
 		LOG_INF("UI -> ETC_INTERFACE_EVENT_RTC");
-	} else if ((type == ETC_INTERFACE_EVENT_RTC) || (type == ETC_INTERFACE_EVENT_HALL)) {
-		ui_module_send();
+	} else if (type == ETC_INTERFACE_EVENT_HALL) {
+		LOG_INF("UI -> ETC_INTERFACE_EVENT_HALL");
 	} else {
 		/* No action required */
 	}
@@ -355,6 +355,30 @@ static void on_state_running(struct ui_msg_data *msg)
 	if (IS_EVENT(msg, lora, LORA_EVT_TX_READY)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_LORA_TRANSMITTING, 5);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_SEND)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_SEND, 2);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_ACK)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_ACK, 2);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_NACK)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_NACK, 2);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+	}
+	
+	if (IS_EVENT(msg, lora, LORA_EVT_ERROR)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_FAIL, 6);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 

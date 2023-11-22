@@ -165,6 +165,6 @@ void main(void)
 	 * main thread idle while the mcumgr server runs.
 	 */
 	while (true) {
-		k_sleep(K_SECONDS(1));
+		k_sleep(K_FOREVER);
 	}
 }

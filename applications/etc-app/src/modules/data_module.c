@@ -122,7 +122,7 @@ enum coneval_supported_data_type {
 };
 
 /* Data module message queue. */
-#define DATA_QUEUE_ENTRY_COUNT		10
+#define DATA_QUEUE_ENTRY_COUNT		20
 #define DATA_QUEUE_BYTE_ALIGNMENT	4
 
 K_MSGQ_DEFINE(msgq_data, sizeof(struct data_msg_data),
@@ -230,6 +230,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
+		__ASSERT_NO_MSG(err == 0);
 		if (err) {
 			LOG_ERR("Message could not be enqueued");
 			SEND_ERROR(data, DATA_EVT_ERROR, err);
@@ -405,8 +406,11 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 /* Message handler for STATE_CLOUD_CONNECTED. */
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
-	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) &&
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
+	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) &&
+	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
+		(IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT_CLOUD_IN_LORA) &&
+	    etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER)) 
+	{
 		data_encode(false);
 		return;
 	}
@@ -521,10 +525,7 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
 		reset_send_status(&send_status);
 	}
-
-	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_NOT_SUPPORTED)) {
-	}
-
+	
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
 		#if 0 /* NO MVP */
 		struct data_lora_sensors new_lora_data = {

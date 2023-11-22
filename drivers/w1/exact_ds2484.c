@@ -79,19 +79,6 @@ static int ds2484_configure(const struct device *dev, enum w1_settings_type type
 		break;
 	case W1_SETTING_RECONFIGURE: {
 		int ret = 0;
-		if (config->slpz_spec.port) {
-			if (!device_is_ready(config->slpz_spec.port)) {
-				LOG_ERR("Port (SLPZ) not ready");
-				return -ENODEV;
-			}
-
-			/* Set SLPZ to HIGH for power up mode */
-			ret = gpio_pin_configure_dt(&config->slpz_spec, GPIO_OUTPUT_ACTIVE);
-			if (ret < 0) {
-				LOG_ERR("Pin configuration (SLPZ) failed: %d", ret);
-				return ret;
-			}
-		}
 
 		ret = ds2482_84_reset_device(&config->i2c_spec);
 		if (ret < 0) {
@@ -114,30 +101,6 @@ static int ds2484_configure(const struct device *dev, enum w1_settings_type type
 
 	return ds2482_84_write_config(&config->i2c_spec, data->reg_device_config);
 }
-
-#ifdef CONFIG_PM_DEVICE
-static int ds2484_pm_control(const struct device *dev, enum pm_device_action action)
-{
-	const struct ds2484_config *config = dev->config;
-
-	switch (action) {
-	case PM_DEVICE_ACTION_SUSPEND:
-		if (!config->slpz_spec.port) {
-			return -ENOTSUP;
-		}
-		return gpio_pin_set_dt(&config->slpz_spec, 0);
-	case PM_DEVICE_ACTION_RESUME:
-		if (!config->slpz_spec.port) {
-			return -ENOTSUP;
-		}
-		return gpio_pin_set_dt(&config->slpz_spec, 1);
-	default:
-		return -ENOTSUP;
-	};
-
-	return 0;
-}
-#endif /* CONFIG_PM_DEVICE */
 
 static int ds2484_init(const struct device *dev)
 {
@@ -166,9 +129,8 @@ static const struct w1_driver_api ds2484_driver_api = {
 		.slpz_spec = GPIO_DT_SPEC_INST_GET_OR(inst, slpz_gpios, {0}),                      \
 		.apu = DT_INST_PROP(inst, active_pullup),                                          \
 	};                                                                                         \
-	static struct ds2484_data inst_##inst##_data;                                              \
-	PM_DEVICE_DT_INST_DEFINE(inst, ds2484_pm_control);                                         \
-	DEVICE_DT_INST_DEFINE(inst, ds2484_init, PM_DEVICE_DT_INST_GET(inst), &inst_##inst##_data, \
+	static struct ds2484_data inst_##inst##_data;                                 \
+	DEVICE_DT_INST_DEFINE(inst, ds2484_init, NULL, &inst_##inst##_data, \
 			      &inst_##inst##_config, POST_KERNEL, CONFIG_W1_INIT_PRIORITY,         \
 			      &ds2484_driver_api);
 

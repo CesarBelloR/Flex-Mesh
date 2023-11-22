@@ -7,6 +7,9 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/usb/usb_device.h>
 #include <ctype.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
 
 #ifdef CONFIG_MCUMGR_CMD_OS_MGMT
 #include <zephyr/mgmt/mcumgr/grp/os_mgmt/os_mgmt.h>
@@ -28,9 +31,6 @@ BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),
 	     "Console device is not ACM CDC UART device");
 
 static void app_driver_init(void) {
-	extern void etc_test_init(void);
-	etc_test_init();
-	// adc_init();
 	pcf85263a_init("I2C_0");
 	pcf85263a_set_interrupt_io(true);
 	pcf85263a_set_clkpin(false);
@@ -49,12 +49,15 @@ void main(void)
 		return;
 	}
 
+	app_driver_init();
+
 	while (!dtr) {
 		uart_line_ctrl_get(dev, UART_LINE_CTRL_DTR, &dtr);
 		k_sleep(K_MSEC(100));
 	}
 
-	app_driver_init();
+	extern void etc_test_init(void);
+	etc_test_init();
 	while(1) {
 		k_sleep(K_FOREVER);
 	}

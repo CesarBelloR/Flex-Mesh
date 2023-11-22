@@ -10,6 +10,12 @@ static char *get_evt_type_str(enum lora_event_type type)
 		return "LORA_EVT_RX_READY";
 	case LORA_EVT_RX_DATA_READY:
 		return "LORA_EVT_RX_DATA_READY";
+	case LORA_EVT_SEND:
+		return "LORA_EVT_SEND";
+	case LORA_EVT_ACK:
+		return "LORA_EVT_ACK";
+	case LORA_EVT_NACK:
+		return "LORA_EVT_NACK";
 	case LORA_EVT_SHUTDOWN_READY:
 		return "LORA_EVT_SHUTDOWN_READY";
 	case LORA_EVT_ERROR:

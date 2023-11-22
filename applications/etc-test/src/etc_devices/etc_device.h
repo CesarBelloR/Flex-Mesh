@@ -38,7 +38,7 @@ enum {
 };
 
 void etc_device_nvs_init(void);
-int etc_device_write_calib(uint16_t calib_id, void *calib, int calib_size);
-int etc_device_read_calib(uint16_t calib_id, void *calib, int calib_size);
+int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size);
+int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size);
 
 #endif /* ETC_DEVICE_H_ */
