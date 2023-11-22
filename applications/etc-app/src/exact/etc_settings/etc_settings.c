@@ -158,8 +158,15 @@ int etc_settings_init(void)
 	if (ret > 0) {
 		saved_psk_len = ret;
 	} else {
-		etc_set_psk(CONFIG_LWM2M_INTEGRATION_PSK, 
-			    sizeof(CONFIG_LWM2M_INTEGRATION_PSK) - 1);
+		uint8_t tmp_psk[ETC_SETTING_PSK_LEN];
+		int ret = hex2bin(CONFIG_LWM2M_INTEGRATION_PSK, sizeof(CONFIG_LWM2M_INTEGRATION_PSK) - 1, 
+			tmp_psk, ETC_SETTING_PSK_LEN);
+		if (ret < 0) {
+			LOG_ERR("Key is too long. Max length is %u",
+				    ETC_SETTING_PSK_LEN * 2);
+		} else {
+			etc_set_psk(tmp_psk, ret);
+		}
 	}
 
 	ret = etc_device_read_setting(ETC_SERIAL_NUMBER_TYPE, &saved_serial_number_type, 
@@ -795,6 +802,14 @@ static int cmd_set_psk(const struct shell *shell, size_t argc, char **argv)
 	return -1;
 }
 
+static int cmd_get_psk(const struct shell *shell, size_t argc, char **argv)
+{
+	uint8_t buf[ETC_SETTING_PSK_LEN] = {0x00};
+	int rc = etc_get_psk(buf, ETC_SETTING_PSK_LEN);
+	shell_hexdump_line(shell, 0, buf, ETC_SETTING_PSK_LEN);
+	return 0;
+}
+
 static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
@@ -1069,7 +1084,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(get_power, NULL, "Get power mode", cmd_get_power),
 	SHELL_CMD(get_alarm_direction, NULL, "Get alarm direction", cmd_get_alarm_direction),
 	SHELL_CMD(get_log_interval, NULL, "Get log interval in second", cmd_get_log_interval),
-	
+	SHELL_CMD(get_psk, NULL, "Get PSK used for cloud connection", cmd_get_psk),
 	SHELL_CMD(get_log_interval_alarm, NULL, "Get log interval alarm in second",
 		  cmd_get_log_interval_alarm),
 	SHELL_CMD(get_tx_interval, NULL, "Get tx interval in second", cmd_get_tx_interval),
