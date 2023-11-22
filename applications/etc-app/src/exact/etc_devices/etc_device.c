@@ -8,11 +8,13 @@
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/random/rand32.h>
 #include <zephyr/fs/nvs.h>
-#include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/kernel.h>
 #include "etc_settings.h"
 #include "cloud/cloud_codec/data_codec.h"
+#include "etc_img.h"
+
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define ETC_SETTINGS_NODE_LABEL etc_settings_storage
@@ -71,6 +73,11 @@ static enum etc_logger_job logger_job = ETC_LOGGER_JOB_LOG;
 static uint16_t tx_logger_lora_offset_mins = 0;
 static uint16_t tx_no_probe_offset_mins = 0;
 static struct etc_device_reclaim_info etc_reclaim_info = {0x00};
+
+/* The public key ID of the current (signed) image. The public key ID 
+ * is the first 4 bytes of the public key hash. 
+ */
+static uint8_t img_pubkey_id[IMG_PUBKEY_ID_LEN];
 
 void etc_device_nvs_init(void)
 {
@@ -209,6 +216,9 @@ void etc_device_init(void)
 {
 	char *dev_str = "Unknown";
 	enum etc_device_mode dev_mode = etc_get_device_mode();
+	uint8_t hash[IMAGE_HASH_LEN];
+	int rc;
+
 	logger_job = ETC_LOGGER_JOB_TX;
 	/* Logger Lora mode will sync with interval quarter hour */
 	tx_logger_lora_offset_mins = (uint16_t)((sys_rand32_get() % 4) *
@@ -222,6 +232,14 @@ void etc_device_init(void)
 		dev_str = "LTE Logger";
 	}
 	LOG_INF("Device is %s", dev_str);
+
+	rc = etc_img_get_pubkey_hash(hash);
+	if (rc != 0) {
+		LOG_WRN("retrieving img pubkey hash: %d", rc);
+	} else {
+		LOG_HEXDUMP_DBG(hash, IMAGE_HASH_LEN, "pubkey hash");
+		memcpy(img_pubkey_id, hash, sizeof(img_pubkey_id));
+	}
 }
 
 bool etc_device_buffer_is_erased(uint8_t *buf, uint8_t length)
@@ -788,12 +806,23 @@ int etc_device_erase_cfg(void) {
 	return 0;
 }
 
-uint16_t etc_device_get_tx_logger_lora_offset_mins(void) {
+uint16_t etc_device_get_tx_logger_lora_offset_mins(void) 
+{
 	return tx_logger_lora_offset_mins;
 }
 
-uint16_t etc_device_get_tx_no_probe_offset_mins(void) {
+uint16_t etc_device_get_tx_no_probe_offset_mins(void) 
+{
 	return tx_no_probe_offset_mins;
+}
+
+int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len)
+{
+	__ASSERT_NO_MSG(pubkey_id_len >= sizeof(img_pubkey_id));
+
+	memcpy(pubkey_id, img_pubkey_id, sizeof(img_pubkey_id));
+	
+	return sizeof(img_pubkey_id);
 }
 
 #ifdef CONFIG_SHELL

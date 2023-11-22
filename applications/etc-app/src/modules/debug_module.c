@@ -205,6 +205,7 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_START)) {
 		set_device_id();
+		etc_mflt_metrics_init_img_pubkey_id();
 	}
 
 	/* Send Memfault data at the same time application data is sent to save overhead

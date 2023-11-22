@@ -14,6 +14,8 @@
 #define ETC_DEVICE_NUM_SENSOR  (6) // 5 temperatures + 1 humidity
 #define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR (16)
 
+#define IMG_PUBKEY_ID_LEN	4
+
 /* Define an enum to describe the job of logger currently */
 enum etc_logger_job {
 	ETC_LOGGER_JOB_LOG = 0x00,
@@ -181,4 +183,15 @@ int etc_device_reclaim_work(int start_time, int stop_time);
 int etc_device_erase_cfg(void);
 uint16_t etc_device_get_tx_logger_lora_offset_mins(void);
 uint16_t etc_device_get_tx_no_probe_offset_mins(void);
+
+/** Get the current image's pubkey ID. The public key ID is the first 4 bytes
+ * of the public key hash that is stored in the image's TLV.
+ * 
+ * @param pubkey_id Buffer to hold the pubkey id. Needs to be at least 4 bytes
+ * long. See @ref IMG_PUBKEY_ID_LEN.
+ * @param pubkey_id_len Size of the buffer.
+ * 
+ * @return Number of bytes written to pubkey_id 
+*/
+int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len);
 #endif /* ETC_DEVICE_H_ */

@@ -65,4 +65,10 @@ void etc_mflt_metrics_ota_started(void);
 */
 void etc_mflt_metrics_ota_failed(void);
 
+/**
+ * Set the device_img_pubkey_id attribute to the currently used
+ * image public key ID.
+*/
+void etc_mflt_metrics_init_img_pubkey_id(void);
+
 #endif /* ETC_MEMFAULT_METRICS_H_ */
