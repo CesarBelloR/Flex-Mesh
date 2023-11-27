@@ -725,6 +725,7 @@ static void on_all_events(struct app_msg_data *msg)
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK) {
 				LOG_DBG("DATA_EVT_DATA_READY -> APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK");
+				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_MAGNET);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else {
 				LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");

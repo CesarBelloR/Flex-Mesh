@@ -26,7 +26,8 @@ enum etc_logger_job {
 /* Define an enum to describe the sub job for transmit event */
 enum etc_transmit_sub_job {
 	ETC_TRANSMIT_NORMAL,
-	ETC_TRANSMIT_SYNC_CLOUD_LORA
+	ETC_TRANSMIT_SYNC_CLOUD_LORA,
+	ETC_TRANSMIT_SYNC_MAGNET,
 };
 
 /* Define a enum to describe about device mode */
