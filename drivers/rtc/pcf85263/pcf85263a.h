@@ -263,4 +263,13 @@ bool pcf85263a_write_ram(uint8_t value);
  */
 uint8_t pcf85263a_read_ram(void);
 void pcf85263a_set_clkpin(bool enable);
+
+/** Set the RTC offset to improve accuracy.
+ * 
+ * @param offset_ppm Pointer to RTC clock offset in ppm derived through calibration process.
+ * 
+ * @retval 0: successful
+ * @retval <0: error
+*/
+int pcf85263a_set_offset(float *offset_ppm);
 #endif /* PCF85263A_H_ */

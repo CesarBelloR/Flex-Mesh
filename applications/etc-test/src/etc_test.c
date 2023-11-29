@@ -33,6 +33,8 @@
 #include "bq24195.h"
 #endif
 #include "etc_device.h"
+#include "rtc_calib.h"
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
@@ -1723,3 +1725,48 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings,
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
 SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);
+
+static int cmd_rtc_calib(const struct shell *shell, size_t argc, char **argv)
+{
+	if (calibrate_rtc() != 0) {
+		shell_error(shell, "Error calibrating RTC");
+		return -1;
+	}
+
+	shell_print(shell, "RTC calibrated");
+
+	return 0;
+}
+
+static int cmd_rtc_offset(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	float offset_ppm;
+
+	if (argc == 1) {
+		offset_ppm = get_rtc_offset();
+		shell_print(shell, "RTC offset: %.2f ppm", offset_ppm);
+		return 0;
+	} else if (argc == 2) {
+		offset_ppm = (float)atof(argv[1]);
+		ret = set_rtc_offset(&offset_ppm);
+		if (ret == 0) {
+			shell_print(shell, "Set RTC offset to %.2f ppm", offset_ppm);
+			return 0;
+		} else {
+			shell_error(shell, "Error setting RTC offset");
+			return -1;
+		}
+	}
+
+	shell_print(shell, "Usage: %s [<offset in ppm>]\n"
+			   "  If offset is not provided, print current offset.",
+		    argv[0]);
+	return -1;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_rtc, 
+	SHELL_CMD(calibrate, NULL, "Calibrate RTC", cmd_rtc_calib),
+	SHELL_CMD_ARG(offset, NULL, "Get/set offset: rtc offset [<offset in ppm>]", cmd_rtc_offset, 1, 1),
+	SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(rtc, &sub_rtc, "RTC calibration", NULL);
