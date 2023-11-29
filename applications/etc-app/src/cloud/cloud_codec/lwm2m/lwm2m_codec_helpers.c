@@ -1094,6 +1094,48 @@ bool lwm2m_codec_helpers_object_path_list_contains_measurement(struct cloud_code
 	return false;
 }
 
+bool lwm2m_codec_helpers_update_reclaim_state(struct cloud_codec_data *cloud_data,
+					      enum data_reclaim_state new_state)
+{
+	uint8_t lwm2m_reclaim_state;
+	const struct lwm2m_obj_path reclaim_state_path = 
+		LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID, 0, ETC_RECLAIM_OBJ_R_STATUS);
+	int err;
+
+	switch (new_state) {
+	case RECLAIM_IDLE:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_IDLE;
+		break;
+	case RECLAIM_IN_PROGRESS:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_IN_PROGRESS;
+		break;
+
+	case RECLAIM_SUCCESS:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_COMPLETE;
+		break;
+
+	case RECLAIM_ERROR:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_ERROR;
+		break;
+	
+	default:
+		return false;
+	}
+
+	err = lwm2m_set_u8(&reclaim_state_path, lwm2m_reclaim_state);
+	if (err) {
+		return false;
+	}
+	err = lwm2m_codec_helpers_object_path_list_add(cloud_data, 
+						       &reclaim_state_path,
+						       1);
+	if (err) {
+		return false;
+	}
+
+	return true;
+}
+
 /**
  * @return If success, index copied into place
  *         If no valid entry found: -1.

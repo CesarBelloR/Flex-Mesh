@@ -150,14 +150,26 @@ int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int set
 
 int etc_device_write_record_sensor(struct sensor_data *sensor);
 int etc_device_write_record(union etc_device_record *record);
-int etc_device_read_record(union etc_device_record *record);
+
+/** Get the next-in-line (unack'd) measurement record. If a reclaim is active,
+ * previously ack'd records that are part of the reclaim period will be returned
+ * as well.
+ * 
+ * @param record Buffer to store measurement record.
+ * @param active_reclaim Buffer to store the current reclaim status. True if
+ * reclaim is active.
+ * 
+ * @retval Record ID >0 if successful.
+ * @retval 0 if error or no nack record available (all records have been ack'd
+ * and there is no active reclaim).
+*/
+int etc_device_read_record(union etc_device_record *record, bool *active_reclaim);
 int etc_device_set_ack_record(int record_id);
 bool etc_device_is_logger_lora(void);
 int etc_device_get_rx_timeout(void);
 int etc_device_get_log_interval_second(void);
 int etc_device_get_tx_interval_second(void);
 int etc_device_get_tx_probe_second(void);
-int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void* data);
 
 /**
  * Get the current number of not acknowledged samples (nacks) stored on the

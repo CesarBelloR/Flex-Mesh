@@ -19,6 +19,7 @@
 #include "etc_lwm2m_client_utils.h"
 #include "lwm2m_firmware.h"
 #include "lwm2m/lwm2m_codec_helpers.h"
+#include "etc_reclaim_obj_48934.h"
 
 #include "cloud/cloud_wrapper.h"
 
@@ -234,6 +235,47 @@ static int device_reboot_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_l
 	return 0;
 }
 
+/* Callback handler triggered when lwm2m object resource 48934/0/3 
+ * (EXACT Reclaim/reclaim) is executed. */
+static int reclaim_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_len)
+{
+	ARG_UNUSED(args);
+	ARG_UNUSED(args_len);
+	ARG_UNUSED(obj_inst_id);
+	int err;
+
+	struct cloud_wrap_event cloud_wrap_evt = {
+		.type = CLOUD_WRAP_EVT_RECLAIM_REQUEST
+	};
+
+	err = lwm2m_get_s32(&LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID,
+				       obj_inst_id, 
+				       ETC_RECLAIM_OBJ_R_START_TIME),
+			    &cloud_wrap_evt.reclaim.start_time_s);
+	if (err) {
+		LOG_ERR("get start time, err %d", err);
+		return -ENOENT;
+	}
+	
+	err = lwm2m_get_s32(&LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID,
+				       obj_inst_id, 
+				       ETC_RECLAIM_OBJ_R_END_TIME),
+			    &cloud_wrap_evt.reclaim.end_time_s);
+	if (err) {
+		LOG_ERR("get start time, err %d", err);
+		return -ENOENT;
+	}
+
+	if (cloud_wrap_evt.reclaim.start_time_s > 
+	    cloud_wrap_evt.reclaim.end_time_s) {
+		LOG_ERR("start time < end time");
+		return -EINVAL;
+	}
+
+	cloud_wrapper_notify_event(&cloud_wrap_evt);
+	return 0;
+}
+
 static void send_cb(enum lwm2m_send_status status)
 {
 	struct cloud_wrap_event cloud_wrap_evt = { 0 };
@@ -361,6 +403,14 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 					   device_reboot_cb);
 	if (err) {
 		LOG_ERR("lwm2m_engine_register_exec_callback, error: %d", err);
+		return err;
+	}
+
+	err = lwm2m_register_exec_callback(&LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID,
+						      0, ETC_RECLAIM_OBJ_R_RECLAIM),
+					   reclaim_exec_cb);
+	if (err) {
+		LOG_ERR("register reclaim exec callback, error: %d", err);
 		return err;
 	}
 

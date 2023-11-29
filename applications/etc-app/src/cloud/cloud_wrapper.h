@@ -64,6 +64,8 @@ enum cloud_wrap_event_type {
 	CLOUD_WRAP_EVT_PGPS_DATA_RECEIVED,
 	/** Reboot request received from cloud. */
 	CLOUD_WRAP_EVT_REBOOT_REQUEST,
+	/** Reclaim request received from cloud */
+	CLOUD_WRAP_EVT_RECLAIM_REQUEST,
 	/** Request to connect to LTE. */
 	CLOUD_WRAP_EVT_LTE_CONNECT_REQUEST,
 	/** Request to disconnect from LTE. */
@@ -96,6 +98,15 @@ struct cloud_wrap_event_data {
 	size_t len;
 };
 
+/** Contains reclaim start and end times that are included in a 
+ *  CLOUD_WRAP_EVT_RECLAIM_REQUEST event.
+ * 
+*/
+struct reclaim_data {
+	int32_t start_time_s;
+	int32_t end_time_s;
+};
+
 /** @brief Cloud wrapper API event. */
 struct cloud_wrap_event {
 	enum cloud_wrap_event_type type;
@@ -106,6 +117,9 @@ struct cloud_wrap_event {
 		/** Error code signifying the cause of error. */
 		int err;
 		uint16_t message_id;
+		/** Struct containing reclaim data when event is 
+		 *  CLOUD_WRAP_EVT_RECLAIM_REQUEST */
+		struct reclaim_data reclaim;
 	};
 };
 

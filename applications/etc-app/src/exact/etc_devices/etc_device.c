@@ -440,7 +440,9 @@ uint16_t etc_device_nack_count(void)
 	return nacks;
 }
 
-int etc_device_find_nack(etc_device_record_reading_callback reading_callback, void *data)
+static int etc_device_find_nack(etc_device_record_reading_callback reading_callback, 
+				void *data, 
+				bool *active_reclaim)
 {
 	int rc = 0;
 	uint16_t last_id;
@@ -452,7 +454,14 @@ int etc_device_find_nack(etc_device_record_reading_callback reading_callback, vo
 	get_current_record_ids(&last_id, &newest_id);
 
 	if (etc_reclaim_info.flag_in_process == 1) {
+		if (active_reclaim != NULL) {
+			*active_reclaim = true;
+		}
 		return etc_device_reclaim_data(reading_callback, data);
+	}
+
+	if (active_reclaim != NULL) {
+		*active_reclaim = false;
 	}
 
 	if (last_id == newest_id) {
@@ -523,9 +532,11 @@ static int etc_device_record_reading(uint16_t record_id, void *data)
 	return record_id;
 }
 
-int etc_device_read_record(union etc_device_record *record)
+int etc_device_read_record(union etc_device_record *record, bool *active_reclaim)
 {
-	int rc = etc_device_find_nack(etc_device_record_reading, record);
+	int rc = etc_device_find_nack(etc_device_record_reading,
+				      record,
+				      active_reclaim);
 	if (rc < 0) {
 		LOG_WRN("Don't have NACK record");
 		return 0;
@@ -839,7 +850,7 @@ static int cmd_num_report_record(const struct shell *shell, size_t argc, char **
 {
 	uint16_t total = etc_device_record_table.total;
 	uint16_t nack = 0;
-	int rc = etc_device_find_nack(cmd_get_record_reading, &nack);
+	int rc = etc_device_find_nack(cmd_get_record_reading, &nack, NULL);
 	if (rc != 0) {
 		shell_error(shell, "Can't query NACK record");
 		return 0;
@@ -890,7 +901,9 @@ static int cmd_get_nack_id_list_reading(uint16_t record_id, void *data)
 
 static int cmd_get_nack_id_list(const struct shell *shell, size_t argc, char **argv)
 {
-	int rc = etc_device_find_nack(cmd_get_nack_id_list_reading, (void *)shell);
+	int rc = etc_device_find_nack(cmd_get_nack_id_list_reading,
+				      (void *)shell,
+				      NULL);
 	if (rc < 0) {
 		shell_error(shell, "Don't have NACK record");
 		return 0;
