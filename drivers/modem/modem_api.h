@@ -109,13 +109,22 @@ struct modem_static_info {
 
 enum modem_api_data_request {
 	MODEM_API_DATA_REQUEST_STATIC,
-	MODEM_API_DATA_REQUEST_DYNAMIC
+	MODEM_API_DATA_REQUEST_DYNAMIC,
+	MODEM_API_DATA_REQUEST_POWER_STATE
+};
+
+enum modem_power_state {
+	MODEM_POWER_OFF,
+	MODEM_POWER_ON,
+	MODEM_POWER_PSM_PENDING,
+	MODEM_POWER_PSM
 };
 
 struct modem_api_data {
 	union {
 		struct modem_static_info modem_info;
 		struct modem_network_data modem_network;
+		enum modem_power_state power_state;
 	};
 };
 

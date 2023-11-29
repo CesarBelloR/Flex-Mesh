@@ -3054,11 +3054,18 @@ static int quectel_bg95_get_data(const struct device *dev,
 		return -EINVAL;
 	}
 
-	if (request == MODEM_API_DATA_REQUEST_STATIC) {
+	switch (request) {
+	case MODEM_API_DATA_REQUEST_STATIC:
 		return quectel_bg95_get_static_info(dev, &data->modem_info);
-	} else if (MODEM_API_DATA_REQUEST_DYNAMIC) {
+	
+	case MODEM_API_DATA_REQUEST_DYNAMIC:
 		return quectel_bg95_modem_get_dynamic_info(dev, &data->modem_network);
-	} else {
+
+	case MODEM_API_DATA_REQUEST_POWER_STATE:
+		data->power_state = mdata.power;
+		return 0;
+
+	default:
 		return -ENOTSUP;
 	}
 }
@@ -3428,7 +3435,8 @@ int quectel_bg95_get_time(char* time_buf) {
 	return 0;
 }
 
-bool quectel_bg95_is_ready(void) {
+bool quectel_bg95_is_ready(void) 
+{
 	return mdata.is_connected;
 }
 

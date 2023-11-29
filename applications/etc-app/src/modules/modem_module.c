@@ -484,28 +484,38 @@ static bool data_type_is_requested(enum app_data_type *data_list,
 
 static int setup(void)
 {
+	struct modem_api_data modem_data;
+	int ret;
+
 	if (modem_dev != NULL) {
 		modem_evt_handler_init(modem_dev, modem_evt_handler);
 	}
 
+	ret = modem_get_data(modem_dev, MODEM_API_DATA_REQUEST_POWER_STATE, 
+			     &modem_data);
+	/* There's something seriously wrong if this request does not return 0. */
+	__ASSERT_NO_MSG(ret == 0);
+
 	if (quectel_bg95_is_ready()) {
 		modem_set_connected();
 		dynamic_modem_data_get();
-	} else {
+	} else if (modem_data.power_state == MODEM_POWER_ON) {
+		state_set(STATE_CONNECTING);
 		k_work_reschedule(&modem_work,
 				K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
 		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
+	} else {
+		/* Power is off. Set the state machine state accordingly. */
+		state_set(STATE_DISCONNECTED);
+
+		if (modem_data.power_state == MODEM_POWER_PSM_PENDING ||
+		    modem_data.power_state == MODEM_POWER_PSM) {
+			sub_state_lte_connected_set(SUB_STATE_MODEM_PSM);
+		} else {
+			sub_state_lte_connected_set(SUB_STATE_MODEM_OFF);
+		}
 	}
 	return 0;
-}
-
-/* Message handler for STATE_INIT */
-static void on_state_init(struct modem_msg_data *msg)
-{
-	LOG_DBG("");
-	int err = setup();
-	__ASSERT(err == 0, "Failed running setup()");
-	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
 }
 
 /* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_OFF. */
@@ -636,8 +646,6 @@ void modem_module_thread_fn(void)
 	struct modem_msg_data msg = { 0 };
 
 	self.thread_id = k_current_get();
-	LOG_INF("Go to modem");
-	state_set(STATE_CONNECTING);
 	SEND_EVENT(modem, MODEM_EVT_INITIALIZED);
 
 	err = setup();
@@ -651,7 +659,6 @@ void modem_module_thread_fn(void)
 
 		switch (state) {
 		case STATE_INIT:
-			on_state_init(&msg);
 			break;
 		case STATE_DISCONNECTED:
 			switch (sub_state)
