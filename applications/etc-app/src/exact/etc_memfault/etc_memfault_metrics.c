@@ -6,6 +6,7 @@
 #include "etc_memfault.h"
 #include "etc_memfault_metrics.h"
 #include "etc_settings.h"
+#include "etc_device.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/sensor.h>
@@ -49,6 +50,17 @@ static bool battery_charger_was_connected;
 static int8_t battery_charge_level_percent = -1;
 static uint8_t num_started_ota_attempts;
 static uint8_t num_failed_ota_attempts;
+
+void etc_mflt_metrics_init_img_pubkey_id(void)
+{
+	uint8_t pubkey_id[IMG_PUBKEY_ID_LEN];
+	char pubkey_id_hex[2 * IMG_PUBKEY_ID_LEN + 1];
+
+	etc_device_get_img_pubkey_id(pubkey_id, sizeof(pubkey_id));
+	bin2hex(pubkey_id, sizeof(pubkey_id), pubkey_id_hex, sizeof(pubkey_id_hex));
+	memfault_metrics_heartbeat_set_string(MEMFAULT_METRICS_KEY(device_img_pubkey_id),
+					      pubkey_id_hex);
+}
 
 void etc_mflt_metrics_charging(enum sensor_event_type evt)
 {

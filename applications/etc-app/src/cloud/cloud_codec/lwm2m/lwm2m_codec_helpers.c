@@ -16,6 +16,7 @@
 #include "lwm2m_codec_helpers.h"
 #include "app_version.h"
 #include "etc_util.h"
+#include "etc_device.h"
 #include "etc_settings.h"
 #include "etc_sensor.h"
 #include "etc_battery.h"
@@ -634,6 +635,7 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 int lwm2m_codec_helpers_set_device_data(void)
 {
 	int err;
+	uint8_t pubkey_id[IMG_PUBKEY_ID_LEN];
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
 				CONFIG_CLOUD_CODEC_MODEL,
@@ -690,6 +692,14 @@ int lwm2m_codec_helpers_set_device_data(void)
 				(uint16_t)strlen(device_id),
 				(uint16_t)strlen(device_id),
 				LWM2M_RES_DATA_FLAG_RO);
+	if (err) {
+		return err;
+	}
+
+	etc_device_get_img_pubkey_id(pubkey_id, sizeof(pubkey_id));
+	err = lwm2m_set_opaque(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0,
+					  ETC_INFO_OBJ_R_IMG_PUBKEY_ID),
+			       pubkey_id, sizeof(pubkey_id));
 	if (err) {
 		return err;
 	}

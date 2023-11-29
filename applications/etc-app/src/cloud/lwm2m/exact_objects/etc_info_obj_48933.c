@@ -21,9 +21,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define OBJECT_ID ETC_INFO_OBJECT_ID
 #define OBJECT_VERSION_MAJOR 1
-#define OBJECT_VERSION_MINOR 0
+#define OBJECT_VERSION_MINOR 1
 
-#define RESOURCES_MAX_ID			4
+#define RESOURCES_MAX_ID			5
 #define RESOURCE_INSTANCE_COUNT			(RESOURCES_MAX_ID)
 
 /* Storage variables to hold info values. */
@@ -31,6 +31,7 @@ static char imei[ETC_INFO_IMEI_SIZE];
 static char modem_rev[ETC_INFO_MODEM_REV_SIZE];
 static char imsi[ETC_INFO_IMSI_SIZE];
 static char iccid[ETC_INFO_ICCID_SIZE];
+static uint8_t img_pubkey_id[ETC_INFO_IMG_PUBKEY_ID_SIZE];
 
 static struct lwm2m_engine_obj object;
 static struct lwm2m_engine_obj_field fields[] = {
@@ -38,6 +39,7 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_MODEM_REV, R, STRING),
 	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_IMSI, R, STRING),
 	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_ICCID, R, STRING),
+	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_IMG_PUBKEY_ID, R, OPAQUE),
 };
 
 static struct lwm2m_engine_obj_inst inst;
@@ -59,6 +61,8 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 			  imsi, sizeof(imsi));
 	INIT_OBJ_RES_DATA(ETC_INFO_OBJ_R_ICCID, res, i, res_inst, j,
 			  iccid, sizeof(iccid));
+	INIT_OBJ_RES_DATA(ETC_INFO_OBJ_R_IMG_PUBKEY_ID, res, i, res_inst, j,
+			  img_pubkey_id, sizeof(img_pubkey_id));
 
 	inst.resources = res;
 	inst.resource_count = i;
