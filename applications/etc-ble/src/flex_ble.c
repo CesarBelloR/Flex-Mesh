@@ -79,19 +79,18 @@ static void flex_ble_set_bt_name(void)
 BT_GATT_SERVICE_DEFINE(flex_svc,
 	BT_GATT_PRIMARY_SERVICE(BT_UUID_SERVICE),
 	BT_GATT_CHARACTERISTIC(BT_UUID_SENSOR_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-			       BT_GATT_PERM_READ_AUTHEN, NULL,
+			       BT_GATT_PERM_READ_ENCRYPT, NULL,
 			       NULL, NULL),
-	BT_GATT_CCC(flex_sensor_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+	BT_GATT_CCC(flex_sensor_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
 	BT_GATT_CHARACTERISTIC(BT_UUID_RECLAIM_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-			       BT_GATT_PERM_READ_AUTHEN, NULL,
+			       BT_GATT_PERM_READ_ENCRYPT, NULL,
 			       NULL, NULL),
-	BT_GATT_CCC(flex_reclaim_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+	BT_GATT_CCC(flex_reclaim_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
 	BT_GATT_CHARACTERISTIC(BT_UUID_CONFIG_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY | BT_GATT_CHRC_WRITE,
-			       BT_GATT_PERM_READ_AUTHEN | BT_GATT_PERM_WRITE_AUTHEN, NULL,
+			       BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT, NULL,
 			       NULL, NULL),
-	BT_GATT_CCC(flex_config_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
+	BT_GATT_CCC(flex_config_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT)
 );
-
 
 static void flex_ble_sim_data(void) {
 	float temp_1 = (float)(sys_rand32_get() % 125);
@@ -141,6 +140,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	k_work_submit(&advertise_work);
 }
 
+#if defined(CONFIG_BT_SMP)
 static void security_changed(struct bt_conn *conn, bt_security_t level,
 			     enum bt_security_err err)
 {
@@ -153,31 +153,31 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 	} else {
 		LOG_WRN("Security failed: %s level %u err %d", addr,
 			level, err);
+		int rc = bt_unpair(BT_ID_DEFAULT, bt_conn_get_dst(conn));
+		LOG_DBG("Unpair this connection %d", rc);
 	}
 }
+#endif
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected = connected,
 	.disconnected = disconnected,
+#if defined(CONFIG_BT_SMP)
 	.security_changed = security_changed,
+#endif
 };
 
 static void auth_cancel(struct bt_conn *conn)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
-
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
 	LOG_INF("Pairing cancelled: %s", addr);
 }
-
 
 static void pairing_complete(struct bt_conn *conn, bool bonded)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
-
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
 	LOG_INF("Pairing completed: %s, bonded: %d", addr, bonded);
 }
 
@@ -185,9 +185,7 @@ static void pairing_complete(struct bt_conn *conn, bool bonded)
 static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
-
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
 	LOG_INF("Pairing failed conn: %s, reason %d", addr, reason);
 }
 
