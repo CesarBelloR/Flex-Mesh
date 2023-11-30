@@ -23,6 +23,13 @@ enum etc_logger_job {
 	ETC_LOGGER_JOB_BOTH,
 };
 
+/* Define an enum to describe the sub job for transmit event */
+enum etc_transmit_sub_job {
+	ETC_TRANSMIT_NORMAL,
+	ETC_TRANSMIT_SYNC_CLOUD_LORA,
+	ETC_TRANSMIT_SYNC_MAGNET,
+};
+
 /* Define a enum to describe about device mode */
 enum etc_device_mode {
 	ETC_DEVICE_MODE_RELAY = 0x00,
@@ -182,6 +189,8 @@ uint16_t etc_device_nack_count(void);
 enum etc_device_mode etc_device_get_mode(void);
 void etc_device_set_job(enum etc_logger_job job);
 enum etc_logger_job etc_device_get_job(void);
+void etc_device_set_transmit_sub_job(enum etc_transmit_sub_job job);
+enum etc_transmit_sub_job etc_device_get_transmit_sub_job(void);
 const struct device* etc_device_get_record(void);
 size_t etc_device_get_record_size(void);
 off_t etc_device_get_record_offset(void);

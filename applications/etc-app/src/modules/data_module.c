@@ -417,8 +417,12 @@ static void data_send_work_fn(struct k_work *work)
 /* Message handler for STATE_CLOUD_DISCONNECTED. */
 static void on_cloud_state_disconnected(struct data_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) &&
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) && 
+	    ((etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
+		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET) ||
+		((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
+		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))
+	 )) {
 		state_set(STATE_CLOUD_CONNECTED);	
 		data_encode(false);
 		return;
@@ -428,11 +432,18 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 /* Message handler for STATE_CLOUD_CONNECTED. */
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
-	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) &&
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
-		(IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT_CLOUD_IN_LORA) &&
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER)) 
+	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && 
+		etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER))
 	{
+		data_encode(false);
+		return;
+	}
+
+	if ((IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD) && 
+		(((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
+		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA)) || 
+		(etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
+		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET)))) {
 		data_encode(false);
 		return;
 	}

@@ -70,6 +70,7 @@ static struct nvs_fs etc_fs;
 static struct nvs_fs record_fs;
 static uint16_t ram_nack_record_id;
 static enum etc_logger_job logger_job = ETC_LOGGER_JOB_LOG;
+static enum etc_transmit_sub_job transmit_sub_job = ETC_TRANSMIT_NORMAL;
 static uint16_t tx_logger_lora_offset_mins = 0;
 static uint16_t tx_no_probe_offset_mins = 0;
 static struct etc_device_reclaim_info etc_reclaim_info = {0x00};
@@ -674,6 +675,14 @@ void etc_device_set_job(enum etc_logger_job job) {
 
 enum etc_logger_job etc_device_get_job(void) {
 	return logger_job;
+}
+
+void etc_device_set_transmit_sub_job(enum etc_transmit_sub_job job) {
+	transmit_sub_job = job;
+}
+
+enum etc_transmit_sub_job etc_device_get_transmit_sub_job(void) {
+	return transmit_sub_job;
 }
 
 const struct device* etc_device_get_record(void) {
