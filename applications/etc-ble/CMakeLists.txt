@@ -7,6 +7,7 @@ project(etc-ble)
 
 target_sources(app PRIVATE src/main.c
     src/flex_ble.c
+    src/flex_data.c
 )
 zephyr_cc_option(-Wfatal-errors)
 

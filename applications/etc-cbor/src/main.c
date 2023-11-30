@@ -8,8 +8,10 @@
 #define LOG_LEVEL LOG_LEVEL_DBG
 LOG_MODULE_REGISTER(cbor);
 
+#define MAX_STATE 24
+
 uint8_t zcbor_buffer[1024];
-zcbor_state_t state[6];
+zcbor_state_t state[MAX_STATE];
 zcbor_state_t *p_state_encode = &state[0];
 
 // {
@@ -120,7 +122,7 @@ zcbor_state_t *p_state_encode = &state[0];
 
 void main(void)
 {
-	zcbor_new_encode_state(p_state_encode, 6, zcbor_buffer, sizeof(zcbor_buffer), 0);
+	zcbor_new_encode_state(p_state_encode, MAX_STATE, zcbor_buffer, sizeof(zcbor_buffer), 0);
 	
 	zcbor_map_start_encode(p_state_encode, 0);
 
@@ -131,7 +133,7 @@ void main(void)
 		zcbor_uint64_put(p_state_encode, 1636384512);
 
 		zcbor_tstr_put_lit(p_state_encode, "3");
-		zcbor_list_start_encode(p_state_encode, 4);
+		zcbor_list_start_encode(p_state_encode, 0);
 			zcbor_map_start_encode(p_state_encode, 0);
 				zcbor_tstr_put_lit(p_state_encode, "1");
 				zcbor_uint64_put(p_state_encode, 123);
@@ -143,88 +145,62 @@ void main(void)
 				zcbor_uint64_put(p_state_encode, 1);	
 
 				zcbor_tstr_put_lit(p_state_encode, "4");
-				zcbor_map_start_encode(p_state_encode, 0);
-
-					zcbor_tstr_put_lit(p_state_encode, "0");
+				zcbor_list_start_encode(p_state_encode, 0);
 					zcbor_map_start_encode(p_state_encode, 0);
 
+						zcbor_tstr_put_lit(p_state_encode, "0");
+							zcbor_list_start_encode(p_state_encode, 0);
+								zcbor_map_start_encode(p_state_encode, 0);
+
+									zcbor_tstr_put_lit(p_state_encode, "1");
+									zcbor_uint32_put(p_state_encode, 0);
+									
+									zcbor_tstr_put_lit(p_state_encode, "2");
+									zcbor_uint32_put(p_state_encode, 0);
+
+									zcbor_tstr_put_lit(p_state_encode, "3");
+									zcbor_tstr_put_term(p_state_encode, "Cel");
+
+									zcbor_tstr_put_lit(p_state_encode, "4");
+									zcbor_float32_put(p_state_encode, 54.2);
+
+								zcbor_map_end_encode(p_state_encode, 0);
+							zcbor_list_end_encode(p_state_encode, 0);
 						zcbor_tstr_put_lit(p_state_encode, "1");
-						zcbor_uint32_put(p_state_encode, 0);
-						
-						zcbor_tstr_put_lit(p_state_encode, "2");
-						zcbor_uint32_put(p_state_encode, 0);
+							zcbor_list_start_encode(p_state_encode, 0);
+								zcbor_map_start_encode(p_state_encode, 0);
 
-						zcbor_tstr_put_lit(p_state_encode, "3");
-						zcbor_tstr_put_term(p_state_encode, "Cel");
+									zcbor_tstr_put_lit(p_state_encode, "1");
+									zcbor_uint32_put(p_state_encode, 0);
+									
+									zcbor_tstr_put_lit(p_state_encode, "2");
+									zcbor_uint32_put(p_state_encode, 0);
 
-						zcbor_tstr_put_lit(p_state_encode, "4");
-						zcbor_float32_put(p_state_encode, 54.2);
+									zcbor_tstr_put_lit(p_state_encode, "3");
+									zcbor_tstr_put_term(p_state_encode, "Cel");
 
+									zcbor_tstr_put_lit(p_state_encode, "4");
+									zcbor_float32_put(p_state_encode, 54.2);
+
+								zcbor_map_end_encode(p_state_encode, 0);
+									zcbor_map_start_encode(p_state_encode, 0);
+
+									zcbor_tstr_put_lit(p_state_encode, "1");
+									zcbor_uint32_put(p_state_encode, 1);
+									
+									zcbor_tstr_put_lit(p_state_encode, "2");
+									zcbor_uint32_put(p_state_encode, 1);
+
+									zcbor_tstr_put_lit(p_state_encode, "3");
+									zcbor_tstr_put_term(p_state_encode, "%%RH");
+
+									zcbor_tstr_put_lit(p_state_encode, "4");
+									zcbor_float32_put(p_state_encode, 89.2);
+
+								zcbor_map_end_encode(p_state_encode, 0);
+							zcbor_list_end_encode(p_state_encode, 0);
 					zcbor_map_end_encode(p_state_encode, 0);
-					zcbor_tstr_put_lit(p_state_encode, "1");
-					zcbor_map_start_encode(p_state_encode, 0);
-
-						zcbor_tstr_put_lit(p_state_encode, "1");
-						zcbor_uint32_put(p_state_encode, 0);
-						
-						zcbor_tstr_put_lit(p_state_encode, "2");
-						zcbor_uint32_put(p_state_encode, 0);
-
-						zcbor_tstr_put_lit(p_state_encode, "3");
-						zcbor_tstr_put_term(p_state_encode, "Cel");
-
-						zcbor_tstr_put_lit(p_state_encode, "4");
-						zcbor_float32_put(p_state_encode, 54.2);
-
-					zcbor_map_end_encode(p_state_encode, 0);
-				zcbor_map_end_encode(p_state_encode, 0);
-			zcbor_map_end_encode(p_state_encode, 0);
-			zcbor_map_start_encode(p_state_encode, 0);
-				zcbor_tstr_put_lit(p_state_encode, "1");
-				zcbor_uint64_put(p_state_encode, 123);
-
-				zcbor_tstr_put_lit(p_state_encode, "2");
-				zcbor_uint64_put(p_state_encode, 1687901671);
-
-				zcbor_tstr_put_lit(p_state_encode, "3");
-				zcbor_uint64_put(p_state_encode, 1);	
-
-				zcbor_tstr_put_lit(p_state_encode, "4");
-				zcbor_map_start_encode(p_state_encode, 0);
-
-					zcbor_tstr_put_lit(p_state_encode, "0");
-					zcbor_list_start_encode(p_state_encode, 0);
-
-						zcbor_tstr_put_lit(p_state_encode, "1");
-						zcbor_uint32_put(p_state_encode, 0);
-						
-						zcbor_tstr_put_lit(p_state_encode, "2");
-						zcbor_uint32_put(p_state_encode, 0);
-
-						zcbor_tstr_put_lit(p_state_encode, "3");
-						zcbor_tstr_put_term(p_state_encode, "Cel");
-
-						zcbor_tstr_put_lit(p_state_encode, "4");
-						zcbor_float32_put(p_state_encode, 54.2);
-
-					zcbor_list_end_encode(p_state_encode, 0);
-					zcbor_tstr_put_lit(p_state_encode, "1");
-					zcbor_list_start_encode(p_state_encode, 0);
-
-						zcbor_tstr_put_lit(p_state_encode, "1");
-						zcbor_uint32_put(p_state_encode, 0);
-						
-						zcbor_tstr_put_lit(p_state_encode, "2");
-						zcbor_uint32_put(p_state_encode, 0);
-
-						zcbor_tstr_put_lit(p_state_encode, "3");
-						zcbor_tstr_put_term(p_state_encode, "Cel");
-
-						zcbor_tstr_put_lit(p_state_encode, "4");
-						zcbor_float32_put(p_state_encode, 54.2);
-
-					zcbor_list_end_encode(p_state_encode, 0);
-				zcbor_map_end_encode(p_state_encode, 0);
+				zcbor_list_end_encode(p_state_encode, 4);
 			zcbor_map_end_encode(p_state_encode, 0);
 		zcbor_list_end_encode(p_state_encode, 4);
 	zcbor_map_end_encode(p_state_encode, 0);
