@@ -34,7 +34,6 @@ struct lora_msg_data {
 		struct app_event app;
 		struct data_event data;
 		struct util_event util;
-		struct cloud_event cloud;
 	} module;
 };
 
@@ -61,7 +60,7 @@ struct logger_lora_response {
 };
 
 /* Lora module message queue. */
-#define LORA_QUEUE_ENTRY_COUNT	  10
+#define LORA_QUEUE_ENTRY_COUNT	  20
 #define LORA_QUEUE_BYTE_ALIGNMENT 4
 
 K_MSGQ_DEFINE(msgq_lora, sizeof(struct lora_msg_data), LORA_QUEUE_ENTRY_COUNT,
@@ -179,13 +178,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct util_event *event = cast_util_event(aeh);
 
 		msg.module.util = *event;
-		enqueue_msg = true;
-	}
-
-	if (is_cloud_event(aeh)) {
-		struct cloud_event *event = cast_cloud_event(aeh);
-
-		msg.module.cloud = *event;
 		enqueue_msg = true;
 	}
 
@@ -618,4 +610,3 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
-APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
