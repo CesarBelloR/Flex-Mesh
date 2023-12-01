@@ -9,6 +9,7 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include "app_version.h"
 #include "etc_device.h"
 #include "etc_settings.h"
+#include "pcf85263a.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
@@ -256,7 +257,20 @@ int etc_settings_init(void)
 		etc_set_alarm_threshold(ETC_SETTING_ALARM_THRESHOLD_DEFAULT);
 	}
 
-	LOG_DBG("Load setting successfully");
+	/* Read RTC calibration offset and set RTC offset register if available. */
+	float offset_ppm;
+	ret = etc_device_read_setting(ETC_RTC_CALIBRATION_OFFSET_PPM,
+				      &offset_ppm, sizeof(offset_ppm));
+	if (ret == 0) {
+		ret = pcf85263a_set_offset(&offset_ppm);
+		if (ret != 0) {
+			LOG_ERR("Setting RTC offset");
+		}
+	} else {
+		LOG_WRN("No RTC calibration available");
+	}
+
+	LOG_DBG("Load settings successfully");
 	return 0;
 }
 
