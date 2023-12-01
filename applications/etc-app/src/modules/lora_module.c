@@ -343,7 +343,7 @@ retry_recv:
 					"%d",
 					response.relay_id, response.reclaim_start_time,
 					response.reclaim_end_time);
-				etc_device_reclaim_record(response.reclaim_start_time,
+				etc_device_record_reclaim(response.reclaim_start_time,
 							  response.reclaim_end_time);
 			}
 			return 0;

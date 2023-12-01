@@ -37,8 +37,8 @@ static int etc_mgmt_record_status(struct smp_streamer *ctxt)
 	zcbor_state_t *zse = ctxt->writer->zs;
 	zcbor_state_t *zsd = ctxt->reader->zs;
 	bool ok;
-	size_t element_size = etc_device_get_record_element_size();
-	struct etc_device_record_table record_table = etc_device_get_record_status();
+	size_t element_size = etc_device_record_get_element_size();
+	struct etc_device_record_table *record_table = etc_device_record_get_status();
 	/* Encode the response. */
 	ok = etc_mgmt_rsp(zse, MGMT_ERR_EOK)							&&
 		zcbor_tstr_put_lit(zse, "record")  						&& 
@@ -46,16 +46,16 @@ static int etc_mgmt_record_status(struct smp_streamer *ctxt)
 		zcbor_tstr_put_lit(zse, "first_record") 					&& 
 		zcbor_map_start_encode(zse, 0) 							&& 
 		zcbor_tstr_put_lit(zse, "index")						&& 
-		zcbor_uint32_put(zse, (uint32_t)record_table.oldest.element_idx)		&&
+		zcbor_uint32_put(zse, (uint32_t)record_table->oldest.element_idx)		&&
 		zcbor_tstr_put_lit(zse, "sector")						&&
-		zcbor_uint32_put(zse, (uint32_t)record_table.oldest.sector_idx)			&&
+		zcbor_uint32_put(zse, (uint32_t)record_table->oldest.sector_idx)			&&
 		zcbor_map_end_encode(zse, 0) 							&&
 		zcbor_tstr_put_lit(zse, "last_record")  					&&
 		zcbor_map_start_encode(zse, 0) 							&&
 		zcbor_tstr_put_lit(zse, "index")						&&
-		zcbor_uint32_put(zse, (uint32_t)record_table.newest.element_idx)		&&
+		zcbor_uint32_put(zse, (uint32_t)record_table->newest.element_idx)		&&
 		zcbor_tstr_put_lit(zse, "sector")						&&
-		zcbor_uint32_put(zse, (uint32_t)record_table.newest.sector_idx)     		&&
+		zcbor_uint32_put(zse, (uint32_t)record_table->newest.sector_idx)     		&&
 		zcbor_map_end_encode(zse, 0) 							&&
 		zcbor_map_end_encode(zse, 0) 							&& 
 		zcbor_tstr_put_lit(zse, "info")  						&&
@@ -63,11 +63,11 @@ static int etc_mgmt_record_status(struct smp_streamer *ctxt)
 		zcbor_tstr_put_lit(zse, "element_size")  					&&
 		zcbor_uint32_put(zse, (uint32_t)element_size)					&&
 		zcbor_tstr_put_lit(zse, "max_index")						&& 
-		zcbor_uint32_put(zse, (uint32_t)etc_device_get_record_max_element_index()) 	&&
+		zcbor_uint32_put(zse, (uint32_t)etc_device_record_get_max_element_index()) 	&&
 		zcbor_tstr_put_lit(zse, "max_sector")					 	&& 
-		zcbor_uint32_put(zse, (uint32_t)etc_device_get_record_max_sector_index()) 	&&
+		zcbor_uint32_put(zse, (uint32_t)etc_device_record_get_max_sector_index()) 	&&
 		zcbor_tstr_put_lit(zse, "total")						&& 
-		zcbor_uint32_put(zse, (uint32_t)record_table.total)				&&
+		zcbor_uint32_put(zse, (uint32_t)record_table->total)				&&
 		zcbor_map_end_encode(zse, 0);
 
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
@@ -81,8 +81,8 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 	uint64_t off = ULLONG_MAX;
 	size_t length = 0;
 	int element_offset = 0, sector_offset = 0, num_element = 0;
-	size_t record_len = etc_device_get_record_size();
-	off_t record_offset = etc_device_get_record_offset();
+	size_t record_len = etc_device_record_get_size();
+	off_t record_offset = etc_device_record_get_offset();
 	int rc;
 	zcbor_state_t *zse = ctxt->writer->zs;
 	zcbor_state_t *zsd = ctxt->reader->zs;
@@ -104,7 +104,7 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 		return MGMT_ERR_EINVAL;
 	}
 
-	rc = flash_read(etc_device_get_record(), record_offset + off, buf, length);
+	rc = flash_read(etc_device_record_get(), record_offset + off, buf, length);
 	if (rc != 0) {
 		return MGMT_ERR_EINVAL;
 	}
@@ -115,7 +115,7 @@ static int etc_mgmt_record_read(struct smp_streamer *ctxt)
 
 	union etc_device_record_header header = {0x00};
 	for (int i = 0; i < num_element; i++) {
-		int rc = etc_device_get_record_header((uint8_t)element_offset + i, (uint8_t)sector_offset, &header);
+		int rc = etc_device_record_get_header((uint8_t)element_offset + i, (uint8_t)sector_offset, &header);
 		if (rc != 0) {
 			ack_list[i] = 255;
 		} else {
@@ -175,7 +175,7 @@ static int etc_mgmt_record_reclaim(struct smp_streamer *ctxt)
 		return MGMT_ERR_EINVAL;
 	}
 
-	etc_device_reclaim_record(start, stop);
+	etc_device_record_reclaim(start, stop);
 
 	/* Encode the response. */
 	ok = etc_mgmt_rsp(zse, MGMT_ERR_EOK);

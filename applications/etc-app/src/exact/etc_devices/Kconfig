@@ -30,6 +30,10 @@ config ETC_DEVICE_RADIO_MODE
 	int "ETC Radio Mode LTE (0) or Lora (1)"
 	default ETC_DEVICE_RADIO_LORA
 
+config ETC_DEVICE_SAVE_RECORD_SEC
+	int "Number of seconds to save the header ACKs"
+	default 3600
+
 module = ETC_DEVICE
 module-str = device
 source "subsys/logging/Kconfig.template.log_config"

@@ -574,7 +574,7 @@ static void on_all_states(struct data_msg_data *msg)
 		int ret;
 		bool err = false;
 		
-		ret = etc_device_reclaim_record(
+		ret = etc_device_record_reclaim(
 			msg->module.cloud.data.reclaim.start_time_s,
 			msg->module.cloud.data.reclaim.end_time_s);
 		if (ret != 0) {

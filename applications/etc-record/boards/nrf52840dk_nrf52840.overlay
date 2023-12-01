@@ -1,13 +1,4 @@
 / {
-	chosen {
-		nordic,pm-ext-flash = &mx25r1635;
-		zephyr,uart-mcumgr = &cdc_acm_uart1;
-		zephyr,shell-uart = &cdc_acm_uart0;
-		zephyr,console = &cdc_acm_uart0;
-	};
-};
-
-/ {
 	sram@2003F000 {
 		compatible = "zephyr,memory-region", "mmio-sram";
 		reg = <0x2003F000 0x1000>;
