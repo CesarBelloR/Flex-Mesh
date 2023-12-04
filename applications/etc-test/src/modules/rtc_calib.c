@@ -13,6 +13,7 @@
 
 #include "pcf85263a.h"
 #include "etc_device.h"
+#include "rtc_calib.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(rtc_calib, CONFIG_ETC_TEST_LOG_LEVEL);
@@ -40,6 +41,9 @@ LOG_MODULE_REGISTER(rtc_calib, CONFIG_ETC_TEST_LOG_LEVEL);
 #define DEV_PIN 8
 #define DEV_PIN_PORT 1
 
+#define RTC_MAX_OFFSET_PPM  250.0f
+#define RTC_MIN_OFFSET_PPM -250.0f
+
 nrfx_timer_t timer_rtc_inst = NRFX_TIMER_INSTANCE(TIMER_RTC_COUNT_INST_IDX);
 nrfx_timer_t timer_ref_inst = NRFX_TIMER_INSTANCE(TIMER_REF_COUNT_INST_IDX);
 
@@ -61,17 +65,13 @@ static void timer_handler(nrf_timer_event_t event_type, void * p_context)
 
 	if (timer_inst->instance_id == timer_rtc_inst.instance_id) {
 		timer_name = "RTC";
-		if (event_type == NRF_TIMER_EVENT_COMPARE0) {
-			LOG_INF("Start ref timer");
-		} else if (event_type == NRF_TIMER_EVENT_COMPARE1) {
+		if (event_type == NRF_TIMER_EVENT_COMPARE1) {
 			nrfx_timer_capture(timer_inst, NRF_TIMER_CC_CHANNEL0);
 			k_sem_give(&timer_sem);
 		}
 	} else if (timer_inst->instance_id == timer_ref_inst.instance_id) {
 		timer_name = "Ref";
 	}
-
-	LOG_INF("%s Counter compare", timer_name);
 }
 
 static void gpiote_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger,
@@ -289,6 +289,12 @@ int set_rtc_offset(float *offset_ppm)
 {
 	int ret;
 
+	if (*offset_ppm > RTC_MAX_OFFSET_PPM ||
+	    *offset_ppm < RTC_MIN_OFFSET_PPM) {
+		LOG_ERR("Offset out of range");
+		return -1;
+	}
+
 	ret = pcf85263a_set_offset(offset_ppm);
 	if (ret < 0) {
 		LOG_ERR("Setting offset");
@@ -304,6 +310,26 @@ int set_rtc_offset(float *offset_ppm)
 	}
 
 	return 0;
+}
+
+void rtc_calib_init(void)
+{
+	int ret;
+
+	/* Read RTC calibration offset and set RTC offset register if available. */
+	float offset_ppm;
+	ret = etc_device_read_setting(ETC_RTC_CALIBRATION_OFFSET_PPM,
+				      &offset_ppm, sizeof(offset_ppm));
+	if (ret == 0) {
+		ret = pcf85263a_set_offset(&offset_ppm);
+		if (ret != 0) {
+			LOG_ERR("Setting RTC offset");
+		} else {
+			LOG_INF("RTC offset set to %.2f ppm", offset_ppm);
+		}
+	} else {
+		LOG_WRN("No RTC calibration available");
+	}
 }
 
 int calibrate_rtc(void)
@@ -341,7 +367,7 @@ int calibrate_rtc(void)
 	nrfx_timer_disable(&timer_ref_inst);
 	ref_ticks = nrfx_timer_capture_get(&timer_ref_inst, NRF_TIMER_CC_CHANNEL0);
 	rtc_ticks = nrfx_timer_capture_get(&timer_rtc_inst, NRF_TIMER_CC_CHANNEL0);
-	LOG_INF("RTC: %u, Ref: %u", rtc_ticks, ref_ticks);
+	LOG_DBG("RTC: %u, Ref: %u", rtc_ticks, ref_ticks);
 	
 	offset_ppm = calculate_offset_ppm(ref_ticks);
 	return set_rtc_offset(&offset_ppm);

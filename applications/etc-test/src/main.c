@@ -24,6 +24,7 @@
 #include "etc_cape.h"
 #include "etc_device.h"
 #include "watchdog.h"
+#include "rtc_calib.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_TEST_LOG_LEVEL);
 
@@ -34,6 +35,7 @@ static void app_driver_init(void) {
 	pcf85263a_init("I2C_0");
 	pcf85263a_set_interrupt_io(true);
 	pcf85263a_set_clkpin(false);
+	rtc_calib_init();
 }
 
 char key[] = "ElL10TaC4T";

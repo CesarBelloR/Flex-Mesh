@@ -24,4 +24,9 @@ int set_rtc_offset(float *offset_ppm);
 */
 float get_rtc_offset(void);
 
+/** Initialize the RTC with the offset saved in flash. 
+ * 
+*/
+void rtc_calib_init(void);
+
 #endif /* RTC_CALIB_H__ */
