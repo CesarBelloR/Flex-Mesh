@@ -517,16 +517,26 @@ static int setup(void)
 	}
 	return 0;
 }
+ 
+/** Check if conditions are met to wake up the modem.
+ * 
+*/
+static bool is_wakeup_modem(struct modem_msg_data *msg)
+{
+	bool is_wakeup;
+	
+	is_wakeup = (((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+		       IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
+		      etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER)) ||
+		    IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD) ||
+		    IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_START);
+	return is_wakeup;
+}
 
 /* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_OFF. */
 static void on_sub_state_modem_off(struct modem_msg_data *msg)
 {
-	if  (((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
-		IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
-		etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER)
-		||
-		(IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD)))
-		{
+	if  (is_wakeup_modem(msg)) {
 		int ret;
 
 		modem_wakeup_time_ms = k_uptime_get();
@@ -542,12 +552,7 @@ static void on_sub_state_modem_off(struct modem_msg_data *msg)
 /* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_PSM. */
 static void on_sub_state_modem_psm(struct modem_msg_data *msg)
 {
-	if  (((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
-		IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
-		etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER)
-		||
-		(IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD)) )
-	{
+	if  (is_wakeup_modem(msg)) {
 		modem_wakeup_time_ms = k_uptime_get();
 		modem_cmd(modem_dev, MODEM_API_CMD_PSM_WAKEUP, NULL);
 		k_work_reschedule(&modem_work,
@@ -559,12 +564,7 @@ static void on_sub_state_modem_psm(struct modem_msg_data *msg)
 
 static void on_sub_state_modem_sleep(struct modem_msg_data *msg)
 {
-	if  (((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
-		IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
-		etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER)
-		||
-		(IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD)))
-	{
+	if  (is_wakeup_modem(msg)) {
 		int ret;
 
 		modem_wakeup_time_ms = k_uptime_get();

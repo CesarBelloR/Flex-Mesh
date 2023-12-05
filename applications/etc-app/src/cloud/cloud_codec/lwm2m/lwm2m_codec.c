@@ -290,11 +290,36 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 	return err;
 }
 
+int data_codec_prepare_functional_test_data(struct cloud_codec_data *cloud_data,
+					    struct sensor_data *sensor_data,
+					    int modem_rsrp,
+					    enum functional_test_result result)
+{
+	int err;
+	
+	err = lwm2m_codec_helpers_update_functional_test(cloud_data, sensor_data,
+							 modem_rsrp, result);
+	return err;
+}
+
 int data_codec_has_data(struct cloud_codec_data *cloud_data)
 {
 	__ASSERT_NO_MSG(cloud_data != NULL);
 
 	return !lwm2m_codec_helpers_object_path_list_is_empty(cloud_data);
+}
+
+int data_codec_move_data(struct cloud_codec_data *cloud_data,
+			 struct cloud_codec_data *backup_data)
+{
+	int ret;
+	
+	ret = lwm2m_codec_helpers_object_path_list_move(cloud_data, backup_data);
+	if (ret != 0) {
+		LOG_ERR("Move data");
+	}
+
+	return ret;
 }
 
 int data_codec_split_data(struct cloud_codec_data *cloud_data,

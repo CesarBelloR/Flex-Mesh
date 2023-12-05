@@ -81,6 +81,12 @@ enum data_event_type {
 	/** Date time has been obtained. */
 	DATA_EVT_DATE_TIME_OBTAINED,
 
+	/* Functional test started */
+	DATA_EVT_FUNCTIONAL_TEST_START,
+
+	/* Functional test complete */
+	DATA_EVT_FUNCTIONAL_TEST_COMPLETE,
+
 	/** The data module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
 	 */
@@ -106,6 +112,14 @@ struct relay_data_buffer {
 	uint16_t data_len;
 };
 
+enum functional_test_result {
+	FUNC_TEST_SUCCESS,
+	FUNC_TEST_FAIL_ACK,
+	FUNC_TEST_FAIL_SENSOR,
+	FUNC_TEST_FAIL_BAT,
+	FUNC_TEST_FAIL_MODEM,
+};
+
 struct data_event {
 	struct app_event_header header;
 
@@ -121,6 +135,8 @@ struct data_event {
 		uint32_t message_id;
 		/** Relay data to be published */
 		struct relay_data_buffer relay_data;
+		/* Result of the functional test */
+		enum functional_test_result test_result;
 	} data;
 };
 
