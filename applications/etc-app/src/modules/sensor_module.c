@@ -207,7 +207,7 @@ static int sensor_poll_handler(bool is_test) {
 	int ret;
 	
 	ret = date_time_now(&now_ms);
-	if (!ret && 
+	if (!is_test && !ret && 
 	    (now_ms - last_poll_complete_time_ms) < SENSOR_MIN_INTERVAL_MS) {
 		/* Ignore sample request if last reading finished
 		 * < SENSOR_MIN_INTERVAL_MS ago. Re-enabling VCC_SENS within
