@@ -275,7 +275,10 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 
 
 
-	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_NORMAL) ||
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_ERROR) ||
+		IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_LOW) ||
+		IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_MED) ||
+		IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_FULL) ||
 	    IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_CHARGING) ||
 	    IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
 		etc_mflt_metrics_charging(msg->module.sensor.type);

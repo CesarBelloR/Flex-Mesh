@@ -164,7 +164,20 @@ static void sensor_module_battery_handler(enum battery_status status) {
 	switch (status) {
 		case BATTERY_NORMAL: {
 			LOG_DBG("BATTERY_NORMAL");
-			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_IN_NORMAL);
+			const uint16_t battery_voltage_mv = etc_battery_get_voltage_mV();
+			const uint8_t battery_percent_now =
+				etc_battery_percentage_from_voltage(battery_voltage_mv);
+			if (battery_percent_now >= BATTERY_MIN_FULL) {
+				SEND_EVENT(sensor, SENSOR_EVT_BATTERY_NORMAL_FULL);
+			} else if (battery_percent_now >= BATTERY_MIN_MED) {
+				SEND_EVENT(sensor, SENSOR_EVT_BATTERY_NORMAL_MED);
+			} else {
+				SEND_EVENT(sensor, SENSOR_EVT_BATTERY_NORMAL_LOW);
+			}
+			break;
+		}
+		case BATTERY_LOW: {
+			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_NORMAL_LOW);
 			break;
 		}
 		case BATTERY_CHARGE_IN_PROCESS: {
@@ -175,6 +188,12 @@ static void sensor_module_battery_handler(enum battery_status status) {
 		case BATTERY_CHARGE_COMPLETE: {
 			LOG_DBG("BATTERY_CHARGE_COMPLETE");
 			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE);
+			break;
+		}
+		case BATTERY_NO_INSTALLED: 
+		case BATTERY_DAMAGED:
+		{
+			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_ERROR);
 			break;
 		}
 		default:

@@ -547,7 +547,8 @@ static void app_peripheral_on(bool is_rtc)
 		}
 	}
 #endif
-
+	/* Send event notify for app wakeup */
+	SEND_EVENT(app, APP_EVT_WAKEUP);
 	if (is_rtc) {
 		LOG_DBG("Wakeup from sleep");
 #if defined(CONFIG_PCF85263)
@@ -664,6 +665,7 @@ static int setup(void)
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 	date_time_register_handler(date_time_handler);
 #endif
+	SEND_EVENT(app, APP_EVT_WAKEUP);
 	static bool is_send = false;
 	if (is_send == false) {
 		LOG_DBG("Request to transmit records");

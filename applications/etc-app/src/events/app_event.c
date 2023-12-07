@@ -21,6 +21,8 @@ static char *type2str(enum app_data_type type)
 static char *get_evt_type_str(enum app_event_type type)
 {
 	switch (type) {
+	case APP_EVT_WAKEUP:
+		return "APP_EVT_WAKEUP";
 	case APP_EVT_DATA_GET:
 		return "APP_EVT_DATA_GET";
 	case APP_EVT_DATA_TRANSMIT:

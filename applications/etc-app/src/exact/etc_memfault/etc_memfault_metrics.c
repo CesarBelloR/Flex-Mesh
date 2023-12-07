@@ -65,9 +65,6 @@ void etc_mflt_metrics_init_img_pubkey_id(void)
 void etc_mflt_metrics_charging(enum sensor_event_type evt)
 {
 	switch (evt) {
-	case SENSOR_EVT_BATTERY_IN_NORMAL:
-		break;
-
 	case SENSOR_EVT_BATTERY_IN_CHARGING:
 	case SENSOR_EVT_BATTERY_CHARGE_COMPLETE:
 		battery_charger_was_connected = true;

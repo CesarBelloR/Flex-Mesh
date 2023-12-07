@@ -3,6 +3,15 @@
 
 #include <stdint.h>
 
+enum battery_level {
+	/* Battery low level from 0 to < 20 */
+	BATTERY_MIN_LOW = 0,
+	/* Battery medium level from 20 to < 80 */
+	BATTERY_MIN_MED = 20,
+	/* Battery full level from 80 to 100 */
+	BATTERY_MIN_FULL = 80
+};
+
 enum battery_status {
 	/* The battery is operating normally and not on power */
 	BATTERY_NORMAL = 0,
