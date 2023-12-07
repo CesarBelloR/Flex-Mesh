@@ -13,6 +13,7 @@
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #include "etc_device.h"
+#include "cloud/lwm2m/lwm2m_firmware.h"
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE data_module
@@ -451,6 +452,8 @@ static void data_encode(bool split)
 			 * sending data.
 			 */
 			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
+			/* Trigger the OTA pending job */
+			lwm2m_firmware_start_pending_job();
 			return;
 		}
 	}
