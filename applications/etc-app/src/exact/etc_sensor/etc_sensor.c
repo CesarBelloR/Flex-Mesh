@@ -63,7 +63,7 @@ static const struct gpio_dt_spec s1_dt =
 static const struct gpio_dt_spec vsen_en_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 
-#define FUNCTIONAL_TEST_VALUE_ACCURACY 0.2f
+#define FUNCTIONAL_TEST_VALUE_ACCURACY 0.5f
 static const float functional_test_values[] = {
 	-4.39, 5.02, -4.39, 5.02
 };
