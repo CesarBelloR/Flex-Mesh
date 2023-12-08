@@ -13,6 +13,7 @@
 #include "etc_reclaim_obj_48934.h"
 #include "etc_relay_obj_48935.h"
 #include "etc_humid_obj_48936.h"
+#include "etc_functional_test_obj_48937.h"
 
 /* LwM2M read-write flag. */
 #define LWM2M_RES_DATA_FLAG_RW 0

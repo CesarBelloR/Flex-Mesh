@@ -37,6 +37,7 @@ static enum state_type {
 	STATE_INIT,
 	STATE_RUNNING,
 	STATE_FOTA_UPDATE,
+	STATE_FUNCTIONAL_TEST,
 	STATE_SHUTDOWN
 } state;
 
@@ -450,6 +451,12 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 		sub_state_set(SUB_STATE_NORMAL);
 	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
+		transition_list_append(LED_STATE_FUNCTIONAL_TEST_IN_PROGRESS, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		state_set(STATE_FUNCTIONAL_TEST);
+	}
 }
 
 /* Message handler for STATE_CLOUD_CONNECTING. */
@@ -508,6 +515,25 @@ static void on_state_fota_update(struct ui_msg_data *msg)
 	}
 }
 
+static void on_state_functional_test(struct ui_msg_data *msg)
+{
+	if (IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_COMPLETE)) {
+		if (msg->module.data.data.test_result == FUNC_TEST_SUCCESS) {
+			transition_list_append(LED_STATE_FUNCTIONAL_TEST_PASS, HOLD_FOREVER);
+		} else {
+			transition_list_append(LED_STATE_FUNCTIONAL_TEST_FAIL, HOLD_FOREVER);
+		}
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_END)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		state_set(STATE_RUNNING);
+	}
+}
+
 /* Message handler for all states. */
 static void on_all_states(struct ui_msg_data *msg)
 {
@@ -540,6 +566,10 @@ static void message_handler(struct ui_msg_data *msg)
 		break;
 	case STATE_FOTA_UPDATE:
 		on_state_fota_update(msg);
+		break;
+	case STATE_FUNCTIONAL_TEST:
+		on_state_functional_test(msg);
+		break;
 	case STATE_SHUTDOWN:
 		/* The shutdown state has no transition. */
 		break;
