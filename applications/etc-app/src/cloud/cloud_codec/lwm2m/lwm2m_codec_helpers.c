@@ -782,6 +782,7 @@ static int invalidate_temp_sensor_value(struct cloud_codec_data *cloud_data,
 		if (err) {
 			return err;
 		}
+		return 1;
 	}
 
 	return 0;
@@ -869,6 +870,8 @@ static int set_temperature(int instance_id, float value, int64_t timestamp)
 		return err;
 	}
 
+	LOG_DBG("temp inst: %d, value: %.2f", instance_id, value);
+
 	return 1;
 }
 
@@ -950,26 +953,20 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 		};
 		
 		err = set_temperature(obj_inst_id, record->sensor[i], record->timestamp);
-		if (err == 1) {
+		if (err == 0) {
 			err = invalidate_temp_sensor_value(cloud_data, obj_inst_id,
 							   (time_t)(record->timestamp));
-			if (err == 1) {
-				err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
-									       path_list,
-									       ARRAY_SIZE(path_list));
-				if (err) {
-					LOG_ERR("Failed populating object path list, error: %d", err);
-				}
-			}
-			continue;
 		}
 
-		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
-							       path_list,
-							       ARRAY_SIZE(path_list));
-		if (err) {
-			LOG_ERR("Failed populating object path list, error: %d", err);
-			return err;
+		/* Add path to temperature object if value changed. */
+		if (err == 1) {
+			err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+									path_list,
+									ARRAY_SIZE(path_list));
+			if (err) {
+				LOG_ERR("Failed populating object path list, error: %d", err);
+			}
+			continue;
 		}
 	}
 
