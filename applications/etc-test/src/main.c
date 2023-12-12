@@ -42,7 +42,6 @@ char key[] = "ElL10TaC4T";
 
 void main(void)
 {
-	etc_device_nvs_init();
 	etc_cape_init(key, 10, 0);
 	etc_cape_set_key(key, 10); 
 	uint32_t dtr = 0;
