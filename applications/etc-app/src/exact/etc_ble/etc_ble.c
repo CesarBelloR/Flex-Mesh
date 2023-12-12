@@ -9,6 +9,7 @@
 LOG_MODULE_REGISTER(etc_ble);
 
 #include "etc_ble.h"
+#include "etc_settings.h"
 
 #define DEVICE_NAME CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
@@ -36,6 +37,7 @@ static char flex_device_name[CONFIG_BT_DEVICE_NAME_MAX] = { 0x00 };
 static struct bt_conn *current_conn;
 static struct sensor_data last_sensor_data;
 static struct flex_ble_frame flex_frame;
+static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 static uint8_t adv_data[] = {
 	0x00, 0x00, 0x00, 0x00, // Probe 1
@@ -68,7 +70,8 @@ static void flex_config_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_
 
 static void etc_ble_set_bt_name(void)
 {
-	snprintf(flex_device_name, sizeof(flex_device_name), "Flex_%d", 10000013);
+	etc_get_device_id(device_id, sizeof(device_id));
+	snprintf(flex_device_name, sizeof(flex_device_name), "Flex_%s", device_id);
 	int err = bt_set_name(flex_device_name);
 	if (err) {
 		LOG_ERR("Can't set BLE device name");
