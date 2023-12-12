@@ -171,7 +171,7 @@ int etc_ble_sensor_notify(const uint8_t *data, uint16_t len)
 		int frame_len = (i == step) ? remain : ETC_BLE_FRAME_PAYLOAD_MAX_LEN;
 		flex_frame.msg_id = 0;
 		flex_frame.frame_id = i;
-		flex_frame.frame_len = frame_len;
+		flex_frame.frame_len = (i == 0) ? len : 0;
 		memcpy(flex_frame.frame_payload, &data[i * ETC_BLE_FRAME_PAYLOAD_MAX_LEN], frame_len);
 		LOG_HEXDUMP_INF((const uint8_t *)&flex_frame, sizeof(flex_frame), "BLE_SENSOR");
 		rc = flex_ble_notify(current_conn, attr_index, (const uint8_t *)&flex_frame, BT_PAYLOAD_OFFSET + frame_len);
