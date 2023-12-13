@@ -1561,6 +1561,8 @@ void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callbac
 static int cmd_stop_feed_wdt(const struct shell *shell, size_t argc, char **argv) 
 {
 	etc_watchdog_stop_work();
+
+	shell_print(shell, "Stopped watchdog feed");
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd_stop_feed_wdt, 1, 0);
