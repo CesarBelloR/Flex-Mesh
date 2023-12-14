@@ -191,8 +191,7 @@ static void sensor_module_battery_handler(enum battery_status status) {
 			break;
 		}
 		case BATTERY_NO_INSTALLED: 
-		case BATTERY_DAMAGED:
-		{
+		case BATTERY_DAMAGED: {
 			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_ERROR);
 			break;
 		}

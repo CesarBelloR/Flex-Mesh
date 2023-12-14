@@ -43,20 +43,25 @@ static enum state_type {
 /* UI module sub states. */
 static enum sub_state_type {
 	SUB_STATE_NORMAL,
+	SUB_STATE_NORMAL_LOW,
+	SUB_STATE_NORMAL_MED,
+	SUB_STATE_NORMAL_FULL,
 	SUB_STATE_CHARGE_IN_PROCESS,
 	SUB_STATE_CHARGE_COMPLETE
-} sub_state;
+} sub_state = SUB_STATE_NORMAL, last_sub_state = SUB_STATE_NORMAL;
 
 static int ui_module_gen_num_of_sample = 0;
-static enum sensor_event_type last_battery_sensor_event;
+
 /* Forward declarations */
 static void led_pattern_update_work_fn(struct k_work *work);
-static void led_battery_update_work_fn(struct k_work *work);
 
 /* Definition used to specify LED patterns that should hold forever. */
 #define HOLD_FOREVER -1
-#define UI_LED_WAIT_TIME K_MSEC(500)
-#define UI_LED_INTERVAL_BATTERY_NORMAL K_SECONDS(10)
+#define UI_LED_WAIT_TIME K_MSEC(2000)
+#define UI_LED_WAIT_NORMAL_DURATION_MSEC (5000)
+#define UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC (200)
+#define UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC (9800)
+#define UI_LED_ERROR_BASE_DURATION_MSEC (1000)
 
 /* List of LED patterns supported in the UI module. */
 static struct led_pattern {
@@ -65,7 +70,7 @@ static struct led_pattern {
 	/* LED state. */
 	enum led_state led_state;
 	/* Duration of the LED state. */
-	int16_t duration_sec;
+	int16_t duration_msec;
 } led_pattern_list[LED_STATE_COUNT];
 
 /* Linked list used to schedule multiple LED pattern transitions. */
@@ -76,7 +81,6 @@ static sys_slist_t pattern_transition_list = SYS_SLIST_STATIC_INIT(&pattern_tran
  */
 static K_WORK_DELAYABLE_DEFINE(led_pattern_update_work, led_pattern_update_work_fn);
 
-static K_WORK_DELAYABLE_DEFINE(led_battery_update_work, led_battery_update_work_fn);
 /* UI module message queue. */
 #define UI_QUEUE_ENTRY_COUNT		10
 #define UI_QUEUE_BYTE_ALIGNMENT		4
@@ -112,8 +116,12 @@ static char *state2str(enum state_type new_state)
 static char *sub_state2str(enum sub_state_type new_state)
 {
 	switch (new_state) {
-	case SUB_STATE_NORMAL:
-		return "SUB_STATE_NORMAL";
+	case SUB_STATE_NORMAL_LOW:
+		return "SUB_STATE_NORMAL_LOW";
+	case SUB_STATE_NORMAL_MED:
+		return "SUB_STATE_NORMAL_MED";
+	case SUB_STATE_NORMAL_FULL:
+		return "SUB_STATE_NORMAL_FULL";
 	case SUB_STATE_CHARGE_IN_PROCESS:
 		return "SUB_STATE_CHARGE_IN_PROCESS";
 	case SUB_STATE_CHARGE_COMPLETE:
@@ -148,11 +156,16 @@ static void sub_state_set(enum sub_state_type new_state)
 		sub_state2str(sub_state),
 		sub_state2str(new_state));
 
+	last_sub_state = sub_state;
 	sub_state = new_state;
 }
 
 static enum sub_state_type sub_state_get(void) {
 	return sub_state;
+}
+
+static enum sub_state_type last_sub_state_get(void) {
+	return last_sub_state;
 }
 
 /* Handlers */
@@ -236,7 +249,7 @@ static void update_led_pattern(enum led_state pattern)
 static void update_list_pattern(enum led_state state, int16_t duration) 
 {
 	led_pattern_list[state].led_state = state;
-	led_pattern_list[state].duration_sec = duration;
+	led_pattern_list[state].duration_msec = duration;
 }
 
 static void led_pattern_update_work_fn(struct k_work *work)
@@ -253,16 +266,36 @@ static void led_pattern_update_work_fn(struct k_work *work)
 		} else if (sub_state_get() == SUB_STATE_CHARGE_IN_PROCESS) {
 			update_list_pattern(LED_STATE_CHARGE_BATTERY_IN_CHARING, HOLD_FOREVER);
 			next_pattern = &led_pattern_list[LED_STATE_CHARGE_BATTERY_IN_CHARING];
+		} else if (sub_state_get() == SUB_STATE_NORMAL_FULL) {
+			update_list_pattern(LED_STATE_BATTERY_FULL, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+			next_pattern = &led_pattern_list[LED_STATE_BATTERY_FULL];
+			sub_state_set(SUB_STATE_NORMAL);
+		} else if (sub_state_get() == SUB_STATE_NORMAL_MED) {
+			update_list_pattern(LED_STATE_BATTERY_MED, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+			next_pattern = &led_pattern_list[LED_STATE_BATTERY_MED];
+			sub_state_set(SUB_STATE_NORMAL);
+		} else if (sub_state_get() == SUB_STATE_NORMAL_LOW) {
+			update_list_pattern(LED_STATE_BATTERY_EMPTY, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+			next_pattern = &led_pattern_list[LED_STATE_BATTERY_EMPTY];
+			sub_state_set(SUB_STATE_NORMAL);
 		} else {
-			update_list_pattern(LED_STATE_TURN_OFF, HOLD_FOREVER);
 			next_pattern = &led_pattern_list[LED_STATE_TURN_OFF];
+			enum sub_state_type _last_sub_state = last_sub_state_get();
+			if (_last_sub_state == SUB_STATE_NORMAL_LOW ||
+				_last_sub_state == SUB_STATE_NORMAL_MED ||
+				_last_sub_state == SUB_STATE_NORMAL_FULL) {
+				update_list_pattern(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
+				sub_state_set(_last_sub_state);
+			} else {
+				update_list_pattern(LED_STATE_TURN_OFF, HOLD_FOREVER);
+			}
 		}
 	} else {
 		next_pattern = CONTAINER_OF(node, struct led_pattern, header);
 	}
 
-	LOG_DBG("led update: %s, %d s, prev: %s", get_led_state_type_str(next_pattern->led_state), next_pattern->duration_sec,
-		get_led_state_type_str(previous_led_state));
+	LOG_DBG("led update: %s, %d s, prev: %s", get_led_state_type_str(next_pattern->led_state), 
+		next_pattern->duration_msec, get_led_state_type_str(previous_led_state));
 	/* Prevent the same LED led_state from being scheduled twice in a row. */
 	if (next_pattern->led_state != previous_led_state) {
 		update_led_pattern(next_pattern->led_state);
@@ -275,26 +308,18 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	 * - If LED is on and duration is specified (not HOLD_FOREVER),
 	 *   reschedule handler to turn off LED after specified time (save power)
 	 */
-	if (!sys_slist_is_empty(&pattern_transition_list) ||
-	    (((next_pattern->led_state != LED_STATE_TURN_OFF) &&
-			(next_pattern->led_state != LED_STATE_CHARGE_BATTERY_IN_CHARING) && 
-			(next_pattern->led_state != LED_STATE_CHARGE_BATTERY_FULL)) &&
-			(next_pattern->duration_sec != HOLD_FOREVER)
-		)) {
+	if (!sys_slist_is_empty(&pattern_transition_list) || 
+		((next_pattern->duration_msec != HOLD_FOREVER) && 
+			(next_pattern->led_state == LED_STATE_TURN_OFF)) || 
+		((next_pattern->duration_msec != HOLD_FOREVER) && 
+			((next_pattern->led_state != LED_STATE_CHARGE_BATTERY_IN_CHARING) && 
+			(next_pattern->led_state != LED_STATE_CHARGE_BATTERY_FULL)))) {
 		LOG_DBG("k_work_reschedule led work");
-		if (next_pattern->duration_sec > 0) {
-			k_work_reschedule(&led_pattern_update_work, 
-					  K_SECONDS(next_pattern->duration_sec));
+		if (next_pattern->duration_msec > 0) {
+			k_work_reschedule(&led_pattern_update_work, K_MSEC(next_pattern->duration_msec));
 		} else {
-			k_work_reschedule(&led_pattern_update_work, 
-					  UI_LED_WAIT_TIME);
+			k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 		}
-	}
-}
-
-static void led_battery_update_work_fn(struct k_work *work) {
-	if (sub_state_get() == SUB_STATE_NORMAL) {
-		SEND_EVENT(sensor, last_battery_sensor_event);
 	}
 }
 
@@ -337,9 +362,9 @@ static void transition_list_clear(void)
 /* Function that appends a LED state and a corresponding duration to the
  * LED pattern transition list.
  */
-static void transition_list_append(enum led_state led_state, int16_t duration_sec)
+static void transition_list_append(enum led_state led_state, int16_t duration_msec)
 {
-	update_list_pattern(led_state, duration_sec);
+	update_list_pattern(led_state, duration_msec);
 	/* Force to remove if it is here */
 	(void)sys_slist_find_and_remove(&pattern_transition_list, &led_pattern_list[led_state].header);	
 	sys_slist_append(&pattern_transition_list, &led_pattern_list[led_state].header);
@@ -364,58 +389,41 @@ static void on_state_init(struct ui_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, app, APP_EVT_WAKEUP)) {
-		enum etc_device_mode mode = etc_device_get_mode();
-		enum led_state set_state = LED_STATE_DEV_MODE_LOGGER_PLUS;
-		if (mode == ETC_DEVICE_MODE_LTE_LOGGER) {
-			set_state = LED_STATE_DEV_MODE_LOGGER_PLUS;
-		} else if (mode == ETC_DEVICE_MODE_LORA_LOGGER) {
-			set_state = LED_STATE_DEV_MODE_LOGGER;
-		} else if (mode == ETC_DEVICE_MODE_RELAY) {
-			set_state = LED_STATE_DEV_MODE_RELAY;
-		} else {
-			set_state = LED_STATE_DEV_MODE_BLE;
-		}
-		transition_list_clear();
-		transition_list_append(set_state, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
-	}
-
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		transition_list_append(LED_STATE_SENSOR_AQUIRING, 5);
+		transition_list_append(LED_STATE_SENSOR_AQUIRING, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTING)) {
-		transition_list_append(LED_STATE_LTE_CONNECTING, 5);
+		transition_list_append(LED_STATE_LTE_CONNECTING, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
-		transition_list_append(LED_STATE_LTE_CONNECTED, 5);
+		transition_list_append(LED_STATE_LTE_CONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}	
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED) ||
 	    IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
-		transition_list_append(LED_STATE_LTE_DISCONNECTED, 5);
+		transition_list_append(LED_STATE_LTE_DISCONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_ERROR)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_LTE_ERROR, 5);
+		transition_list_append(LED_STATE_LTE_ERROR, 4 * UI_LED_ERROR_BASE_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_CLOUD_DISCONNECTED, 5);
+		transition_list_append(LED_STATE_CLOUD_DISCONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
-		transition_list_append(LED_STATE_CLOUD_CONNECTING, 5);
+		transition_list_append(LED_STATE_CLOUD_CONNECTING, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
@@ -426,7 +434,7 @@ static void on_state_running(struct ui_msg_data *msg)
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_ERROR)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_CLOUD_ERROR, 5);
+		transition_list_append(LED_STATE_CLOUD_ERROR, 1 * UI_LED_ERROR_BASE_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
@@ -436,30 +444,19 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_SEND)) {
-		transition_list_append(LED_STATE_LORA_SEND, 2);
+		transition_list_append(LED_STATE_LORA_SEND, 2000);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_NACK)) {
-		transition_list_append(LED_STATE_LORA_NACK, 2);
+		transition_list_append(LED_STATE_LORA_NACK, 2000);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 	
 	if (IS_EVENT(msg, lora, LORA_EVT_ERROR)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_LORA_ERROR, 5);
+		transition_list_append(LED_STATE_LORA_ERROR, 6 * UI_LED_ERROR_BASE_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		if (sub_state_get() == SUB_STATE_CHARGE_IN_PROCESS) {
-			transition_list_append(LED_STATE_CHARGE_BATTERY_IN_CHARING, HOLD_FOREVER);
-		} else if (sub_state_get() == SUB_STATE_CHARGE_COMPLETE) {
-			transition_list_append(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);
-		} else {
-			transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
-		}
-		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START)) {
@@ -471,54 +468,51 @@ static void on_state_running(struct ui_msg_data *msg)
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_FOTA_ERROR, HOLD_FOREVER);
+		transition_list_append(LED_STATE_FOTA_ERROR, 5 * UI_LED_ERROR_BASE_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 		state_set(STATE_FOTA_UPDATE);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_ERROR)) {
-		transition_list_append(LED_STATE_CHARGE_BATTERY_ERROR, HOLD_FOREVER);
+		transition_list_append(LED_STATE_CHARGE_BATTERY_ERROR, 7 * UI_LED_ERROR_BASE_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		k_work_cancel_delayable(&led_battery_update_work);
 		sub_state_set(SUB_STATE_CHARGE_IN_PROCESS);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_CHARGING)) {
 		transition_list_append(LED_STATE_CHARGE_BATTERY_IN_CHARING, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		k_work_cancel_delayable(&led_battery_update_work);
 		sub_state_set(SUB_STATE_CHARGE_IN_PROCESS);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
 		transition_list_append(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		k_work_cancel_delayable(&led_battery_update_work);
 		sub_state_set(SUB_STATE_CHARGE_COMPLETE);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_FULL)) {
-		last_battery_sensor_event = SENSOR_EVT_BATTERY_NORMAL_FULL;
-		transition_list_append(LED_STATE_BATTERY_FULL, 1);
+		transition_list_clear();
+		transition_list_append(LED_STATE_BATTERY_FULL, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		k_work_reschedule(&led_battery_update_work, UI_LED_INTERVAL_BATTERY_NORMAL);
-		sub_state_set(SUB_STATE_NORMAL);
+		sub_state_set(SUB_STATE_NORMAL_FULL);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_MED)) {
-		last_battery_sensor_event = SENSOR_EVT_BATTERY_NORMAL_MED;
-		transition_list_append(LED_STATE_BATTERY_MED, 1);
+		transition_list_clear();
+		transition_list_append(LED_STATE_BATTERY_MED, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		k_work_reschedule(&led_battery_update_work, UI_LED_INTERVAL_BATTERY_NORMAL);
-		sub_state_set(SUB_STATE_NORMAL);
+		sub_state_set(SUB_STATE_NORMAL_MED);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_LOW)) {
-		last_battery_sensor_event = SENSOR_EVT_BATTERY_NORMAL_LOW;
-		transition_list_append(LED_STATE_BATTERY_EMPTY, 1);
+		transition_list_clear();
+		transition_list_append(LED_STATE_BATTERY_EMPTY, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		k_work_reschedule(&led_battery_update_work, UI_LED_INTERVAL_BATTERY_NORMAL);
-		sub_state_set(SUB_STATE_NORMAL);
+		sub_state_set(SUB_STATE_NORMAL_LOW);
 	}
 }
 
@@ -540,12 +534,7 @@ static void on_state_cloud_associating(struct ui_msg_data *msg)
 /* Message handler for STATE_LORA_TRANSMITTING. */
 static void on_state_lora_transmitting(struct ui_msg_data *msg)
 {
-	// if (IS_EVENT(msg, lora, LORA_EVT_TX_READY)) {
-	// 	transition_list_clear();
-	// 	transition_list_append(LED_STATE_LORA_TRANSMITTING, HOLD_FOREVER);
-	// 	k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-	// 	state_set(STATE_RUNNING);
-	// }
+	/* No action here */
 }
 
 /* Message handler for STATE_LORA_RECEIVING. */
@@ -564,7 +553,7 @@ static void on_state_fota_update(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_FOTA_ERROR, 5);
+		transition_list_append(LED_STATE_FOTA_ERROR, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 		state_set(STATE_RUNNING);
@@ -642,18 +631,11 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, sensor_event);
 SYS_INIT(setup, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 
 
-#ifdef CONFIG_SHELL
+#ifdef CONFIG_UI_MODULE_SHELL
 #include <zephyr/shell/shell.h>
 
 static int cmd_ui_status(const struct shell *shell, size_t argc, char **argv)
 {
-	return 0;
-}
-
-
-static int cmd_ui_event_wakeup(const struct shell *shell, size_t argc, char **argv)
-{
-	SEND_EVENT(app, APP_EVT_WAKEUP);
 	return 0;
 }
 
@@ -756,7 +738,6 @@ static int cmd_ui_battery_error(const struct shell *shell, size_t argc, char **a
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_ui_event,
 	SHELL_CMD(status, NULL, "List status of transition", cmd_ui_status),
-	SHELL_CMD(wakeup, NULL, "Event app wakeup", cmd_ui_event_wakeup),
 	SHELL_CMD(sensor_aquiring, NULL, "Event sensor aquiring", cmd_ui_sensor_aquiring),
 	SHELL_CMD(lte_connecting, NULL, "Event lte connecting", cmd_ui_lte_connecting),
 	SHELL_CMD(lte_connected, NULL, "Event lte connected", cmd_ui_lte_connected),
