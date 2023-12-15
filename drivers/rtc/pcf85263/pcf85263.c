@@ -8,6 +8,7 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/pm/device_runtime.h>
 #include <time.h>
+#include <math.h>
 #include "pcf85263a.h"
 #include "pcf85263a_registers.h"
 
@@ -110,6 +111,7 @@ enum {
 #define MAX_WRITE_SIZE		       (64)
 #define PCF85263A_FLAG_RTC_SYNCED      (0xCA)
 #define PCF85263A_REGISTER_COUNT(a, b) (b - a + 1)
+#define OFFSET_LOW_POWER_CONSTANT	2.17f
 
 struct pcf85263_config {
 	const struct device *i2c_dev;
@@ -750,4 +752,21 @@ uint8_t pcf85263a_read_ram(void)
 	uint8_t buf[1] = {0x00};
 	read_register(PCF85263A_RAM_BYTE_REG, buf);
 	return buf[0];
+}
+
+int pcf85263a_set_offset(float *offset_ppm)
+{
+	int offset_reg = (int)roundf(*offset_ppm / OFFSET_LOW_POWER_CONSTANT);
+	int rc;
+
+	if (offset_reg < -128 || offset_reg > 127) {
+		return -EINVAL;
+	}
+
+	rc = write_register(PCF85263A_OFFSET_REG, (int8_t)offset_reg);
+	if (rc == 0) {
+		LOG_INF("Calibration offset set to %d", offset_reg);
+	}
+
+	return rc;
 }
