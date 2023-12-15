@@ -359,6 +359,9 @@ int etc_set_power_mode(enum etc_power_mode_e power)
 	if (rc == 0) {
 		LOG_DBG("set %u", power);
 	}
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+	date_time_force_event(DATE_TIME_SYSTEM_RELOAD);
+#endif
 	return rc;
 }
 
