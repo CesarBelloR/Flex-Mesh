@@ -59,8 +59,8 @@ static void led_pattern_update_work_fn(struct k_work *work);
 #define HOLD_FOREVER -1
 #define UI_LED_WAIT_TIME K_MSEC(2000)
 #define UI_LED_WAIT_NORMAL_DURATION_MSEC (5000)
-#define UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC (200)
-#define UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC (9800)
+#define UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC (100)
+#define UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC (9900)
 #define UI_LED_ERROR_BASE_DURATION_MSEC (1000)
 
 /* List of LED patterns supported in the UI module. */
@@ -389,7 +389,7 @@ static void on_state_init(struct ui_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct ui_msg_data *msg)
 {
-	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_AQUIRING)) {
 		transition_list_append(LED_STATE_SENSOR_AQUIRING, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
@@ -428,7 +428,7 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
-		transition_list_append(LED_STATE_CLOUD_CONNECTED, HOLD_FOREVER);
+		transition_list_append(LED_STATE_CLOUD_CONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
@@ -439,7 +439,7 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
-		transition_list_append(LED_STATE_LORA_LISTEN, HOLD_FOREVER);
+		transition_list_append(LED_STATE_LORA_LISTEN, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
@@ -525,7 +525,7 @@ static void on_state_cloud_connecting(struct ui_msg_data *msg)
 static void on_state_cloud_associating(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		transition_list_append(LED_STATE_CLOUD_CONNECTED, HOLD_FOREVER);
+		transition_list_append(LED_STATE_CLOUD_CONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_RUNNING);
 	}
@@ -542,7 +542,7 @@ static void on_state_lora_receiving(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_LORA_LISTEN, HOLD_FOREVER);
+		transition_list_append(LED_STATE_LORA_LISTEN, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_RUNNING);
 	}
@@ -553,7 +553,7 @@ static void on_state_fota_update(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_FOTA_ERROR, UI_LED_WAIT_NORMAL_DURATION_MSEC);
+		transition_list_append(LED_STATE_FOTA_ERROR, 5 * UI_LED_ERROR_BASE_DURATION_MSEC);
 		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
 		state_set(STATE_RUNNING);
@@ -641,7 +641,7 @@ static int cmd_ui_status(const struct shell *shell, size_t argc, char **argv)
 
 static int cmd_ui_sensor_aquiring(const struct shell *shell, size_t argc, char **argv)
 {
-	SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY);
+	SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_AQUIRING);
 	return 0;
 }
 

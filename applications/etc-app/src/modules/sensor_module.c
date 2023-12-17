@@ -242,7 +242,7 @@ static int sensor_poll_handler(bool is_test) {
 	}
 #endif
 	sensor_is_processing = true;
-
+	SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_AQUIRING);
 	etc_sensor_run_acquisition();
 
 	struct sensor_data* data = &static_sensor_data;

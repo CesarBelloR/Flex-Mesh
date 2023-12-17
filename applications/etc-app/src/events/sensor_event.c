@@ -4,6 +4,8 @@
 static char *get_evt_type_str(enum sensor_event_type type)
 {
 	switch (type) {
+	case SENSOR_EVT_ENVIRONMENTAL_AQUIRING:
+		return "SENSOR_EVT_ENVIRONMENTAL_AQUIRING";
 	case SENSOR_EVT_ENVIRONMENTAL_DATA_READY:
 		return "SENSOR_EVT_ENVIRONMENTAL_DATA_READY";
 	case SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY:

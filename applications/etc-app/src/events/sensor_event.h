@@ -28,6 +28,7 @@ extern "C" {
 
 /** @brief Sensor event types submitted by the Sensor module. */
 enum sensor_event_type {
+	SENSOR_EVT_ENVIRONMENTAL_AQUIRING,
 	SENSOR_EVT_ENVIRONMENTAL_DATA_READY,
 	SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY,
 	SENSOR_EVT_ENVIRONMENTAL_NO_CONNECT,
