@@ -13,6 +13,7 @@
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #include "etc_device.h"
+#include "cloud/lwm2m/lwm2m_firmware.h"
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE data_module
@@ -37,6 +38,8 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define DEVICE_SETTINGS_KEY			"data_module"
 #define DEVICE_SETTINGS_CONFIG_KEY		"config"
+
+#define FUNCTIONAL_TEST_TIMEOUT_S 300
 
 struct data_msg_data {
 	union {
@@ -64,6 +67,32 @@ static enum state_type {
 	STATE_CLOUD_CONNECTED,
 	STATE_SHUTDOWN
 } state;
+
+#define FUNC_TEST_MIN_RSRP		-90
+#define FUNC_TEST_MIN_BAT_VOLTAGE_MV	4090
+
+enum functional_test_data_type {
+	DATA_TYPE_SENSOR,
+	DATA_TYPE_MODEM,
+	DATA_TYPE_ACK
+};
+
+enum functional_test_state {
+	FUNC_TEST_STATE_NOT_STARTED,
+	FUNC_TEST_STATE_COLLECTING_DATA,
+	FUNC_TEST_STATE_SENDING_DATA,
+	FUNC_TEST_STATE_WAITING_FOR_ACK,
+	FUNC_TEST_STATE_COMPLETE
+};
+
+struct functional_test_data {
+	struct sensor_data sensor_data;
+	int lte_rsrp;
+	bool ack;
+	enum functional_test_state state;
+	/* Result of the test (pass/fail) */
+	enum functional_test_result result;
+} functional_test_data;
 
 static struct data_battery bat_buf[MODULE_DATA_BATTERY_BUFFER_COUNT];
 static struct data_lora_sensors lora_buf[MODULE_LORA_SENSOR_BUFFER_COUNT];
@@ -95,6 +124,8 @@ static k_timeout_t data_publish_timeout = K_FOREVER;
 static K_SEM_DEFINE(config_load_sem, 0, 1);
 
 static struct k_work_delayable data_send_work;
+/* Work to control functional test timeout */
+static struct k_work_delayable functional_test_work;
 
 /* List used to keep track of responses from other modules with data that is
  * requested to be sampled/published.
@@ -141,6 +172,7 @@ static struct module_data self = {
 
 /* Forward declarations */
 static void data_send_work_fn(struct k_work *work);
+static void functional_test_work_fn(struct k_work *work);
 
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type new_state)
@@ -264,6 +296,12 @@ static int setup(void)
 	int err;
 	struct etc_config cfg;
 
+	int transmission_in_seconds = etc_get_tx_interval_secs();
+	data_publish_timeout = K_SECONDS(transmission_in_seconds);
+	k_work_init_delayable(&data_send_work, data_send_work_fn);
+	k_work_init_delayable(&functional_test_work, functional_test_work_fn);
+	k_work_reschedule(&data_send_work, data_publish_timeout);
+
 	etc_settings_get_config(&cfg);
 	
 	err = data_codec_init(&cfg, cloud_codec_event_handler);
@@ -321,6 +359,28 @@ static void data_send(enum data_event_type event,
 	APP_EVENT_SUBMIT(module_event);
 }
 
+
+static enum functional_test_result evaluate_functional_test_result(
+		struct functional_test_data *data)
+{
+	enum functional_test_result result;
+
+	if (!etc_sensor_check_functional_test_values(&functional_test_data.sensor_data)) {
+		result = FUNC_TEST_FAIL_SENSOR;
+	} else if (functional_test_data.lte_rsrp < FUNC_TEST_MIN_RSRP) {
+		result = FUNC_TEST_FAIL_MODEM;
+	} else if (functional_test_data.sensor_data.battery_mV < FUNC_TEST_MIN_BAT_VOLTAGE_MV) {
+		result = FUNC_TEST_FAIL_BAT;
+	} else if (!functional_test_data.ack && 
+		   functional_test_data.state > FUNC_TEST_STATE_WAITING_FOR_ACK) {
+		result = FUNC_TEST_FAIL_ACK;
+	} else {
+		result = FUNC_TEST_SUCCESS;
+	}
+
+	return result;
+}
+
 /**
  * Encode the current LwM2M data to be sent in a message.
  * 
@@ -343,9 +403,18 @@ static void data_encode(bool split)
 		first_send = false;
 	}
 
-	/* Send previously stored data first, then send new measurement record. */
-	if (data_codec_has_data(&codec_backup) && 
+	if (functional_test_data.state == FUNC_TEST_STATE_SENDING_DATA) {
+		LOG_DBG("Sending functional test data");
+		/* Store currently queued data in backup codec. */
+		data_codec_move_data(&codec, &codec_backup);
+		data_codec_prepare_functional_test_data(&codec,
+							&functional_test_data.sensor_data,
+							functional_test_data.lte_rsrp,
+							evaluate_functional_test_result(&functional_test_data));
+		functional_test_data.state = FUNC_TEST_STATE_WAITING_FOR_ACK;
+	} else if (data_codec_has_data(&codec_backup) && 
 	    (!split || !data_codec_has_data(&codec))) {
+		/* Send previously stored data first, then send new measurement record. */
 		LOG_DBG("Recovering previously backed up data.");
 		data_codec_recover_data(&codec, &codec_backup);
 	} else {
@@ -383,6 +452,8 @@ static void data_encode(bool split)
 			 * sending data.
 			 */
 			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
+			/* Trigger the OTA pending job */
+			lwm2m_firmware_start_pending_job();
 			return;
 		}
 	}
@@ -414,16 +485,104 @@ static void data_send_work_fn(struct k_work *work)
 	k_work_reschedule(&data_send_work, data_publish_timeout);
 }
 
+/** Stop functional test and evaluate result. Set device mode to probe mode if
+ * passed.
+ * 
+*/
+static void stop_functional_test(void)
+{
+	/* Only stop test is functional test is running */
+	if (functional_test_data.state == FUNC_TEST_STATE_NOT_STARTED ||
+	    functional_test_data.state == FUNC_TEST_STATE_COMPLETE) {
+		return;
+	}
+
+	functional_test_data.result = evaluate_functional_test_result(&functional_test_data);
+	LOG_INF("Test result: %u", functional_test_data.result);
+	if (functional_test_data.result == FUNC_TEST_SUCCESS) {
+		etc_set_power_mode(ETC_POWER_MODE_PROBE);
+	}
+
+	functional_test_data.state = FUNC_TEST_STATE_COMPLETE;
+	k_work_cancel_delayable(&functional_test_work);
+
+	struct data_event *data_event = new_data_event();
+
+	data_event->type = DATA_EVT_FUNCTIONAL_TEST_COMPLETE;
+	data_event->data.test_result = functional_test_data.result;
+	APP_EVENT_SUBMIT(data_event);
+}
+
+static void functional_test_work_fn(struct k_work *work)
+{
+	stop_functional_test();
+}
+
+static void start_functional_test(void)
+{
+	memset(&functional_test_data, 0, sizeof(functional_test_data));
+	functional_test_data.state = FUNC_TEST_STATE_COLLECTING_DATA;
+	k_work_reschedule(&functional_test_work, K_SECONDS(FUNCTIONAL_TEST_TIMEOUT_S));
+	SEND_EVENT(data, DATA_EVT_FUNCTIONAL_TEST_START);
+}
+
+
+/** Track/collect functional test data.
+ * 
+ * @retval 1 Data collected, ready to be sent to cloud.
+ * @retval 0 Not all data ready that needs to be sent to cloud or functional
+ *           test not running.
+*/
+static int track_functional_test(enum functional_test_data_type type,
+				  void *data)
+{
+	__ASSERT_NO_MSG(data != NULL);
+
+	if (functional_test_data.state == FUNC_TEST_STATE_NOT_STARTED ||
+	    functional_test_data.state == FUNC_TEST_STATE_COMPLETE) {
+		return 0;
+	}
+
+	switch (type) {
+	case DATA_TYPE_SENSOR:
+		struct sensor_data *sensor_data = (struct sensor_data *)data;
+		memcpy(&functional_test_data.sensor_data, sensor_data, sizeof(struct sensor_data));
+		break;
+	case DATA_TYPE_MODEM:
+		int rsrp = *((int *)data);
+		functional_test_data.lte_rsrp = rsrp;
+		break;
+	case DATA_TYPE_ACK:
+		bool ack = *((bool *)data);
+		functional_test_data.ack = ack;
+		break;
+	default:
+	}
+
+	LOG_DBG("rsrp: %d, bat: %u", functional_test_data.lte_rsrp, 
+		functional_test_data.sensor_data.battery_mV);
+
+	if (functional_test_data.lte_rsrp != 0 &&
+	    functional_test_data.sensor_data.battery_mV != 0) {
+		functional_test_data.state = FUNC_TEST_STATE_SENDING_DATA;
+		return 1;
+	}
+
+	return 0;
+}
+
 /* Message handler for STATE_CLOUD_DISCONNECTED. */
 static void on_cloud_state_disconnected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) && 
 	    ((etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
-		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET) ||
-		((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
-		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))
-	 )) {
-		state_set(STATE_CLOUD_CONNECTED);	
+	     (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET) ||
+	     ((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
+	      (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA)) ||
+	     functional_test_data.state == FUNC_TEST_STATE_COLLECTING_DATA)) {
+		int rsrp = quectel_bg95_get_rsrp();
+		track_functional_test(DATA_TYPE_MODEM, &rsrp);
+		state_set(STATE_CLOUD_CONNECTED);
 		data_encode(false);
 		return;
 	}
@@ -459,6 +618,14 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		reset_send_status(&send_status);
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_START)) {
+		int rsrp = quectel_bg95_get_rsrp();
+		
+		if (track_functional_test(DATA_TYPE_MODEM, &rsrp) == 1) {
+			data_encode(false);
+		}
 	}
 }
 
@@ -530,6 +697,11 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
+		if (functional_test_data.state == FUNC_TEST_STATE_WAITING_FOR_ACK) {
+			bool ack = true;
+			track_functional_test(DATA_TYPE_ACK, (void *)&ack);
+			stop_functional_test();
+		}
 		data_codec_clear_data(&codec);
 		if (send_status.record_id > 0) {
 			/* Acknowledge record and encode more data, if connected to cloud */
@@ -593,6 +765,15 @@ static void on_all_states(struct data_msg_data *msg)
 			reclaim_active = false;
 		}
 	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
+		start_functional_test();
+		track_functional_test(DATA_TYPE_SENSOR, (void *)msg->module.sensor.data.sensors);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_END)) {
+		stop_functional_test();
+	}
 }
 
 void data_module_thread_fn(void)
@@ -609,10 +790,6 @@ void data_module_thread_fn(void)
 	}
 
 	state_set(STATE_CLOUD_DISCONNECTED);
-	int transmission_in_seconds = etc_get_tx_interval_secs();
-	data_publish_timeout = K_SECONDS(transmission_in_seconds);
-	k_work_init_delayable(&data_send_work, data_send_work_fn);
-	k_work_reschedule(&data_send_work, data_publish_timeout);
 
 	err = setup();
 	if (err) {

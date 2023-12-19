@@ -29,7 +29,7 @@
 LOG_MODULE_REGISTER(lwm2m_firmware, CONFIG_CLOUD_INTEGRATION_LOG_LEVEL);
 
 #include "lwm2m_firmware.h"
-
+#include "etc_device.h"
 #define BYTE_PROGRESS_STEP (1024 * 10)
 
 #define LWM2M_FIRM_PREFIX "lwm2m:fir"
@@ -63,6 +63,7 @@ static uint8_t mcuboot_buf[CONFIG_LWM2M_INTEGRATION_MCUBOOT_FLASH_BUF_SIZE] __al
 #endif
 #define UNUSED_OBJ_ID 0xffff
 #define PENDING_DELAY K_MSEC(10)
+
 static uint16_t ongoing_obj_id;
 static char *fota_path;
 static char *fota_host;
@@ -80,6 +81,7 @@ static void start_pending_fota_download(struct k_work *work);
 
 static K_WORK_DEFINE(download_work, start_fota_download);
 static K_WORK_DELAYABLE_DEFINE(pending_download_work, start_pending_fota_download);
+
 static struct update_data {
 	struct k_work_delayable work;
 	enum {APP, MODEM_DELTA} type;
@@ -783,6 +785,11 @@ static void start_pending_fota_download(struct k_work *work)
 	}
 }
 
+void lwm2m_firmware_start_pending_job(void) {
+	LOG_INF("Start pending FOTA work");
+	k_work_reschedule(&pending_download_work, PENDING_DELAY);
+}
+
 static int write_dl_uri(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst_id, uint8_t *data,
 			uint16_t data_len, bool last_block, size_t total_size)
 {
@@ -798,7 +805,9 @@ static int write_dl_uri(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst
 		set_state(obj_inst_id, STATE_DOWNLOADING);
 
 		if (ongoing_obj_id == UNUSED_OBJ_ID) {
-			lwm2m_start_download_image(data, obj_inst_id);
+			if (etc_device_nack_count() == 0) { // If device is ready for OTA
+				lwm2m_start_download_image(data, obj_inst_id);
+			}
 		} else {
 			set_result(obj_inst_id, RESULT_ADV_CONFLICT_STATE);
 		}

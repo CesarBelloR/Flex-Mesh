@@ -91,6 +91,22 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
  */
 int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_static);
 
+/** Update data codec with the functional test results.
+ * 
+ * @param cloud_data Pointer to struct cloud_codec_data_instance
+ * @param sensor_data Pointer to struct sensor_data instance containing the 
+ *                    sensor data collected during test.
+ * @param modem_rsrp Modem RSRP collected during test
+ * @param result Functional test result (pass: true, fail: false)
+ * 
+ * @retval 0 successful
+ * @retval <0 error
+*/
+int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_data,
+					       struct sensor_data *sensor_data,
+					       int modem_rsrp,
+					       enum functional_test_result result);
+
 /** @brief Clear the LwM2M path list from the provided struct cloud_codec_data.
  * 
  * @param[out] output Pointer to structure that contains the LwM2M path list 
@@ -125,6 +141,16 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
  * @return 1 if empty, 0 if not empty.
 */
 int lwm2m_codec_helpers_object_path_list_is_empty(struct cloud_codec_data *data);
+
+/**
+ * Move path list contained in cloud_data to backup_data. Path list in cloud_data
+ * is moved after clearing.
+ * 
+ * @retval 0 successful
+ * @retval <0 error
+*/
+int lwm2m_codec_helpers_object_path_list_move(struct cloud_codec_data *cloud_data,
+					      struct cloud_codec_data *backup_data);
 
 /**
  * @brief Split the paths contained in cloud_data between cloud_data and backup_data

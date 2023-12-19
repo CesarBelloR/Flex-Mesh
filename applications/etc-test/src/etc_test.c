@@ -33,6 +33,8 @@
 #include "bq24195.h"
 #endif
 #include "etc_device.h"
+#include "rtc_calib.h"
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test, CONFIG_ETC_TEST_LOG_LEVEL);
 
@@ -522,6 +524,9 @@ SHELL_CMD_ARG_REGISTER(etc_adc_load_cal, NULL, "Load ADC calibration information
 
 static int cmd_adc_set_offset(const struct shell *shell, size_t argc, char **argv)
 {
+	float new_val;
+	float written_val;
+	
 	if (argc != 2) {
 		shell_print(shell, 
 			    "Usage:\n"
@@ -530,13 +535,21 @@ static int cmd_adc_set_offset(const struct shell *shell, size_t argc, char **arg
 		return -EINVAL;
 	}
 
-	adc_calib_info.offset = atof(argv[1]);
+	new_val = atof(argv[1]);
+	adc_calib_info.offset = new_val;
 	int rc = etc_device_write_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for offset to NVS %d", rc);
-	} else {
-		shell_print(shell, "Saved the calibration for offset to NVS successful");
+		return -1;
 	}
+
+	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID, &written_val, sizeof(written_val));
+	if (rc) {
+		shell_error(shell, "Failed to read ADC offset from NVS %d", rc);
+		return -1;
+	}
+
+	shell_print(shell, "Saved ADC offset: %.2f", written_val);
 	return 0;
 }
 
@@ -544,6 +557,9 @@ SHELL_CMD_ARG_REGISTER(etc_adc_offset, NULL, "Set the offset value for the calib
 
 static int cmd_adc_set_high(const struct shell *shell, size_t argc, char **argv)
 {
+	float new_val;
+	float written_val;
+
 	if (argc != 2) {
 		shell_print(shell, 
 			    "Usage:\n"
@@ -552,13 +568,21 @@ static int cmd_adc_set_high(const struct shell *shell, size_t argc, char **argv)
 		return -EINVAL;
 	}
 
-	adc_calib_info.high = atof(argv[1]);
+	new_val = atof(argv[1]);
+	adc_calib_info.high = new_val;
 	int rc = etc_device_write_setting(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for high to NVS %d", rc);
-	} else {
-		shell_print(shell, "Saved the calibration for high to NVS successful");
+		return -1;
 	}
+
+	rc = etc_device_read_setting(ETC_CALIBRATION_RAWHIGH_ID, &written_val, sizeof(written_val));
+	if (rc) {
+		shell_error(shell, "Failed to read ADC high value from NVS %d", rc);
+		return -1;
+	}
+
+	shell_print(shell, "Saved ADC high value: %.2f", written_val);
 	return 0;
 }
 
@@ -566,6 +590,9 @@ SHELL_CMD_ARG_REGISTER(etc_adc_high, NULL, "Set the RAW high value for the calib
 
 static int cmd_adc_set_ref(const struct shell *shell, size_t argc, char **argv)
 {
+	float new_val;
+	float written_val;
+
 	if (argc != 2) {
 		shell_print(shell, 
 			    "Usage:\n"
@@ -574,13 +601,20 @@ static int cmd_adc_set_ref(const struct shell *shell, size_t argc, char **argv)
 		return -EINVAL;
 	}
 
-	adc_calib_info.ref = atof(argv[1]);
+	new_val = atof(argv[1]);
+	adc_calib_info.ref = new_val;
 	int rc = etc_device_write_setting(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for reference to NVS %d", rc);
-	} else {
-		shell_print(shell, "Saved the calibration for reference to NVS successful");
 	}
+	
+	rc = etc_device_read_setting(ETC_CALIBRATION_REF_ID, &written_val, sizeof(written_val));
+	if (rc) {
+		shell_error(shell, "Failed to read ADC ref value from NVS %d", rc);
+		return -1;
+	}
+
+	shell_print(shell, "Saved ADC ref: %.2f", written_val);
 	return 0;
 }
 
@@ -1527,6 +1561,8 @@ void gpio_watchdog_interrupt_event(const struct device *dev, struct gpio_callbac
 static int cmd_stop_feed_wdt(const struct shell *shell, size_t argc, char **argv) 
 {
 	etc_watchdog_stop_work();
+
+	shell_print(shell, "Stopped watchdog feed");
 	return 0;
 }
 SHELL_CMD_ARG_REGISTER(etc_stop_wdt, NULL, "Stop feeding hardware watchdog", cmd_stop_feed_wdt, 1, 0);
@@ -1659,6 +1695,8 @@ static char tmp_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv)
 {
+	int ret;
+
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
 		size_t input_len = strlen(argv[1]);
 		if (input_len > 6 || input_len < 1) {
@@ -1675,7 +1713,11 @@ static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv
 		}
 		shell_print(shell, "OK");
 		snprintf(tmp_device_id, sizeof(tmp_device_id), "%02d%06d", CONFIG_PRODUCTION_GROUP_VALUE, atoi(argv[1]));
-		etc_device_write_setting(ETC_SETTING_DEVICE_ID, (char *)tmp_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+		ret = etc_device_write_setting(ETC_SETTING_DEVICE_ID, (char *)tmp_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+		if (ret) {
+			shell_error(shell, "Error writing device id");
+			return -1;
+		}
 	} else {
 		shell_error(shell, "Invalid device id");
 	}
@@ -1710,8 +1752,15 @@ static int cmd_set_psk(const struct shell *shell, size_t argc, char **argv)
 
 static int cmd_get_device_id(const struct shell *shell, size_t argc, char **argv)
 {
+	int ret;
+	
 	memset(tmp_device_id, 0, sizeof(tmp_device_id));
-	etc_device_read_setting(ETC_SETTING_DEVICE_ID, (char *)tmp_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+	ret = etc_device_read_setting(ETC_SETTING_DEVICE_ID, (char *)tmp_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+	if (ret) {
+		shell_error(shell, "Error reading device ID");
+		return -1;
+	}
+
 	shell_print(shell, "Device ID %s", tmp_device_id);
 	return 0;
 }
@@ -1723,3 +1772,48 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings,
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
 SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);
+
+static int cmd_rtc_calib(const struct shell *shell, size_t argc, char **argv)
+{
+	if (calibrate_rtc() != 0) {
+		shell_error(shell, "Error calibrating RTC");
+		return -1;
+	}
+
+	shell_print(shell, "RTC calibrated");
+
+	return 0;
+}
+
+static int cmd_rtc_offset(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	float offset_ppm;
+
+	if (argc == 1) {
+		offset_ppm = get_rtc_offset();
+		shell_print(shell, "RTC offset: %.2f ppm", offset_ppm);
+		return 0;
+	} else if (argc == 2) {
+		offset_ppm = (float)atof(argv[1]);
+		ret = set_rtc_offset(&offset_ppm);
+		if (ret == 0) {
+			shell_print(shell, "Set RTC offset to %.2f ppm", offset_ppm);
+			return 0;
+		} else {
+			shell_error(shell, "Error setting RTC offset");
+			return -1;
+		}
+	}
+
+	shell_print(shell, "Usage: %s [<offset in ppm>]\n"
+			   "  If offset is not provided, print current offset.",
+		    argv[0]);
+	return -1;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_rtc, 
+	SHELL_CMD(calibrate, NULL, "Calibrate RTC", cmd_rtc_calib),
+	SHELL_CMD_ARG(offset, NULL, "Get/set offset: rtc offset [<offset in ppm>]", cmd_rtc_offset, 1, 1),
+	SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(rtc, &sub_rtc, "RTC calibration", NULL);

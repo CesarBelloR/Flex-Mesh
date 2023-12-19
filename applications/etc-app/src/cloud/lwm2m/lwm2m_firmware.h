@@ -52,6 +52,11 @@ int lwm2m_init_firmware(void);
  * @brief Initialize Image Update object
  */
 int lwm2m_init_image(void);
+
+/**
+ * @brief Trigger the OTA job if any pending
+ */
+void lwm2m_firmware_start_pending_job(void);
 #endif
 
 #define RESULT_ADV_FOTA_CANCELLED 10

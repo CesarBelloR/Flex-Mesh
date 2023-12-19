@@ -6,6 +6,13 @@ menuconfig ETC_DEVICE
 
 if ETC_DEVICE
 
+config ETC_DEVICE_INIT_PRIORITY
+	int "etc_device init priority"
+	default APPLICATION_INIT_PRIORITY
+	help
+	  Init priority for the etc_device module, which includes initializing
+	  NVS.
+
 module = ETC_DEVICE
 module-str = device
 source "subsys/logging/Kconfig.template.log_config"

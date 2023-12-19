@@ -46,6 +46,7 @@ struct etc_sensor_adc_calibration_info {
 
 // Get any one sht31 in current bus. If NULL, SHT31 is not ready 
 const struct device *const sht31_i2c_dev = DEVICE_DT_GET_ANY(sensirion_sht31);
+const struct device *ds2484_dev = DEVICE_DT_GET_ANY(exact_ds2484);
 
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 static const struct gpio_dt_spec sense_dt = 
@@ -62,6 +63,11 @@ static const struct gpio_dt_spec s1_dt =
 static const struct gpio_dt_spec vsen_en_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 
+#define FUNCTIONAL_TEST_VALUE_ACCURACY 0.5f
+static const float functional_test_values[] = {
+	-4.39, 5.02, -4.39, 5.02
+};
+
 static enum sensor_type list_sensor_type[SENSOR_INPUT_IN4 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN4 + 1];
 static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
@@ -72,6 +78,10 @@ static int sensor_battery_raw_adc = 0;
 static struct etc_sensor_adc_calibration_info etc_sensor_adc_calibration_info= {0x00};
 static etc_sensor_evt_handler_t sensor_evt_handler;
 static enum etc_sensor_status last_sensor_status = SENSOR_CONNECTED;
+/* Flag that signals if current connected sensors' state qualifies for functional
+ * test mode. */
+static bool enter_functional_test = false;
+
 /* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
 inline static int8_t remap_th_channel(int8_t channel)
 {
@@ -186,7 +196,8 @@ static void etc_sensor_gpios_one_wire_disable(void)
 #endif
 }
 
-static void etc_sensor_run_detection(void) {
+static void etc_sensor_run_detection(void) 
+{
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		etc_sensor_adc_switch_channel(i);
@@ -203,7 +214,8 @@ static void etc_sensor_run_detection(void) {
 #endif
 }
 
-static void etc_sensor_probe_check(void) {
+static void etc_sensor_probe_check(void) 
+{
 	int no_connected_counter = 0;
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		float temp = etc_sensor_get_probe_temp(i);
@@ -227,54 +239,86 @@ static void etc_sensor_probe_check(void) {
 	}
 }
 
-static void etc_sensor_run_digital_sample(void) {
+static inline int etc_sensor_acquire_digital_sensor(float *humidity_val, int8_t index)
+{
+	__ASSERT_NO_MSG(humidity_val != NULL);
+
+	if (!device_is_ready(sht31_i2c_dev)) {
+		LOG_ERR("SHT31 is not ready in I2C bus");
+		return -1;
+	}
+
+	/* Reset the bus */
+	sensor_attr_set(sht31_i2c_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_CONFIGURATION, NULL);
+	struct sensor_value temp, hum;
+	int rc = sensor_sample_fetch(sht31_i2c_dev);
+	if (rc) {
+		LOG_ERR("Failed to fetch sensor SHT31 (err %d)", rc);
+		return rc;
+	}
+
+	rc = sensor_channel_get(sht31_i2c_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
+	if (rc) {
+		LOG_ERR("Failed to get temperature sensor SHT31 (err %d)", rc);
+		return rc;
+	} else {
+		list_sensor_digital_temp[index] = (float)sensor_value_to_double(&temp);
+	}
+
+	rc = sensor_channel_get(sht31_i2c_dev, SENSOR_CHAN_HUMIDITY, &hum);
+	if (rc) {
+		LOG_ERR("Failed to get humidity sensor SHT31 (err %d)", rc);
+		return rc;
+	}
+	
+	*humidity_val = (float)sensor_value_to_double(&hum);
+	
+	return 0;
+}
+
+extern int ds2484_get_logic_level(const struct device *dev);
+
+static void etc_sensor_run_digital_sample(void) 
+{
+	int ret;
+
 	etc_sensor_gpios_one_wire_enable();
 	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	sensor_digital_humid_port_index = -1;
+	enter_functional_test = true;
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
+		etc_sensor_adc_switch_channel(i);
 		if (list_sensor_type[i] == SENSOR_TYPE_DIGITAL) {
-			list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
-			etc_sensor_adc_switch_channel(i);
+			float humidity_val;
 
+			enter_functional_test = false;
 			k_msleep(50);
-			if (!device_is_ready(sht31_i2c_dev)) {
-				LOG_ERR("SHT31 is not ready in I2C bus");
-				continue;
-			}
 
-			/* Reset the bus */
-			sensor_attr_set(sht31_i2c_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_CONFIGURATION, NULL);
-			struct sensor_value temp, hum;
-			int rc = sensor_sample_fetch(sht31_i2c_dev);
-			if (rc) {
-				LOG_ERR("Failed to fetch sensor SHT31 (err %d)", rc);
-				continue;
-			}
+			ret = etc_sensor_acquire_digital_sensor(&humidity_val,
+								i);
 
-			rc = sensor_channel_get(sht31_i2c_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
-			if (rc) {
-				LOG_ERR("Failed to get temperature sensor SHT31 (err %d)", rc);
-			} else {
-				list_sensor_digital_temp[i] = (float)sensor_value_to_double(&temp);
-			}
-
-			if (sensor_digital_humid != SENSOR_HUMID_NO_CONNECTED) {
-				// Get only one humidity sensor.
-				continue;
-			}
-			rc = sensor_channel_get(sht31_i2c_dev, SENSOR_CHAN_HUMIDITY, &hum);
-			if (rc) {
-				LOG_ERR("Failed to get humidity sensor SHT31 (err %d)", rc);
-			} else {
-				sensor_digital_humid = (float)sensor_value_to_double(&hum);
+			/* Only one humidity sensor is supported */
+			if (ret == 0 &&
+			    sensor_digital_humid == SENSOR_HUMID_NO_CONNECTED) {
+				sensor_digital_humid = humidity_val;
 				sensor_digital_humid_port_index = i;
+			}
+		} else if (enter_functional_test) {
+			k_msleep(50);
+
+			ret = ds2484_get_logic_level(ds2484_dev);
+			LOG_DBG("LL: %d", ret);
+			if (ret != 0) {
+				enter_functional_test = false;
 			}
 		}
 	}
 	etc_sensor_gpios_one_wire_disable();
 }
 
-static int etc_sensor_get_calibrated_adc(int raw_adc) {
+static int etc_sensor_get_calibrated_adc(int raw_adc) 
+{
 	int calibrated_adc = raw_adc;
 	if (etc_sensor_adc_calibration_info.loaded) {
 		calibrated_adc = (int)(((float)(raw_adc) - etc_sensor_adc_calibration_info.offset) / 
@@ -284,7 +328,8 @@ static int etc_sensor_get_calibrated_adc(int raw_adc) {
 	return calibrated_adc;
 }
 
-static void etc_sensor_run_analog_sample(void) {
+static void etc_sensor_run_analog_sample(void) 
+{
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG) {
 			etc_sensor_adc_switch_channel(i);
@@ -299,7 +344,8 @@ static void etc_sensor_run_analog_sample(void) {
 
 #if defined(CONFIG_ETC_NTC_TABLE)
 static float etc_sensor_ntc_converter(const float table[], int table_length, int offset , 
-	int raw_adc, int max_adc) {
+	int raw_adc, int max_adc) 
+{
  	float input = ((float)max_adc / (float)raw_adc) - 1;
  	input = (float) SENSOR_NTC_NOMINAL_RESISTANCE / input;
  	input = input / 1000.0;
@@ -317,7 +363,8 @@ static float etc_sensor_ntc_converter(const float table[], int table_length, int
   	return temp_value;
 }
 #else
-static float etc_sensor_ntc_converter(int data, float full_scale_v, int full_scale_count) {
+static float etc_sensor_ntc_converter(int data, float full_scale_v, int full_scale_count) 
+{
 	float raw_data = ((float)(data) * full_scale_v / SENSOR_NTC_REFERENCE_VOLTAGE);
 	float tmp_value = (float)full_scale_count / (float)raw_data - 1.0;
 	tmp_value = SENSOR_NTC_RESISTOR_REF / tmp_value;
@@ -331,7 +378,8 @@ static float etc_sensor_ntc_converter(int data, float full_scale_v, int full_sca
 }
 #endif
 
-static void etc_sensor_load_calibration(void) {
+static void etc_sensor_load_calibration(void) 
+{
 	int rc = 0;
 	etc_sensor_adc_calibration_info.loaded = false;
 	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID, &etc_sensor_adc_calibration_info.offset, sizeof(etc_sensor_adc_calibration_info.offset));
@@ -353,7 +401,8 @@ static void etc_sensor_load_calibration(void) {
 	etc_sensor_adc_calibration_info.loaded = true;
 }
 
-void etc_sensor_init(etc_sensor_evt_handler_t handler) {
+void etc_sensor_init(etc_sensor_evt_handler_t handler) 
+{
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 	__ASSERT(ambient_i2c_dev != NULL, "Failed to get device binding");
 	__ASSERT(device_is_ready(ambient_i2c_dev), "Device %s is not ready", ambient_i2c_dev->name);
@@ -371,7 +420,8 @@ void etc_sensor_init(etc_sensor_evt_handler_t handler) {
 	sensor_evt_handler = handler;
 }
 
-float etc_sensor_get_ambient_temp(void) {
+float etc_sensor_get_ambient_temp(void) 
+{
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_NTC_SENSOR)
 #if defined(CONFIG_ETC_NTC_TABLE)
 	return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset, 
@@ -400,7 +450,8 @@ float etc_sensor_get_ambient_temp(void) {
 	return SENSOR_TEMP_NO_CONNECTED;
 }
 
-float etc_sensor_get_probe_temp(enum sensor_input input) {
+float etc_sensor_get_probe_temp(enum sensor_input input) 
+{
 	__ASSERT(input >= 0 && input <= 3, "invalid channel number");
 	if (list_sensor_type[input] == SENSOR_TYPE_ANALOG) {
 		#if defined(CONFIG_ETC_NTC_TABLE)
@@ -419,23 +470,27 @@ float etc_sensor_get_probe_temp(enum sensor_input input) {
 	return SENSOR_TEMP_NO_CONNECTED;
 }
 
-float etc_sensor_get_probe_humid(void) {
+float etc_sensor_get_probe_humid(void) 
+{
 	return sensor_digital_humid;
 }
 
-int8_t etc_sensor_get_probe_humid_index(void) {
+int8_t etc_sensor_get_probe_humid_index(void) 
+{
 	return sensor_digital_humid_port_index;
 }
 
 
-uint16_t etc_sensor_get_battery(void) {
+uint16_t etc_sensor_get_battery(void) 
+{
 	int raw_battery_adc = sensor_battery_raw_adc;
 	adc_get_raw_to_millivolts(ETC_ADC_CHANNEL_BATTERY, &raw_battery_adc);
 	int adc_mv_battery = raw_battery_adc * (sFullOhms / sOutputOhms);
 	return adc_mv_battery;
 }
 
-void etc_sensor_run_acquisition(void) {
+void etc_sensor_run_acquisition(void) 
+{
 	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	/* Enable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_enable();
@@ -457,15 +512,46 @@ void etc_sensor_run_acquisition(void) {
 	etc_sensor_probe_check();
 }
 
-enum sensor_type etc_sensor_get_probe_type(enum sensor_input input) {
+enum sensor_type etc_sensor_get_probe_type(enum sensor_input input) 
+{
 	__ASSERT(input >= 0 && input <= 3, "invalid channel number");
 	return list_sensor_type[input];
 }
 
-enum etc_sensor_status etc_sensor_get_status(void) {
+enum etc_sensor_status etc_sensor_get_status(void) 
+{
 	enum etc_sensor_status status;
 	k_mutex_lock(&etc_sensor_mtx, K_FOREVER);
 	status = last_sensor_status;
 	k_mutex_unlock(&etc_sensor_mtx);
 	return status;
+}
+
+bool etc_sensor_get_enter_functional_test(void)
+{
+	return enter_functional_test;
+}
+
+void etc_sensor_enter_functional_test(void)
+{
+	etc_sensor_gpios_enable();
+}
+
+void etc_sensor_exit_functional_test(void)
+{
+	etc_sensor_gpios_disable();
+}
+
+bool etc_sensor_check_functional_test_values(struct sensor_data *data) 
+{
+	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		float val = data->sensor[i];
+		float expected_val = functional_test_values[i];
+		if (val < (expected_val - FUNCTIONAL_TEST_VALUE_ACCURACY) ||
+		    val > (expected_val + FUNCTIONAL_TEST_VALUE_ACCURACY)) {
+			return false;
+		}
+	}
+
+	return true;
 }

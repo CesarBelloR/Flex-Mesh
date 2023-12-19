@@ -102,6 +102,21 @@ static int ds2484_configure(const struct device *dev, enum w1_settings_type type
 	return ds2482_84_write_config(&config->i2c_spec, data->reg_device_config);
 }
 
+int ds2484_get_logic_level(const struct device *dev)
+{
+	const struct ds2484_config *config = dev->config;
+	uint8_t byte;
+	int ret;
+
+	ret = ds2482_84_read(&config->i2c_spec, REG_STATUS, &byte);
+	if (ret < 0) {
+		LOG_ERR("Reading status");
+		return -1;
+	}
+
+	return ((byte & STATUS_LL_msk) >> STATUS_LL_pos);
+}
+
 static int ds2484_init(const struct device *dev)
 {
 	const struct ds2484_config *config = dev->config;

@@ -752,8 +752,15 @@ int lwm2m_codec_helpers_set_relay_data(const uint8_t *data, uint16_t data_len)
 	return err;
 }
 
+/** Invalidate the current sensor value.
+ * 
+ * @retval 1 value invalidated and changed
+ * @retval 0 value was already invalidated
+ * @retval <0 error
+ * 
+*/
 static int invalidate_temp_sensor_value(struct cloud_codec_data *cloud_data,
-				   int obj_inst_id, const struct lwm2m_obj_path *path,
+				   int obj_inst_id,
 				   time_t timestamp)
 {
 	int err;
@@ -775,13 +782,7 @@ static int invalidate_temp_sensor_value(struct cloud_codec_data *cloud_data,
 		if (err) {
 			return err;
 		}
-		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
-				path,
-				1);
-		if (err) {
-			LOG_ERR("Failed populating object path list, error: %d", err);
-			return err;
-		}
+		return 1;
 	}
 
 	return 0;
@@ -844,6 +845,36 @@ static inline int set_resource_if_changed_s32(struct cloud_codec_data *cloud_dat
 	return err;
 }
 
+/** Set current values of a temperature object instance.
+ * 
+ * @retval 1 Object instance updated successfully.
+ * @retval 0 Temperature is invalid
+ * @retval <0 error
+*/
+static int set_temperature(int instance_id, float value, int64_t timestamp)
+{
+	int err;
+
+	if (!data_codec_compare_temperature_is_valid(value)) {
+		return 0;
+	}
+	
+	err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, instance_id, TIMESTAMP_RID),
+			(time_t)(timestamp));
+	if (err) {
+		return err;
+	}
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, instance_id, SENSOR_VALUE_RID),
+				value);
+	if (err) {
+		return err;
+	}
+
+	LOG_DBG("temp inst: %d, value: %.2f", instance_id, value);
+
+	return 1;
+}
+
 int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 					union etc_device_record *record)
 {
@@ -883,19 +914,21 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 	}
 
 	if (data_codec_compare_humidity_is_valid(record->sensor[SENSOR_INPUT_HUMID])) {
-		err = lwm2m_set_time(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, TIMESTAMP_RID), (time_t)(record->timestamp));
+		err = lwm2m_set_time(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, TIMESTAMP_RID), 
+				     (time_t)(record->timestamp));
 		if (err) {
 			return err;
 		}
 
 		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, SENSOR_VALUE_RID),
-			record->sensor[SENSOR_INPUT_HUMID]);
+				    record->sensor[SENSOR_INPUT_HUMID]);
 		if (err) {
 			return err;
 		}
 
 		err = lwm2m_set_s8(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0,
-							ETC_HUMID_OBJ_R_PORT), etc_sensor_get_probe_humid_index());
+					      ETC_HUMID_OBJ_R_PORT), 
+				   etc_sensor_get_probe_humid_index());
 		if (err) {
 			return err;
 		}
@@ -919,33 +952,156 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id),
 		};
 		
-		if (!data_codec_compare_temperature_is_valid(record->sensor[i])) {
-			invalidate_temp_sensor_value(cloud_data, obj_inst_id, path_list,
-						(time_t)(record->timestamp));
-			continue;
-		}
-		
-		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, TIMESTAMP_RID),
-				(time_t)(record->timestamp));
-		if (err) {
-			return err;
-		}
-		err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, SENSOR_VALUE_RID),
-				    record->sensor[i]);
-		if (err) {
-			return err;
+		err = set_temperature(obj_inst_id, record->sensor[i], record->timestamp);
+		if (err == 0) {
+			err = invalidate_temp_sensor_value(cloud_data, obj_inst_id,
+							   (time_t)(record->timestamp));
 		}
 
-		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
-							       path_list,
-							       ARRAY_SIZE(path_list));
-		if (err) {
-			LOG_ERR("Failed populating object path list, error: %d", err);
-			return err;
+		/* Add path to temperature object if value changed. */
+		if (err == 1) {
+			err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+									path_list,
+									ARRAY_SIZE(path_list));
+			if (err) {
+				LOG_ERR("Failed populating object path list, error: %d", err);
+			}
+			continue;
 		}
 	}
 
 	return 0;
+}
+
+int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_data,
+					       struct sensor_data *sensor_data,
+					       int modem_rsrp,
+					       enum functional_test_result result)
+{
+	int ret;
+
+	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		int obj_inst_id = i + 1;
+		const struct lwm2m_obj_path paths[] = {
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, SENSOR_VALUE_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, TIMESTAMP_RID)
+		};
+
+		ret = set_temperature(obj_inst_id, sensor_data->sensor[i],
+				      sensor_data->timestamp);
+		if (ret < 0) {
+			LOG_ERR("set temperature");
+			return ret;
+		}
+
+		lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							 paths, ARRAY_SIZE(paths));
+	}
+	
+	const struct lwm2m_obj_path path_list[] = {
+		LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+		LWM2M_OBJ(ETC_FUNCTIONAL_TEST_OBJECT_ID, 0, ETC_FUNCTIONAL_TEST_OBJ_R_STATUS),
+	};
+	ret = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+			   modem_rsrp);
+	if (ret) {
+		return ret;
+	}
+	ret = lwm2m_set_u8(&LWM2M_OBJ(ETC_FUNCTIONAL_TEST_OBJECT_ID, 0, ETC_FUNCTIONAL_TEST_OBJ_R_STATUS),
+			   result);
+	if (ret) {
+		return ret;
+	}
+	lwm2m_codec_helpers_object_path_list_add(cloud_data,
+						 path_list, ARRAY_SIZE(path_list));
+
+	return 0;
+}
+
+bool lwm2m_codec_helpers_update_reclaim_state(struct cloud_codec_data *cloud_data,
+					      enum data_reclaim_state new_state)
+{
+	uint8_t lwm2m_reclaim_state;
+	const struct lwm2m_obj_path reclaim_state_path = 
+		LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID, 0, ETC_RECLAIM_OBJ_R_STATUS);
+	int err;
+
+	switch (new_state) {
+	case RECLAIM_IDLE:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_IDLE;
+		break;
+	case RECLAIM_IN_PROGRESS:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_IN_PROGRESS;
+		break;
+
+	case RECLAIM_SUCCESS:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_COMPLETE;
+		break;
+
+	case RECLAIM_ERROR:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_ERROR;
+		break;
+	
+	default:
+		return false;
+	}
+
+	err = lwm2m_set_u8(&reclaim_state_path, lwm2m_reclaim_state);
+	if (err) {
+		return false;
+	}
+	err = lwm2m_codec_helpers_object_path_list_add(cloud_data, 
+						       &reclaim_state_path,
+						       1);
+	if (err) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * @return If success, index copied into place
+ *         If no valid entry found: -1.
+*/
+static int move_valid_entry(struct lwm2m_obj_path *path_list, size_t list_size)
+{
+	/* Skip first (invalid) entry*/
+	for (int i = 1; i < list_size; i++) {
+		if (path_list[i].level > 0) {			
+			path_list[0].obj_id = path_list[i].obj_id;
+			path_list[0].obj_inst_id = path_list[i].obj_inst_id;
+			path_list[0].res_id = path_list[i].res_id;
+			path_list[0].res_inst_id = path_list[i].res_inst_id;
+			path_list[0].level = path_list[i].level;
+
+			path_list[i].level = 0;
+			
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static void lwm2m_codec_helpers_object_path_list_remove_invalids(struct cloud_codec_data *cloud_data)
+{
+	int ret;
+
+	for (int i = 0; i < cloud_data->valid_object_paths; i++) {
+		/* If invalid entry is found, move next valid entry in its place. */
+		if (cloud_data->paths[i].level == 0) {
+			ret = move_valid_entry(&cloud_data->paths[i],
+					       cloud_data->valid_object_paths - i);
+			/* Set new size and exit if either no valid entry found
+			   or if last entry was copied into place. */
+			if (ret == -1 || 
+			    (ret + i + 1) == cloud_data->valid_object_paths) {
+				cloud_data->valid_object_paths = i + 1;
+				return;
+			}
+		}
+	}
 }
 
 void lwm2m_codec_helpers_path_list_log(const struct lwm2m_obj_path path_list[],
@@ -1094,90 +1250,21 @@ bool lwm2m_codec_helpers_object_path_list_contains_measurement(struct cloud_code
 	return false;
 }
 
-bool lwm2m_codec_helpers_update_reclaim_state(struct cloud_codec_data *cloud_data,
-					      enum data_reclaim_state new_state)
-{
-	uint8_t lwm2m_reclaim_state;
-	const struct lwm2m_obj_path reclaim_state_path = 
-		LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID, 0, ETC_RECLAIM_OBJ_R_STATUS);
-	int err;
-
-	switch (new_state) {
-	case RECLAIM_IDLE:
-		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_IDLE;
-		break;
-	case RECLAIM_IN_PROGRESS:
-		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_IN_PROGRESS;
-		break;
-
-	case RECLAIM_SUCCESS:
-		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_COMPLETE;
-		break;
-
-	case RECLAIM_ERROR:
-		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_ERROR;
-		break;
-	
-	default:
-		return false;
-	}
-
-	err = lwm2m_set_u8(&reclaim_state_path, lwm2m_reclaim_state);
-	if (err) {
-		return false;
-	}
-	err = lwm2m_codec_helpers_object_path_list_add(cloud_data, 
-						       &reclaim_state_path,
-						       1);
-	if (err) {
-		return false;
-	}
-
-	return true;
-}
-
-/**
- * @return If success, index copied into place
- *         If no valid entry found: -1.
-*/
-static int move_valid_entry(struct lwm2m_obj_path *path_list, size_t list_size)
-{
-	/* Skip first (invalid) entry*/
-	for (int i = 1; i < list_size; i++) {
-		if (path_list[i].level > 0) {			
-			path_list[0].obj_id = path_list[i].obj_id;
-			path_list[0].obj_inst_id = path_list[i].obj_inst_id;
-			path_list[0].res_id = path_list[i].res_id;
-			path_list[0].res_inst_id = path_list[i].res_inst_id;
-			path_list[0].level = path_list[i].level;
-
-			path_list[i].level = 0;
-			
-			return i;
-		}
-	}
-
-	return -1;
-}
-
-static void lwm2m_codec_helpers_object_path_list_remove_invalids(struct cloud_codec_data *cloud_data)
+int lwm2m_codec_helpers_object_path_list_move(struct cloud_codec_data *cloud_data,
+					      struct cloud_codec_data *backup_data)
 {
 	int ret;
 
-	for (int i = 0; i < cloud_data->valid_object_paths; i++) {
-		/* If invalid entry is found, move next valid entry in its place. */
-		if (cloud_data->paths[i].level == 0) {
-			ret = move_valid_entry(&cloud_data->paths[i],
-					       cloud_data->valid_object_paths - i);
-			/* Set new size and exit if either no valid entry found
-			   or if last entry was copied into place. */
-			if (ret == -1 || 
-			    (ret + i + 1) == cloud_data->valid_object_paths) {
-				cloud_data->valid_object_paths = i + 1;
-				return;
-			}
-		}
+	ret = lwm2m_codec_helpers_object_path_list_add(backup_data,
+						       cloud_data->paths,
+						       cloud_data->valid_object_paths);
+	if (ret != 0) {
+		return -ENOMEM;
 	}
+
+	lwm2m_codec_helpers_object_path_list_clear(cloud_data);
+	
+	return 0;
 }
 
 int lwm2m_codec_helpers_object_path_list_split(struct cloud_codec_data *cloud_data,

@@ -10,6 +10,7 @@
 #include <zephyr/net/net_ip.h>
 #include "events/lora_event.h"
 #include "events/sensor_event.h"
+#include "events/data_event.h"
 
 #include "etc_device.h"
 #include "etc_settings.h"
@@ -217,6 +218,15 @@ int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 */
 int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data);
 
+/**
+ * Prepare packet with results of the functional test.
+ * 
+*/
+int data_codec_prepare_functional_test_data(struct cloud_codec_data *cloud_data,
+					    struct sensor_data *sensor_data,
+					    int modem_rsrp,
+					    enum functional_test_result result);
+
 /** 
  * @brief Clear the data saved in the cloud_data struct. This should be done
  *        after the data has been sent to the cloud, if the struct is to be reused.
@@ -232,6 +242,16 @@ int data_codec_clear_data(struct cloud_codec_data *cloud_data);
  * @return 1 if cloud_data contains data, 0 if not.
 */
 int data_codec_has_data(struct cloud_codec_data *cloud_data);
+
+/**
+ * Move all data contained in cloud_data to backup_data. Clear data from
+ * cloud_data after the move operation.
+ * 
+ * @retval 0 success
+ * @retval <0 error
+*/
+int data_codec_move_data(struct cloud_codec_data *cloud_data,
+			 struct cloud_codec_data *backup_data);
 
 /**
  * @brief Remove data to be sent from cloud_data and save it in backup_data.

@@ -11,6 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/kernel.h>
+#include <zephyr/init.h>
 
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_DEVICE_LOG_LEVEL);
 
@@ -18,14 +19,14 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_DEVICE_LOG_LEVEL);
 
 static struct nvs_fs etc_fs;
 
-void etc_device_nvs_init(void)
+int etc_device_nvs_init(void)
 {
 	int rc = 0;
 	struct flash_pages_info info;
 	etc_fs.flash_device = FLASH_AREA_DEVICE(ETC_SETTINGS_NODE_LABEL);
 	if (!device_is_ready(etc_fs.flash_device)) {
 		LOG_ERR("Flash device %s is not ready", etc_fs.flash_device->name);
-		return;
+		return -1;
 	}
 
 	etc_fs.offset = FLASH_AREA_OFFSET(ETC_SETTINGS_NODE_LABEL);
@@ -40,13 +41,16 @@ void etc_device_nvs_init(void)
 	rc = nvs_mount(&etc_fs);
 	if (rc) {
 		LOG_ERR("Flash Init failed");
-		return;
+		return -1;
 	}
 
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
 		FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL), info.size, etc_fs.sector_count);
 	LOG_DBG("Initialised etc setting successfully");
+
+	return 0;
 }
+SYS_INIT(etc_device_nvs_init, APPLICATION, CONFIG_ETC_DEVICE_INIT_PRIORITY);
 
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len)
 {
