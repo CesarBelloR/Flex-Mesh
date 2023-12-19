@@ -161,6 +161,8 @@ static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 }
 
 static void sensor_module_battery_handler(enum battery_status status) {
+	static enum sensor_event_type last_sensor_battery_event = SENSOR_EVT_ERROR;
+	enum sensor_event_type battery_event = SENSOR_EVT_ERROR;
 	switch (status) {
 		case BATTERY_NORMAL: {
 			LOG_DBG("BATTERY_NORMAL");
@@ -168,36 +170,41 @@ static void sensor_module_battery_handler(enum battery_status status) {
 			const uint8_t battery_percent_now =
 				etc_battery_percentage_from_voltage(battery_voltage_mv);
 			if (battery_percent_now >= BATTERY_MIN_FULL) {
-				SEND_EVENT(sensor, SENSOR_EVT_BATTERY_NORMAL_FULL);
+				battery_event = SENSOR_EVT_BATTERY_NORMAL_FULL;
 			} else if (battery_percent_now >= BATTERY_MIN_MED) {
-				SEND_EVENT(sensor, SENSOR_EVT_BATTERY_NORMAL_MED);
+				battery_event = SENSOR_EVT_BATTERY_NORMAL_MED;
 			} else {
-				SEND_EVENT(sensor, SENSOR_EVT_BATTERY_NORMAL_LOW);
+				battery_event = SENSOR_EVT_BATTERY_NORMAL_LOW;
 			}
 			break;
 		}
 		case BATTERY_LOW: {
-			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_NORMAL_LOW);
+			battery_event = SENSOR_EVT_BATTERY_NORMAL_LOW;
 			break;
 		}
 		case BATTERY_CHARGE_IN_PROCESS: {
 			LOG_DBG("BATTERY_CHARGE_IN_PROCESS");
-			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_IN_CHARGING);
+			battery_event = SENSOR_EVT_BATTERY_IN_CHARGING;
 			break;
 		}
 		case BATTERY_CHARGE_COMPLETE: {
 			LOG_DBG("BATTERY_CHARGE_COMPLETE");
-			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE);
+			battery_event = SENSOR_EVT_BATTERY_CHARGE_COMPLETE;
 			break;
 		}
 		case BATTERY_NO_INSTALLED: 
 		case BATTERY_DAMAGED: {
-			SEND_EVENT(sensor, SENSOR_EVT_BATTERY_ERROR);
+			battery_event = SENSOR_EVT_BATTERY_ERROR;
 			break;
 		}
 		default:
 			LOG_DBG("Battery Status %d", status);
 			break;
+	}
+
+	if (last_sensor_battery_event != battery_event) {
+		last_sensor_battery_event = battery_event;
+		SEND_EVENT(sensor, battery_event);
 	}
 }
 

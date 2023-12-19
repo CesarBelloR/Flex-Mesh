@@ -50,8 +50,6 @@ void etc_battery_poll_status(void) {
 	bq25618_poll_status(battery_dev);
 }
 
-
-
 enum battery_status etc_battery_get_status(void) {
 	return last_battery_status;
 }
@@ -87,11 +85,9 @@ static void etc_battery_charger_handler(uint8_t bus_status,
 		}
 	}
 
-	if (last_battery_status != current_status) {
+	if (etc_battery_cb != NULL) {
 		last_battery_status = current_status;
-		if (etc_battery_cb != NULL) {
-			etc_battery_cb(current_status);
-		}
+		etc_battery_cb(current_status);
 	}
 }
 
@@ -101,9 +97,9 @@ uint16_t etc_battery_get_voltage_mV(void)
 }
 
 uint8_t etc_battery_percentage_from_voltage(uint16_t voltage_mv)
-{
+{	
 	for (int i = 0; i < ARRAY_SIZE(lookup_table); i++) {
-		struct battery_lookup_entry *entry = &lookup_table[i];
+		struct battery_lookup_entry *entry = (struct battery_lookup_entry *)&lookup_table[i];
 
 		if (voltage_mv <= entry->start_voltage_mv &&
 		    voltage_mv >= entry->end_voltage_mv) {

@@ -41,14 +41,17 @@ static enum state_type {
 } state;
 
 /* UI module sub states. */
-static enum sub_state_type {
+enum sub_state_type {
 	SUB_STATE_NORMAL,
-	SUB_STATE_NORMAL_LOW,
-	SUB_STATE_NORMAL_MED,
-	SUB_STATE_NORMAL_FULL,
-	SUB_STATE_CHARGE_IN_PROCESS,
-	SUB_STATE_CHARGE_COMPLETE
-} sub_state = SUB_STATE_NORMAL, last_sub_state = SUB_STATE_NORMAL;
+	SUB_STATE_NORMAL_BAT_LOW,
+	SUB_STATE_NORMAL_BAT_MED,
+	SUB_STATE_NORMAL_BAT_FULL,
+	SUB_STATE_CHARGE_BAT_IN_PROCESS,
+	SUB_STATE_CHARGE_BAT_COMPLETE,
+};
+
+static enum sub_state_type sub_state = SUB_STATE_NORMAL;
+static enum sub_state_type last_sub_state = SUB_STATE_NORMAL; 
 
 static int ui_module_gen_num_of_sample = 0;
 
@@ -116,16 +119,18 @@ static char *state2str(enum state_type new_state)
 static char *sub_state2str(enum sub_state_type new_state)
 {
 	switch (new_state) {
-	case SUB_STATE_NORMAL_LOW:
-		return "SUB_STATE_NORMAL_LOW";
-	case SUB_STATE_NORMAL_MED:
-		return "SUB_STATE_NORMAL_MED";
-	case SUB_STATE_NORMAL_FULL:
-		return "SUB_STATE_NORMAL_FULL";
-	case SUB_STATE_CHARGE_IN_PROCESS:
-		return "SUB_STATE_CHARGE_IN_PROCESS";
-	case SUB_STATE_CHARGE_COMPLETE:
-		return "SUB_STATE_CHARGE_COMPLETE";
+	case SUB_STATE_NORMAL:
+		return "SUB_STATE_NORMAL";
+	case SUB_STATE_NORMAL_BAT_LOW:
+		return "SUB_STATE_NORMAL_BAT_LOW";
+	case SUB_STATE_NORMAL_BAT_MED:
+		return "SUB_STATE_NORMAL_BAT_MED";
+	case SUB_STATE_NORMAL_BAT_FULL:
+		return "SUB_STATE_NORMAL_BAT_FULL";
+	case SUB_STATE_CHARGE_BAT_IN_PROCESS:
+		return "SUB_STATE_CHARGE_BAT_IN_PROCESS";
+	case SUB_STATE_CHARGE_BAT_COMPLETE:
+		return "SUB_STATE_CHARGE_BAT_COMPLETE";
 	default:
 		return "Unknown";
 	}
@@ -246,10 +251,11 @@ static void update_led_pattern(enum led_state pattern)
 	ui_led_set_pattern((enum ui_led_pattern)pattern);
 }
 
-static void update_list_pattern(enum led_state state, int16_t duration) 
+static struct led_pattern* update_list_pattern(enum led_state state, int16_t duration) 
 {
 	led_pattern_list[state].led_state = state;
 	led_pattern_list[state].duration_msec = duration;
+	return &led_pattern_list[state];
 }
 
 static void led_pattern_update_work_fn(struct k_work *work)
@@ -260,30 +266,25 @@ static void led_pattern_update_work_fn(struct k_work *work)
 
 	if (node == NULL) {
 		LOG_DBG("Empty node");
-		if (sub_state_get() == SUB_STATE_CHARGE_COMPLETE) {
-			update_list_pattern(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);
-			next_pattern = &led_pattern_list[LED_STATE_CHARGE_BATTERY_FULL];
-		} else if (sub_state_get() == SUB_STATE_CHARGE_IN_PROCESS) {
-			update_list_pattern(LED_STATE_CHARGE_BATTERY_IN_CHARING, HOLD_FOREVER);
-			next_pattern = &led_pattern_list[LED_STATE_CHARGE_BATTERY_IN_CHARING];
-		} else if (sub_state_get() == SUB_STATE_NORMAL_FULL) {
-			update_list_pattern(LED_STATE_BATTERY_FULL, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
-			next_pattern = &led_pattern_list[LED_STATE_BATTERY_FULL];
+		if (sub_state_get() == SUB_STATE_CHARGE_BAT_COMPLETE) {
+			next_pattern = update_list_pattern(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);;
+		} else if (sub_state_get() == SUB_STATE_CHARGE_BAT_IN_PROCESS) {
+			next_pattern = update_list_pattern(LED_STATE_CHARGE_BATTERY_IN_CHARING, HOLD_FOREVER);
+		} else if (sub_state_get() == SUB_STATE_NORMAL_BAT_FULL) {
+			next_pattern = update_list_pattern(LED_STATE_BATTERY_FULL, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
 			sub_state_set(SUB_STATE_NORMAL);
-		} else if (sub_state_get() == SUB_STATE_NORMAL_MED) {
-			update_list_pattern(LED_STATE_BATTERY_MED, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
-			next_pattern = &led_pattern_list[LED_STATE_BATTERY_MED];
+		} else if (sub_state_get() == SUB_STATE_NORMAL_BAT_MED) {
+			next_pattern = update_list_pattern(LED_STATE_BATTERY_MED, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
 			sub_state_set(SUB_STATE_NORMAL);
-		} else if (sub_state_get() == SUB_STATE_NORMAL_LOW) {
-			update_list_pattern(LED_STATE_BATTERY_EMPTY, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
-			next_pattern = &led_pattern_list[LED_STATE_BATTERY_EMPTY];
+		} else if (sub_state_get() == SUB_STATE_NORMAL_BAT_LOW) {
+			next_pattern = update_list_pattern(LED_STATE_BATTERY_EMPTY, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
 			sub_state_set(SUB_STATE_NORMAL);
 		} else {
 			next_pattern = &led_pattern_list[LED_STATE_TURN_OFF];
 			enum sub_state_type _last_sub_state = last_sub_state_get();
-			if (_last_sub_state == SUB_STATE_NORMAL_LOW ||
-				_last_sub_state == SUB_STATE_NORMAL_MED ||
-				_last_sub_state == SUB_STATE_NORMAL_FULL) {
+			if (_last_sub_state == SUB_STATE_NORMAL_BAT_LOW ||
+				_last_sub_state == SUB_STATE_NORMAL_BAT_MED ||
+				_last_sub_state == SUB_STATE_NORMAL_BAT_FULL) {
 				update_list_pattern(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
 				sub_state_set(_last_sub_state);
 			} else {
@@ -368,6 +369,7 @@ static void transition_list_append(enum led_state led_state, int16_t duration_ms
 	/* Force to remove if it is here */
 	(void)sys_slist_find_and_remove(&pattern_transition_list, &led_pattern_list[led_state].header);	
 	sys_slist_append(&pattern_transition_list, &led_pattern_list[led_state].header);
+	sub_state_set(SUB_STATE_NORMAL);
 }
 
 /* Message handler for STATE_INIT. */
@@ -395,17 +397,20 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTING)) {
-		transition_list_append(LED_STATE_LTE_CONNECTING, UI_LED_WAIT_NORMAL_DURATION_MSEC);
+		transition_list_clear();
+		transition_list_append(LED_STATE_LTE_CONNECTING, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
-		transition_list_append(LED_STATE_LTE_CONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
+		transition_list_clear();
+		transition_list_append(LED_STATE_LTE_CONNECTED, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}	
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED) ||
 	    IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+		transition_list_clear();
 		transition_list_append(LED_STATE_LTE_DISCONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
@@ -423,12 +428,14 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
+		transition_list_clear();
 		transition_list_append(LED_STATE_CLOUD_CONNECTING, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
-		transition_list_append(LED_STATE_CLOUD_CONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
+		transition_list_clear();
+		transition_list_append(LED_STATE_CLOUD_CONNECTED, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
@@ -439,16 +446,19 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
-		transition_list_append(LED_STATE_LORA_LISTEN, UI_LED_WAIT_NORMAL_DURATION_MSEC);
+		transition_list_clear();
+		transition_list_append(LED_STATE_LORA_LISTEN, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_SEND)) {
+		transition_list_clear();
 		transition_list_append(LED_STATE_LORA_SEND, 2000);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_NACK)) {
+		transition_list_clear();
 		transition_list_append(LED_STATE_LORA_NACK, 2000);
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
@@ -476,19 +486,19 @@ static void on_state_running(struct ui_msg_data *msg)
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_ERROR)) {
 		transition_list_append(LED_STATE_CHARGE_BATTERY_ERROR, 7 * UI_LED_ERROR_BASE_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_CHARGE_IN_PROCESS);
+		sub_state_set(SUB_STATE_CHARGE_BAT_IN_PROCESS);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_CHARGING)) {
 		transition_list_append(LED_STATE_CHARGE_BATTERY_IN_CHARING, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_CHARGE_IN_PROCESS);
+		sub_state_set(SUB_STATE_CHARGE_BAT_IN_PROCESS);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
 		transition_list_append(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_CHARGE_COMPLETE);
+		sub_state_set(SUB_STATE_CHARGE_BAT_COMPLETE);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_FULL)) {
@@ -496,7 +506,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		transition_list_append(LED_STATE_BATTERY_FULL, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
 		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_NORMAL_FULL);
+		sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_MED)) {
@@ -504,7 +514,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		transition_list_append(LED_STATE_BATTERY_MED, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
 		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_NORMAL_MED);
+		sub_state_set(SUB_STATE_NORMAL_BAT_MED);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_LOW)) {
@@ -512,7 +522,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		transition_list_append(LED_STATE_BATTERY_EMPTY, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
 		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_NORMAL_LOW);
+		sub_state_set(SUB_STATE_NORMAL_BAT_LOW);
 	}
 }
 
@@ -657,6 +667,12 @@ static int cmd_ui_lte_connected(const struct shell *shell, size_t argc, char **a
 	return 0;
 }
 
+static int cmd_ui_lte_psm(const struct shell *shell, size_t argc, char **argv)
+{
+	SEND_EVENT(modem, MODEM_EVT_PSM_ENTERED);
+	return 0;
+}
+
 static int cmd_ui_lte_error(const struct shell *shell, size_t argc, char **argv)
 {
 	SEND_EVENT(modem, MODEM_EVT_ERROR);
@@ -741,6 +757,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(sensor_aquiring, NULL, "Event sensor aquiring", cmd_ui_sensor_aquiring),
 	SHELL_CMD(lte_connecting, NULL, "Event lte connecting", cmd_ui_lte_connecting),
 	SHELL_CMD(lte_connected, NULL, "Event lte connected", cmd_ui_lte_connected),
+	SHELL_CMD(lte_psm, NULL, "Event PSM entered", cmd_ui_lte_psm),
 	SHELL_CMD(lte_error, NULL, "Event lte error", cmd_ui_lte_error),
 	SHELL_CMD(lora_listen, NULL, "Event lora listen", cmd_ui_lora_listen),
 	SHELL_CMD(lora_send, NULL, "Event lora send", cmd_ui_lora_send),
