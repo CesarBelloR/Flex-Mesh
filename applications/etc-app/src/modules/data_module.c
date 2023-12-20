@@ -429,9 +429,8 @@ static void data_encode(bool split)
 		if (send_status.record_id != 0) {
 			ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
 			if (ret != 0) {
-				LOG_WRN("No message to publish");
-				return;
-			}	
+				LOG_WRN("Error populating data codec");
+			}
 		}
 
 		/* Update reclaim status */							   
