@@ -292,6 +292,7 @@ static int module_lora_wait_packet(void)
 	int16_t rssi;
 	int8_t snr;
 	int64_t start_time = k_uptime_get();
+	SEND_EVENT(lora, LORA_EVT_RX_READY);
 	memset(lora_rx_buf, 0, sizeof(lora_rx_buf));
 	memset(decoded_buf, 0, sizeof(decoded_buf));
 	ret = lora_config(lora_dev, &etc_lora_rx_config);
@@ -427,6 +428,7 @@ retry:
 		} else {
 			if (cnt++ >= LORA_RETRY_MAX_TIME) {
 				SEND_EVENT(lora, LORA_EVT_NACK);
+				k_sleep(K_SECONDS(1));
 				return rc;
 			}
 			

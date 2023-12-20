@@ -15,7 +15,7 @@ enum app_event_type {
 	 *  now started.
 	 */
 	APP_EVT_START,
-
+	
 	/** Connect to LTE network. */
 	APP_EVT_LTE_CONNECT,
 

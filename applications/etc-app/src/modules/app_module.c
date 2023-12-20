@@ -547,7 +547,6 @@ static void app_peripheral_on(bool is_rtc)
 		}
 	}
 #endif
-
 	if (is_rtc) {
 		LOG_DBG("Wakeup from sleep");
 #if defined(CONFIG_PCF85263)

@@ -37,6 +37,7 @@ enum etc_device_mode {
 	ETC_DEVICE_MODE_RELAY = 0x00,
 	ETC_DEVICE_MODE_LORA_LOGGER = 0x01,
 	ETC_DEVICE_MODE_LTE_LOGGER = 0x02,
+	ETC_DEVICE_MODE_BLE = 0x03,
 };
 
 /* Define a enum to describe about power mode */

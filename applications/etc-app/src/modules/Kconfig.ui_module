@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2023 EXACT Technology
+#
+
+menuconfig UI_MODULE
+	bool "UI module"
+	default y
+
+if UI_MODULE
+
+config UI_MODULE_SHELL
+	bool "Enable UI module shell for testing transition"
+	depends on SHELL
+	default n
+	help
+	  It will enable the shell interface to verify the transition 
+	  between each UI.
+
+endif

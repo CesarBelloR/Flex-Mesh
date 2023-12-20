@@ -13,6 +13,11 @@ config BATTERY_NOT_INSTALL_MV
 	int "The voltage in mV to determine battery in not installed"
 	default 2800
 
+config BATTERY_MODULE_SHELL
+	bool "Enable battery module shell for testing"
+	depends on SHELL
+	default n
+
 module = ETC_BATTERY
 module-str = battery
 source "subsys/logging/Kconfig.template.log_config"
