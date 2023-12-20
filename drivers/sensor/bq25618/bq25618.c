@@ -335,8 +335,6 @@ void bq25618_poll_status(const struct device *dev)
 	uint8_t power_status = 0;
 	uint8_t battery_status = 0;
 	uint8_t bus_status = 0;
-	// Set last battery status to invalid status (Fast charging but not input)
-	static uint8_t last_status = 0x10; 
 	uint8_t reg = 0x00;
 	int ret = read_register(dev, BQ25618_CHARGER_STATUS0_REG, &reg);
 	if (ret != 0) {
@@ -350,10 +348,7 @@ void bq25618_poll_status(const struct device *dev)
 	bus_status = (reg >> 5) & 0x07;
 
 	if (bq25618_evt_cb) {
-		if (last_status != reg) {
-			last_status = reg;
-			bq25618_evt_cb(bus_status, battery_status, power_status);
-		}
+		bq25618_evt_cb(bus_status, battery_status, power_status);
 	}
 exit:
 	pm_device_runtime_put(cfg->i2c.bus);

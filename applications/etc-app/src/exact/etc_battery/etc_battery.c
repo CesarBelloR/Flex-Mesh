@@ -1,5 +1,6 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_battery, CONFIG_ETC_BATTERY_LOG_LEVEL);
 
@@ -12,6 +13,11 @@ static enum battery_status last_battery_status = BATTERY_UNKNOWN;
 static etc_battery_evt_handler_t etc_battery_cb = NULL;
 static void etc_battery_charger_handler(uint8_t bus_status, 
 	uint8_t battery_status, uint8_t power_status);
+
+#ifdef CONFIG_BATTERY_MODULE_SHELL
+static bool is_battery_shell_active = false;
+static uint8_t battery_percent_on_set = 0;
+#endif
 
 struct battery_lookup_entry {
 	uint16_t start_voltage_mv;
@@ -61,7 +67,6 @@ static void etc_battery_charger_handler(uint8_t bus_status,
 		bus_status, battery_status, power_status, battery_mV);
 	
 	enum battery_status current_status = BATTERY_UNKNOWN;
-
 	if (battery_mV < CONFIG_BATTERY_NOT_INSTALL_MV) {
 		current_status = BATTERY_NO_INSTALLED;
 	} else {
@@ -98,6 +103,11 @@ uint16_t etc_battery_get_voltage_mV(void)
 
 uint8_t etc_battery_percentage_from_voltage(uint16_t voltage_mv)
 {	
+#ifdef CONFIG_BATTERY_MODULE_SHELL
+	if (is_battery_shell_active) {
+		return battery_percent_on_set;
+	}
+#endif
 	for (int i = 0; i < ARRAY_SIZE(lookup_table); i++) {
 		struct battery_lookup_entry *entry = (struct battery_lookup_entry *)&lookup_table[i];
 
@@ -113,3 +123,34 @@ uint8_t etc_battery_percentage_from_voltage(uint16_t voltage_mv)
 
 	return 0;
 }
+
+#ifdef CONFIG_BATTERY_MODULE_SHELL
+#include <zephyr/shell/shell.h>
+
+static int cmd_battery_enable(const struct shell *shell, size_t argc, char **argv)
+{
+	is_battery_shell_active = true;
+	return 0;
+}
+
+static int cmd_battery_disable(const struct shell *shell, size_t argc, char **argv)
+{
+	is_battery_shell_active = false;
+	return 0;
+}
+
+static int cmd_battery_set(const struct shell *shell, size_t argc, char **argv)
+{
+	battery_percent_on_set = atoi(argv[1]);
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_battery,
+	SHELL_CMD(enable, NULL, "Enable the battery shell", cmd_battery_enable),
+	SHELL_CMD(disable, NULL, "Disable the battery shell", cmd_battery_disable),
+	SHELL_CMD(set, NULL, "Set a percentage battery", cmd_battery_set),
+	SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(battery, &sub_battery, "Command line to test battery", NULL);
+
+#endif
