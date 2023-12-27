@@ -1,0 +1,131 @@
+name: Build Application
+
+on:
+  push:
+    branches: 
+      - main
+      - v*
+      - RC/*
+      - dev
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - main
+      - v*
+      - RC/*
+      - dev
+    paths:
+      - 'applications/etc-app/**'
+      - 'boards/**'
+      - 'lib/**'
+      - 'drivers/**'
+      - 'patch/**'
+      - '.github/workflows/build_app.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: zephyrprojectrtos/ci:v0.26.6
+    env:
+      ZEPHYR_SDK_INSTALL_DIR: "/opt/toolchains/zephyr-sdk-0.16.4"
+    strategy:
+      matrix:
+        type: [base, memfault]
+        key: [dev, production]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: etc-firmware
+
+      - name: Configure Git
+        working-directory: etc-firmware
+        run: |
+            git config --global user.email "actions@exacttechnology.com"
+            git config --global user.name "Github Actions"
+
+      - name: Set variables
+        working-directory: etc-firmware
+        id: vars
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Setup
+        working-directory: etc-firmware
+        run: |
+          west init -l .
+          west update
+          pip3 install memfault-cli
+          pip3 install imgtool==2.0.0
+          ./scripts/apply_patches.sh
+
+      - name: Retrieve signing key and save to file
+        working-directory: etc-firmware
+        if: ${{ matrix.key == 'production' }}
+        env:
+          MCUBOOT_PRIVATE_KEY_BASE64: ${{ secrets.MCUBOOT_PRIVATE_KEY_BASE64 }}
+        run: |
+          echo $MCUBOOT_PRIVATE_KEY_BASE64 | base64 --decode > mcuboot.pem
+          echo "mcuboot_key_path=$(realpath mcuboot.pem)" >> "$GITHUB_ENV"
+
+      - name: Set mcuboot key path to default
+        if: ${{ matrix.key == 'dev' }}
+        run: |
+          echo "mcuboot_key_path=root-rsa-2048.pem" >> "$GITHUB_ENV"
+
+      - name: Memfault Overlay
+        if: ${{ matrix.type == 'memfault' }}
+        run: |
+          echo "overlays=-DOVERLAY_CONFIG=debug.conf;rtt.conf;overlay-memfault.conf;overlay-1nce.conf" >> "$GITHUB_ENV"
+
+      - name: Base Overlay
+        if: ${{ matrix.type == 'base' }}
+        run: |
+          echo "overlays=" >> "$GITHUB_ENV"
+          
+      - name: Build etc-app ${{ matrix.sample }}
+        working-directory: etc-firmware
+        run: |
+          west build -b etc@0.3.0 -s applications/etc-app -p -- \
+            $overlays \
+            -Dmcuboot_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$mcuboot_key_path\"
+
+      - name: Upload symbol file to Memfault
+        working-directory: etc-firmware
+        env:
+          MEMFAULT_ORG_TOKEN: ${{ secrets.MEMFAULT_ORG_TOKEN }}
+          MEMFAULT_ORG: ${{ vars.MEMFAULT_ORG }}
+          MEMFAULT_PROJECT: ${{ vars.MEMFAULT_PROJECT }}
+        if: ${{ matrix.type == 'memfault' }}
+        run: |
+          echo $MEMFAULT_ORG_TOKEN
+          echo $MEMFAULT_ORG
+          echo $MEMFAULT_PROJECT
+          memfault \
+            --org-token $MEMFAULT_ORG_TOKEN \
+            --org $MEMFAULT_ORG \
+            --project $MEMFAULT_PROJECT \
+            upload-mcu-symbols build/zephyr/zephyr.elf
+
+      - name: Extract pubkey ID
+        working-directory: etc-firmware
+        run: |
+          echo "pubkey_id=$(python scripts/imgtools/etc_imgtool.py pubkeyid build/zephyr/app_update.bin)" \
+            >> "$GITHUB_ENV"
+
+      - name: Copy output files
+        working-directory: etc-firmware
+        run: |
+          mkdir -p out/update
+          cp build/zephyr/merged.hex out/flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.hex
+          cp build/zephyr/app_update.bin "out/update/update_flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.bin"
+          mkdir out/test
+          cp build/zephyr/app_signed.hex "out/test/update_test_flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.hex"
+
+      - name: Upload output files
+        uses: actions/upload-artifact@v4
+        with:
+          name: flex_${{ env.sha_short }}_${{ matrix.type }}_${{ env.pubkey_id }}
+          path: etc-firmware/out/
