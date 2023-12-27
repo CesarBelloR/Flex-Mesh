@@ -490,6 +490,13 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
+	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+		/* RX listen is done. Back to battery */
+		transition_list_clear();
+		sub_state_set(last_battery_state);
+		k_work_reschedule(&led_pattern_update_work,  K_NO_WAIT);
+	}
+
 	if (IS_EVENT(msg, lora, LORA_EVT_SEND)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_LORA_SEND, 2000);

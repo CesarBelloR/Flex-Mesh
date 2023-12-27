@@ -198,7 +198,6 @@ static void sensor_module_battery_handler(enum battery_status status) {
 	enum sensor_event_type battery_event = SENSOR_EVT_ERROR;
 	switch (status) {
 		case BATTERY_NORMAL: {
-			LOG_DBG("BATTERY_NORMAL");
 			const uint16_t battery_voltage_mv = etc_battery_get_voltage_mV();
 			const uint8_t battery_percent_now =
 				etc_battery_percentage_from_voltage(battery_voltage_mv);
@@ -218,12 +217,10 @@ static void sensor_module_battery_handler(enum battery_status status) {
 			break;
 		}
 		case BATTERY_CHARGE_IN_PROCESS: {
-			LOG_DBG("BATTERY_CHARGE_IN_PROCESS");
 			battery_event = SENSOR_EVT_BATTERY_IN_CHARGING;
 			break;
 		}
 		case BATTERY_CHARGE_COMPLETE: {
-			LOG_DBG("BATTERY_CHARGE_COMPLETE");
 			battery_event = SENSOR_EVT_BATTERY_CHARGE_COMPLETE;
 			break;
 		}
