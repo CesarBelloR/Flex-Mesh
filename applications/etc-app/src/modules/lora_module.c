@@ -381,8 +381,6 @@ static int module_lora_process_packet(union etc_device_record record)
 						    sizeof(decoded_buf) - decoded_buf_len, "*,");
 		}
 	}
-	decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-				    sizeof(decoded_buf) - decoded_buf_len, "*,");
 #if 0 // Test decrypt the message encoded
 	etc_cape_decrypt(encoded_buffer, decr_buf, decoded_buf_len + 1);
 	LOG_HEXDUMP_INF(decr_buf, sizeof(decr_buf), "DECRYPTED");
