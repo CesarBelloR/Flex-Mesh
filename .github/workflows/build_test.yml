@@ -1,0 +1,68 @@
+name: Build etc-test
+
+on:
+  push:
+    branches: 
+      - main
+      - v*
+      - RC/*
+      - dev
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - main
+      - v*
+      - RC/*
+      - dev
+    paths:
+      - 'applications/etc-test/**'
+      - 'boards/**'
+      - 'lib/**'
+      - '.github/workflows/build_test.yml'
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: zephyrprojectrtos/ci:v0.26.6
+    env:
+      ZEPHYR_SDK_INSTALL_DIR: "/opt/toolchains/zephyr-sdk-0.16.4"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: etc-firmware
+      
+      - name: Configure Git
+        working-directory: etc-firmware
+        run: |
+            git config --global user.email "actions@exacttechnology.com"
+            git config --global user.name "Github Actions"
+
+      - name: Set variables
+        working-directory: etc-firmware
+        id: vars
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+      
+      - name: Setup
+        working-directory: etc-firmware
+        run: |
+          west init -l .
+          west update
+          ./scripts/apply_patches.sh
+
+      - name: Build etc-test
+        working-directory: etc-firmware
+        run: |
+          west build -b etc@0.3.0 -s applications/etc-test -p
+          mkdir out
+          cp build/zephyr/merged.hex out/etc_test_${sha_short}.hex
+      
+      - name: Upload output files
+        uses: actions/upload-artifact@v4
+        with:
+          name: etc_test_${{ env.sha_short }}
+          path: etc-firmware/out/
