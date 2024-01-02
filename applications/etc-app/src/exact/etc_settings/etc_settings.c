@@ -115,6 +115,21 @@ int etc_get_device_id(char *buf, int buf_len)
 	return copy_size;
 }
 
+bool etc_device_id_is_default(void)
+{
+	char default_id[ETC_SETTINGS_DEVICE_ID_LEN];
+	char set_id[ETC_SETTINGS_DEVICE_ID_LEN];
+
+	snprintf(default_id, sizeof(default_id), "%08d", CONFIG_SERIAL_NUMBER_DEFAULT_VALUE);
+	etc_get_device_id(set_id, sizeof(set_id));
+	if (strncmp(default_id, set_id, sizeof(default_id)) == 0 &&
+	    strlen(default_id) == strlen(set_id)) {
+		return true;
+	}
+
+	return false;
+}
+
 int etc_get_psk(uint8_t *psk_buf, uint8_t buf_len)
 {
 	int copy_size; 

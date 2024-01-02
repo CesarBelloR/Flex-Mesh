@@ -74,7 +74,8 @@ static enum state_type {
 enum functional_test_data_type {
 	DATA_TYPE_SENSOR,
 	DATA_TYPE_MODEM,
-	DATA_TYPE_ACK
+	DATA_TYPE_ACK,
+	DATA_TYPE_DEVICE_ID_DEFAULT
 };
 
 enum functional_test_state {
@@ -89,6 +90,7 @@ struct functional_test_data {
 	struct sensor_data sensor_data;
 	int lte_rsrp;
 	bool ack;
+	bool unset_device_id;
 	enum functional_test_state state;
 	/* Result of the test (pass/fail) */
 	enum functional_test_result result;
@@ -371,6 +373,9 @@ static enum functional_test_result evaluate_functional_test_result(
 		result = FUNC_TEST_FAIL_MODEM;
 	} else if (functional_test_data.sensor_data.battery_mV < FUNC_TEST_MIN_BAT_VOLTAGE_MV) {
 		result = FUNC_TEST_FAIL_BAT;
+	/* Fail functional test if the device ID hasn't been set */
+	} else if (functional_test_data.unset_device_id) {
+		result = FUNC_TEST_FAIL_DEVICE_ID;
 	} else if (!functional_test_data.ack && 
 		   functional_test_data.state > FUNC_TEST_STATE_WAITING_FOR_ACK) {
 		result = FUNC_TEST_FAIL_ACK;
@@ -554,6 +559,10 @@ static int track_functional_test(enum functional_test_data_type type,
 	case DATA_TYPE_ACK:
 		bool ack = *((bool *)data);
 		functional_test_data.ack = ack;
+		break;
+	case DATA_TYPE_DEVICE_ID_DEFAULT:
+		bool default_id = *((bool *)data);
+		functional_test_data.unset_device_id = default_id;
 		break;
 	default:
 	}
@@ -766,8 +775,10 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
+		bool device_id_is_default = etc_device_id_is_default();
 		start_functional_test();
 		track_functional_test(DATA_TYPE_SENSOR, (void *)msg->module.sensor.data.sensors);
+		track_functional_test(DATA_TYPE_DEVICE_ID_DEFAULT, (void *)&device_id_is_default);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_END)) {

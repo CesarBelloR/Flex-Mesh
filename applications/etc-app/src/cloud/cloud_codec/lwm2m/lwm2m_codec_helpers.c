@@ -1001,6 +1001,7 @@ int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_da
 	const struct lwm2m_obj_path path_list[] = {
 		LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
 		LWM2M_OBJ(ETC_FUNCTIONAL_TEST_OBJECT_ID, 0, ETC_FUNCTIONAL_TEST_OBJ_R_STATUS),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_SERIAL_NUMBER_ID)
 	};
 	ret = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
 			   modem_rsrp);

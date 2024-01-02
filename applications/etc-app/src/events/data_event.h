@@ -118,6 +118,7 @@ enum functional_test_result {
 	FUNC_TEST_FAIL_SENSOR,
 	FUNC_TEST_FAIL_BAT,
 	FUNC_TEST_FAIL_MODEM,
+	FUNC_TEST_FAIL_DEVICE_ID
 };
 
 struct data_event {

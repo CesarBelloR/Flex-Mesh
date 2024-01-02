@@ -89,6 +89,14 @@ int etc_get_hw_id(char *buf, int buf_len);
 int etc_get_device_id(char *buf, int buf_len);
 
 /**
+ * Check if the device ID is set to the default value.
+ * 
+ * @retval true if value is default.
+ * @retval false if value is not default.
+*/
+bool etc_device_id_is_default(void);
+
+/**
  * @brief Get the PSK key used for cloud authentication
  * 
  * @param psk_buf Buffer to save the PSK key. Buffer must be
