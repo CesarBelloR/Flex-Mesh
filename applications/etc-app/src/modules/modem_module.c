@@ -65,7 +65,6 @@ static enum sub_state_lte_connected {
 	SUB_STATE_MODEM_SLEEP
 } sub_state;
 
-
 /* Enumerator that specifies the data type that is sampled. */
 enum sample_type {
 	MODEM_STATIC,
@@ -80,6 +79,8 @@ const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
 
 static void modem_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(modem_work, modem_work_fn);
+static void psm_workaround_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(psm_workaround_work, psm_workaround_work_fn);
 
 int64_t modem_wakeup_time_ms = -1;
 
@@ -238,7 +239,6 @@ static int modem_enter_sleep(void)
 	while (rc == -EAGAIN && count < MODEM_RETRY_SUSPEND_COUNT);
 #endif
 
-
 	/* If the modem can't enter sleep, we have no way of recovering
 		* and risk of draining the battery. Issue an assert in this case. */
 	__ASSERT_NO_MSG((rc == 0) || (rc == -EALREADY));
@@ -264,7 +264,6 @@ static int modem_enter_wakeup(void)
 		LOG_ERR("Failed to suspend the modem %d", rc);
 	}
 #endif
-
 	/* If we can't turn on modem, we are in an unrecoverable state.
 	 * Issue assert in this case. */
 	__ASSERT_NO_MSG(rc == 0);
@@ -394,6 +393,13 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 		new_dynamic_modem_data(evt->dynamic_data);
 	}
 	}
+}
+
+static void psm_workaround_work_fn(struct k_work *work) 
+{
+	(void)work;
+	modem_cmd(modem_dev, MODEM_API_CMD_CLOSE_CONNECTION, NULL);
+	modem_enter_sleep();
 }
 
 static int dynamic_modem_data_get(void)
@@ -538,7 +544,6 @@ static void on_sub_state_modem_off(struct modem_msg_data *msg)
 {
 	if  (is_wakeup_modem(msg)) {
 		int ret;
-
 		modem_wakeup_time_ms = k_uptime_get();
 		ret = modem_cmd(modem_dev, MODEM_API_CMD_POWER_ON, NULL);
 		__ASSERT_NO_MSG(ret == 0);
@@ -604,6 +609,11 @@ static void on_state_connected(struct modem_msg_data *msg)
 	if (IS_EVENT(msg, modem, MODEM_EVT_POWERED_DOWN)) {
 		LOG_DBG("Modem powered down. Sleeping.");
 		modem_enter_sleep();
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
+		k_work_schedule(&psm_workaround_work, 
+			K_SECONDS(CONFIG_MODEM_PSM_WORKAROUND_WAIT_TIME_S));
 	}
 }
 

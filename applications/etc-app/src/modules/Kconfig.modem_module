@@ -18,4 +18,8 @@ config MODEM_MODULE_MAX_CONNECTION_TIME_S
 	  the modem is turned off manually until the next scheduled transmit or
 	  other wakeup event.
 
+config MODEM_PSM_WORKAROUND_WAIT_TIME_S
+	int "The timeout to put the modem to sleep mode like PSM"
+	default 60
+
 endif
