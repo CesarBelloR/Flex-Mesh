@@ -463,13 +463,14 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 /* Handler: +QCSQ: <sysmode>, <rssi>[1], <rsrp>[2], <sinr>[3], <rsrq>[4] */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_qcsq)
 {
-	if (argc < 5) {
-		LOG_WRN("QCSQ: not enough args");
-		return -1;
+	int rssi = 0;
+	int rsrp = 0;
+	int rsrq = 0;
+	rssi = ATOI(argv[1], 0, "rssi");
+	if (argc ==  5) {
+		rsrp = ATOI(argv[2], 0, "rsrp");
+		rsrq = ATOI(argv[4], 0, "rsrq");
 	}
-	int rssi = ATOI(argv[1], 0, "rssi");
-	int rsrp = ATOI(argv[2], 0, "rsrp");
-	int rsrq = ATOI(argv[4], 0, "rsrq");
 
 	/* -125 and lower is considered invalid, anything larger is valid. */
 	if (rssi <= -125) {
@@ -485,6 +486,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_qcsq)
 
 	return 0;
 }
+
 
 /* Handler: +QIOPEN: <connect_id>[0], <err>[1] */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sockopen)
@@ -2987,13 +2989,25 @@ static int quectel_bg95_set_credentials(const struct device *dev,
 	return 0;
 }
 
-static int quectel_bg95_psm_cmd(const struct device *dev,
+static int quectel_bg95_close_all_connection(void) {
+	for(int i = 0; i < MDM_MAX_SOCKETS; i++) {
+		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_id) {
+			LOG_DBG("invalidating socket: %u", mdata.sockets[i].id);
+			modem_socket_put(&mdata.socket_config, mdata.sockets[i].sock_fd);
+		}
+	}
+	return 0;
+}
+
+static int quectel_bg95_cmd(const struct device *dev,
 				enum modem_api_cmd cmd, void *psm_data)
 {
 	if (cmd == MODEM_API_CMD_PSM_WAKEUP) {
 		return quectel_bg95_psm_wakeup();
 	} else if (cmd == MODEM_API_CMD_POWER_ON) {
 		return modem_setup();
+	} else if (cmd == MODEM_API_CMD_CLOSE_CONNECTION) {
+		return quectel_bg95_close_all_connection();
 	}
 
 	return -EINVAL;
@@ -3075,7 +3089,7 @@ static struct modem_api api_funcs = {
 
 	.evt_handler_init = quectel_bg95_evt_handler_init,
 	.set_credentials = quectel_bg95_set_credentials,
-	.cmd = quectel_bg95_psm_cmd,
+	.cmd = quectel_bg95_cmd,
 	.get_data = quectel_bg95_get_data,
 };
 

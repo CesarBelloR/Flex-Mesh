@@ -95,7 +95,8 @@ struct modem_api_psk {
 
 enum modem_api_cmd {
 	MODEM_API_CMD_PSM_WAKEUP,
-	MODEM_API_CMD_POWER_ON
+	MODEM_API_CMD_POWER_ON,
+	MODEM_API_CMD_CLOSE_CONNECTION,
 };
 
 struct modem_static_info {
