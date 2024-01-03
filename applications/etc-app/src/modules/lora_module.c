@@ -371,7 +371,7 @@ static int module_lora_process_packet(union etc_device_record record)
 		lora_pkt_counter = 0;
 	}
 
-	for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
 		if (data_codec_compare_temperature_is_valid(record.sensor[i])) {
 			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 						    sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
@@ -381,6 +381,13 @@ static int module_lora_process_packet(union etc_device_record record)
 						    sizeof(decoded_buf) - decoded_buf_len, "*,");
 		}
 	}
+	
+	if (data_codec_compare_humidity_is_valid(record.sensor[SENSOR_INPUT_HUMID])) {
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+			sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
+			record.sensor[SENSOR_INPUT_HUMID]);
+	}
+
 #if 0 // Test decrypt the message encoded
 	etc_cape_decrypt(encoded_buffer, decr_buf, decoded_buf_len + 1);
 	LOG_HEXDUMP_INF(decr_buf, sizeof(decr_buf), "DECRYPTED");
