@@ -164,6 +164,14 @@ static void date_time_store(int64_t curr_time_second)
 		ltm.tm_hour, ltm.tm_min, ltm.tm_sec);
 }
 
+static void set_system_time_sec(time_t new_date_time_sec)
+{
+	initial_valid_time = true;
+	date_time_store(new_date_time_sec);
+	time_aux.last_date_time_update = k_uptime_get();
+	time_aux.date_time_utc = (int64_t)new_date_time_sec * 1000;
+}
+
 static void new_date_time_get(void)
 {
 	int err;
@@ -227,6 +235,9 @@ static int date_time_init(void)
 		/* RTC doesn't sync yet */
 		rc = pcf85263a_rtc_set_time(0);
 		LOG_INF("RTC didn't sync yet. Need to set time 0 (err: %d)", rc);
+	} else {
+		/* Set system time to RTC time if RTC reported a valid time. */
+		set_system_time_sec(now);
 	}
 	k_work_init_delayable(&time_work, date_time_handler);
 	return 0;
@@ -314,10 +325,8 @@ int date_time_set_second(uint32_t new_date_time_sec)
 	if (ret < 0) {
 		return -1;
 	}
-	initial_valid_time = true;
-	date_time_store(new_date_time_sec);
-	time_aux.last_date_time_update = k_uptime_get();
-	time_aux.date_time_utc = (int64_t)new_date_time_sec * 1000;
+	set_system_time_sec(new_date_time_sec);
+
 	evt.type = DATE_TIME_OBTAINED_EXT;
 	date_time_notify_event(&evt);
 	
