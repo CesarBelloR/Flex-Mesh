@@ -52,10 +52,32 @@ jobs:
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
-      - name: Setup
+      - name: Init West
         working-directory: etc-firmware
         run: |
           west init -l .
+      
+      - name: Cache West dependencies
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-west
+        with:
+          path: |
+            ./zephyr
+            ./tools
+            ./test
+            ./nrfxlib
+            ./nrf
+            ./modules
+            ./mbedtls
+            ./bootloader
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('etc-firmware/west.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+      
+      - name: Setup
+        working-directory: etc-firmware
+        run: |
           west update
           pip3 install memfault-cli
           pip3 install imgtool==2.0.0
