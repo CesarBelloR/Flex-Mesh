@@ -8,6 +8,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_ble);
 
+#include <cJSON.h>
+#include <cJSON_os.h>
 #include "etc_ble.h"
 #include "etc_settings.h"
 
@@ -31,7 +33,7 @@ LOG_MODULE_REGISTER(etc_ble);
 #define BT_UUID_CONFIG_CHAR BT_UUID_DECLARE_128(BT_UUID_CONFIG_CHAR_VAL)
 
 #define BT_PAYLOAD_OFFSET     offsetof(struct flex_ble_frame, frame_payload)
-
+#define BT_OP_OFFSET (7)
 static struct k_work advertise_work;
 static char flex_device_name[CONFIG_BT_DEVICE_NAME_MAX] = { 0x00 };
 static struct bt_conn *current_conn;
@@ -39,6 +41,7 @@ static uint8_t msg_id_cnt = 0;
 static struct sensor_data last_sensor_data;
 static struct flex_ble_frame flex_frame;
 static etc_ble_evt_handler_t ble_evt_handler;
+static uint8_t flex_ble_notify_sub_cnt = 0;
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 static uint8_t adv_data[] = {
@@ -103,20 +106,44 @@ BT_GATT_SERVICE_DEFINE(flex_svc,
 static void flex_sensor_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 				  uint16_t value)
 {
-	LOG_DBG("Notification has been turned %s", value == BT_GATT_CCC_NOTIFY ? "on" : "off");
-	etc_ble_notify_evt(ETC_BLE_EVT_CCC_MEASURE_READY);
+	if (value == BT_GATT_CCC_NOTIFY) {
+		flex_ble_notify_sub_cnt += 1;
+		etc_ble_notify_evt(ETC_BLE_EVT_CCC_MEASURE_READY);
+	} else {
+		if (flex_ble_notify_sub_cnt > 0) {
+			flex_ble_notify_sub_cnt = flex_ble_notify_sub_cnt - 1;
+		}
+	}
+	LOG_DBG("Notification has been turned %s %d", 
+		value == BT_GATT_CCC_NOTIFY ? "on" : "off", flex_ble_notify_sub_cnt);
 }
 
 static void flex_reclaim_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 				  uint16_t value)
 {
-	LOG_DBG("Notification has been turned %s", value == BT_GATT_CCC_NOTIFY ? "on" : "off");
+	if (value == BT_GATT_CCC_NOTIFY) {
+		flex_ble_notify_sub_cnt += 1;
+	} else {
+		if (flex_ble_notify_sub_cnt > 0) {
+			flex_ble_notify_sub_cnt = flex_ble_notify_sub_cnt - 1;
+		}
+	}
+	LOG_DBG("Notification has been turned %s %d", 
+		value == BT_GATT_CCC_NOTIFY ? "on" : "off", flex_ble_notify_sub_cnt);
 }
 
 static void flex_config_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 				  uint16_t value)
 {
-	LOG_DBG("Notification has been turned %s", value == BT_GATT_CCC_NOTIFY ? "on" : "off");
+	if (value == BT_GATT_CCC_NOTIFY) {
+		flex_ble_notify_sub_cnt += 1;
+	} else {
+		if (flex_ble_notify_sub_cnt > 0) {
+			flex_ble_notify_sub_cnt = flex_ble_notify_sub_cnt - 1;
+		}
+	}
+	LOG_DBG("Notification has been turned %s %d", 
+		value == BT_GATT_CCC_NOTIFY ? "on" : "off", flex_ble_notify_sub_cnt);
 }
 
 static ssize_t flex_sensor_on_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
@@ -129,17 +156,64 @@ static ssize_t flex_config_on_write(struct bt_conn *conn, const struct bt_gatt_a
 	const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
 	LOG_HEXDUMP_INF(buf, len, "Flex Config");
+	cJSON *json = cJSON_ParseWithLength(buf, len);
+	if (json == NULL) {
+		LOG_ERR("Failed in parsering config command");
+		return -EINVAL;
+	}
+
+	cJSON *request_json = cJSON_GetObjectItem(json, "request");
+	if (request_json == NULL) {
+		LOG_ERR("Failed in parsering request information");
+		cJSON_Delete(json);
+		return -EINVAL;
+	}
+
+	/* {"request" : "reclaim", "start" : xxx, "end" : xxxx} */
+	if (strstr(request_json->valuestring, "reclaim") != NULL) {
+		LOG_DBG("Reclaim request");
+		cJSON *start_json = cJSON_GetObjectItem(json, "start");
+		cJSON *end_json = cJSON_GetObjectItem(json, "end");
+		if (start_json == NULL || end_json == NULL) {
+			LOG_ERR("Missing start/stop parameter");
+		} else {
+			int start_time = (int)start_json->valuedouble;
+			int end_time = (int)end_json->valuedouble;
+			if (start_time > end_time) {
+				LOG_ERR("start_time > end_time");
+			} else {
+				LOG_DBG("Start %d - End %d", start_time, end_time);
+				if (ble_evt_handler != NULL) {
+					struct etc_ble_evt evt = {
+						.type = ETC_BLE_EVT_CCC_RECLAIM_READY,
+						.reclaim.start_time_s = start_time,
+						.reclaim.end_time_s = end_time,
+					};
+					ble_evt_handler(&evt);
+				}
+			}
+		}
+	} else {
+		LOG_WRN("Unsupported request %s", request_json->valuestring);
+	}
+
+	cJSON_Delete(json);
 	return 0;
 }
 
-int flex_attr_get_index(const struct bt_uuid *uuid) {
-	char uuid_str[64] = {0x0};
+int flex_attr_get_index(int channel) {
 	for (int i = 0; i < flex_svc.attr_count; i++) {
 		const struct bt_gatt_attr *attr = &flex_svc.attrs[i];
-		bt_uuid_to_str(attr->uuid, uuid_str, sizeof(uuid_str));
-		if (bt_uuid_cmp(uuid, attr->uuid) == 0) {
-			return i;
+		if (channel == ETC_BLE_SENSOR_CHAR) {
+			if (bt_uuid_cmp(BT_UUID_SENSOR_CHAR, attr->uuid) == 0) {
+				return i;
+			}
+		} else if (channel == ETC_BLE_RECLAIM_CHAR) {
+			if (bt_uuid_cmp(BT_UUID_RECLAIM_CHAR, attr->uuid) == 0) {
+				return i;
+			}
 		}
+
 	}
 	return -ENOENT;
 }
@@ -167,33 +241,38 @@ static int flex_ble_notify(struct bt_conn *conn, int attr_index, const uint8_t *
 	return -EINVAL;
 }
 
-int etc_ble_sensor_notify(const uint8_t *data, uint16_t len)
+int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 {
 	if (current_conn == NULL) return -ENOTCONN;
-	int attr_index = flex_attr_get_index(BT_UUID_SENSOR_CHAR);
-	int step = len / ETC_BLE_FRAME_PAYLOAD_MAX_LEN;
-	int remain = len % ETC_BLE_FRAME_PAYLOAD_MAX_LEN;
+	int attr_index = flex_attr_get_index(channel);
+	if (attr_index == -ENOENT) {
+		LOG_ERR("The attr index is invalid");
+		return -ENOENT;
+	}
+	int mtu_size = bt_gatt_get_mtu(current_conn) - BT_OP_OFFSET;
+	int step = len / mtu_size;
+	int remain = len % mtu_size;
 	int rc = 0;
 
 	uint8_t msg_id = msg_id_cnt;
 	msg_id_cnt = (msg_id_cnt + 1) % 255;
 
 	for (int i = 0; i <= step; i++) {
-		int frame_len = (i == step) ? remain : ETC_BLE_FRAME_PAYLOAD_MAX_LEN;
+		int frame_len = (i == step) ? remain : mtu_size;
 		flex_frame.msg_id = msg_id;
 		flex_frame.frame_id = i;
 		flex_frame.frame_len = (i == 0) ? len : 0;
-		memcpy(flex_frame.frame_payload, &data[i * ETC_BLE_FRAME_PAYLOAD_MAX_LEN], frame_len);
-		LOG_HEXDUMP_INF((const uint8_t *)&flex_frame, sizeof(flex_frame), "BLE_SENSOR");
+		memcpy(flex_frame.frame_payload, &data[i * mtu_size], frame_len);
+		LOG_HEXDUMP_INF((const uint8_t *)&flex_frame, frame_len, channel == ETC_BLE_SENSOR_CHAR ? "SENSOR" : "RECLAIM");
 		rc = flex_ble_notify(current_conn, attr_index, (const uint8_t *)&flex_frame, BT_PAYLOAD_OFFSET + frame_len);
 		if (rc) {
-			LOG_ERR("Failed to notify UUID_SENSOR_CHAR %d", rc);
+			LOG_ERR("Failed to notify current characteristic %d", rc);
 			return rc;
 		}
 		k_sem_take(&flex_ble_notify_sem, K_FOREVER);
 	}
 
-	LOG_DBG("Notified UUID_SENSOR_CHAR success");
+	LOG_DBG("Notified success");
 	return 0;
 }
 
@@ -227,18 +306,6 @@ static void advertise(struct k_work *work)
 	LOG_INF("Advertising successfully started");
 }
 
-static void mtu_exchange_cb(struct bt_conn *conn, uint8_t err,
-			    struct bt_gatt_exchange_params *params)
-{
-	LOG_DBG("%s: MTU exchange %s (%u)", __func__, 
-		err == 0U ? "successful" : "failed",
-		bt_gatt_get_mtu(conn));
-}
-
-static struct bt_gatt_exchange_params mtu_exchange_params = {
-	.func = mtu_exchange_cb
-};
-
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
@@ -246,12 +313,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	} else {
 		LOG_INF("Connected");
 		current_conn = conn;
-		int rc = bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
-		if (rc) {
-			LOG_ERR("Can't exchange MTU request %d", rc);
-		} else {
-			etc_ble_notify_evt(ETC_BLE_EVT_CONNECTING);
-		}
+		etc_ble_notify_evt(ETC_BLE_EVT_CONNECTING);
 	}
 }
 

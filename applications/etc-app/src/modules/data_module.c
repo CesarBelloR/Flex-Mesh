@@ -474,17 +474,7 @@ static void data_encode_for_ble()
 	}
 
 	/* Update reclaim status */							   
-	if (reclaim_status != reclaim_active) {
-		if (reclaim_status) {
-			data_codec_update_reclaim_state(&codec,
-							RECLAIM_IN_PROGRESS);
-			reclaim_active = true;
-		} else {
-			data_codec_update_reclaim_state(&codec,
-							RECLAIM_SUCCESS);
-			reclaim_active = false;
-		}
-	} else if (send_status.record_id == 0) {
+	if (send_status.record_id == 0) {
 		LOG_INF("No record found");
 		/* Return early and report data send complete if we don't
 		 * have any new data to send, so other modules can start
@@ -773,6 +763,24 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_END)) {
 		stop_functional_test();
+	}
+
+	if (IS_EVENT(msg, ble, BLE_EVT_RECLAIM_REQUEST)) {
+		int ret;
+		bool err = false;
+		
+		ret = etc_device_record_reclaim(
+			msg->module.ble.data.reclaim.start_time_s,
+			msg->module.ble.data.reclaim.end_time_s);
+		if (ret != 0) {
+			LOG_ERR("Reclaim failed, %d", err);
+			err = true;
+		}
+
+		if (!err) {
+			reclaim_active = true;
+			data_encode_for_ble();
+		}
 	}
 
 	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && 

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "events/sensor_event.h"
+#include "cloud/cloud_wrapper.h"
 
 /* MTU is 256 bytes */
 #define ETC_BLE_FRAME_PAYLOAD_MAX_LEN (240) 
@@ -24,6 +25,7 @@ enum etc_ble_evt_type {
 	ETC_BLE_EVT_CONNECTING,
 	ETC_BLE_EVT_CONNECTED,
 	ETC_BLE_EVT_CCC_MEASURE_READY,
+	ETC_BLE_EVT_CCC_RECLAIM_READY,
 	ETC_BLE_EVT_ERR
 };
 
@@ -31,6 +33,14 @@ enum etc_ble_evt_type {
 struct etc_ble_evt {
 	/** Type of event. */
 	enum etc_ble_evt_type type;
+	/* Reclaim data if CCC_RECLAIM request */
+	struct reclaim_data reclaim;
+};
+
+/** @brief The channel charactersitic */
+enum {
+	ETC_BLE_SENSOR_CHAR,
+	ETC_BLE_RECLAIM_CHAR
 };
 
 /** @brief Bluetooth library asynchronous event handler.
@@ -59,11 +69,12 @@ void etc_ble_set_current_sensor(struct sensor_data* data);
 /**
  * @brief Notifies the app with sensor data.
  *
- * This function is used to notify the app with sensor data.
- *
- * @param data Pointer to the buffer containing sensor data.
- * @param len  Length of the sensor data buffer.
+ * This function is used to notify the app with data.
+ * 
+ * @param channel The characteristic channel will send data out
+ * @param data Pointer to the buffer containing data.
+ * @param len  Length of the data buffer.
  * @return     Returns 0 on success, non-zero on failure.
  */
-int etc_ble_sensor_notify(const uint8_t *data, uint16_t len);
+int etc_ble_notify(int channel, const uint8_t *data, uint16_t len);
 #endif /* ETC_BLE_H_ */

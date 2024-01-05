@@ -53,7 +53,7 @@ static enum state_type {
 
 /* Variables to save BLE buffer */
 static uint8_t ble_buf[CONFIG_LWM2M_COAP_MAX_MSG_SIZE];
-
+static uint8_t ble_channel_out = ETC_BLE_SENSOR_CHAR;
 /* BLE module message queue. */
 #define BLE_QUEUE_ENTRY_COUNT 20
 #define BLE_QUEUE_BYTE_ALIGNMENT 4
@@ -184,9 +184,19 @@ static void ble_module_evt_handler(const struct etc_ble_evt *evt)
 			break;
 		}
 		case ETC_BLE_EVT_CCC_MEASURE_READY: {
+			ble_channel_out = ETC_BLE_SENSOR_CHAR;
 			SEND_EVENT(ble, BLE_EVT_CONN_READY);
 			break;
 		}
+		case ETC_BLE_EVT_CCC_RECLAIM_READY: {
+			ble_channel_out = ETC_BLE_RECLAIM_CHAR;
+			struct ble_event *ble_evt = new_ble_event();
+			ble_evt->type = BLE_EVT_RECLAIM_REQUEST;
+			ble_evt->data.reclaim.start_time_s = evt->reclaim.start_time_s;
+			ble_evt->data.reclaim.end_time_s = evt->reclaim.end_time_s;
+			APP_EVENT_SUBMIT(ble_evt);
+			break;
+		};
 		case ETC_BLE_EVT_ERR: {
 			SEND_EVENT(ble, BLE_EVT_ERROR);
 			break;
@@ -245,7 +255,7 @@ static void on_all_states(struct ble_msg_data *msg)
 				LOG_ERR("cloud_wrap_data_export, err: %d", err);
 				SEND_ERROR(ble, BLE_EVT_DATA_EXPORT_FAIL, err);
 			} else {
-				err = etc_ble_sensor_notify(ble_buf, ble_len);
+				err = etc_ble_notify(ble_channel_out, ble_buf, ble_len);
 				if (err) {
 					if (err != -ENOTCONN) {
 						LOG_ERR("Failed to send data to BLE");
@@ -257,6 +267,11 @@ static void on_all_states(struct ble_msg_data *msg)
 			}
 			return;
 		}
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_SEND_COMPLETE)) {
+		/* By default, channel out is sensor characteristic */
+		ble_channel_out = ETC_BLE_SENSOR_CHAR;
 	}
 }
 

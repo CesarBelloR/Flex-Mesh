@@ -517,6 +517,7 @@ static int etc_device_update_reclaim(uint16_t record_id, int start_time, int sto
 	rc = etc_device_record_reading(record_id, buf);
 	if (rc == record_id) {
 		memcpy(record.data, buf, ETC_DEVICE_RECORD_SIZE);
+		LOG_DBG("Record %d Time %d", record_id, record.timestamp);
 		if ((start_time <= record.timestamp) && (record.timestamp <= stop_time)) {
 			if (etc_reclaim_info.start_index == 0) {
 				etc_reclaim_info.start_index = record_id;
@@ -538,11 +539,13 @@ int etc_device_record_reclaim(int start_time, int stop_time)
 	}
 
 	int rc = 0;
-	LOG_DBG("Request to reclaim %d %d", start_time, stop_time);
+	
 	etc_reclaim_info.start_index = 0;
 	etc_reclaim_info.stop_index = 0;
 	uint16_t oldest_id = etc_device_record_get_oldest_id();
 	uint16_t newest_id = etc_device_record_get_latest_id();
+
+	LOG_DBG("Request to reclaim %d %d %d %d", start_time, stop_time, oldest_id, newest_id);
 
 	if (oldest_id < newest_id) {
 		for (int i = oldest_id; i < newest_id; i++) {
