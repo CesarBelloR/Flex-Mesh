@@ -197,7 +197,7 @@ static void etc_sensor_run_detection(void)
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		etc_sensor_adc_switch_channel(i);
 		k_msleep(50);
-		int raw_adc = adc_get_channel(ETC_ADC_CHANNEL_SENSOR);
+		int raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
 		if (raw_adc >= SENSOR_ADC_NO_CONNECTED) {
 			list_sensor_type[i] = SENSOR_TYPE_UNDEF;
 		} else if (raw_adc <= SENSOR_ADC_ONE_WIRE_CONNECTED) {
@@ -329,7 +329,7 @@ static void etc_sensor_run_analog_sample(void)
 		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG) {
 			etc_sensor_adc_switch_channel(i);
 			k_msleep(50);
-			list_sensor_raw_adc[i] = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_SENSOR));
+			list_sensor_raw_adc[i] = etc_sensor_get_calibrated_adc(adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR));
 		} else {
 			list_sensor_raw_adc[i] = -1;
 		}

@@ -6,11 +6,9 @@ menuconfig ADC_MODULES
 
 if ADC_MODULES
 
-config ADC_MODULES_SAMPLE_RATE_MSEC
-	int "Sample rate time in mseconds"
-	default 500
-	help
-	  This is sample ADC rate
+config ADC_MODULES_FILTER_SAMPLE_COUNT
+	int "Number of samples that are taken when using adc_get_channel_filtered()"
+	default 9
 
 module = ADC_MODULES
 module-str = ADC Modules

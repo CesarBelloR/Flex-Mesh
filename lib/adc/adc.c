@@ -20,6 +20,8 @@
 
 #include "adc.h"
 
+#define SAMPLES_FILTERED_ADC CONFIG_ADC_MODULES_FILTER_SAMPLE_COUNT
+
 LOG_MODULE_REGISTER(ETC_ADC, CONFIG_ADC_MODULES_LOG_LEVEL);
 
 #if !DT_NODE_EXISTS(DT_PATH(zephyr_user)) || \
@@ -53,6 +55,26 @@ int adc_init(void)
 	}
 
 	return 0;
+}
+
+int adc_get_channel_filtered(int channel)
+{
+	int16_t sample_buffer[SAMPLES_FILTERED_ADC];
+	for (int i = 0; i < SAMPLES_FILTERED_ADC - 1; i++) {
+		sample_buffer[i] = adc_get_channel(channel);
+	}
+	/* Sort samples and return median */
+	for (int i = 0; i < SAMPLES_FILTERED_ADC - 1; i++) {
+		for (int j = 0; j < SAMPLES_FILTERED_ADC - i - 1; j++) {
+			if (sample_buffer[j] > sample_buffer[j + 1]) {
+				// Swap elements
+				int16_t temp = sample_buffer[j];
+				sample_buffer[j] = sample_buffer[j + 1];
+				sample_buffer[j + 1] = temp;
+			}
+		}
+	}
+	return sample_buffer[SAMPLES_FILTERED_ADC/2];
 }
 
 int adc_get_channel(int channel)

@@ -29,6 +29,16 @@
  */
 int adc_init(void);
 
+/** @brief Get filtered raw ADC value.
+ * 
+ * Take @ref CONFIG_ADC_MODULES_FILTER_SAMPLE_COUNT samples and return
+ * the median.
+ *
+ * @param channel input from 0 to ( @a ADC_NUM_CHANNELS - 1)
+ * @retval return median raw ADC value with 12 bit resolution
+ */
+int adc_get_channel_filtered(int channel);
+
 /** @brief Get raw ADC value
  *
  * @param channel input from 0 to ( @a ADC_NUM_CHANNELS - 1)
