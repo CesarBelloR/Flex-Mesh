@@ -95,17 +95,17 @@ static void etc_ble_set_bt_name(void)
 BT_GATT_SERVICE_DEFINE(flex_svc,
 	BT_GATT_PRIMARY_SERVICE(BT_UUID_SERVICE),
 	BT_GATT_CHARACTERISTIC(BT_UUID_SENSOR_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-			       BT_GATT_PERM_READ_ENCRYPT, flex_sensor_on_read,
+			       BT_GATT_PERM_READ, flex_sensor_on_read,
 			       NULL, NULL),
-	BT_GATT_CCC(flex_sensor_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
+	BT_GATT_CCC(flex_sensor_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 	BT_GATT_CHARACTERISTIC(BT_UUID_RECLAIM_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-			       BT_GATT_PERM_READ_ENCRYPT, NULL,
+			       BT_GATT_PERM_READ, NULL,
 			       NULL, NULL),
-	BT_GATT_CCC(flex_reclaim_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
+	BT_GATT_CCC(flex_reclaim_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 	BT_GATT_CHARACTERISTIC(BT_UUID_CONFIG_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY | BT_GATT_CHRC_WRITE,
-			       BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT, NULL,
+			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE, NULL,
 			       flex_config_on_write, NULL),
-	BT_GATT_CCC(flex_config_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT)
+	BT_GATT_CCC(flex_config_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
 );
 
 
@@ -338,6 +338,10 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		if (rc) {
 			LOG_ERR("Can't exchange MTU request %d", rc);
 		}
+
+#if !defined(CONFIG_BT_SMP)
+	etc_ble_notify_evt(ETC_BLE_EVT_CONNECTED);
+#endif
 		k_work_schedule(&flex_ble_sensor_work, K_SECONDS(FLEX_BT_SENSOR_WORK_DELAY_SECONDS));
 	}
 }
@@ -377,6 +381,7 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 #endif
 };
 
+#if defined(CONFIG_BT_SMP)
 static void auth_cancel(struct bt_conn *conn)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -400,11 +405,6 @@ static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 	etc_ble_notify_evt(ETC_BLE_EVT_ERR);
 }
 
-void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
-{
-	LOG_INF("Updated MTU: TX: %d RX: %d bytes", tx, rx);
-}
-
 static struct bt_conn_auth_cb conn_auth_callbacks = {
 	.cancel = auth_cancel,
 };
@@ -413,6 +413,13 @@ static struct bt_conn_auth_info_cb conn_auth_info_callbacks = {
 	.pairing_complete = pairing_complete,
 	.pairing_failed = pairing_failed
 };
+
+#endif
+
+void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
+{
+	LOG_INF("Updated MTU: TX: %d RX: %d bytes", tx, rx);
+}
 
 static struct bt_gatt_cb gatt_callbacks = {
 	.att_mtu_updated = mtu_updated
@@ -434,6 +441,7 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 		ble_evt_handler = evt_handler;
 	}
 
+#if defined(CONFIG_BT_SMP)
 	rc = bt_conn_auth_cb_register(&conn_auth_callbacks);
 	if (rc) {
 		LOG_ERR("Failed to register authorization callbacks");
@@ -445,7 +453,7 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 		printk("Failed to register authorization info callbacks.");
 		return 0;
 	}
-
+#endif
 	bt_gatt_cb_register(&gatt_callbacks);
 
 	/* Enable Bluetooth. */
