@@ -95,17 +95,41 @@ static void etc_ble_set_bt_name(void)
 BT_GATT_SERVICE_DEFINE(flex_svc,
 	BT_GATT_PRIMARY_SERVICE(BT_UUID_SERVICE),
 	BT_GATT_CHARACTERISTIC(BT_UUID_SENSOR_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-			       BT_GATT_PERM_READ, flex_sensor_on_read,
+#if defined(CONFIG_BT_SMP)
+				BT_GATT_PERM_READ_ENCRYPT, flex_sensor_on_read,
+#else
+				BT_GATT_PERM_READ, flex_sensor_on_read,
+#endif
 			       NULL, NULL),
+#if defined(CONFIG_BT_SMP)
+	BT_GATT_CCC(flex_sensor_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
+#else
 	BT_GATT_CCC(flex_sensor_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+#endif
 	BT_GATT_CHARACTERISTIC(BT_UUID_RECLAIM_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-			       BT_GATT_PERM_READ, NULL,
+#if defined(CONFIG_BT_SMP)
+				BT_GATT_PERM_READ_ENCRYPT, NULL,
+#else
+				BT_GATT_PERM_READ, NULL,
+#endif
 			       NULL, NULL),
+#if defined(CONFIG_BT_SMP)
+	BT_GATT_CCC(flex_reclaim_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
+#else
 	BT_GATT_CCC(flex_reclaim_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+#endif
 	BT_GATT_CHARACTERISTIC(BT_UUID_CONFIG_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY | BT_GATT_CHRC_WRITE,
-			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE, NULL,
+#if defined(CONFIG_BT_SMP)
+				BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT, NULL,
+#else
+				BT_GATT_PERM_READ | BT_GATT_PERM_WRITE, NULL,
+#endif
 			       flex_config_on_write, NULL),
-	BT_GATT_CCC(flex_config_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
+#if defined(CONFIG_BT_SMP)
+	BT_GATT_CCC(flex_config_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
+#else
+	BT_GATT_CCC(flex_config_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+#endif
 );
 
 
@@ -479,10 +503,14 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 	LOG_INF("Bluetooth initialized");
 	memset(last_sensor_data.sensor, 0, sizeof(last_sensor_data.sensor));
 	k_work_init(&advertise_work, advertise);
-	k_work_submit(&advertise_work);
 	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
 	flex_ble_is_ready = true;
+	k_work_submit(&advertise_work);
 	return 0;
+}
+
+void etc_ble_start_adv(void) {
+	k_work_submit(&advertise_work);
 }
 
 void etc_ble_set_current_sensor(struct sensor_data* data) {

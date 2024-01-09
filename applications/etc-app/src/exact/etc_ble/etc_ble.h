@@ -58,6 +58,13 @@ typedef void (*etc_ble_evt_handler_t)(const struct etc_ble_evt *evt);
 int etc_ble_init(etc_ble_evt_handler_t evt_handler);
 
 /**
+ * @brief Start the adv for BLE
+ *  
+ * @note FIXME: Need to start ADV after the first connection to cloud done  
+ */
+void etc_ble_start_adv(void);
+
+/**
  * @brief Sets the current sensor data for the ETC BLE module.
  *
  * This function allows you to set the current sensor data.

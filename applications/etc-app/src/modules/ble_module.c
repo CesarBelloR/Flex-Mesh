@@ -36,7 +36,7 @@ struct ble_msg_data
 	{
 		struct app_event app;
 		struct data_event data;
-		struct ble_event ble;
+		struct cloud_event cloud;
 		struct modem_event modem;
 		struct util_event util;
 		struct debug_event debug;
@@ -137,11 +137,11 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
-	if (is_ble_event(aeh))
+	if (is_cloud_event(aeh))
 	{
-		struct ble_event *evt = cast_ble_event(aeh);
+		struct cloud_event *evt = cast_cloud_event(aeh);
 
-		msg.module.ble = *evt;
+		msg.module.cloud = *evt;
 		enqueue_msg = true;
 	}
 
@@ -326,7 +326,8 @@ APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
+APP_EVENT_SUBSCRIBE(MODULE, ble_event);
 #if IS_ENABLED(CONFIG_DEBUG_MODULE)
 APP_EVENT_SUBSCRIBE(MODULE, debug_event);
 #endif
-APP_EVENT_SUBSCRIBE_FIRST(MODULE, ble_event);
+
