@@ -34,6 +34,11 @@ LOG_MODULE_REGISTER(etc_ble);
 
 #define BT_PAYLOAD_OFFSET     offsetof(struct flex_ble_frame, frame_payload)
 #define BT_OP_OFFSET (7)
+#define FLEX_BT_SENSOR_WORK_DELAY_SECONDS (5)
+
+static void flex_ble_sensor_work_handler(struct k_work* work);
+static K_WORK_DELAYABLE_DEFINE(flex_ble_sensor_work, flex_ble_sensor_work_handler);
+
 static struct k_work advertise_work;
 static char flex_device_name[CONFIG_BT_DEVICE_NAME_MAX] = { 0x00 };
 static struct bt_conn *current_conn;
@@ -109,7 +114,6 @@ static void flex_sensor_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 {
 	if (value == BT_GATT_CCC_NOTIFY) {
 		flex_ble_notify_sub_cnt += 1;
-		etc_ble_notify_evt(ETC_BLE_EVT_CCC_MEASURE_READY);
 	} else {
 		if (flex_ble_notify_sub_cnt > 0) {
 			flex_ble_notify_sub_cnt = flex_ble_notify_sub_cnt - 1;
@@ -307,14 +311,34 @@ static void advertise(struct k_work *work)
 	LOG_INF("Advertising successfully started");
 }
 
+static void flex_ble_sensor_work_handler(struct k_work* work) {
+	etc_ble_notify_evt(ETC_BLE_EVT_CCC_MEASURE_READY);
+}
+
+static void mtu_exchange_cb(struct bt_conn *conn, uint8_t err,
+			    struct bt_gatt_exchange_params *params)
+{
+	LOG_DBG("%s: MTU exchange %s (%u)", __func__, 
+		err == 0U ? "successful" : "failed",
+		bt_gatt_get_mtu(conn));
+}
+
+static struct bt_gatt_exchange_params mtu_exchange_params = {
+	.func = mtu_exchange_cb
+};
+
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
 		LOG_ERR("Connection failed (err 0x%02x)", err);
 	} else {
-		LOG_INF("Connected");
+		LOG_INF("Connected to peer - Need to pair/bond");
 		current_conn = conn;
-		etc_ble_notify_evt(ETC_BLE_EVT_CONNECTING);
+		int rc = bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
+		if (rc) {
+			LOG_ERR("Can't exchange MTU request %d", rc);
+		}
+		k_work_schedule(&flex_ble_sensor_work, K_SECONDS(FLEX_BT_SENSOR_WORK_DELAY_SECONDS));
 	}
 }
 
@@ -457,7 +481,7 @@ void etc_ble_set_current_sensor(struct sensor_data* data) {
 	if (!flex_ble_is_ready) {
 		return;
 	}
-	
+
 	memcpy(&last_sensor_data, data, sizeof(last_sensor_data));
 	if (current_conn == NULL) {
 		k_work_submit(&advertise_work);
