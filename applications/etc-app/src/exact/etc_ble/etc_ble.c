@@ -4,6 +4,7 @@
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/random/rand32.h>
+#include <zephyr/mgmt/mcumgr/transport/smp_bt.h>
 #define LOG_LEVEL LOG_LEVEL_DBG
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_ble);
@@ -497,6 +498,9 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 		}
 	}
 
+	/* Initialize the Bluetooth mcumgr transport. */
+	smp_bt_register();
+	
 	/* Set BLE device name */
 	etc_ble_set_bt_name();
 
