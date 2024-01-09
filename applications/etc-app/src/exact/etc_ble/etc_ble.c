@@ -42,6 +42,7 @@ static struct sensor_data last_sensor_data;
 static struct flex_ble_frame flex_frame;
 static etc_ble_evt_handler_t ble_evt_handler;
 static uint8_t flex_ble_notify_sub_cnt = 0;
+static bool flex_ble_is_ready = false;
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 static uint8_t adv_data[] = {
@@ -448,10 +449,15 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 	k_work_init(&advertise_work, advertise);
 	k_work_submit(&advertise_work);
 	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
+	flex_ble_is_ready = true;
 	return 0;
 }
 
 void etc_ble_set_current_sensor(struct sensor_data* data) {
+	if (!flex_ble_is_ready) {
+		return;
+	}
+	
 	memcpy(&last_sensor_data, data, sizeof(last_sensor_data));
 	if (current_conn == NULL) {
 		k_work_submit(&advertise_work);
