@@ -85,9 +85,6 @@ static int connect_retries;
 /* Last publish message id */
 static uint16_t last_message_id = 0;
 
-/* Variables to save BLE buffer */
-static uint8_t ble_buf[CONFIG_LWM2M_COAP_MAX_MSG_SIZE];
-
 /* Cloud module message queue. */
 #define CLOUD_QUEUE_ENTRY_COUNT 20
 #define CLOUD_QUEUE_BYTE_ALIGNMENT 4
