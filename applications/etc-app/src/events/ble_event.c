@@ -14,6 +14,8 @@ static char *get_evt_type_str(enum ble_event_type type)
 		return "BLE_EVT_SECURED";
 	case BLE_EVT_CONN_FAILED:
 		return "BLE_EVT_CONN_FAILED";
+	case BLE_EVT_CONN_READY:
+		return "BLE_EVT_CONN_READY";
 	case BLE_EVT_DATA_SEND_ACK:
 		return "BLE_EVT_DATA_SEND_ACK";
 	case BLE_EVT_DATA_SEND_FAIL:

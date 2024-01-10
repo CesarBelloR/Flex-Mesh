@@ -139,6 +139,7 @@ static void flex_sensor_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 {
 	if (value == BT_GATT_CCC_NOTIFY) {
 		flex_ble_notify_sub_cnt += 1;
+		k_work_schedule(&flex_ble_sensor_work, K_SECONDS(FLEX_BT_SENSOR_WORK_DELAY_SECONDS));
 	} else {
 		if (flex_ble_notify_sub_cnt > 0) {
 			flex_ble_notify_sub_cnt = flex_ble_notify_sub_cnt - 1;
@@ -367,7 +368,6 @@ static void connected(struct bt_conn *conn, uint8_t err)
 #if !defined(CONFIG_BT_SMP)
 	etc_ble_notify_evt(ETC_BLE_EVT_CONNECTED);
 #endif
-		k_work_schedule(&flex_ble_sensor_work, K_SECONDS(FLEX_BT_SENSOR_WORK_DELAY_SECONDS));
 	}
 }
 
@@ -526,4 +526,8 @@ void etc_ble_set_current_sensor(struct sensor_data* data) {
 	if (current_conn == NULL) {
 		k_work_submit(&advertise_work);
 	}
+}
+
+bool etc_ble_get_is_connected(void) {
+	return (current_conn != NULL);
 }

@@ -6,7 +6,7 @@
 #include "cloud/cloud_wrapper.h"
 
 /* MTU is 256 bytes */
-#define ETC_BLE_FRAME_PAYLOAD_MAX_LEN (240) 
+#define ETC_BLE_FRAME_PAYLOAD_MAX_LEN (256) 
 
 #pragma pack(push, 1)
 
@@ -84,4 +84,6 @@ void etc_ble_set_current_sensor(struct sensor_data* data);
  * @return     Returns 0 on success, non-zero on failure.
  */
 int etc_ble_notify(int channel, const uint8_t *data, uint16_t len);
+
+bool etc_ble_get_is_connected(void);
 #endif /* ETC_BLE_H_ */
