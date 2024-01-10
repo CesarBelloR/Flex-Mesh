@@ -410,7 +410,6 @@ static int setup(void)
 
 static void connect_cloud(void)
 {
-	if (etc_get_device_mode() == ETC_DEVICE_MODE_BLE) return;
 	int backoff_sec = backoff_delay[connect_retries].delay;
 	int err = 0;
 	LOG_DBG("Connecting to cloud");
@@ -454,7 +453,6 @@ static void pause_cloud(void)
 
 static void resume_cloud(void)
 {
-	if (etc_get_device_mode() == ETC_DEVICE_MODE_BLE) return;
 	if (cloud_wrap_resume() != 0) {
 		LOG_WRN("resuming failed.");
 	}

@@ -55,7 +55,7 @@ static enum state_type {
 static uint8_t ble_buf[CONFIG_LWM2M_COAP_MAX_MSG_SIZE];
 static uint8_t ble_channel_out = ETC_BLE_SENSOR_CHAR;
 /* BLE module message queue. */
-#define BLE_QUEUE_ENTRY_COUNT 20
+#define BLE_QUEUE_ENTRY_COUNT 10
 #define BLE_QUEUE_BYTE_ALIGNMENT 4
 
 K_MSGQ_DEFINE(msgq_ble, sizeof(struct ble_msg_data),
@@ -173,6 +173,7 @@ static void ble_module_evt_handler(const struct etc_ble_evt *evt)
 	switch (evt->type) {
 		case ETC_BLE_EVT_DISCONNECTED: {
 			SEND_EVENT(ble, BLE_EVT_DISCONNECTED);
+			state_set(STATE_BLE_DISCONNECTED);
 			break;
 		}
 		case ETC_BLE_EVT_CONNECTING: {
@@ -181,6 +182,7 @@ static void ble_module_evt_handler(const struct etc_ble_evt *evt)
 		}
 		case ETC_BLE_EVT_CONNECTED: {
 			SEND_EVENT(ble, BLE_EVT_CONNECTED);
+			state_set(STATE_BLE_CONNECTED);
 			break;
 		}
 		case ETC_BLE_EVT_CCC_MEASURE_READY: {
@@ -231,8 +233,8 @@ static void on_state_shutdown(struct ble_msg_data *msg)
 	}
 }
 
-/* Message handler for all states. */
-static void on_all_states(struct ble_msg_data *msg)
+/* Message handler for connected states. */
+static void on_connected_states(struct ble_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND_BLE)) {
 		if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
@@ -275,6 +277,12 @@ static void on_all_states(struct ble_msg_data *msg)
 	}
 }
 
+/* Message handler for all states. */
+static void on_all_states(struct ble_msg_data *msg)
+{
+
+}
+
 void ble_module_thread_fn(void)
 {
 	int err;
@@ -306,6 +314,7 @@ void ble_module_thread_fn(void)
 			on_state_init(&msg);
 			break;
 		case STATE_BLE_CONNECTED:
+			on_connected_states(&msg);
 			break;
 		case STATE_BLE_DISCONNECTED:
 			break;
@@ -326,7 +335,7 @@ APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
-APP_EVENT_SUBSCRIBE(MODULE, ble_event);
+APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 #if IS_ENABLED(CONFIG_DEBUG_MODULE)
 APP_EVENT_SUBSCRIBE(MODULE, debug_event);
 #endif

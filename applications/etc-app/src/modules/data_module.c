@@ -13,6 +13,7 @@
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #include "etc_device.h"
+#include "etc_ble.h"
 #include "cloud/lwm2m/lwm2m_firmware.h"
 #include "cloud/cloud_wrapper.h"
 
@@ -460,6 +461,7 @@ static void data_encode_for_cloud(bool split)
 
 static void data_encode_for_ble() 
 {
+	if (!etc_ble_get_is_connected()) return;
 	union etc_device_record record;
 	int ret;
 	bool reclaim_status;
