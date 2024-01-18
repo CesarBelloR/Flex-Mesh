@@ -5,6 +5,7 @@
 #include <app_event_manager_profiler_tracer.h>
 #include <zephyr/net/lwm2m.h>
 #include "compiler.h"
+#include "etc_functional_test.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -84,6 +85,9 @@ enum data_event_type {
 	/* Functional test started */
 	DATA_EVT_FUNCTIONAL_TEST_START,
 
+	/* Functional test data send requested */
+	DATA_EVT_FUNCTIONAL_TEST_SEND_DATA,
+
 	/* Functional test complete */
 	DATA_EVT_FUNCTIONAL_TEST_COMPLETE,
 
@@ -110,15 +114,6 @@ struct data_module_data_buffers {
 struct relay_data_buffer {
 	const uint8_t *data;
 	uint16_t data_len;
-};
-
-enum functional_test_result {
-	FUNC_TEST_SUCCESS,
-	FUNC_TEST_FAIL_ACK,
-	FUNC_TEST_FAIL_SENSOR,
-	FUNC_TEST_FAIL_BAT,
-	FUNC_TEST_FAIL_MODEM,
-	FUNC_TEST_FAIL_DEVICE_ID
 };
 
 struct data_event {

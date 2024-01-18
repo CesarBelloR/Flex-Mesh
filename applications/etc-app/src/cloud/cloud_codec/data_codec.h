@@ -15,6 +15,7 @@
 #include "etc_device.h"
 #include "etc_settings.h"
 #include "modem_api.h"
+#include "etc_functional_test.h"
 
 #if defined(CONFIG_LWM2M)
 #include <zephyr/net/lwm2m.h>
@@ -223,9 +224,7 @@ int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data);
  * 
 */
 int data_codec_prepare_functional_test_data(struct cloud_codec_data *cloud_data,
-					    struct sensor_data *sensor_data,
-					    int modem_rsrp,
-					    enum functional_test_result result);
+					    struct functional_test_data *test_data);
 
 /** 
  * @brief Clear the data saved in the cloud_data struct. This should be done

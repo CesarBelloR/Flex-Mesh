@@ -111,11 +111,4 @@ void etc_sensor_enter_functional_test(void);
  * 
 */
 void etc_sensor_exit_functional_test(void);
-
-/** Check if the sensor values pass the functional test.
- * 
- * @retval true Values pass functional test
- * @retval false Values do not pass functional test 
-*/
-bool etc_sensor_check_functional_test_values(struct sensor_data *data);
 #endif /*  ETC_SENSOR_H_ */

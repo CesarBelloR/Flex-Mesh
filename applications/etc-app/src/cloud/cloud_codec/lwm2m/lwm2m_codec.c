@@ -291,14 +291,14 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 }
 
 int data_codec_prepare_functional_test_data(struct cloud_codec_data *cloud_data,
-					    struct sensor_data *sensor_data,
-					    int modem_rsrp,
-					    enum functional_test_result result)
+					    struct functional_test_data *test_data)
 {
 	int err;
 	
-	err = lwm2m_codec_helpers_update_functional_test(cloud_data, sensor_data,
-							 modem_rsrp, result);
+	err = lwm2m_codec_helpers_update_functional_test(cloud_data,
+							 &test_data->sensor_data,
+							 test_data->lte_rsrp,
+							 test_data->result);
 	return err;
 }
 

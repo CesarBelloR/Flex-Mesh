@@ -63,11 +63,6 @@ static const struct gpio_dt_spec s1_dt =
 static const struct gpio_dt_spec vsen_en_dt = 
 		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 
-#define FUNCTIONAL_TEST_VALUE_ACCURACY 0.5f
-static const float functional_test_values[] = {
-	-4.39, 5.02, -4.39, 5.02
-};
-
 static enum sensor_type list_sensor_type[SENSOR_INPUT_IN4 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN4 + 1];
 static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
@@ -540,18 +535,4 @@ void etc_sensor_enter_functional_test(void)
 void etc_sensor_exit_functional_test(void)
 {
 	etc_sensor_gpios_disable();
-}
-
-bool etc_sensor_check_functional_test_values(struct sensor_data *data) 
-{
-	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
-		float val = data->sensor[i];
-		float expected_val = functional_test_values[i];
-		if (val < (expected_val - FUNCTIONAL_TEST_VALUE_ACCURACY) ||
-		    val > (expected_val + FUNCTIONAL_TEST_VALUE_ACCURACY)) {
-			return false;
-		}
-	}
-
-	return true;
 }
