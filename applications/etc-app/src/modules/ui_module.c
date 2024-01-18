@@ -288,13 +288,13 @@ static void led_pattern_update_work_fn(struct k_work *work)
 	if (node == NULL) {
 		LOG_DBG("Empty node %d", sub_state_get());
 		if (sub_state_get() == SUB_STATE_LTE_CONNECTING) {
-			next_pattern = update_list_pattern(LED_STATE_LTE_CONNECTING, HOLD_FOREVER);;
+			next_pattern = update_list_pattern(LED_STATE_LTE_CONNECTING, HOLD_FOREVER);
 		} else if (sub_state_get() == SUB_STATE_LTE_CONNECTED) {
 			next_pattern = update_list_pattern(LED_STATE_LTE_CONNECTED, HOLD_FOREVER);
 		} else if (sub_state_get() == SUB_STATE_CLOUD_CONNECTED) {
-			next_pattern = update_list_pattern(LED_STATE_CLOUD_CONNECTED, HOLD_FOREVER);;
+			next_pattern = update_list_pattern(LED_STATE_CLOUD_CONNECTED, HOLD_FOREVER);
 		} else if (sub_state_get() == SUB_STATE_LORA_LISTEN) {
-			next_pattern = update_list_pattern(LED_STATE_LORA_LISTEN, HOLD_FOREVER);;
+			next_pattern = update_list_pattern(LED_STATE_LORA_LISTEN, HOLD_FOREVER);
 		}  else if (sub_state_get() == SUB_STATE_CHARGE_BAT_COMPLETE) {
 			next_pattern = update_list_pattern(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);;
 		} else if (sub_state_get() == SUB_STATE_CHARGE_BAT_IN_PROCESS) {
@@ -496,7 +496,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		/* RX listen is done. Back to battery */
 		transition_list_clear();
 		sub_state_set(last_battery_state);
-		k_work_reschedule(&led_pattern_update_work,  K_NO_WAIT);
+		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_SEND)) {
@@ -509,7 +509,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		transition_list_clear();
 		sub_state_set(last_battery_state);
 		transition_list_append(LED_STATE_LORA_NACK, 2000);
-		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+		k_work_reschedule(&led_pattern_update_work,  K_NO_WAIT);
 	}
 	
 	if (IS_EVENT(msg, lora, LORA_EVT_ERROR)) {
