@@ -386,6 +386,9 @@ static int module_lora_process_packet(union etc_device_record record)
 		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 			sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
 			record.sensor[SENSOR_INPUT_HUMID]);
+	} else {
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+			sizeof(decoded_buf) - decoded_buf_len, "*,");
 	}
 
 #if 0 // Test decrypt the message encoded
