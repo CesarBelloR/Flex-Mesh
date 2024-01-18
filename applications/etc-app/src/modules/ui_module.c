@@ -174,10 +174,12 @@ static void sub_state_set(enum sub_state_type new_state)
 		sub_state2str(sub_state),
 		sub_state2str(new_state));
 
-	/* Save last sub-state for battery only */
+	/* Save last sub-state for battery (in-charge or no charge) */
 	if (sub_state == SUB_STATE_NORMAL_BAT_FULL ||
 		sub_state == SUB_STATE_NORMAL_BAT_LOW ||
-		sub_state == SUB_STATE_NORMAL_BAT_MED) {
+		sub_state == SUB_STATE_NORMAL_BAT_MED || 
+		sub_state == SUB_STATE_CHARGE_BAT_IN_PROCESS ||
+		sub_state == SUB_STATE_CHARGE_BAT_COMPLETE) {
 		last_battery_state = sub_state;
 	}
 	last_sub_state = sub_state;
