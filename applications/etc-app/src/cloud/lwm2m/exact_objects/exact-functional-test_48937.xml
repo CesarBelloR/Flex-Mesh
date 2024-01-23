@@ -23,6 +23,8 @@
 - 2: Sensor error
 - 3: Battery error
 - 4: Modem error
+- 5: Device ID error
+- 6: Unknown error
 - 99: not started]]></Description>
 			</Item>
 		</Resources>
