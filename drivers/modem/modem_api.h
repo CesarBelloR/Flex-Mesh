@@ -70,7 +70,9 @@ enum modem_api_evt_type {
 	/* Modem powered down manually, NOT in PSM*/
 	MODEM_API_POWER_DOWN_EVT,
 	/* Modem dynamic data changed (e.g. cellular network, PSM parameters) */
-	MODEM_API_DYNAMIC_DATA_UPDATE_EVT
+	MODEM_API_DYNAMIC_DATA_UPDATE_EVT,
+	/* Modem Soft PSM event */
+	MODEM_API_SOFT_PSM_EVT,
 };
 
 struct modem_api_evt {
@@ -194,6 +196,8 @@ static inline char *modem_evt_to_str(enum modem_api_evt_type evt)
 		return "MODEM_API_POWER_DOWN_EVT";
 	case MODEM_API_DYNAMIC_DATA_UPDATE_EVT:
 		return "MODEM_API_DYNAMIC_DATA_UPDATE_EVT";
+	case MODEM_API_SOFT_PSM_EVT:
+		return "MODEM_API_SOFT_PSM_EVT";
 	default:
 		return "Unknown event";
 	}

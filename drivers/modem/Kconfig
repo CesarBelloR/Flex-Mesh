@@ -127,4 +127,8 @@ config MODEM_NTP_SERVER
 	help 
 		The NTP server for getting date/time when the modem is online
 
+config MODEM_PSM_WORKAROUND_WAIT_TIME_S
+	int "The timeout to put the modem to sleep mode like PSM"
+	default 60
+	
 endif

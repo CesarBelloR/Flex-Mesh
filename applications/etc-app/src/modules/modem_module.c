@@ -79,8 +79,6 @@ const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
 
 static void modem_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(modem_work, modem_work_fn);
-static void psm_workaround_work_fn(struct k_work *work);
-static K_WORK_DELAYABLE_DEFINE(psm_workaround_work, psm_workaround_work_fn);
 
 int64_t modem_wakeup_time_ms = -1;
 
@@ -374,7 +372,18 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 		APP_EVENT_SUBMIT(module_event);
 		break;
 	}
+	case MODEM_API_SOFT_PSM_EVT: {
+		struct modem_event *module_event = new_modem_event();
 
+		k_work_cancel_delayable(&modem_work);
+		state_set(STATE_DISCONNECTED);
+		sub_state_lte_connected_set(SUB_STATE_MODEM_OFF);
+
+		module_event->data.on_time_ms = get_modem_on_time_ms(true);
+		module_event->type = MODEM_EVT_PSM_ENTERED;
+		APP_EVENT_SUBMIT(module_event);
+		break;
+	}
 	case MODEM_API_PSM_WAKEUP_EVT: {
 		break;
 	}
@@ -393,13 +402,6 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 		new_dynamic_modem_data(evt->dynamic_data);
 	}
 	}
-}
-
-static void psm_workaround_work_fn(struct k_work *work) 
-{
-	(void)work;
-	modem_cmd(modem_dev, MODEM_API_CMD_CLOSE_CONNECTION, NULL);
-	modem_enter_sleep();
 }
 
 static int dynamic_modem_data_get(void)
@@ -571,7 +573,6 @@ static void on_sub_state_modem_sleep(struct modem_msg_data *msg)
 {
 	if  (is_wakeup_modem(msg)) {
 		int ret;
-
 		modem_wakeup_time_ms = k_uptime_get();
 		ret = modem_enter_wakeup();
 	}
@@ -609,11 +610,6 @@ static void on_state_connected(struct modem_msg_data *msg)
 	if (IS_EVENT(msg, modem, MODEM_EVT_POWERED_DOWN)) {
 		LOG_DBG("Modem powered down. Sleeping.");
 		modem_enter_sleep();
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
-		k_work_schedule(&psm_workaround_work, 
-			K_SECONDS(CONFIG_MODEM_PSM_WORKAROUND_WAIT_TIME_S));
 	}
 }
 

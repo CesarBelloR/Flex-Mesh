@@ -28,7 +28,7 @@ static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
 static struct modem_context    mctx;
 static const struct socket_op_vtable offload_socket_fd_op_vtable;
-
+static bool modem_req_shutdown = false;
 #if defined(CONFIG_DNS_RESOLVER)
 #define AI_ARR_MAX 1
 #endif
@@ -84,11 +84,37 @@ static char psm_param_rptau[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PS
 #endif 
 #endif
 
+#if CONFIG_MODEM_QUECTEL_BG95_PSM
+static int pm_suspend_uart(void);
+#endif 
+
+static void psm_workaround_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(psm_workaround_work, psm_workaround_work_fn);
+
 static void quectel_bg95_set_connected(bool connected);
 static int modem_event_callback(const struct modem_api_evt *evt);
 int quectel_bg95_psm_wakeup(void);
 /* Implementation in net/ip/utils.h */
 extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
+
+static void psm_workaround_work_fn(struct k_work *work) 
+{
+	(void)work;
+	/* stop RSSI delay work */
+	k_work_cancel_delayable(&mdata.rssi_query_work);
+
+	mdata.power = MODEM_POWER_OFF;
+	quectel_bg95_set_connected(false);
+	for(int i = 0; i < MDM_MAX_SOCKETS; i++) {
+		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_id) {
+			LOG_DBG("invalidating socket: %u", mdata.sockets[i].id);
+			modem_socket_put(&mdata.socket_config, mdata.sockets[i].sock_fd);
+		}
+	}
+
+	pm_suspend_uart();
+	MODEM_SUBMIT_EVT(MODEM_API_SOFT_PSM_EVT);
+}
 
 static inline int digits(int n)
 {
@@ -486,6 +512,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_qcsq)
 
 	return 0;
 }
+
 
 
 /* Handler: +QIOPEN: <connect_id>[0], <err>[1] */
@@ -1272,6 +1299,10 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 
 	/* Data was written successfully. */
 	errno = 0;
+	
+	/* Reschedule for PSM workaround */
+	k_work_reschedule(&psm_workaround_work, K_SECONDS(CONFIG_MODEM_PSM_WORKAROUND_WAIT_TIME_S));
+
 	return ret;
 }
 
@@ -1384,6 +1415,8 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 exit:
 	/* clear socket data */
 	sock->data = NULL;
+	/* Reschedule for PSM workaround */
+	k_work_reschedule(&psm_workaround_work, K_SECONDS(CONFIG_MODEM_PSM_WORKAROUND_WAIT_TIME_S));
 	return ret;
 }
 
@@ -1540,6 +1573,7 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 
 MODEM_CMD_DEFINE(on_cmd_power_down)
 {
+	if (!modem_req_shutdown) return 0;
 	k_sem_give(&mdata.sem_shutdown);
 	mdata.power = MODEM_POWER_OFF;
 	MODEM_SUBMIT_EVT(MODEM_API_POWER_DOWN_EVT);
@@ -1584,6 +1618,8 @@ static int quectel_bg95_power_down()
 		return -EAGAIN;
 	}
 
+	modem_req_shutdown = true;
+
 	k_sem_reset(&mdata.sem_shutdown);
 #if 1
 	do {
@@ -1615,7 +1651,7 @@ static int quectel_bg95_power_down()
 				      NULL, 0U, false);
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	LOG_INF("Modem powered down");
-
+	modem_req_shutdown = false;
 	return 0;
 error:
 	LOG_ERR("Failed to shut down modem, %d", ret);
@@ -1623,6 +1659,7 @@ error:
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
 				      NULL, 0U, false);
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
+	modem_req_shutdown = false;
 	return ret;
 }
 
@@ -2752,7 +2789,8 @@ retry:
 	mdata.power = MODEM_POWER_ON;
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    MDM_WAIT_FOR_RSSI_TIMEOUT);
-
+	k_work_schedule(&psm_workaround_work, 
+		K_SECONDS(CONFIG_MODEM_PSM_WORKAROUND_WAIT_TIME_S));
 error:
 	return ret;
 }
@@ -3005,6 +3043,12 @@ static int quectel_bg95_cmd(const struct device *dev,
 	if (cmd == MODEM_API_CMD_PSM_WAKEUP) {
 		return quectel_bg95_psm_wakeup();
 	} else if (cmd == MODEM_API_CMD_POWER_ON) {
+		enum pm_device_state pm_state;
+		int rc = pm_device_state_get(mctx.iface.dev, &pm_state);
+		if (!rc && pm_state == PM_DEVICE_STATE_SUSPENDED) {
+			LOG_DBG("Resume UART");
+			pm_resume_uart();
+		}
 		return modem_setup();
 	} else if (cmd == MODEM_API_CMD_CLOSE_CONNECTION) {
 		return quectel_bg95_close_all_connection();
