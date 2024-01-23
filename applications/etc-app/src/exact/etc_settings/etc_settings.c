@@ -31,6 +31,10 @@ static int flag_etc_config_load;
 static enum etc_serial_number_types saved_serial_number_type;
 struct etc_config etc_cfg;
 
+const uint8_t etc_setting_production_code_valid[] = {
+	10, 11
+};
+
 K_MUTEX_DEFINE(setting_mutex);
 
 void etc_set_hw_version(const char *hw_version)
@@ -777,25 +781,53 @@ static int cmd_set_serial_type(const struct shell *shell, size_t argc, char **ar
 
 static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv)
 {
-	if ((argc == 2) && (strlen(argv[1]) != 0)) {
-		size_t input_len = strlen(argv[1]);
-		if (input_len > 6 || input_len < 1) {
-			shell_error(shell, "Device ID Input exceeds maximum number of digits");
+	if ((argc == 3) && (strlen(argv[1]) != 0) && (strlen(argv[2]) != 0)) {
+		size_t prod_len = strlen(argv[1]);
+		size_t serial_len = strlen(argv[2]);
+
+		if (prod_len != 2) {
+			shell_error(shell, "Production Code exceeds range number of digits");
+			return 0;
+		}
+		if (serial_len > 6 || serial_len < 1) {
+			shell_error(shell, "Device ID exceeds range number of digits");
 			return 0;
 		}
 
 		char *input = argv[1];
-		for (int i = 0; i < input_len; i++) {
+		for (int i = 0; i < prod_len; i++) {
 			if (!isdigit((unsigned char)input[i])) {
 				shell_error(shell, "Invalid input, non-numeric characters detected");
 				return 0;
 			}
 		}
+
+		input = argv[2];
+		for (int i = 0; i < serial_len; i++) {
+			if (!isdigit((unsigned char)input[i])) {
+				shell_error(shell, "Invalid input, non-numeric characters detected");
+				return 0;
+			}
+		}
+
+		int prod_code = atoi(argv[1]);
+		bool is_valid = false;
+		for (int i = 0; i < ARRAY_SIZE(etc_setting_production_code_valid); i++) {
+			if (prod_code == etc_setting_production_code_valid[i]) {
+				is_valid = true;
+			}
+		}
+
+		if (!is_valid) {
+			shell_error(shell, "Invalid input, Production Code doesn't support");
+			return 0;
+		}
+
 		shell_print(shell, "OK");
-		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%02d%06d", CONFIG_PRODUCTION_GROUP_VALUE, atoi(argv[1]));
+		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%02d%06d", prod_code, atoi(argv[2]));
 		etc_set_device_id(tmp_saved_value);
 	} else {
-		shell_error(shell, "Invalid device id");
+		shell_error(shell, "Invalid input parameter\n. Syntax: set_device_id <Production Code> <Serial Number>");
 	}
 
 	return 0;
