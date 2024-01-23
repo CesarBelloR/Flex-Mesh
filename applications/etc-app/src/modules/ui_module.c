@@ -447,7 +447,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		transition_list_clear();
 		sub_state_set(last_battery_state);
 		transition_list_append(LED_STATE_LTE_DISCONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
-		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+		k_work_reschedule(&led_pattern_update_work,  K_NO_WAIT);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_ERROR)) {
@@ -461,7 +461,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		transition_list_clear();
 		sub_state_set(last_battery_state);
 		transition_list_append(LED_STATE_CLOUD_DISCONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
-		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+		k_work_reschedule(&led_pattern_update_work,  K_NO_WAIT);
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
