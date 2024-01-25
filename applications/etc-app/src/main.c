@@ -20,6 +20,9 @@
 #include "events/app_event.h"
 #include "etc_device.h"
 #include "etc_settings.h"
+#if defined(CONFIG_BT)
+#include "etc_ble.h"
+#endif
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -125,7 +128,9 @@ int main(void)
 	etc_settings_init();
 	etc_device_init();
 	ui_init();
-
+#if defined(CONFIG_BT)
+	etc_ble_init();
+#endif
 	/* Initialize all threads */
 	k_thread_create(&app_thread, app_stack, K_KERNEL_STACK_SIZEOF(app_stack),
 			(k_thread_entry_t)app_module_thread_fn, NULL, NULL, NULL,
