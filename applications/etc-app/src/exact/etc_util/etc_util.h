@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+/* Define a bit lenght for encrypt/decrypt method */
+#define AES_KEY_BITLEN 128
+
 /**
  * @brief Validate given data against given lower and upper limits.
  * The limits are inclusive.
@@ -78,5 +81,8 @@ uint16_t ceil_int(uint16_t value, uint16_t divisor);
  * @return Result of integer division.
 */
 uint16_t round_int(uint16_t value, uint16_t divisor);
+
+int encrypt_data(const unsigned char *psk, const unsigned char *encrypting_data, size_t encrypting_length, unsigned char *encrypted_data);
+int decrypt_data(const unsigned char *psk, const unsigned char *encrypted_data, size_t encrypted_length, unsigned char *decrypted_data);
 
 #endif

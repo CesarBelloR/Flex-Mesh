@@ -13,9 +13,19 @@ LOG_MODULE_REGISTER(etc_ble);
 #include <cJSON_os.h>
 #include "etc_ble.h"
 #include "etc_settings.h"
+#include "etc_util.h"
 
 #define DEVICE_NAME CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
+
+enum {
+	FLEX_CCC_SUBSCRIBED,
+	FLEX_CCC_NUM_FLAGS,
+};
+
+ATOMIC_DEFINE(flex_ccc_sensor, FLEX_CCC_NUM_FLAGS);
+ATOMIC_DEFINE(flex_ccc_config, FLEX_CCC_NUM_FLAGS);
+ATOMIC_DEFINE(flex_ccc_reclaim, FLEX_CCC_NUM_FLAGS);
 
 #define BT_UUID_SERVICE_VAL BT_UUID_128_ENCODE(0x24eb85c0, 0x1114, 0x46fd, 0xa9a3, 0x1559361c6a95)
 
@@ -138,43 +148,37 @@ static void flex_sensor_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 				  uint16_t value)
 {
 	if (value == BT_GATT_CCC_NOTIFY) {
-		flex_ble_notify_sub_cnt += 1;
+		atomic_set_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED);
 		k_work_schedule(&flex_ble_sensor_work, K_SECONDS(FLEX_BT_SENSOR_WORK_DELAY_SECONDS));
 	} else {
-		if (flex_ble_notify_sub_cnt > 0) {
-			flex_ble_notify_sub_cnt = flex_ble_notify_sub_cnt - 1;
-		}
+		atomic_clear_bit(flex_ccc_reclaim, FLEX_CCC_SUBSCRIBED);
 	}
-	LOG_DBG("Notification has been turned %s %d", 
-		value == BT_GATT_CCC_NOTIFY ? "on" : "off", flex_ble_notify_sub_cnt);
+	LOG_DBG("Notification has been turned %s", 
+		value == BT_GATT_CCC_NOTIFY ? "on" : "off");
 }
 
 static void flex_reclaim_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 				  uint16_t value)
 {
 	if (value == BT_GATT_CCC_NOTIFY) {
-		flex_ble_notify_sub_cnt += 1;
+		atomic_set_bit(flex_ccc_reclaim, FLEX_CCC_SUBSCRIBED);
 	} else {
-		if (flex_ble_notify_sub_cnt > 0) {
-			flex_ble_notify_sub_cnt = flex_ble_notify_sub_cnt - 1;
-		}
+		atomic_clear_bit(flex_ccc_reclaim, FLEX_CCC_SUBSCRIBED);
 	}
-	LOG_DBG("Notification has been turned %s %d", 
-		value == BT_GATT_CCC_NOTIFY ? "on" : "off", flex_ble_notify_sub_cnt);
+	LOG_DBG("Notification has been turned %s", 
+		value == BT_GATT_CCC_NOTIFY ? "on" : "off");
 }
 
 static void flex_config_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 				  uint16_t value)
 {
 	if (value == BT_GATT_CCC_NOTIFY) {
-		flex_ble_notify_sub_cnt += 1;
+		atomic_set_bit(flex_ccc_config, FLEX_CCC_SUBSCRIBED);
 	} else {
-		if (flex_ble_notify_sub_cnt > 0) {
-			flex_ble_notify_sub_cnt = flex_ble_notify_sub_cnt - 1;
-		}
+		atomic_clear_bit(flex_ccc_config, FLEX_CCC_SUBSCRIBED);
 	}
-	LOG_DBG("Notification has been turned %s %d", 
-		value == BT_GATT_CCC_NOTIFY ? "on" : "off", flex_ble_notify_sub_cnt);
+	LOG_DBG("Notification has been turned %s", 
+		value == BT_GATT_CCC_NOTIFY ? "on" : "off");
 }
 
 static ssize_t flex_sensor_on_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
@@ -265,11 +269,45 @@ static int flex_ble_notify(struct bt_conn *conn, int attr_index, const uint8_t *
 	params.data = data;
 	params.len = len;
 	params.func = flex_ble_notify_complete;
-	if (bt_gatt_is_subscribed(conn, attr, BT_GATT_CCC_NOTIFY)) {
-		return bt_gatt_notify_cb(conn, &params);
+
+	int ccc_sensor_index = flex_attr_get_index(ETC_BLE_SENSOR_CHAR);
+	int ccc_reclaim_index = flex_attr_get_index(ETC_BLE_RECLAIM_CHAR);
+
+	if (ccc_sensor_index == attr_index) {
+		if (atomic_test_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED)) {
+			return bt_gatt_notify_cb(conn, &params);
+		}
+	} else if (ccc_reclaim_index == attr_index) {
+		if (atomic_test_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED)) {
+			return bt_gatt_notify_cb(conn, &params);
+		}
 	}
+
 	LOG_WRN("The UUID is not subscribed yet");
 	return -EINVAL;
+}
+
+static uint8_t* etc_ble_encrypt_data(const uint8_t *data, uint16_t len, uint16_t *encrypted_len)
+{
+	uint16_t max_encrypted_len = (len / AES_KEY_BITLEN) * AES_KEY_BITLEN + AES_KEY_BITLEN;
+	uint8_t* out_buf = (uint8_t* )k_malloc(max_encrypted_len);
+	if (out_buf == NULL) {
+		LOG_ERR("Failed to allocate memory for encrypting data");
+		*encrypted_len = 0;
+		return NULL;
+	}
+	uint8_t buf[ETC_SETTING_PSK_LEN] = {0x00};
+	etc_get_psk(buf, ETC_SETTING_PSK_LEN);
+	int ret = encrypt_data(buf, (const uint8_t*)data, len, out_buf);
+	if (ret > 0) {
+		*encrypted_len = ret;
+		LOG_DBG("Encrypted data with length %d (input %d)", ret, len);
+		return out_buf;
+	} else {
+		LOG_ERR("Can't encrypted data %d", ret);
+	}
+
+	return NULL;
 }
 
 int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
@@ -281,8 +319,15 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 		return -ENOENT;
 	}
 	int mtu_size = bt_gatt_get_mtu(current_conn) - BT_OP_OFFSET;
-	int step = len / mtu_size;
-	int remain = len % mtu_size;
+
+	uint16_t encrypted_len = 0;
+	uint8_t *encrypted_buf = etc_ble_encrypt_data(data, len, &encrypted_len);
+	if (encrypted_buf == NULL) {
+		return -EINVAL;
+	}
+
+	int step = encrypted_len / mtu_size;
+	int remain = encrypted_len % mtu_size;
 	int rc = 0;
 
 	uint8_t msg_id = msg_id_cnt;
@@ -290,21 +335,27 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 
 	for (int i = 0; i <= step; i++) {
 		int frame_len = (i == step) ? remain : mtu_size;
+		if (frame_len == 0) {
+			break;
+		}
 		flex_frame.msg_id = msg_id;
 		flex_frame.frame_id = i;
-		flex_frame.frame_len = (i == 0) ? len : 0;
-		memcpy(flex_frame.frame_payload, &data[i * mtu_size], frame_len);
-		LOG_HEXDUMP_INF((const uint8_t *)&flex_frame, frame_len, channel == ETC_BLE_SENSOR_CHAR ? "SENSOR" : "RECLAIM");
+		flex_frame.frame_len = (i == 0) ? encrypted_len : 0;
+		memcpy(flex_frame.frame_payload, &encrypted_buf[i * mtu_size], frame_len);
 		rc = flex_ble_notify(current_conn, attr_index, (const uint8_t *)&flex_frame, BT_PAYLOAD_OFFSET + frame_len);
 		if (rc) {
 			LOG_ERR("Failed to notify current characteristic %d", rc);
-			return rc;
+			goto done;
 		}
 		k_sem_take(&flex_ble_notify_sem, K_FOREVER);
 	}
 
 	LOG_DBG("Notified success");
-	return 0;
+done:
+	if (encrypted_buf) {
+		k_free(encrypted_buf);
+	}
+	return rc;
 }
 
 static void advertise(struct k_work *work)
@@ -375,6 +426,11 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	current_conn = NULL;
 	LOG_INF("Disconnected (reason 0x%02x)", reason);
+	/* Clear all bits */
+	atomic_clear_bit(flex_ccc_config, FLEX_CCC_SUBSCRIBED);
+	atomic_clear_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED);
+	atomic_clear_bit(flex_ccc_reclaim, FLEX_CCC_SUBSCRIBED);
+
 	k_work_submit(&advertise_work);
 	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
 }

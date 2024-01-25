@@ -2,9 +2,10 @@
  * Copyright (c) 2023 EXACT Technology
 */
 #include <zephyr/kernel.h>
+#include <mbedtls/aes.h>
+#include <mbedtls/cipher.h>
 
 #include "etc_util.h"
-
 
 int util_validate_u32(uint32_t data, uint32_t lower_limit, uint32_t upper_limit) 
 {
@@ -36,4 +37,37 @@ uint16_t ceil_int(uint16_t value, uint16_t divisor)
 	}
 	
 	return quotient * divisor;
+}
+
+int encrypt_data(const unsigned char *psk, const unsigned char *encrypting_data, size_t encrypting_length, unsigned char *encrypted_data) {
+	size_t output_length = 0;
+	size_t partial_length = 0;
+    mbedtls_cipher_context_t ctx;
+    mbedtls_cipher_init(&ctx);
+	const mbedtls_cipher_info_t *info = mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_CBC);
+    mbedtls_cipher_setup(&ctx, info);
+    mbedtls_cipher_setkey(&ctx, psk, AES_KEY_BITLEN, MBEDTLS_ENCRYPT);
+    mbedtls_cipher_update(&ctx, encrypting_data, encrypting_length, encrypted_data, &partial_length);
+	output_length += partial_length;
+    mbedtls_cipher_finish(&ctx, encrypted_data + output_length, &partial_length);
+	output_length += partial_length;
+    mbedtls_cipher_free(&ctx);
+    return output_length;
+}
+
+int decrypt_data(const unsigned char *psk, const unsigned char *encrypted_data, size_t encrypted_length, unsigned char *decrypted_data) {
+	size_t output_length = 0;
+	size_t partial_length = 0;
+    mbedtls_cipher_context_t ctx;
+    mbedtls_cipher_init(&ctx);
+	const mbedtls_cipher_info_t *info = mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_CBC);
+    mbedtls_cipher_setup(&ctx, info);
+    mbedtls_cipher_setkey(&ctx, psk, AES_KEY_BITLEN, MBEDTLS_DECRYPT);
+    mbedtls_cipher_update(&ctx, encrypted_data, encrypted_length, decrypted_data, &partial_length);
+	output_length += partial_length;
+    mbedtls_cipher_finish(&ctx, decrypted_data + output_length, &partial_length);
+	output_length += partial_length;
+    mbedtls_cipher_free(&ctx);
+
+    return output_length;
 }
