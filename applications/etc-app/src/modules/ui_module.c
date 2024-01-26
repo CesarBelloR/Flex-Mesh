@@ -446,7 +446,6 @@ static void on_state_running(struct ui_msg_data *msg)
 	    IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
 		transition_list_clear();
 		sub_state_set(last_battery_state);
-		transition_list_append(LED_STATE_LTE_DISCONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  K_NO_WAIT);
 	}
 
@@ -460,7 +459,6 @@ static void on_state_running(struct ui_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
 		transition_list_clear();
 		sub_state_set(last_battery_state);
-		transition_list_append(LED_STATE_CLOUD_DISCONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
 		k_work_reschedule(&led_pattern_update_work,  K_NO_WAIT);
 	}
 
