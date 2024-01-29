@@ -19,6 +19,7 @@
 #include "etc_lwm2m_client_utils.h"
 #include "lwm2m_firmware.h"
 #include "lwm2m/lwm2m_codec_helpers.h"
+#include "etc_reclaim_obj_48934.h"
 
 #include "cloud/cloud_wrapper.h"
 
@@ -234,6 +235,47 @@ static int device_reboot_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_l
 	return 0;
 }
 
+/* Callback handler triggered when lwm2m object resource 48934/0/3 
+ * (EXACT Reclaim/reclaim) is executed. */
+static int reclaim_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_len)
+{
+	ARG_UNUSED(args);
+	ARG_UNUSED(args_len);
+	ARG_UNUSED(obj_inst_id);
+	int err;
+
+	struct cloud_wrap_event cloud_wrap_evt = {
+		.type = CLOUD_WRAP_EVT_RECLAIM_REQUEST
+	};
+
+	err = lwm2m_get_s32(&LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID,
+				       obj_inst_id, 
+				       ETC_RECLAIM_OBJ_R_START_TIME),
+			    &cloud_wrap_evt.reclaim.start_time_s);
+	if (err) {
+		LOG_ERR("get start time, err %d", err);
+		return -ENOENT;
+	}
+	
+	err = lwm2m_get_s32(&LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID,
+				       obj_inst_id, 
+				       ETC_RECLAIM_OBJ_R_END_TIME),
+			    &cloud_wrap_evt.reclaim.end_time_s);
+	if (err) {
+		LOG_ERR("get start time, err %d", err);
+		return -ENOENT;
+	}
+
+	if (cloud_wrap_evt.reclaim.start_time_s > 
+	    cloud_wrap_evt.reclaim.end_time_s) {
+		LOG_ERR("start time < end time");
+		return -EINVAL;
+	}
+
+	cloud_wrapper_notify_event(&cloud_wrap_evt);
+	return 0;
+}
+
 static void send_cb(enum lwm2m_send_status status)
 {
 	struct cloud_wrap_event cloud_wrap_evt = { 0 };
@@ -302,65 +344,6 @@ static int firmware_update_state_cb(uint8_t update_state)
 	return 0;
 }
 
-static int lwm2m_init_security(struct lwm2m_ctx *client, const char *ep_name)
-{
-	int ret;
-	char *server_url;
-	uint16_t server_url_len;
-	uint8_t client_psk[CONFIG_LWM2M_SECURITY_KEY_SIZE];
-	size_t psk_len;
-
-	/* Server URL */
-	ret = lwm2m_get_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_SECURITY_ID, 0,
-					   SECURITY_SERVER_URI_ID),
-				(void **)&server_url, &server_url_len, NULL, NULL);
-	if (ret < 0) {
-		return ret;
-	}
-
-	server_url_len = snprintk(server_url, server_url_len, "%s",
-				  CONFIG_LWM2M_INTEGRATION_SERVER_URL);
-	lwm2m_set_res_data_len(&LWM2M_OBJ(LWM2M_OBJECT_SECURITY_ID, 0,
-					  SECURITY_SERVER_URI_ID),
-			       server_url_len + 1);
-
-	/* Security Mode */
-	lwm2m_set_u8(&LWM2M_OBJ(LWM2M_OBJECT_SECURITY_ID, 0, SECURITY_MODE_ID), 
-		     IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT) ? 0 : 3);
-
-#if defined(CONFIG_LWM2M_DTLS_SUPPORT)
-	psk_len = hex2bin(CONFIG_LWM2M_INTEGRATION_PSK, 
-			  sizeof(CONFIG_LWM2M_INTEGRATION_PSK) - 1,
-			  client_psk, sizeof(client_psk));
-	if (psk_len == 0) {
-		LOG_WRN("Error converting DTLS PSK to binary. Is it too long?");
-	}
-	lwm2m_set_string(&LWM2M_OBJ(0, 0, 3), ep_name);
-	lwm2m_set_opaque(&LWM2M_OBJ(0, 0, 5),
-			 (void *)client_psk, psk_len);
-#endif /* CONFIG_LWM2M_DTLS_SUPPORT */
-#if CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP
-	/* Mark 1st instance of security object as a bootstrap server */
-	lwm2m_set_u8(&LWM2M_OBJ(0, 0, 1), 1);
-
-	/* Create 2nd instance of security object needed for bootstrap */
-	lwm2m_create_object_inst(&LWM2M_OBJ(0, 1));
-#else
-	/* Set short server id.
-	 */
-	lwm2m_set_u16(&LWM2M_OBJ(0, 0, 10), CONFIG_LWM2M_SERVER_DEFAULT_SSID);
-	lwm2m_set_u16(&LWM2M_OBJ(1, 0, 0), CONFIG_LWM2M_SERVER_DEFAULT_SSID);
-#endif
-
-	ret = lwm2m_load_credentials_to_modem(client);
-	if (ret < 0) {
-		LOG_ERR("Error loading credentials to modem: %d", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
 int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 {
 	int err, len;
@@ -389,7 +372,15 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 
 	LOG_DBG("LwM2M endpoint name: %s", endpoint_name);
 
-	err = lwm2m_init_security(&client, endpoint_name);
+	struct dtls_psk psk;
+	err = etc_get_psk(psk.psk, sizeof(psk.psk));
+	if (err <= 0) {
+		LOG_ERR("etc_get_psk error %d", err);
+		return err;
+	}
+	psk.psk_len = (uint8_t)err;
+
+	err = lwm2m_init_security(&client, endpoint_name, &psk);
 	if (err) {
 		LOG_ERR("lwm2m_init_security, error: %d", err);
 		return err;
@@ -412,6 +403,14 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 					   device_reboot_cb);
 	if (err) {
 		LOG_ERR("lwm2m_engine_register_exec_callback, error: %d", err);
+		return err;
+	}
+
+	err = lwm2m_register_exec_callback(&LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID,
+						      0, ETC_RECLAIM_OBJ_R_RECLAIM),
+					   reclaim_exec_cb);
+	if (err) {
+		LOG_ERR("register reclaim exec callback, error: %d", err);
 		return err;
 	}
 

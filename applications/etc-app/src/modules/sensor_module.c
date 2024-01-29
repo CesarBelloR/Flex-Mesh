@@ -10,6 +10,7 @@
 #include "etc_settings.h"
 #include "etc_device.h"
 #include "etc_sensor.h"
+#include "etc_battery.h"
 #include "watchdog_app.h"
 #define MODULE sensor_module
 #include "cloud/cloud_codec/data_codec.h"
@@ -37,6 +38,7 @@ struct sensor_msg_data {
 static enum state_type {
 	STATE_INIT,
 	STATE_RUNNING,
+	STATE_FUNCTIONAL_TEST,
 	STATE_SHUTDOWN
 } state;
 
@@ -159,6 +161,85 @@ static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
 	APP_EVENT_SUBMIT(sensor_event);
 }
 
+static void sensor_module_enter_functional_test(struct sensor_data *sensor)
+{
+	struct sensor_event *sensor_event = new_sensor_event();
+
+	state_set(STATE_FUNCTIONAL_TEST);
+
+	sensor_event->type = SENSOR_EVT_FUNCTIONAL_TEST_START;
+	sensor_event->data.sensors = sensor;
+	APP_EVENT_SUBMIT(sensor_event);
+}
+
+static void sensor_module_exit_functional_test(void)
+{
+	int ret;
+	int64_t now_ms;
+	struct sensor_event *sensor_event = new_sensor_event();
+
+	if (state != STATE_FUNCTIONAL_TEST) {
+		return;
+	}
+
+	ret = date_time_now(&now_ms);
+	if (!ret) {
+		last_poll_complete_time_ms = now_ms;
+	}
+	etc_sensor_exit_functional_test();
+	state_set(STATE_RUNNING);
+
+	sensor_event->type = SENSOR_EVT_FUNCTIONAL_TEST_END;
+	APP_EVENT_SUBMIT(sensor_event);
+}
+
+static void sensor_module_battery_handler(enum battery_status status) {
+	static enum sensor_event_type last_sensor_battery_event = SENSOR_EVT_ERROR;
+	enum sensor_event_type battery_event = SENSOR_EVT_ERROR;
+	switch (status) {
+		case BATTERY_NORMAL: {
+			const uint16_t battery_voltage_mv = etc_battery_get_voltage_mV();
+			const uint8_t battery_percent_now =
+				etc_battery_percentage_from_voltage(battery_voltage_mv);
+			if (battery_percent_now >= BATTERY_MIN_FULL) {
+				battery_event = SENSOR_EVT_BATTERY_NORMAL_FULL;
+			} else if (battery_percent_now >= BATTERY_MIN_MED) {
+				battery_event = SENSOR_EVT_BATTERY_NORMAL_MED;
+			} else {
+				battery_event = SENSOR_EVT_BATTERY_NORMAL_LOW;
+			}
+			sensor_module_exit_functional_test();
+			break;
+		}
+		case BATTERY_LOW: {
+			battery_event = SENSOR_EVT_BATTERY_NORMAL_LOW;
+			sensor_module_exit_functional_test();
+			break;
+		}
+		case BATTERY_CHARGE_IN_PROCESS: {
+			battery_event = SENSOR_EVT_BATTERY_IN_CHARGING;
+			break;
+		}
+		case BATTERY_CHARGE_COMPLETE: {
+			battery_event = SENSOR_EVT_BATTERY_CHARGE_COMPLETE;
+			break;
+		}
+		case BATTERY_NO_INSTALLED: 
+		case BATTERY_DAMAGED: {
+			battery_event = SENSOR_EVT_BATTERY_ERROR;
+			break;
+		}
+		default:
+			LOG_DBG("Battery Status %d", status);
+			break;
+	}
+
+	if (last_sensor_battery_event != battery_event) {
+		last_sensor_battery_event = battery_event;
+		SEND_EVENT(sensor, battery_event);
+	}
+}
+
 static void sensor_module_evt_handler(enum etc_sensor_status status) {
 	LOG_INF("Sensor status %d", status);
 	if (status == SENSOR_NO_CONNECTION) {
@@ -171,7 +252,23 @@ static void sensor_module_evt_handler(enum etc_sensor_status status) {
 static int setup(void)
 {
 	etc_sensor_init(sensor_module_evt_handler);
+	etc_battery_init(sensor_module_battery_handler);
 	return 0;
+}
+
+static bool is_enter_functional_test(void)
+{
+	enum battery_status bat_status;
+
+	bat_status = etc_battery_get_status();
+
+	if (etc_sensor_get_enter_functional_test() &&
+	    (bat_status == BATTERY_CHARGE_IN_PROCESS || 
+	     bat_status == BATTERY_CHARGE_COMPLETE)) {
+		return true;
+	}
+
+	return false;
 }
 
 static int sensor_poll_handler(bool is_test) {
@@ -182,7 +279,7 @@ static int sensor_poll_handler(bool is_test) {
 	int ret;
 	
 	ret = date_time_now(&now_ms);
-	if (!ret && 
+	if (!is_test && !ret && 
 	    (now_ms - last_poll_complete_time_ms) < SENSOR_MIN_INTERVAL_MS) {
 		/* Ignore sample request if last reading finished
 		 * < SENSOR_MIN_INTERVAL_MS ago. Re-enabling VCC_SENS within
@@ -199,14 +296,14 @@ static int sensor_poll_handler(bool is_test) {
 	}
 #endif
 	sensor_is_processing = true;
-
+	SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_AQUIRING);
 	etc_sensor_run_acquisition();
 
 	struct sensor_data* data = &static_sensor_data;
 	int utc_timestamp = date_time_now_second();
 	data->timestamp = utc_timestamp == -1 ? 0 : utc_timestamp;
 	data->sensor[SENSOR_INPUT_AMBIENT] = etc_sensor_get_ambient_temp();
-
+	
 	if (data_codec_compare_temperature_is_valid(data->sensor[SENSOR_INPUT_AMBIENT])) {
 		LOG_DBG("Ambient temp %2.2f", data->sensor[SENSOR_INPUT_AMBIENT]);
 	}
@@ -221,8 +318,16 @@ static int sensor_poll_handler(bool is_test) {
 
 	data->sensor[SENSOR_INPUT_HUMID] = etc_sensor_get_probe_humid();
 	LOG_DBG("Humid %2.2f%% at port %d", data->sensor[SENSOR_INPUT_HUMID], etc_sensor_get_probe_humid_index());
-	data->battery_mV = etc_sensor_get_battery();
-	sensor_module_send_sensor(data, is_test);
+	data->battery_mV = etc_battery_get_voltage_mV();
+	LOG_DBG("Battery %u mV", data->battery_mV);
+	data->battery_status = etc_battery_get_status();
+	if (is_enter_functional_test()) {
+		LOG_DBG("Enter functional test");
+		etc_sensor_enter_functional_test();
+		sensor_module_enter_functional_test(data);
+	} else {
+		sensor_module_send_sensor(data, is_test);
+	}
 	sensor_is_processing = false;
 
 	ret = date_time_now(&now_ms);
@@ -239,7 +344,7 @@ static int sensor_poll_handler(bool is_test) {
 /* Message handler for STATE_INIT. */
 static void on_state_init(struct sensor_msg_data *msg)
 {
-	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
+	if (IS_EVENT(msg, app, APP_EVT_START)) {
 		state_set(STATE_RUNNING);
 	}
 }
@@ -247,23 +352,9 @@ static void on_state_init(struct sensor_msg_data *msg)
 /* Message handler for STATE_RUNNING. */
 static void on_state_running(struct sensor_msg_data *msg)
 {
-}
-
-/* Message handler for all states. */
-static void on_all_states(struct sensor_msg_data *msg)
-{
 	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
 		LOG_INF("APP_EVT_DATA_GET");
 		sensor_poll_handler(false);
-		return;
-	}
-
-	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
-		/* The module doesn't have anything to shut down and can
-		 * report back immediately.
-		 */
-		state_set(STATE_SHUTDOWN);
-		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
 		return;
 	}
 
@@ -290,6 +381,24 @@ static void on_all_states(struct sensor_msg_data *msg)
 				sensor_poll_handler(false);
 			}
 		}
+		return;
+	}
+}
+
+/* Message handler for STATE_FUNCTIONAL_TEST. */
+static void on_state_functional_test(struct sensor_msg_data *msg)
+{
+}
+
+/* Message handler for all states. */
+static void on_all_states(struct sensor_msg_data *msg)
+{
+	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
+		/* The module doesn't have anything to shut down and can
+		 * report back immediately.
+		 */
+		state_set(STATE_SHUTDOWN);
+		SEND_SHUTDOWN_ACK(sensor, SENSOR_EVT_SHUTDOWN_READY, self.id);
 		return;
 	}
 }
@@ -324,6 +433,9 @@ void sensor_module_thread_fn(void)
 			break;
 		case STATE_RUNNING:
 			on_state_running(&msg);
+			break;
+		case STATE_FUNCTIONAL_TEST:
+			on_state_functional_test(&msg);
 			break;
 		case STATE_SHUTDOWN:
 			/* The shutdown state has no transition. */

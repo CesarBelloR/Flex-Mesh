@@ -12,6 +12,8 @@ enum {
 	ETC_RECORD_RECLAIM = 0x03,
 	ETC_SERIAL_NUMBER_TYPE = 0x04,
 	ETC_SERIAL_NUMBER_ID = 0x05,
+	ETC_PSK_ID = 0x06,
+	ETC_RTC_CALIBRATION_OFFSET_PPM,
 	ETC_SETTING_HW_VERSION_ID = 0x100,
 	ETC_SETTING_FW_VERSION_ID,
 	ETC_SETTING_DEVICE_ID,
@@ -37,7 +39,6 @@ enum {
 
 };
 
-void etc_device_nvs_init(void);
 int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size);
 int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size);
 

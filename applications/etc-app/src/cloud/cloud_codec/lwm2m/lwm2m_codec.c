@@ -106,6 +106,7 @@ int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data)
 		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, FIRMWARE_VERSION_RID),
 		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_TYPE_RID),
 		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, HARDWARE_VERSION_RID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, BATTERY_STATUS_RID),
 		LWM2M_OBJ(ETC_CFG_OBJECT_ID),
 		LWM2M_OBJ(ETC_TEMP_OBJECT_ID),
 		LWM2M_OBJ(ETC_HUMID_OBJECT_ID),
@@ -133,7 +134,6 @@ int data_codec_prepare_record_packet(struct cloud_codec_data *cloud_data,
 		static const struct lwm2m_obj_path path_list[] = {
 			/* Always send first temperature object containing ambient data. */
 			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 0),
-			LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID)
 		};
 
 		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
@@ -290,11 +290,36 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 	return err;
 }
 
+int data_codec_prepare_functional_test_data(struct cloud_codec_data *cloud_data,
+					    struct functional_test_data *test_data)
+{
+	int err;
+	
+	err = lwm2m_codec_helpers_update_functional_test(cloud_data,
+							 &test_data->sensor_data,
+							 test_data->lte_rsrp,
+							 test_data->result);
+	return err;
+}
+
 int data_codec_has_data(struct cloud_codec_data *cloud_data)
 {
 	__ASSERT_NO_MSG(cloud_data != NULL);
 
 	return !lwm2m_codec_helpers_object_path_list_is_empty(cloud_data);
+}
+
+int data_codec_move_data(struct cloud_codec_data *cloud_data,
+			 struct cloud_codec_data *backup_data)
+{
+	int ret;
+	
+	ret = lwm2m_codec_helpers_object_path_list_move(cloud_data, backup_data);
+	if (ret != 0) {
+		LOG_ERR("Move data");
+	}
+
+	return ret;
 }
 
 int data_codec_split_data(struct cloud_codec_data *cloud_data,
@@ -338,4 +363,17 @@ int data_codec_contains_measurement_data(struct cloud_codec_data *cloud_data)
 	__ASSERT_NO_MSG(cloud_data != NULL);
 
 	return lwm2m_codec_helpers_object_path_list_contains_measurement(cloud_data);
+}
+
+int data_codec_update_reclaim_state(struct cloud_codec_data *cloud_data,
+				    enum data_reclaim_state new_state)
+{
+	int ret;
+
+	ret = lwm2m_codec_helpers_update_reclaim_state(cloud_data, new_state);
+	if (ret != 0) {
+		LOG_ERR("update reclaim status");
+	}
+
+	return ret;
 }

@@ -24,7 +24,7 @@
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define MODULE_APP_THREAD_STACK_SIZE	2048
-#define MODULE_CLOUD_THREAD_STACK_SIZE	2048
+#define MODULE_CLOUD_THREAD_STACK_SIZE	4096
 #define MODULE_DATA_THREAD_STACK_SIZE	2048
 #define MODULE_LORA_THREAD_STACK_SIZE	2048
 #define MODULE_MODEM_THREAD_STACK_SIZE	2048
@@ -83,11 +83,12 @@ extern void lora_module_thread_fn(void);
 extern void modem_module_thread_fn(void);
 extern void sensor_module_thread_fn(void);
 
-void main(void)
+int main(void)
 {
 	int rc = STATS_INIT_AND_REG(smp_svr_stats, STATS_SIZE_32, "smp_svr_stats");
 	if (rc < 0) {
 		LOG_ERR("Error initializing stats system [%d]", rc);
+		return -EINVAL;
 	}
 
 	LOG_INF("EXACT Monitor 2.0 version %s", APP_VERSION_STR);
@@ -107,6 +108,7 @@ void main(void)
 	rc = boot_read_bank_header(FLASH_AREA_ID(image_0), &img_hdr, sizeof(img_hdr));
 	if (rc) {
 		LOG_ERR("Failed to get header %d", rc);
+		return -EINVAL;
 	} else {
 		if (APP_VERSION_MAJOR != img_hdr.h.v1.sem_ver.major ||
 		    APP_VERSION_MINOR != img_hdr.h.v1.sem_ver.minor ||
@@ -167,4 +169,7 @@ void main(void)
 	while (true) {
 		k_sleep(K_FOREVER);
 	}
+
+	/* Never reach here */
+	return 0;
 }

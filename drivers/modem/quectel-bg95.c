@@ -454,9 +454,34 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 	} else {
 		mdata.mdm_rssi = MDM_RSSI_INVALID;
 	}
-	mdata.mdm_qual = qual;
 
-	LOG_INF("RSSI: %d, qual: %d", mdata.mdm_rssi, mdata.mdm_qual);
+	LOG_INF("RSSI: %d", mdata.mdm_rssi);
+
+	return 0;
+}
+
+/* Handler: +QCSQ: <sysmode>, <rssi>[1], <rsrp>[2], <sinr>[3], <rsrq>[4] */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_qcsq)
+{
+	if (argc < 5) {
+		LOG_WRN("QCSQ: not enough args");
+		return -1;
+	}
+	int rssi = ATOI(argv[1], 0, "rssi");
+	int rsrp = ATOI(argv[2], 0, "rsrp");
+	int rsrq = ATOI(argv[4], 0, "rsrq");
+
+	/* -125 and lower is considered invalid, anything larger is valid. */
+	if (rssi <= -125) {
+		mdata.mdm_rssi = MDM_RSSI_INVALID;
+	} else {
+		mdata.mdm_rssi = rssi;
+	}
+
+	mdata.mdm_rsrp = rsrp;
+	mdata.mdm_rsrq = rsrq;
+
+	LOG_INF("RSSI: %d, RSRP: %d, RSRQ: %d", rssi, rsrp, rsrq);
 
 	return 0;
 }
@@ -1874,64 +1899,74 @@ exit:
 	return ret;
 }
 
-static int on_connect_dtls_init(struct modem_socket *sock)
+static int dtls_set_psk(uint8_t cid, const struct modem_api_psk *psk)
 {
-	int ret = 0;
 	char psk_fn[sizeof("!##_server.psk!")];
 	char buf[256];
+	int ret;
+
+	/* SSL Context ID supported range is 0 to 5 */
+	__ASSERT_NO_MSG(cid <= 5);
 
 	// File name is <SSL context ID>_server.psk.
-	snprintk(psk_fn, sizeof(psk_fn), "%d_server.psk", sock->id);
+	snprintk(psk_fn, sizeof(psk_fn), "%u_server.psk", cid);
 	if (quectel_bg95_file_find(psk_fn) == 0) {
 		if (quectel_bg95_file_delete(psk_fn) != 0) {
 			return -1;
 		}
 	}
 
-#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK)
-	// Use dynamic psk data if not empty.
-	if (mdata.psk.id_len > 0 && mdata.psk.psk_len > 0) {
-		ret = snprintk(buf, sizeof(buf), "%s&", mdata.psk.id);
-		ret += bin2hex(mdata.psk.psk, mdata.psk.psk_len,
-			       buf + ret, sizeof(buf) - ret);
-	} else
-#endif  
-	{
-		// Modem expects file content in format <PSK_ID>&<PSK_KEY>
-		ret = snprintk(buf, sizeof(buf), "%s&%s", 
-				CONFIG_MODEM_QUECTEL_BG95_M3_PSK_ID, 
-				CONFIG_MODEM_QUECTEL_BG95_M3_PSK_KEY);
-		if (ret >= sizeof(buf)) {
-			LOG_WRN("PSK file truncated");
-			ret = sizeof(buf) - 1;
-		}
-	}
+	ret = snprintk(buf, sizeof(buf), "%s&", psk->psk_id);
+	ret += bin2hex(psk->psk, psk->psk_len,
+			buf + ret, sizeof(buf) - ret);
+
 	ret = quectel_bg95_file_download(psk_fn, buf, ret);
 	if (ret != 0) {
 		LOG_DBG("Failed to download PSK file %d", ret);
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0X00AE", "ciphersuite", sock->id);
+	return 0;
+}
+
+static int dtls_init(uint8_t cid, enum modem_api_cred_type type, void *data)
+{
+	if (type == MODEM_API_CRED_TYPE_PSK) {
+		struct modem_api_psk *psk = (struct modem_api_psk *)data;
+		return dtls_set_psk(cid, psk);
+	} else {
+		return -ENOTSUP;
+	}
+}
+
+static int dtls_configure(struct modem_socket *sock)
+{
+	char buf[256];
+	int ret;
+	uint8_t cid = sock->tls_tag;
+
+	__ASSERT_NO_MSG(sock->tls_tag >= 0);
+
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0X00AE", "ciphersuite", cid);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
 	{
 		LOG_DBG("Error to set QSSLCFG for CipherSuite Type");
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtlsversion", sock->id, 1);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtlsversion", cid, 1);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
 	{
 		LOG_DBG("Error to set QSSLCFG for DTLS Version");
 		return -1;
 	}
 		
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->id, 1);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", cid, 1);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
 	{
 		LOG_DBG("Error to set QSSLCFG for DTLS enable");
@@ -1939,9 +1974,9 @@ static int on_connect_dtls_init(struct modem_socket *sock)
 	}
 
 	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "negotiatetime", 
-		 sock->id, CONFIG_MODEM_QUECTEL_BG95_M3_SSL_NEGOTIATION_TIMEOUT);
+		 cid, CONFIG_MODEM_QUECTEL_BG95_M3_SSL_NEGOTIATION_TIMEOUT);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
-						 &mdata.sem_response, MDM_CMD_TIMEOUT);
+			     &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
 	{
 		LOG_DBG("Error to set QSSLCFG for DTLS enable");
@@ -2002,7 +2037,7 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XFFFF", "ciphersuite", sock->id);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,0XFFFF", "ciphersuite", sock->tls_tag);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2012,7 +2047,8 @@ static int on_connect_tls_init(struct modem_socket *sock)
 	}
 
 	/* Set CA path */
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "cacert", sock->id, MDM_TLS_CA_FILE_NAME);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "cacert", 
+		 sock->tls_tag, MDM_TLS_CA_FILE_NAME);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2021,7 +2057,8 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "clientcert", sock->id, MDM_TLS_CLIENT_CERT_FILE_NAME);
+	snprintk(buf, sizeof(buf),"AT+QSSLCFG=\"%s\",%d,\"%s\"", "clientcert",
+		 sock->tls_tag, MDM_TLS_CLIENT_CERT_FILE_NAME);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2030,7 +2067,8 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "clientkey", sock->id, MDM_TLS_PRIV_KEY_FILE_NAME);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,\"%s\"", "clientkey",
+		 sock->tls_tag, MDM_TLS_PRIV_KEY_FILE_NAME);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2039,7 +2077,8 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "sslversion", sock->id, 3);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "sslversion",
+		 sock->tls_tag, 3);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2048,7 +2087,8 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel", sock->id, 0);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "seclevel",
+		 sock->tls_tag, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2057,7 +2097,8 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "negotiatetime", sock->id, 300);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "negotiatetime",
+		 sock->tls_tag, 300);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2066,7 +2107,8 @@ static int on_connect_tls_init(struct modem_socket *sock)
 		return -1;
 	}
 
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "ignorelocaltime", sock->id, 0);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "ignorelocaltime",
+		 sock->tls_tag, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2076,7 +2118,8 @@ static int on_connect_tls_init(struct modem_socket *sock)
 	}
 
 	/* Disable DTLS when using TLS socket */
-	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls", sock->id, 0);
+	snprintk(buf, sizeof(buf), "AT+QSSLCFG=\"%s\",%d,%d", "dtls",
+		 sock->tls_tag, 0);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf,
 						 &mdata.sem_response, MDM_CMD_TIMEOUT);
 	if (ret < 0)
@@ -2125,13 +2168,19 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	}
 
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
+		/* Use the socket ID as the TLS tag. Safe guard with an assert, 
+		   as the modem supports socket IDs from 0 to 11, but only SSL
+		   cids from 0 to 5. */
+		sock->tls_tag = sock->id;
+		__ASSERT_NO_MSG(sock->tls_tag <= 5);
 		if (on_connect_tls_init(sock) != 0) {
 			errno = EAGAIN;
 			return -errno;
 		}
 	} else if (sock->ip_proto == IPPROTO_DTLS_1_2) {
-		if (on_connect_dtls_init(sock) != 0) {
-			errno = EAGAIN;
+		if (dtls_configure(sock) != 0) {
+			LOG_ERR("Error configuring DTLS, fd: %d", sock->sock_fd);
+			errno = ENOENT;
 			return -errno;
 		}
 	}
@@ -2151,8 +2200,8 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	/* Formulate the complete string. */
 	/* Open the socket with buffer access mode */
 	if ((sock->ip_proto == IPPROTO_TLS_1_2) || (sock->ip_proto == IPPROTO_DTLS_1_2)) {
-		snprintk(buf, sizeof(buf), "AT+QSSLOPEN=%d,%d,%d,\"%s\",%d,0", 1, sock->id, sock->id,
-			ip_str, dst_port);
+		snprintk(buf, sizeof(buf), "AT+QSSLOPEN=%d,%d,%d,\"%s\",%d,0", 1,
+			 sock->tls_tag, sock->id, ip_str, dst_port);
 	} else if (sock->ip_proto == IPPROTO_UDP) {
 		snprintk(buf, sizeof(buf), "AT+QIOPEN=%d,%d,\"%s\",\"%s\",%d,0,0", 1, sock->id, "UDP",
 			ip_str, dst_port);
@@ -2430,20 +2479,49 @@ static void modem_connect_work(void)
 	quectel_bg95_set_connected(true);
 }
 
-/* Func: modem_rssi_query_work
- * Desc: Routine to get Modem RSSI.
- */
-static void modem_rssi_query_work(struct k_work *work)
+static int modem_csq(void) 
 {
 	struct modem_cmd cmd  = MODEM_CMD("+CSQ: ", on_cmd_atcmdinfo_rssi_csq, 2U, ",");
 	static char *send_cmd = "AT+CSQ";
 	int ret;
-	k_timeout_t timeout = K_SECONDS(RSSI_TIMEOUT_SECS);
 
 	/* query modem RSSI */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     &cmd, 1U, send_cmd, &mdata.sem_response,
 			     MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+CSQ ret:%d", ret);
+	}
+	return ret;
+}
+
+static int modem_qcsq(void) 
+{
+	struct modem_cmd cmd  = 
+		MODEM_CMD_ARGS_MAX("+QCSQ: ", on_cmd_atcmdinfo_qcsq, 1U, 5U, ",");
+	static char *send_cmd = "AT+QCSQ";
+	int ret;
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     &cmd, 1U, send_cmd, &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+QCSQ ret:%d", ret);
+	}
+	
+	return ret;
+}
+
+/* Func: modem_rssi_query_work
+ * Desc: Routine to get Modem RSSI.
+ */
+static void modem_rssi_query_work(struct k_work *work)
+{
+	int ret;
+	k_timeout_t timeout = K_SECONDS(RSSI_TIMEOUT_SECS);
+
+	/* query modem RSSI */
+	ret = modem_qcsq();
 	if (ret < 0) {
 		if (!mdata.is_connected) {
 			/* Set RSSI to invalid if AT+CSQ returns with an error
@@ -2452,7 +2530,6 @@ static void modem_rssi_query_work(struct k_work *work)
 			   large amounts of data, e.g. firmware update. */
 			mdata.mdm_rssi = MDM_RSSI_INVALID;
 		}
-		LOG_ERR("AT+CSQ ret:%d", ret);
 	}
 
 	modem_connect_work();
@@ -2680,6 +2757,15 @@ error:
 
 static int map_credentials(struct modem_socket *sock, const void *optval, socklen_t optlen)
 {
+	__ASSERT_NO_MSG(optval != NULL);
+	__ASSERT_NO_MSG(optlen > 0);
+	sec_tag_t *tls_tag_list = (sec_tag_t *)optval;
+
+	/* Map the socket to the first tag in the list. Only one tag per socket
+	 * is supported for now.
+	*/
+	sock->tls_tag = *tls_tag_list;
+
 	return 0;
 }
 
@@ -2890,35 +2976,15 @@ static int quectel_bg95_evt_handler_init(const struct device *dev,
 }
 
 static int quectel_bg95_set_credentials(const struct device *dev,
+					uint8_t cid,
 					enum modem_api_cred_type type,
-					uint8_t *cred_buf, uint8_t cred_len)
+					void *cred_data)
 {
-	struct modem_data *data = dev->data;
-#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_DYNAMIC_PSK)
-	if (dev == NULL || cred_buf == NULL) {
-		return -EINVAL;
-	}
+	__ASSERT_NO_MSG(cred_data != NULL);
 
-	if (type == MODEM_API_CRED_TYPE_PSK_ID) {
-		if (cred_len > sizeof(data->psk.id)) {
-			return -ENOMEM;
-		}
-		memcpy(data->psk.id, cred_buf, cred_len);
-		data->psk.id_len = cred_len;
-	} else if (type == MODEM_API_CRED_TYPE_PSK) {
-		if (cred_len > sizeof(data->psk.psk)) {
-			return -ENOMEM;
-		}
-		memcpy(data->psk.psk, cred_buf, cred_len);
-		data->psk.psk_len = cred_len;
-	} else {
-		return -EINVAL;
-	}
+	dtls_init(cid, type, cred_data);
 
 	return 0;
-#else
-	return -ENOTSUP;
-#endif
 }
 
 static int quectel_bg95_psm_cmd(const struct device *dev,
@@ -2988,11 +3054,18 @@ static int quectel_bg95_get_data(const struct device *dev,
 		return -EINVAL;
 	}
 
-	if (request == MODEM_API_DATA_REQUEST_STATIC) {
+	switch (request) {
+	case MODEM_API_DATA_REQUEST_STATIC:
 		return quectel_bg95_get_static_info(dev, &data->modem_info);
-	} else if (MODEM_API_DATA_REQUEST_DYNAMIC) {
+	
+	case MODEM_API_DATA_REQUEST_DYNAMIC:
 		return quectel_bg95_modem_get_dynamic_info(dev, &data->modem_network);
-	} else {
+
+	case MODEM_API_DATA_REQUEST_POWER_STATE:
+		data->power_state = mdata.power;
+		return 0;
+
+	default:
 		return -ENOTSUP;
 	}
 }
@@ -3095,7 +3168,6 @@ static int modem_init(const struct device *dev)
 	mctx.data_rssi	       = &mdata.mdm_rssi;
 
 	/* Set qual and RSSI to 99 (means not known/not connected) */
-	mdata.mdm_qual = 99;
 	mdata.mdm_rssi = MDM_RSSI_INVALID;
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
@@ -3363,7 +3435,8 @@ int quectel_bg95_get_time(char* time_buf) {
 	return 0;
 }
 
-bool quectel_bg95_is_ready(void) {
+bool quectel_bg95_is_ready(void) 
+{
 	return mdata.is_connected;
 }
 
@@ -3372,7 +3445,12 @@ int quectel_bg95_get_rssi(void)
 	return mdata.mdm_rssi;
 }
 
-int quectel_bg95_get_qual(void)
+int quectel_bg95_get_rsrp(void)
 {
-	return mdata.mdm_qual;
+	return mdata.mdm_rsrp;
+}
+
+int quectel_bg95_get_rsrq(void)
+{
+	return mdata.mdm_rsrq;
 }

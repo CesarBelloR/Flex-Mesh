@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/random/rand32.h>
 #include <zephyr/logging/log.h>
@@ -8,6 +9,7 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include "app_version.h"
 #include "etc_device.h"
 #include "etc_settings.h"
+#include "pcf85263a.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
@@ -23,23 +25,13 @@ static char saved_hw_version[ETC_SETTING_HW_VER_LEN];
 static char saved_fw_version[ETC_SETTING_FW_VER_LEN];
 static char saved_device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
+static uint8_t saved_psk[ETC_SETTING_PSK_LEN];
+static uint8_t saved_psk_len;
 static int flag_etc_config_load;
 static enum etc_serial_number_types saved_serial_number_type;
 struct etc_config etc_cfg;
 
 K_MUTEX_DEFINE(setting_mutex);
-
-void etc_settings_refresh()
-{
-	k_mutex_lock(&setting_mutex, K_FOREVER);
-	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
-	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
-	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
-	etc_device_read_setting(SETTINGS_HW_VERSION, saved_hw_version, ETC_SETTING_HW_VER_LEN);
-	etc_device_read_setting(SETTINGS_FW_VERSION, saved_fw_version, ETC_SETTING_FW_VER_LEN);
-	etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
-	k_mutex_unlock(&setting_mutex);
-}
 
 void etc_set_hw_version(const char *hw_version)
 {
@@ -62,6 +54,15 @@ void etc_set_device_id(const char *device_id)
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	strncpy(saved_device_id, device_id, ETC_SETTINGS_DEVICE_ID_LEN);
 	etc_device_write_setting(SETTINGS_DEVICE_ID, (char *)device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+	k_mutex_unlock(&setting_mutex);
+}
+
+void etc_set_psk(const uint8_t *psk, uint8_t psk_len)
+{
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	memcpy(saved_psk, psk, psk_len);
+	saved_psk_len = psk_len;
+	etc_device_write_setting(ETC_PSK_ID, psk, psk_len);
 	k_mutex_unlock(&setting_mutex);
 }
 
@@ -114,10 +115,39 @@ int etc_get_device_id(char *buf, int buf_len)
 	return copy_size;
 }
 
+bool etc_device_id_is_default(void)
+{
+	char default_id[ETC_SETTINGS_DEVICE_ID_LEN];
+	char set_id[ETC_SETTINGS_DEVICE_ID_LEN];
+
+	snprintf(default_id, sizeof(default_id), "%08d", CONFIG_SERIAL_NUMBER_DEFAULT_VALUE);
+	etc_get_device_id(set_id, sizeof(set_id));
+	if (strncmp(default_id, set_id, sizeof(default_id)) == 0 &&
+	    strlen(default_id) == strlen(set_id)) {
+		return true;
+	}
+
+	return false;
+}
+
+int etc_get_psk(uint8_t *psk_buf, uint8_t buf_len)
+{
+	int copy_size; 
+	/* Application should always ensure to use the maximum supported key length
+	   for the buffer size */
+	__ASSERT_NO_MSG(buf_len >= ETC_SETTING_PSK_LEN);
+
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	copy_size = saved_psk_len < buf_len ? saved_psk_len : buf_len;
+	memcpy(psk_buf, saved_psk, copy_size);
+	k_mutex_unlock(&setting_mutex);
+
+	return copy_size;
+}
+
 int etc_settings_init(void)
 {
 	int ret;
-	bool flag_config_set_default = false;
 	memset(saved_hw_version, 0, ETC_SETTING_HW_VER_LEN);
 	memset(saved_fw_version, 0, ETC_SETTING_FW_VER_LEN);
 	memset(saved_device_id, 0, ETC_SETTINGS_DEVICE_ID_LEN);
@@ -138,6 +168,21 @@ int etc_settings_init(void)
 	if (ret) {
 		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%08d", CONFIG_SERIAL_NUMBER_DEFAULT_VALUE);
 		etc_set_device_id(tmp_saved_value);
+	}
+
+	ret = etc_device_read_setting_with_len(ETC_PSK_ID, saved_psk, sizeof(saved_psk));
+	if (ret > 0) {
+		saved_psk_len = ret;
+	} else {
+		uint8_t tmp_psk[ETC_SETTING_PSK_LEN];
+		int ret = hex2bin(CONFIG_LWM2M_INTEGRATION_PSK, sizeof(CONFIG_LWM2M_INTEGRATION_PSK) - 1, 
+			tmp_psk, ETC_SETTING_PSK_LEN);
+		if (ret < 0) {
+			LOG_ERR("Key is too long. Max length is %u",
+				    ETC_SETTING_PSK_LEN * 2);
+		} else {
+			etc_set_psk(tmp_psk, ret);
+		}
 	}
 
 	ret = etc_device_read_setting(ETC_SERIAL_NUMBER_TYPE, &saved_serial_number_type, 
@@ -227,7 +272,20 @@ int etc_settings_init(void)
 		etc_set_alarm_threshold(ETC_SETTING_ALARM_THRESHOLD_DEFAULT);
 	}
 
-	LOG_DBG("Load setting successfully");
+	/* Read RTC calibration offset and set RTC offset register if available. */
+	float offset_ppm;
+	ret = etc_device_read_setting(ETC_RTC_CALIBRATION_OFFSET_PPM,
+				      &offset_ppm, sizeof(offset_ppm));
+	if (ret == 0) {
+		ret = pcf85263a_set_offset(&offset_ppm);
+		if (ret != 0) {
+			LOG_ERR("Setting RTC offset");
+		}
+	} else {
+		LOG_WRN("No RTC calibration available");
+	}
+
+	LOG_DBG("Load settings successfully");
 	return 0;
 }
 
@@ -316,6 +374,9 @@ int etc_set_power_mode(enum etc_power_mode_e power)
 	if (rc == 0) {
 		LOG_DBG("set %u", power);
 	}
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+	date_time_force_event(DATE_TIME_SYSTEM_RELOAD);
+#endif
 	return rc;
 }
 
@@ -740,6 +801,47 @@ static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv
 	return 0;
 }
 
+static int cmd_set_psk(const struct shell *shell, size_t argc, char **argv)
+{
+	int input_len;
+
+	if ((argc == 2) && ((input_len = strlen(argv[1])) != 0)) {
+		if ((input_len / 2) > ETC_SETTING_PSK_LEN) {
+			shell_error(shell, "Key is too long. Max length is %u",
+				    ETC_SETTING_PSK_LEN * 2);
+			return -1;
+		}
+		uint8_t tmp_psk[ETC_SETTING_PSK_LEN];
+		int ret;
+
+		ret = hex2bin(argv[1], input_len, tmp_psk, ETC_SETTING_PSK_LEN);
+		if (ret < 0) {
+			shell_error(shell, "Key is too long. Max length is %u",
+				    ETC_SETTING_PSK_LEN * 2);
+			return -1;
+		}
+
+		etc_set_psk(tmp_psk, ret);
+		shell_print(shell, "OK, len %d", input_len);
+		shell_hexdump(shell, tmp_psk, ret);
+
+		return 0;
+	}
+
+	shell_print(shell, "Usage: %s <psk in hex>\n"
+			   "  Max psk size: %u characters", argv[0],
+			   ETC_SETTING_PSK_LEN * 2);
+	return -1;
+}
+
+static int cmd_get_psk(const struct shell *shell, size_t argc, char **argv)
+{
+	uint8_t buf[ETC_SETTING_PSK_LEN] = {0x00};
+	int rc = etc_get_psk(buf, ETC_SETTING_PSK_LEN);
+	shell_hexdump_line(shell, 0, buf, ETC_SETTING_PSK_LEN);
+	return 0;
+}
+
 static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 {
 	if ((argc == 2) && (strlen(argv[1]) != 0)) {
@@ -971,6 +1073,20 @@ static int cmd_get_alarm_threshold(const struct shell *shell, size_t argc, char 
 	return 0;
 }
 
+static int cmd_factory_reset(const struct shell *shell, size_t argc, char **argv)
+{
+	int rc = etc_device_erase_cfg();
+	if (rc != 0) {
+		shell_error(shell, "Failed to erase all configuration");
+		return 0;
+	}
+
+	/* Re-set all configuration */
+	etc_settings_init();
+	shell_print(shell, "Factory reset successfully");
+	return 0;
+}
+
 /* Creating subcommands (level 1 command) array for command "demo". */
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_settings, SHELL_CMD(info, NULL, "Get ETC settings.", cmd_info),
@@ -978,8 +1094,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(hardware, NULL, "Set hardware version", cmd_set_hardware_version),
 	SHELL_CMD(firmware, NULL, "Set firmware version", cmd_set_firmware_version),
 #endif
+	SHELL_CMD(factory_reset, NULL, "Factory reset", cmd_factory_reset),
 	SHELL_CMD(set_serial_type, NULL, "Set serial number type", cmd_set_serial_type),
 	SHELL_CMD(set_device_id, NULL, "Set device ID", cmd_set_device_id),
+	SHELL_CMD(set_psk, NULL, "Set PSK used for cloud connection", cmd_set_psk),
 	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),
 	SHELL_CMD(set_power, NULL, "Set power mode", cmd_set_power),
 	SHELL_CMD(set_alarm_direction, NULL, "Set alarm direction", cmd_set_alarm_direction),
@@ -998,7 +1116,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(get_power, NULL, "Get power mode", cmd_get_power),
 	SHELL_CMD(get_alarm_direction, NULL, "Get alarm direction", cmd_get_alarm_direction),
 	SHELL_CMD(get_log_interval, NULL, "Get log interval in second", cmd_get_log_interval),
-	
+	SHELL_CMD(get_psk, NULL, "Get PSK used for cloud connection", cmd_get_psk),
 	SHELL_CMD(get_log_interval_alarm, NULL, "Get log interval alarm in second",
 		  cmd_get_log_interval_alarm),
 	SHELL_CMD(get_tx_interval, NULL, "Get tx interval in second", cmd_get_tx_interval),

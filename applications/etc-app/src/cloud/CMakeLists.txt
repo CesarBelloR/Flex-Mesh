@@ -22,8 +22,10 @@ target_sources_ifdef(CONFIG_LWM2M app
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/exact_objects/etc_cfg_obj_48931.c
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/exact_objects/etc_temp_obj_48932.c
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/exact_objects/etc_info_obj_48933.c
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/exact_objects/etc_reclaim_obj_48934.c
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/exact_objects/etc_relay_obj_48935.c
                      ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/exact_objects/etc_humid_obj_48936.c
+                     ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/exact_objects/etc_functional_test_obj_48937.c
 )
 
 target_sources_ifdef(CONFIG_LWM2M_INTEGRATION_FIRMWARE_UPDATE_OBJ_SUPPORT app

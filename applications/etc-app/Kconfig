@@ -21,6 +21,7 @@ rsource "src/cloud/Kconfig"
 rsource "src/cloud/Kconfig.lwm2m"
 rsource "src/modules/Kconfig.debug_module"
 rsource "src/modules/Kconfig.modem_module"
+rsource "src/modules/Kconfig.ui_module"
 rsource "src/cloud/cloud_codec/Kconfig"
 
 endmenu

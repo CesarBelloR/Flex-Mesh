@@ -6,7 +6,7 @@
 		<ObjectID>48933</ObjectID>
 		<ObjectURN>urn:oma:lwm2m:x:48933:1.0</ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.0</ObjectVersion>
+		<ObjectVersion>1.1</ObjectVersion>
 		<MultipleInstances>Single</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -49,6 +49,17 @@ BG95M3LAR02A03_01.012.01.012]]></Description>
 				<RangeEnumeration></RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[The device's SIM's ICCID read by the modem.]]></Description>
+			</Item>
+			<Item ID="5">
+				<Name>Image Pubkey ID</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Opaque</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Public Key ID of the currently used image.
+The public key ID is the first 4 bytes of the public key hash that is part of the image TLV.]]></Description>
 			</Item>
 			
 		</Resources>

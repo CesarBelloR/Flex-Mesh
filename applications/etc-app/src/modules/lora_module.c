@@ -34,7 +34,6 @@ struct lora_msg_data {
 		struct app_event app;
 		struct data_event data;
 		struct util_event util;
-		struct cloud_event cloud;
 	} module;
 };
 
@@ -61,7 +60,7 @@ struct logger_lora_response {
 };
 
 /* Lora module message queue. */
-#define LORA_QUEUE_ENTRY_COUNT	  10
+#define LORA_QUEUE_ENTRY_COUNT	  20
 #define LORA_QUEUE_BYTE_ALIGNMENT 4
 
 K_MSGQ_DEFINE(msgq_lora, sizeof(struct lora_msg_data), LORA_QUEUE_ENTRY_COUNT,
@@ -182,13 +181,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
-	if (is_cloud_event(aeh)) {
-		struct cloud_event *event = cast_cloud_event(aeh);
-
-		msg.module.cloud = *event;
-		enqueue_msg = true;
-	}
-
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -300,6 +292,7 @@ static int module_lora_wait_packet(void)
 	int16_t rssi;
 	int8_t snr;
 	int64_t start_time = k_uptime_get();
+	SEND_EVENT(lora, LORA_EVT_RX_READY);
 	memset(lora_rx_buf, 0, sizeof(lora_rx_buf));
 	memset(decoded_buf, 0, sizeof(decoded_buf));
 	ret = lora_config(lora_dev, &etc_lora_rx_config);
@@ -351,7 +344,7 @@ retry_recv:
 					"%d",
 					response.relay_id, response.reclaim_start_time,
 					response.reclaim_end_time);
-				etc_device_reclaim_record(response.reclaim_start_time,
+				etc_device_record_reclaim(response.reclaim_start_time,
 							  response.reclaim_end_time);
 			}
 			return 0;
@@ -378,7 +371,7 @@ static int module_lora_process_packet(union etc_device_record record)
 		lora_pkt_counter = 0;
 	}
 
-	for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
 		if (data_codec_compare_temperature_is_valid(record.sensor[i])) {
 			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 						    sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
@@ -388,8 +381,16 @@ static int module_lora_process_packet(union etc_device_record record)
 						    sizeof(decoded_buf) - decoded_buf_len, "*,");
 		}
 	}
-	decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-				    sizeof(decoded_buf) - decoded_buf_len, "*,");
+	
+	if (data_codec_compare_humidity_is_valid(record.sensor[SENSOR_INPUT_HUMID])) {
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+			sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
+			record.sensor[SENSOR_INPUT_HUMID]);
+	} else {
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+			sizeof(decoded_buf) - decoded_buf_len, "*,");
+	}
+
 #if 0 // Test decrypt the message encoded
 	etc_cape_decrypt(encoded_buffer, decr_buf, decoded_buf_len + 1);
 	LOG_HEXDUMP_INF(decr_buf, sizeof(decr_buf), "DECRYPTED");
@@ -435,6 +436,7 @@ retry:
 		} else {
 			if (cnt++ >= LORA_RETRY_MAX_TIME) {
 				SEND_EVENT(lora, LORA_EVT_NACK);
+				k_sleep(K_SECONDS(1));
 				return rc;
 			}
 			
@@ -456,12 +458,15 @@ retry:
 static void on_all_states(struct lora_msg_data *msg)
 {
 	if (etc_device_is_logger_lora()) {
-		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
+		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) || 
+			IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD)) {
 			LOG_INF("Logger sending data");
 			int rc = 0;
 			do {
 				union etc_device_record record;
-				uint16_t record_id = etc_device_read_record(&record);
+				uint16_t record_id;
+				record_id = etc_device_read_record(&record,
+								   NULL);
 				if (record_id > 0) {
 					LOG_INF("Sending data over LORA");
 					rc = module_lora_process_packet(record);
@@ -615,4 +620,3 @@ APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
-APP_EVENT_SUBSCRIBE(MODULE, cloud_event);

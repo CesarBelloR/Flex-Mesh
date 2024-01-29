@@ -94,4 +94,21 @@ enum sensor_type etc_sensor_get_probe_type(enum sensor_input input);
  * @return the status of probed sensor (connected or no connect)
  */
 enum etc_sensor_status etc_sensor_get_status(void);
+
+/** Get the enter functional test status. This will return true if all four
+ * sensor ports report a connected analog sensor and a low level on the 1-wire
+ * sensor line.
+ * 
+*/
+bool etc_sensor_get_enter_functional_test(void);
+
+/** Enter the functional test. Turn on sensor power supplies. 
+ * 
+*/
+void etc_sensor_enter_functional_test(void);
+
+/** Exit the functional test. Turn off sensor power supplies.
+ * 
+*/
+void etc_sensor_exit_functional_test(void);
 #endif /*  ETC_SENSOR_H_ */

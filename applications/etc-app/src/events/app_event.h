@@ -15,7 +15,7 @@ enum app_event_type {
 	 *  now started.
 	 */
 	APP_EVT_START,
-
+	
 	/** Connect to LTE network. */
 	APP_EVT_LTE_CONNECT,
 
@@ -32,8 +32,8 @@ enum app_event_type {
 	/** Request transmit the log to lora/cloud */
 	APP_EVT_DATA_TRANSMIT,
 
-	/** Request transmit the log to cloud in Logger Lora */
-	APP_EVT_DATA_TRANSMIT_CLOUD_IN_LORA,
+	/** Request to sync with cloud in desired event (Lora Sync, Magnet, T.B.D in future) */
+	APP_EVT_DATA_SYNC_CLOUD,
 
 	/** Create a list with all available sensor types in the system and
 	 *  distribute it as an APP_EVT_DATA_GET event.

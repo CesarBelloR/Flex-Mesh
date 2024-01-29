@@ -1,0 +1,57 @@
+From ad565cfffa7b556652c878d6035026a24afab7f8 Mon Sep 17 00:00:00 2001
+From: Andi Gerl <andi.gerl@exacttechnology.com>
+Date: Wed, 1 Nov 2023 10:11:46 -0400
+Subject: [PATCH] HW-1175: Add tls_tag property to modem socket
+
+- Add tls_tag property to modem socket struct that can be used to identify/map
+  TLS/SSL configuration stored on the modem.
+---
+ drivers/modem/modem_socket.c | 2 ++
+ drivers/modem/modem_socket.h | 4 ++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/drivers/modem/modem_socket.c b/drivers/modem/modem_socket.c
+index a2d35531b7..05f9018e3f 100644
+--- a/drivers/modem/modem_socket.c
++++ b/drivers/modem/modem_socket.c
+@@ -239,6 +239,7 @@ void modem_socket_put(struct modem_socket_config *cfg, int sock_fd)
+ 
+ 	sock->id = cfg->base_socket_id - 1;
+ 	sock->sock_fd = -1;
++	sock->tls_tag = -1;
+ 	sock->is_waiting = false;
+ 	sock->is_connected = false;
+ 	(void)memset(&sock->src, 0, sizeof(struct sockaddr));
+@@ -438,6 +439,7 @@ int modem_socket_init(struct modem_socket_config *cfg, struct modem_socket *sock
+ 		k_sem_init(&cfg->sockets[i].sem_data_ready, 0, 1);
+ 		k_poll_signal_init(&cfg->sockets[i].sig_data_ready);
+ 		cfg->sockets[i].id = -1;
++		cfg->sockets[i].tls_tag = -1;
+ 	}
+ 	return 0;
+ }
+diff --git a/drivers/modem/modem_socket.h b/drivers/modem/modem_socket.h
+index aa966a457e..6603751eef 100644
+--- a/drivers/modem/modem_socket.h
++++ b/drivers/modem/modem_socket.h
+@@ -16,6 +16,7 @@
+ #include <zephyr/kernel.h>
+ #include <zephyr/net/net_ip.h>
+ #include <zephyr/net/socket.h>
++#include <zephyr/net/tls_credentials.h>
+ 
+ #include "sockets_internal.h"
+ 
+@@ -36,6 +37,9 @@ __net_socket struct modem_socket {
+ 	/** The file descriptor identifying the socket in the fdtable */
+ 	int sock_fd;
+ 
++	/** The TLS tag associated with this socket */
++	sec_tag_t tls_tag;
++
+ 	/** packet data */
+ 	uint16_t packet_sizes[CONFIG_MODEM_SOCKET_PACKET_COUNT];
+ 	uint16_t packet_count;
+-- 
+2.34.1
+

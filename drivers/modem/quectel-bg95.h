@@ -50,6 +50,7 @@
 #define BUF_ALLOC_TIMEOUT		K_SECONDS(1)
 #define MDM_MAX_BOOT_TIME		K_SECONDS(15)
 #define MDM_RSSI_INVALID		-1000
+#define MDM_RSRP_INVALID		-125
 #define MDM_PDPDEACT_RECONNECT_DELAY	K_SECONDS(5)
 
 #define MDM_FILE_NAME_MAX_LENGTH	(80)
@@ -73,13 +74,6 @@
 /* Modem ATOI routine. */
 #define ATOI(s_, value_, desc_)		modem_atoi(s_, value_, desc_, __func__, 10)
 #define ATOI_HEX(s_, value_, desc_)	modem_atoi(s_, value_, desc_, __func__, 16)
-
-enum modem_power_state {
-	MODEM_POWER_OFF,
-	MODEM_POWER_ON,
-	MODEM_POWER_PSM_PENDING,
-	MODEM_POWER_PSM
-};
 
 /* driver data */
 struct modem_data {
@@ -118,7 +112,8 @@ struct modem_data {
 #endif /* #if defined(CONFIG_MODEM_QUECTEL_BG95_M3_SIM_NUMBERS) */
 	char mdm_time[MDM_TIME_LENGTH];
 	int mdm_rssi;
-	uint8_t mdm_qual;
+	int mdm_rsrp;
+	int mdm_rsrq;
 
 	struct modem_network_data mdm_network;
 	struct k_mutex mdm_network_mutex;

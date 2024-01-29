@@ -5,6 +5,7 @@
 #include <app_event_manager_profiler_tracer.h>
 #include <zephyr/net/lwm2m.h>
 #include "compiler.h"
+#include "etc_functional_test.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -81,6 +82,15 @@ enum data_event_type {
 	/** Date time has been obtained. */
 	DATA_EVT_DATE_TIME_OBTAINED,
 
+	/* Functional test started */
+	DATA_EVT_FUNCTIONAL_TEST_START,
+
+	/* Functional test data send requested */
+	DATA_EVT_FUNCTIONAL_TEST_SEND_DATA,
+
+	/* Functional test complete */
+	DATA_EVT_FUNCTIONAL_TEST_COMPLETE,
+
 	/** The data module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
 	 */
@@ -121,6 +131,8 @@ struct data_event {
 		uint32_t message_id;
 		/** Relay data to be published */
 		struct relay_data_buffer relay_data;
+		/* Result of the functional test */
+		enum functional_test_result test_result;
 	} data;
 };
 

@@ -71,6 +71,8 @@ enum bq25618_chg_timer_mask {
 #define round(x)     ((x)>=0?(long)((x)+0.5):(long)((x)-0.5))
 #endif
 
+static bq25618_evt_handler_t bq25618_evt_cb = NULL;
+
 static int read_register(const struct device *dev,
 			uint8_t addr, uint8_t *val)
 {
@@ -173,6 +175,10 @@ void bq25618_print_all_registers(const struct device *dev)
 	}
 }
 
+void bq25618_register_callback(bq25618_evt_handler_t evt) {
+	bq25618_evt_cb = evt;
+}
+
 static void bq25618_work_fn(struct k_work *work)
 {
 	struct bq25618_data *drv_data =
@@ -183,12 +189,10 @@ static void bq25618_work_fn(struct k_work *work)
 	int count;
 	int ret;
 
-	pm_device_runtime_get(cfg->i2c.bus);
+	/* Poll PMIC status - Notice: Call it before pm get/put. */
+	bq25618_poll_status(dev);
 
-	ret = bq25618_is_power_good(drv_data->dev);
-	if (ret != 1) {
-		return;
-	}
+	pm_device_runtime_get(cfg->i2c.bus);
 
 	ret = bq25618_get_input_current_limit(drv_data->dev, &curr_lim);
 	if (curr_lim != cfg->max_current) {
@@ -208,8 +212,8 @@ static void bq25618_gpio_callback(const struct device *dev,
 {
 	struct bq25618_data *drv_data = 
 		CONTAINER_OF(cb, struct bq25618_data, gpio_cb);
-
-	k_work_submit(&drv_data->work);
+	/* Wait 10ms before running status work */
+	k_work_reschedule(&drv_data->work, K_MSEC(10));
 }
 
 static int bq25618_init_interrupt(const struct device *dev) 
@@ -243,8 +247,8 @@ static int bq25618_init_interrupt(const struct device *dev)
 
 	drv_data->dev = dev;
 
-	k_work_init(&drv_data->work, bq25618_work_fn);
-
+	k_work_init_delayable(&drv_data->work, bq25618_work_fn);
+	k_mutex_init(&drv_data->status_lock);
 	return ret;
 }
 
@@ -317,6 +321,38 @@ exit:
 	pm_device_runtime_put(cfg->i2c.bus);
 
 	return retval;
+}
+
+void bq25618_poll_status(const struct device *dev) 
+{
+	struct bq25618_data *drv_data = dev->data;
+	const struct bq25618_dev_config *cfg = dev->config;
+
+	k_mutex_lock(&drv_data->status_lock, K_FOREVER);
+	pm_device_runtime_get(cfg->i2c.bus);
+
+	/* Need to sync immediately */
+	uint8_t power_status = 0;
+	uint8_t battery_status = 0;
+	uint8_t bus_status = 0;
+	uint8_t reg = 0x00;
+	int ret = read_register(dev, BQ25618_CHARGER_STATUS0_REG, &reg);
+	if (ret != 0) {
+		LOG_ERR("Failed to read reg BQ25618_CHARGER_STATUS0_REG error %d", ret);
+		goto exit;
+	}
+
+	LOG_DBG("Reg 0x%02x", reg);
+	power_status = (reg >> 2) & 0x01;
+	battery_status = (reg >> 3) & 0x03;
+	bus_status = (reg >> 5) & 0x07;
+
+	if (bq25618_evt_cb) {
+		bq25618_evt_cb(bus_status, battery_status, power_status);
+	}
+exit:
+	pm_device_runtime_put(cfg->i2c.bus);
+	k_mutex_unlock(&drv_data->status_lock);
 }
 
 int bq25618_enable_buck(const struct device *dev) 
@@ -831,10 +867,11 @@ int bq25618_voltage_bus_status(const struct device *dev, uint8_t *status)
 	return 0;
 }
 
-int bq25618_is_power_good(const struct device *dev) 
+int bq25618_is_power_good(const struct device *dev, uint8_t* status) 
 {
 	int ret = 0;
 	uint8_t reg = 0x00;
+	*status = 0;
 	ret = read_register(dev, BQ25618_CHARGER_STATUS0_REG, &reg);
 	if (ret != 0) {
 		LOG_ERR("Failed to read reg BQ25618_CHARGER_STATUS0_REG error %d", ret);
@@ -842,7 +879,7 @@ int bq25618_is_power_good(const struct device *dev)
 	}
 
 	if (reg & 0x04) {
-		return 1;
+		*status = 1;
 	}
 
 	return 0;

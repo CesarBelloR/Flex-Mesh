@@ -10,8 +10,10 @@
 #include "etc_cfg_obj_48931.h"
 #include "etc_temp_obj_48932.h"
 #include "etc_info_obj_48933.h"
+#include "etc_reclaim_obj_48934.h"
 #include "etc_relay_obj_48935.h"
 #include "etc_humid_obj_48936.h"
+#include "etc_functional_test_obj_48937.h"
 
 /* LwM2M read-write flag. */
 #define LWM2M_RES_DATA_FLAG_RW 0
@@ -37,9 +39,10 @@
 #define CURRENT_TIME_RID		13
 #define POWER_SOURCE_VOLTAGE_RID	7
 #define MODEL_NUMBER_RID		1
-#define DEVICE_TYPE_RID                 17
+#define DEVICE_TYPE_RID			17
 #define MANUFACTURER_RID		0
 #define HARDWARE_VERSION_RID		18
+#define BATTERY_STATUS_RID		20
 
 #define DEVICE_MODE_RID		1
 #define POWER_MODE_RID		2

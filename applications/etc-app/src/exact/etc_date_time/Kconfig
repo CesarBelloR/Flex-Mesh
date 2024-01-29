@@ -15,6 +15,11 @@ config DATE_TIME_THREAD_SIZE
 	int "Stack size of the thread maintaining date time"
 	default 1024
 
+config DATE_TIME_INIT_PRIORITY
+	int "Date time init priority"
+	default 30 if MEMFAULT
+	default APPLICATION_INIT_PRIORITY
+
 module = DATE_TIME
 module-str = Date Time
 source "subsys/logging/Kconfig.template.log_config"

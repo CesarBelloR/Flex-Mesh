@@ -5,15 +5,14 @@
  */
 
 #include <zephyr/kernel.h>
-#if defined(CONFIG_MEMFAULT)
 #include <memfault/metrics/metrics.h>
 #include <memfault/ports/zephyr/http.h>
 #include <memfault/core/data_packetizer.h>
 #include <memfault/core/trace_event.h>
 #include <memfault/ports/watchdog.h>
 #include <memfault/panics/coredump.h>
+#include "etc_memfault_metrics.h"
 #include "etc_memfault.h"
-#endif
 #include <memfault_ncs.h>
 
 #define MODULE debug_module
@@ -51,7 +50,6 @@ bool wdt_request_pending = false;
 /* Forward declarations. */
 static void message_handler(struct debug_msg_data *msg);
 
-#if defined(CONFIG_MEMFAULT)
 /* Enumerator used to specify what type of Memfault that is sent. */
 static enum memfault_data_type {
 	METRICS,
@@ -92,8 +90,6 @@ entry:
 K_THREAD_DEFINE(mflt_send_thread, CONFIG_DEBUG_MODULE_MEMFAULT_THREAD_STACK_SIZE,
 		memfault_internal_send, NULL, NULL, NULL,
 		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
-
-#endif /* if defined(CONFIG_MEMFAULT) */
 
 static struct module_data self = {
 	.name = "debug",
@@ -181,8 +177,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-#if defined(CONFIG_MEMFAULT)
-
 /**
  * @brief Send Memfault data. To transfer Memfault data using an internal transport,
  *	  CONFIG_DEBUG_MODULE_MEMFAULT_USE_EXTERNAL_TRANSPORT must be selected.
@@ -207,20 +201,11 @@ static void set_device_id(void)
 	memfault_etc_device_id_set(device_id, strlen(device_id));
 }
 
-static void add_modem_metrics(int64_t time_to_connect) 
-{
-	if (time_to_connect == -1) {
-		return;
-	}
-
-	memfault_metrics_heartbeat_set_unsigned(MEMFAULT_METRICS_KEY(ModemTimeToConnect), 
-				(uint32_t)time_to_connect);
-}
-
 static void memfault_handle_event(struct debug_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_START)) {
 		set_device_id();
+		etc_mflt_metrics_init_img_pubkey_id();
 	}
 
 	/* Send Memfault data at the same time application data is sent to save overhead
@@ -252,19 +237,53 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 	 * sent on an established connection to LTE.
 	 */
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
-		add_modem_metrics(msg->module.modem.data.time_to_connect);
+		etc_mflt_metrics_modem_conn_time(msg->module.modem.data.time_to_connect_ms);
 		/* Send coredump on LTE CONNECTED. */
 		send_type = COREDUMP;
 		send_memfault_data();
 		return;
 	}
 
-	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		memfault_metrics_heartbeat_set_unsigned(MEMFAULT_METRICS_KEY(BatteryMv), 
-				(uint32_t)msg->module.sensor.data.sensors->battery_mV);
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
+		etc_mflt_metrics_send_successful();
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
+		etc_mflt_metrics_send_failed();
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED) ||
+	    IS_EVENT(msg, modem, MODEM_EVT_POWERED_DOWN)) {
+		etc_mflt_metrics_modem_on_time(msg->module.modem.data.on_time_ms);
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START)) {
+		etc_mflt_metrics_ota_started();
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
+		etc_mflt_metrics_ota_failed();
+	}
+
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_DYNAMIC_DATA_READY)) {
+		etc_mflt_metrics_modem_network(msg->module.modem.data.modem_dynamic.mcc,
+					       msg->module.modem.data.modem_dynamic.mnc,
+					       quectel_bg95_get_rsrp(),
+					       quectel_bg95_get_rsrq());
+	}
+
+
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_ERROR) ||
+		IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_LOW) ||
+		IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_MED) ||
+		IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_FULL) ||
+	    IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_CHARGING) ||
+	    IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
+		etc_mflt_metrics_charging(msg->module.sensor.type);
 	}
 }
-#endif /* defined(CONFIG_MEMFAULT) */
 
 static void handle_wdt_feed_evt(struct debug_msg_data *msg)
 {

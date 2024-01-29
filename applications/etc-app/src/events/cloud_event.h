@@ -4,6 +4,7 @@
 #include <app_event_manager.h>
 #include <app_event_manager_profiler_tracer.h>
 #include "compiler.h"
+#include "cloud_wrapper.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,6 +57,9 @@ enum cloud_event_type {
 	/** Reboot requested from cloud. */
 	CLOUD_EVT_REBOOT_REQUEST,
 
+	/** Reclaim request received from cloud */
+	CLOUD_EVT_RECLAIM_REQUEST,
+
 	/** A new device configuration has been received from cloud.
 	 *  The payload associated with this event is of type @ref cloud_data_cfg (config).
 	 */
@@ -92,6 +96,7 @@ struct cloud_event {
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
+		struct reclaim_data reclaim;
 	} data;
 };
 

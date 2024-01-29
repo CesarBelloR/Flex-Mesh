@@ -10,10 +10,12 @@
 #include <zephyr/net/net_ip.h>
 #include "events/lora_event.h"
 #include "events/sensor_event.h"
+#include "events/data_event.h"
 
 #include "etc_device.h"
 #include "etc_settings.h"
 #include "modem_api.h"
+#include "etc_functional_test.h"
 
 #if defined(CONFIG_LWM2M)
 #include <zephyr/net/lwm2m.h>
@@ -67,8 +69,8 @@ struct data_modem_dynamic {
 	uint32_t cell;
 	/** Reference Signal Received Power. */
 	int16_t rsrp;
-	/** Signal quality*/
-	uint8_t qual;
+	/** Signal quality, RSRQ */
+	int16_t qual;
 	/* Access technology (NB-IoT or LTE-M) */
 	enum access_technology nw_mode;
 	/* PSM Active timer value in s */
@@ -127,6 +129,15 @@ enum json_common_buffer_type {
 	JSON_COMMON_SENSOR,
 	JSON_COMMON_LORA_SENSOR,
 	JSON_COMMON_COUNT
+};
+
+/** Used to indicate current state of reclaim.
+*/
+enum data_reclaim_state {
+	RECLAIM_IDLE,
+	RECLAIM_IN_PROGRESS,
+	RECLAIM_SUCCESS,
+	RECLAIM_ERROR
 };
 
 typedef union {
@@ -208,6 +219,13 @@ int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 */
 int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data);
 
+/**
+ * Prepare packet with results of the functional test.
+ * 
+*/
+int data_codec_prepare_functional_test_data(struct cloud_codec_data *cloud_data,
+					    struct functional_test_data *test_data);
+
 /** 
  * @brief Clear the data saved in the cloud_data struct. This should be done
  *        after the data has been sent to the cloud, if the struct is to be reused.
@@ -223,6 +241,16 @@ int data_codec_clear_data(struct cloud_codec_data *cloud_data);
  * @return 1 if cloud_data contains data, 0 if not.
 */
 int data_codec_has_data(struct cloud_codec_data *cloud_data);
+
+/**
+ * Move all data contained in cloud_data to backup_data. Clear data from
+ * cloud_data after the move operation.
+ * 
+ * @retval 0 success
+ * @retval <0 error
+*/
+int data_codec_move_data(struct cloud_codec_data *cloud_data,
+			 struct cloud_codec_data *backup_data);
 
 /**
  * @brief Remove data to be sent from cloud_data and save it in backup_data.
@@ -261,5 +289,18 @@ int data_codec_recover_data(struct cloud_codec_data *cloud_data,
  * @return 0 on success, otherwise error.
 */
 int data_codec_contains_measurement_data(struct cloud_codec_data *cloud_data);
+
+/**
+ * Update the current reclaim state. New reclaim state will be included
+ * in next send action.
+ * 
+ * @param cloud_data Pointer to struct cloud_data instance. Reclaim status path
+ * will be added to the paths saved in cloud_data.
+ * @param new_state The new reclaim status.
+ * 
+ * @return 0 on success, otherwise error.
+*/
+int data_codec_update_reclaim_state(struct cloud_codec_data *cloud_data,
+				    enum data_reclaim_state new_state);
 
 #endif /* DATA_CODEC_H__ */

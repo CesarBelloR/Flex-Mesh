@@ -13,6 +13,7 @@
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #include "etc_device.h"
+#include "cloud/lwm2m/lwm2m_firmware.h"
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE data_module
@@ -21,6 +22,7 @@
 #define MODULE_LORA_SENSOR_BUFFER_COUNT 8
 
 #include "etc_memfault.h"
+#include "etc_functional_test.h"
 
 #include "modules_common.h"
 #include "events/app_event.h"
@@ -120,6 +122,11 @@ enum coneval_supported_data_type {
 	NEIGHBOR_CELLS,
 	COUNT,
 };
+
+/* Save the current/previous reclaim state, so we can change the LwM2M reclaim
+ * status accordingly.
+ */
+static bool reclaim_active;
 
 /* Data module message queue. */
 #define DATA_QUEUE_ENTRY_COUNT		20
@@ -254,10 +261,48 @@ static void cloud_codec_event_handler(const struct cloud_codec_evt *evt)
 	}
 }
 
+static void functional_test_event_handler(const enum functional_test_evt evt)
+{
+	switch (evt) {
+	case FUNC_TEST_EVT_SEND_DATA: {
+		SEND_EVENT(data, DATA_EVT_FUNCTIONAL_TEST_SEND_DATA);
+	}
+		break;
+	case FUNC_TEST_EVT_TIMEOUT: {
+		struct data_event *data_event = new_data_event();
+		data_event->type = DATA_EVT_FUNCTIONAL_TEST_COMPLETE;
+		data_event->data.test_result = functional_test_get_result();
+		APP_EVENT_SUBMIT(data_event);
+		break;
+	}
+	}
+}
+
+static void stop_functional_test(void)
+{
+	if (functional_test_stop()) {
+		enum functional_test_result result = functional_test_get_result();
+
+		if (result == FUNC_TEST_SUCCESS) {
+			etc_set_power_mode(ETC_POWER_MODE_PROBE);
+		}
+
+		struct data_event *data_event = new_data_event();
+		data_event->type = DATA_EVT_FUNCTIONAL_TEST_COMPLETE;
+		data_event->data.test_result = result;
+		APP_EVENT_SUBMIT(data_event);
+	}
+}
+
 static int setup(void)
 {
 	int err;
 	struct etc_config cfg;
+
+	int transmission_in_seconds = etc_get_tx_interval_secs();
+	data_publish_timeout = K_SECONDS(transmission_in_seconds);
+	k_work_init_delayable(&data_send_work, data_send_work_fn);
+	k_work_reschedule(&data_send_work, data_publish_timeout);
 
 	etc_settings_get_config(&cfg);
 	
@@ -316,6 +361,7 @@ static void data_send(enum data_event_type event,
 	APP_EVENT_SUBMIT(module_event);
 }
 
+
 /**
  * Encode the current LwM2M data to be sent in a message.
  * 
@@ -338,29 +384,57 @@ static void data_encode(bool split)
 		first_send = false;
 	}
 
-	/* Send previously stored data first, then send new measurement record. */
-	if (data_codec_has_data(&codec_backup) && 
+	if (functional_test_get_state() == FUNC_TEST_STATE_SENDING_DATA) {
+		struct functional_test_data test_data;
+		LOG_DBG("Sending functional test data");
+
+		functional_test_get_data(&test_data);
+		/* Store currently queued data in backup codec. */
+		data_codec_move_data(&codec, &codec_backup);
+		data_codec_prepare_functional_test_data(&codec,
+							&test_data);
+		functional_test_set_state(FUNC_TEST_STATE_WAITING_FOR_ACK);
+	} else if (data_codec_has_data(&codec_backup) && 
 	    (!split || !data_codec_has_data(&codec))) {
+		/* Send previously stored data first, then send new measurement record. */
 		LOG_DBG("Recovering previously backed up data.");
 		data_codec_recover_data(&codec, &codec_backup);
 	} else {
-		modem_dynamic.rsrp = quectel_bg95_get_rssi();
-		modem_dynamic.qual = quectel_bg95_get_qual();
+		bool reclaim_status;
+		modem_dynamic.rsrp = quectel_bg95_get_rsrp();
+		modem_dynamic.qual = quectel_bg95_get_rsrq();
 		modem_dynamic.queued = 1;
 
-		send_status.record_id = etc_device_read_record(&record);
-		if (send_status.record_id == 0) {
+		send_status.record_id = etc_device_read_record(&record, 
+							       &reclaim_status);
+		/* Only add a record if it is valid. */
+		if (send_status.record_id != 0) {
+			ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
+			if (ret != 0) {
+				LOG_WRN("Error populating data codec");
+			}
+		}
+
+		/* Update reclaim status */							   
+		if (reclaim_status != reclaim_active) {
+			if (reclaim_status) {
+				data_codec_update_reclaim_state(&codec,
+								RECLAIM_IN_PROGRESS);
+				reclaim_active = true;
+			} else {
+				data_codec_update_reclaim_state(&codec,
+								RECLAIM_SUCCESS);
+				reclaim_active = false;
+			}
+		} else if (send_status.record_id == 0) {
 			LOG_INF("No record found");
-			/* Report data send complete, so other modules can start
+			/* Return early and report data send complete if we don't
+			 * have any new data to send, so other modules can start
 			 * sending data.
 			 */
 			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
-			return;
-		}
-
-		ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
-		if (ret != 0) {
-			LOG_WRN("No message to publish");
+			/* Trigger the OTA pending job */
+			lwm2m_firmware_start_pending_job();
 			return;
 		}
 	}
@@ -395,22 +469,34 @@ static void data_send_work_fn(struct k_work *work)
 /* Message handler for STATE_CLOUD_DISCONNECTED. */
 static void on_cloud_state_disconnected(struct data_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED) &&
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
-		state_set(STATE_CLOUD_CONNECTED);	
-		data_encode(false);
-		return;
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		state_set(STATE_CLOUD_CONNECTED);
+		if (functional_test_get_state() == FUNC_TEST_STATE_COLLECTING_DATA) {
+			functional_test_schedule_send();
+		} else if ((etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
+			   (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET) ||
+			   ((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
+			    (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))) {
+			data_encode(false);
+		}
 	}
 }
 
 /* Message handler for STATE_CLOUD_CONNECTED. */
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
-	if ((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) &&
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
-		(IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT_CLOUD_IN_LORA) &&
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER)) 
+	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && 
+	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER)
 	{
+		data_encode(false);
+		return;
+	}
+
+	if ((IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD) && 
+		(((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
+		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA)) || 
+		(etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
+		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET)))) {
 		data_encode(false);
 		return;
 	}
@@ -426,6 +512,14 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		reset_send_status(&send_status);
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_START) ||
+	    IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_SEND_DATA)) {
+		int rsrp = quectel_bg95_get_rsrp();
+		track_functional_test(DATA_TYPE_MODEM, &rsrp);
+		functional_test_set_state(FUNC_TEST_STATE_SENDING_DATA);
+		data_encode(false);
 	}
 }
 
@@ -497,6 +591,11 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
+		if (functional_test_get_state() == FUNC_TEST_STATE_WAITING_FOR_ACK) {
+			bool ack = true;
+			track_functional_test(DATA_TYPE_ACK, (void *)&ack);
+			stop_functional_test();
+		}
 		data_codec_clear_data(&codec);
 		if (send_status.record_id > 0) {
 			/* Acknowledge record and encode more data, if connected to cloud */
@@ -512,7 +611,8 @@ static void on_all_states(struct data_msg_data *msg)
 		ETC_MEMFAULT_TRACE_EVENT(send_fail);
 		bool split = false;
 		if (msg->module.cloud.data.err == -ENOMEM ||
-		    msg->module.cloud.data.err == -ECONNREFUSED) {
+		    msg->module.cloud.data.err == -ECONNREFUSED ||
+		    msg->module.cloud.data.err == -E2BIG) {
 			split = true;
 		}
 		/* Reset send status on fail */
@@ -536,6 +636,43 @@ static void on_all_states(struct data_msg_data *msg)
 		data_codec_populate_lora_sensor_buffer(lora_buf, &new_lora_data, &head_lora_buf, ARRAY_SIZE(lora_buf));
 		#endif
 	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_RECLAIM_REQUEST)) {
+		int ret;
+		bool err = false;
+		
+		ret = etc_device_record_reclaim(
+			msg->module.cloud.data.reclaim.start_time_s,
+			msg->module.cloud.data.reclaim.end_time_s);
+		if (ret != 0) {
+			LOG_ERR("Reclaim failed, %d", err);
+			err = true;
+		}
+
+		if (!err) {
+			data_codec_update_reclaim_state(&codec,
+							RECLAIM_IN_PROGRESS);
+			reclaim_active = true;
+			data_encode(false);
+		} else {
+			data_codec_update_reclaim_state(&codec,
+							RECLAIM_ERROR);
+			reclaim_active = false;
+		}
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
+		bool device_id_is_default = etc_device_id_is_default();
+		functional_test_start(functional_test_event_handler);
+		SEND_EVENT(data, DATA_EVT_FUNCTIONAL_TEST_START);
+
+		track_functional_test(DATA_TYPE_SENSOR, (void *)msg->module.sensor.data.sensors);
+		track_functional_test(DATA_TYPE_DEVICE_ID_DEFAULT, (void *)&device_id_is_default);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_END)) {
+		stop_functional_test();
+	}
 }
 
 void data_module_thread_fn(void)
@@ -552,10 +689,6 @@ void data_module_thread_fn(void)
 	}
 
 	state_set(STATE_CLOUD_DISCONNECTED);
-	int transmission_in_seconds = etc_get_tx_interval_secs();
-	data_publish_timeout = K_SECONDS(transmission_in_seconds);
-	k_work_init_delayable(&data_send_work, data_send_work_fn);
-	k_work_reschedule(&data_send_work, data_publish_timeout);
 
 	err = setup();
 	if (err) {

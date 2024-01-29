@@ -81,8 +81,16 @@ struct modem_api_evt {
 };
 
 enum modem_api_cred_type {
-	MODEM_API_CRED_TYPE_PSK_ID,
 	MODEM_API_CRED_TYPE_PSK
+};
+
+struct modem_api_psk {
+	/* Null-terminated string with the PSK ID*/
+	char *psk_id;
+	/* Binary key */
+	uint8_t *psk;
+	/* Length of PSK */
+	uint16_t psk_len;
 };
 
 enum modem_api_cmd {
@@ -101,13 +109,22 @@ struct modem_static_info {
 
 enum modem_api_data_request {
 	MODEM_API_DATA_REQUEST_STATIC,
-	MODEM_API_DATA_REQUEST_DYNAMIC
+	MODEM_API_DATA_REQUEST_DYNAMIC,
+	MODEM_API_DATA_REQUEST_POWER_STATE
+};
+
+enum modem_power_state {
+	MODEM_POWER_OFF,
+	MODEM_POWER_ON,
+	MODEM_POWER_PSM_PENDING,
+	MODEM_POWER_PSM
 };
 
 struct modem_api_data {
 	union {
 		struct modem_static_info modem_info;
 		struct modem_network_data modem_network;
+		enum modem_power_state power_state;
 	};
 };
 
@@ -117,8 +134,9 @@ typedef int(*modem_api_evt_handler_init_t)(const struct device *dev,
                                            modem_api_evt_handler_t evt_handler);
 
 typedef int(*modem_api_set_credentials_t)(const struct device *dev,
+					  uint8_t cid,
 					  enum modem_api_cred_type type,
-					  uint8_t *cred_buf, uint8_t cred_len);
+					  void *cred_data);
 
 typedef int(*modem_api_cmd_t)(const struct device *dev,
 			      enum modem_api_cmd cmd,
@@ -205,14 +223,16 @@ inline int modem_evt_handler_init(const struct device *dev,
  * @brief Set the modem security credentials
  * 
  * @param dev Pointer to the modem device
+ * @param cid SSL Context ID for the modem to use
  * @param type Type of the credential to set
- * @param cred_buf Credential buffer
- * @param cred_len Length of the credential buffer
+ * @param cred_data Pointer to the credential data. Supported types:
+ * 	- struct modem_api_psk if `type == MODEM_API_CRED_TYPE_PSK`
  * @return 0 on success, negative on error
 */
 inline static int modem_set_credentials(const struct device *dev,
-				 enum modem_api_cred_type type,
-				 uint8_t *cred_buf, uint8_t cred_len)
+					uint8_t cid,
+					enum modem_api_cred_type type,
+					void *cred_data)
 {
 	const struct modem_api *api =
 		(const struct modem_api *)dev->api;
@@ -221,7 +241,7 @@ inline static int modem_set_credentials(const struct device *dev,
 		return -ENOSYS;
 	}
 
-	return api->set_credentials(dev, type, cred_buf, cred_len);
+	return api->set_credentials(dev, cid, type, cred_data);
 }
 
 inline static int modem_cmd(const struct device *dev,
@@ -258,6 +278,19 @@ char* quectel_bg95_get_sim_number(void);
 bool quectel_bg95_is_ready(void);
 int quectel_bg95_get_time(char* time_buf);
 int quectel_bg95_get_rssi(void);
-int quectel_bg95_get_qual(void);
+
+/**
+ * Retrieve the Modem RSRP (signal strength)
+ * 
+ * @return RSRP in dBm
+*/
+int quectel_bg95_get_rsrp(void);
+
+/**
+ * Retrieve the Modem RSRQ (signal quality)
+ * 
+ * @return RSRQ in dBm
+*/
+int quectel_bg95_get_rsrq(void);
 
 #endif // MODEM_API_H
