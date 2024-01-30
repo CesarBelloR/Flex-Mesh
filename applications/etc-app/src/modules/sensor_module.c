@@ -176,11 +176,11 @@ static void sensor_module_exit_functional_test(void)
 {
 	int ret;
 	int64_t now_ms;
-	struct sensor_event *sensor_event = new_sensor_event();
 
 	if (state != STATE_FUNCTIONAL_TEST) {
 		return;
 	}
+	struct sensor_event *sensor_event = new_sensor_event();
 
 	ret = date_time_now(&now_ms);
 	if (!ret) {
