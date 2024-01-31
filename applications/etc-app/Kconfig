@@ -12,6 +12,10 @@ config APP_AWS_IOT
 	bool "Enable/disable use of AWS IoT to connect to cloud"
 	default y
 
+config ETC_BLE_ENCRYPTION
+	bool "Enable/disable the encryption data for BLE module"
+	default n
+
 rsource "src/exact/Kconfig"
 rsource "src/cloud/Kconfig"
 rsource "src/cloud/Kconfig.lwm2m"

@@ -82,7 +82,39 @@ uint16_t ceil_int(uint16_t value, uint16_t divisor);
 */
 uint16_t round_int(uint16_t value, uint16_t divisor);
 
-int encrypt_data(const unsigned char *psk, const unsigned char *encrypting_data, size_t encrypting_length, unsigned char *encrypted_data);
-int decrypt_data(const unsigned char *psk, const unsigned char *encrypted_data, size_t encrypted_length, unsigned char *decrypted_data);
+#ifdef CONFIG_ETC_BLE_ENCRYPTION
+/**
+ * @brief Encrypts the given data using the provided pre-shared key (PSK).
+ *
+ * This function takes a pre-shared key (PSK), data to be encrypted, and its length.
+ * It performs encryption and stores the result in the provided buffer.
+ *
+ * @param psk               The pre-shared key used for encryption.
+ * @param encrypting_data   The data to be encrypted.
+ * @param encrypting_length The length of the data to be encrypted.
+ * @param encrypted_data    The buffer to store the encrypted data.
+ *
+ * @return                  Returns 0 on success, or a non-zero value on failure.
+ */
+int encrypt_data(const unsigned char *psk, 
+	const unsigned char *encrypting_data, size_t encrypting_length, 
+	unsigned char *encrypted_data);
 
+/**
+ * @brief Decrypts the given encrypted data using the provided pre-shared key (PSK).
+ *
+ * This function takes a pre-shared key (PSK), encrypted data, and its length.
+ * It performs decryption and stores the result in the provided buffer.
+ *
+ * @param psk               The pre-shared key used for decryption.
+ * @param encrypted_data    The data to be decrypted.
+ * @param encrypted_length  The length of the data to be decrypted.
+ * @param decrypted_data    The buffer to store the decrypted data.
+ *
+ * @return                  Returns 0 on success, or a non-zero value on failure.
+ */
+int decrypt_data(const unsigned char *psk, 
+	const unsigned char *encrypted_data, size_t encrypted_length, 
+	unsigned char *decrypted_data);
+#endif
 #endif

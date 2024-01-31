@@ -287,6 +287,7 @@ static int flex_ble_notify(struct bt_conn *conn, int attr_index, const uint8_t *
 	return -EINVAL;
 }
 
+#ifdef CONFIG_ETC_BLE_ENCRYPTION
 static uint8_t* etc_ble_encrypt_data(const uint8_t *data, uint16_t len, uint16_t *encrypted_len)
 {
 	uint16_t max_encrypted_len = (len / AES_KEY_BITLEN) * AES_KEY_BITLEN + AES_KEY_BITLEN;
@@ -309,6 +310,7 @@ static uint8_t* etc_ble_encrypt_data(const uint8_t *data, uint16_t len, uint16_t
 
 	return NULL;
 }
+#endif
 
 int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 {
@@ -321,11 +323,16 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 	int mtu_size = bt_gatt_get_mtu(current_conn) - BT_OP_OFFSET;
 
 	uint16_t encrypted_len = 0;
-	uint8_t *encrypted_buf = etc_ble_encrypt_data(data, len, &encrypted_len);
+	uint8_t *encrypted_buf;
+#ifdef CONFIG_ETC_BLE_ENCRYPTION
+	encrypted_buf = etc_ble_encrypt_data(data, len, &encrypted_len);
 	if (encrypted_buf == NULL) {
 		return -EINVAL;
 	}
-
+#else
+	encrypted_len = len;
+	*encrypted_buf = (uint8_t*)data;
+#endif
 	int step = encrypted_len / mtu_size;
 	int remain = encrypted_len % mtu_size;
 	int rc = 0;

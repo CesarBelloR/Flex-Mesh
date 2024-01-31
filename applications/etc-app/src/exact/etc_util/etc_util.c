@@ -39,6 +39,7 @@ uint16_t ceil_int(uint16_t value, uint16_t divisor)
 	return quotient * divisor;
 }
 
+#ifdef CONFIG_ETC_BLE_ENCRYPTION
 int encrypt_data(const unsigned char *psk, const unsigned char *encrypting_data, size_t encrypting_length, unsigned char *encrypted_data) {
 	size_t output_length = 0;
 	size_t partial_length = 0;
@@ -71,3 +72,4 @@ int decrypt_data(const unsigned char *psk, const unsigned char *encrypted_data, 
 
     return output_length;
 }
+#endif
