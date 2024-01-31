@@ -105,6 +105,9 @@ config MODEM_QUECTEL_BG95_M3_PSK_KEY
 config MODEM_QUECTEL_BG95_PSM
 	bool "Enable/disable PSM functionality"
 
+config MODEM_QUECTEL_BG95_SOFT_SPM
+	bool "Enable/disable software method for PSM functionality"
+
 config MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU
 	string "PSM setting requested periodic TAU"
 	default "00111000"
