@@ -29,4 +29,5 @@ if __name__ == "__main__":
     decrypted_data = []
     for data_entry in parser.get_data():
         decrypted_data.append(decrypt.decrypt_aes_128(data_entry))
+    Util.write_bin_to_file("decrypted_data.bin", decrypted_data)
     Util.write_to_file("decrypted_data.txt", decrypted_data)
