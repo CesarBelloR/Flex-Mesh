@@ -37,12 +37,8 @@ class BleLogParser:
             if frame_id != (frame_id_old + 1):
                 continue
             
-            # Skip message ID, frame ID and payload length on first frame (4 bytes total)
-            if frame_id == 0:
-                packet.extend(data_entry[4:])
-            # Skip message and frame ID on frames after first frame
-            elif frame_id > 0:
-                packet.extend(data_entry[4:])
+            # Skip message ID, frame ID and payload length (4 bytes total)
+            packet.extend(data_entry[4:])
             
             frame_id_old = frame_id
             all_packets.append(packet)
