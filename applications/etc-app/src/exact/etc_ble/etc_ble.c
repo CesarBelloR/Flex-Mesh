@@ -331,7 +331,7 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 	}
 #else
 	encrypted_len = len;
-	*encrypted_buf = (uint8_t*)data;
+	encrypted_buf = (uint8_t*)data;
 #endif
 	int step = encrypted_len / mtu_size;
 	int remain = encrypted_len % mtu_size;
@@ -359,9 +359,11 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 
 	LOG_DBG("Notified success");
 done:
+#ifdef CONFIG_ETC_BLE_ENCRYPTION
 	if (encrypted_buf) {
 		k_free(encrypted_buf);
 	}
+#endif
 	return rc;
 }
 
