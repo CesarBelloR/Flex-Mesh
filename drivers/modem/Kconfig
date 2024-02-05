@@ -102,12 +102,17 @@ config MODEM_QUECTEL_BG95_M3_PSK_KEY
 	  When using DTLS over UDP, the modem uses the PSK method to encrypt the
 	  data. This option specifies the PSK key to use.
 
+choice
+	prompt "Select PSM functionality"
+	default MODEM_QUECTEL_BG95_PSM
+
 config MODEM_QUECTEL_BG95_PSM
 	bool "Enable/disable PSM functionality"
 
 config MODEM_QUECTEL_BG95_SOFT_PSM
 	bool "Enable/disable software method for PSM functionality"
-	default y
+
+endchoice
 
 config MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU
 	string "PSM setting requested periodic TAU"
