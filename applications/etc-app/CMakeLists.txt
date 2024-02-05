@@ -5,7 +5,7 @@ set(PROJECT_VERSION_MINOR 99)
 set(PROJECT_VERSION_PATCH 99)
 set(PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
 
-set(PROJECT_VERSION_DEV 1)
+# set(PROJECT_VERSION_DEV 1)
 # set(PROJECT_VERSION_RC 12)
 
 if(PROJECT_VERSION_RC)
@@ -28,8 +28,8 @@ set(PM_STATIC_YML_FILE
 )
 
 configure_file(app_version.h.in ${CMAKE_BINARY_DIR}/app/include/app_version.h)
-configure_file(version.h.in ${CMAKE_CURRENT_LIST_DIR}/mcu_version.conf)
-list(APPEND OVERLAY_CONFIG ${CMAKE_CURRENT_LIST_DIR}/mcu_version.conf)
+configure_file(version.h.in ${CMAKE_BINARY_DIR}/app/config/mcu_version.conf)
+list(APPEND OVERLAY_CONFIG ${CMAKE_BINARY_DIR}/app/config/mcu_version.conf)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
