@@ -89,7 +89,7 @@ static int pm_suspend_uart(void);
 static int quectel_bg95_pm_suspend(void);
 #endif
 
-#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_SPM
+#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
 static void psm_workaround_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(psm_workaround_work, psm_workaround_work_fn);
 #endif
@@ -100,7 +100,7 @@ int quectel_bg95_psm_wakeup(void);
 /* Implementation in net/ip/utils.h */
 extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
 
-#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_SPM
+#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
 static void psm_workaround_work_fn(struct k_work *work) 
 {
 	(void)work;
@@ -1302,9 +1302,10 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 
 	/* Data was written successfully. */
 	errno = 0;
-	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_SPM
+	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
 	/* Reschedule for PSM workaround */
-	k_work_reschedule(&psm_workaround_work, K_SECONDS(CONFIG_MODEM_PSM_WORKAROUND_WAIT_TIME_S));
+	k_work_reschedule(&psm_workaround_work, 
+		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
 	#endif
 	return ret;
 }
@@ -1418,9 +1419,10 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 exit:
 	/* clear socket data */
 	sock->data = NULL;
-	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_SPM
+	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
 	/* Reschedule for PSM workaround */
-	k_work_reschedule(&psm_workaround_work, K_SECONDS(CONFIG_MODEM_PSM_WORKAROUND_WAIT_TIME_S));
+	k_work_reschedule(&psm_workaround_work, 
+		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
 	#endif
 	return ret;
 }
@@ -2310,12 +2312,23 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	/* Connected successfully. */
 	sock->is_connected = true;
 	errno = 0;
+
+	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+	/* Reschedule for PSM workaround */
+	k_work_reschedule(&psm_workaround_work, 
+		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
+	#endif
 	return 0;
 
 exit:
 	(void) modem_cmd_handler_update_cmds(&mdata.cmd_handler_data,
 					     NULL, 0U, false);
 	errno = -ret;
+	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+	/* Reschedule for PSM workaround */
+	k_work_reschedule(&psm_workaround_work, 
+		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
+	#endif
 	return -1;
 }
 
@@ -2329,12 +2342,17 @@ static int offload_close(void *obj)
 
 	/* Make sure we assigned an id */
 	if (modem_socket_is_allocated(&mdata.socket_config, sock) == false) {
-		return 0;
+		goto exit;
 	}
 
 	/* Close the socket */
 	socket_close(sock, false);
-
+exit:
+	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+	/* Reschedule for PSM workaround */
+	k_work_reschedule(&psm_workaround_work, 
+		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
+	#endif
 	return 0;
 }
 
@@ -2792,9 +2810,9 @@ retry:
 	mdata.power = MODEM_POWER_ON;
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    MDM_WAIT_FOR_RSSI_TIMEOUT);
-	#ifdef CONIFG_MODEM_QUECTEL_BG95_SOFT_SPM
+	#ifdef CONIFG_MODEM_QUECTEL_BG95_SOFT_PSM
 	k_work_schedule(&psm_workaround_work, 
-		K_SECONDS(CONFIG_MODEM_PSM_WORKAROUND_WAIT_TIME_S));
+		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
 	#endif
 error:
 	return ret;

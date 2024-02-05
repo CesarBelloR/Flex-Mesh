@@ -105,8 +105,9 @@ config MODEM_QUECTEL_BG95_M3_PSK_KEY
 config MODEM_QUECTEL_BG95_PSM
 	bool "Enable/disable PSM functionality"
 
-config MODEM_QUECTEL_BG95_SOFT_SPM
+config MODEM_QUECTEL_BG95_SOFT_PSM
 	bool "Enable/disable software method for PSM functionality"
+	default y
 
 config MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU
 	string "PSM setting requested periodic TAU"
@@ -130,8 +131,8 @@ config MODEM_NTP_SERVER
 	help 
 		The NTP server for getting date/time when the modem is online
 
-config MODEM_PSM_WORKAROUND_WAIT_TIME_S
+config MODEM_SOFT_PSM_WAIT_TIME_SEC
 	int "The timeout to put the modem to sleep mode like PSM"
-	default 60
+	default 20
 	
 endif
