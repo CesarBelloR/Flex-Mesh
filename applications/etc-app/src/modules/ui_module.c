@@ -186,12 +186,32 @@ static void sub_state_set(enum sub_state_type new_state)
 	sub_state = new_state;
 }
 
+static void last_sub_state_set(enum sub_state_type state) {
+	if (state == last_sub_state) {
+		LOG_DBG("Last sub state: %s", sub_state2str(last_sub_state));
+		return;
+	}
+
+	last_sub_state = state;
+}
+
 static enum sub_state_type sub_state_get(void) {
 	return sub_state;
 }
 
 static enum sub_state_type last_sub_state_get(void) {
 	return last_sub_state;
+}
+
+static bool is_sub_state_higher_priority() {
+	if (sub_state == SUB_STATE_LTE_CONNECTING ||
+		sub_state == SUB_STATE_LTE_CONNECTED ||
+		sub_state == SUB_STATE_CLOUD_CONNECTED ||
+		sub_state == SUB_STATE_LORA_LISTEN) 
+	{
+			return true;
+	}
+	return false;
 }
 
 /* Handlers */
@@ -538,39 +558,59 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_CHARGING)) {
-		transition_list_append(LED_STATE_CHARGE_BATTERY_IN_CHARING, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_CHARGE_BAT_IN_PROCESS);
+		if (is_sub_state_higher_priority()) {
+			last_sub_state_set(SUB_STATE_CHARGE_BAT_IN_PROCESS);
+		} else {
+			transition_list_append(LED_STATE_CHARGE_BATTERY_IN_CHARING, HOLD_FOREVER);
+			k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+			sub_state_set(SUB_STATE_CHARGE_BAT_IN_PROCESS);
+		}
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
-		transition_list_append(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_CHARGE_BAT_COMPLETE);
+		if (is_sub_state_higher_priority()) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
+		} else {
+			transition_list_append(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);
+			k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+			sub_state_set(SUB_STATE_CHARGE_BAT_COMPLETE);
+		}
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_FULL)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_BATTERY_FULL, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
-		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
-		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
+		if (is_sub_state_higher_priority()) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
+		} else {
+			transition_list_clear();
+			transition_list_append(LED_STATE_BATTERY_FULL, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+			transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
+			k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+			sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
+		}
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_MED)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_BATTERY_MED, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
-		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
-		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_NORMAL_BAT_MED);
+		if (is_sub_state_higher_priority()) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_MED);
+		} else {
+			transition_list_clear();
+			transition_list_append(LED_STATE_BATTERY_MED, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+			transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
+			k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+			sub_state_set(SUB_STATE_NORMAL_BAT_MED);
+		}
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_LOW)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_BATTERY_EMPTY, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
-		transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
-		k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
-		sub_state_set(SUB_STATE_NORMAL_BAT_LOW);
+		if (is_sub_state_higher_priority()) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_LOW);
+		} else {
+			transition_list_clear();
+			transition_list_append(LED_STATE_BATTERY_EMPTY, UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC);
+			transition_list_append(LED_STATE_TURN_OFF, UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC);
+			k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
+			sub_state_set(SUB_STATE_NORMAL_BAT_LOW);
+		}
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
