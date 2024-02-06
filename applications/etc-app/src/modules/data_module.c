@@ -85,6 +85,7 @@ static int head_modem_dyn_buf = 0;
 static uint8_t data_relay_buf[CONFIG_LWM2M_ETC_RELAY_OBJ_DATA_SIZE] = {0x00};
 
 struct cloud_codec_data codec = { 0 };
+struct cloud_codec_data ble_codec = { 0 };
 struct cloud_codec_data codec_backup = { 0 };
 
 struct send_msg_status send_status;
@@ -468,7 +469,7 @@ static void data_encode_for_ble()
 	send_status.record_id = etc_device_read_record(&record, &reclaim_status);
 	/* Only add a record if it is valid. */
 	if (send_status.record_id != 0) {
-		ret = data_codec_prepare_ble_packet(&codec, &record);
+		ret = data_codec_prepare_ble_packet(&ble_codec, &record);
 		if (ret != 0) {
 			LOG_WRN("No message to send over BLE");
 			return;
@@ -486,7 +487,7 @@ static void data_encode_for_ble()
 		return;
 	}
 
-	data_send(DATA_EVT_DATA_SEND_BLE, &codec);
+	data_send(DATA_EVT_DATA_SEND_BLE, &ble_codec);
 }
 
 static void relay_data_encode(struct relay_data_buffer *relay_data)

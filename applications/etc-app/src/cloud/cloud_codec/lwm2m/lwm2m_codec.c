@@ -318,7 +318,26 @@ int data_codec_prepare_ble_packet(struct cloud_codec_data *cloud_data,
 	}
 
 	if (record != NULL) {
-		data_codec_prepare_record_packet(cloud_data, record);
+		err = data_codec_prepare_record_packet(cloud_data, record);
+		if (err == 0) {
+			static const struct lwm2m_obj_path path_list[] = {
+				/* Always send first temperature object containing ambient data. */
+				LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 1),
+				LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 2),
+				LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 3),
+				LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 4),
+				LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0),
+				LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_SERIAL_NUMBER_ID),
+			};
+
+			err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+								path_list,
+								ARRAY_SIZE(path_list));
+			if (err) {
+				LOG_ERR("Failed populating object path list, error: %d", err);
+				return err;
+			}
+		}
 	}
 	
 	return err;
