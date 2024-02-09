@@ -71,6 +71,8 @@ enum etc_setting_id {
 	ETC_SERIAL_NUMBER_ID = 0x05,
 	ETC_PSK_ID = 0x06,
 	ETC_RTC_CALIBRATION_OFFSET_PPM,
+	/* Reference value to compensate temperature-dependent ADC error */
+	ETC_ADC_TEMPERATURE_REFERENCE,
 	ETC_SETTING_HW_VERSION_ID = 0x100,
 	ETC_SETTING_FW_VERSION_ID,
 	ETC_SETTING_DEVICE_ID,

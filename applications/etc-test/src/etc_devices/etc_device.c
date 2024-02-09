@@ -92,3 +92,19 @@ int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size
 	// LOG_DBG("Read setting ID %d", setting_id);
 	return etc_nvs_read(setting_id, setting, setting_size);
 }
+
+int etc_device_write_read_setting(uint16_t setting_id, void *setting, int setting_size,
+				  void *setting_readback, int setting_readback_size)
+{
+	int rc = etc_device_write_setting(setting_id, setting, setting_size);
+	if (rc) {
+		return -1;
+	}
+
+	rc = etc_device_read_setting(setting_id, setting_readback, setting_readback_size);
+	if (rc) {
+		return -1;
+	}
+
+	return rc;
+}

@@ -104,6 +104,7 @@ struct adc_calibration_info {
 	float offset;
 	float high;
 	float ref;
+	uint16_t temp_comp_ref;
 };
 
 static struct adc_calibration_info adc_calib_info;
@@ -501,7 +502,8 @@ static int cmd_adc_load_calibration(const struct shell *shell, size_t argc, char
 	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
 	if (rc) {
 		adc_calib_info.offset = 0;
-		etc_device_write_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
+		etc_device_write_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, 
+					 sizeof(adc_calib_info.offset));
 	}
 	shell_print(shell, "The offset calibration: %.6f", adc_calib_info.offset);
 	rc = etc_device_read_setting(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
@@ -516,6 +518,15 @@ static int cmd_adc_load_calibration(const struct shell *shell, size_t argc, char
 		etc_device_write_setting(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
 	} 
 	shell_print(shell, "The reference calibration: %.6f", adc_calib_info.ref);
+
+	rc = etc_device_read_setting(ETC_ADC_TEMPERATURE_REFERENCE_ID, &adc_calib_info.temp_comp_ref, 
+				     sizeof(adc_calib_info.temp_comp_ref));
+	if (rc) {
+		adc_calib_info.temp_comp_ref = 1501;
+		etc_device_write_setting(ETC_ADC_TEMPERATURE_REFERENCE_ID, &adc_calib_info.temp_comp_ref, 
+					 sizeof(adc_calib_info.temp_comp_ref));
+	} 
+	shell_print(shell, "The temperature reference: %u", adc_calib_info.temp_comp_ref);
 
 	return 0;
 }
@@ -537,15 +548,10 @@ static int cmd_adc_set_offset(const struct shell *shell, size_t argc, char **arg
 
 	new_val = atof(argv[1]);
 	adc_calib_info.offset = new_val;
-	int rc = etc_device_write_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset));
+	int rc = etc_device_write_read_setting(ETC_CALIBRATION_OFFSET_ID, &adc_calib_info.offset, sizeof(adc_calib_info.offset),
+					       &written_val, sizeof(written_val));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for offset to NVS %d", rc);
-		return -1;
-	}
-
-	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID, &written_val, sizeof(written_val));
-	if (rc) {
-		shell_error(shell, "Failed to read ADC offset from NVS %d", rc);
 		return -1;
 	}
 
@@ -570,15 +576,10 @@ static int cmd_adc_set_high(const struct shell *shell, size_t argc, char **argv)
 
 	new_val = atof(argv[1]);
 	adc_calib_info.high = new_val;
-	int rc = etc_device_write_setting(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high));
+	int rc = etc_device_write_read_setting(ETC_CALIBRATION_RAWHIGH_ID, &adc_calib_info.high, sizeof(adc_calib_info.high),
+					       &written_val, sizeof(written_val));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for high to NVS %d", rc);
-		return -1;
-	}
-
-	rc = etc_device_read_setting(ETC_CALIBRATION_RAWHIGH_ID, &written_val, sizeof(written_val));
-	if (rc) {
-		shell_error(shell, "Failed to read ADC high value from NVS %d", rc);
 		return -1;
 	}
 
@@ -603,15 +604,10 @@ static int cmd_adc_set_ref(const struct shell *shell, size_t argc, char **argv)
 
 	new_val = atof(argv[1]);
 	adc_calib_info.ref = new_val;
-	int rc = etc_device_write_setting(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref));
+	int rc = etc_device_write_read_setting(ETC_CALIBRATION_REF_ID, &adc_calib_info.ref, sizeof(adc_calib_info.ref),
+					       &written_val, sizeof(written_val));
 	if (rc) {
 		shell_error(shell, "Failed to save calibration for reference to NVS %d", rc);
-	}
-	
-	rc = etc_device_read_setting(ETC_CALIBRATION_REF_ID, &written_val, sizeof(written_val));
-	if (rc) {
-		shell_error(shell, "Failed to read ADC ref value from NVS %d", rc);
-		return -1;
 	}
 
 	shell_print(shell, "Saved ADC ref: %.2f", written_val);
@@ -619,6 +615,36 @@ static int cmd_adc_set_ref(const struct shell *shell, size_t argc, char **argv)
 }
 
 SHELL_CMD_ARG_REGISTER(etc_adc_ref, NULL, "Set the reference value for the calibration calculation", cmd_adc_set_ref, 1, 1);
+
+static int cmd_adc_temp_ref(const struct shell *shell, size_t argc, char **argv)
+{
+	uint16_t new_val;
+	uint16_t written_val;
+
+	if (argc != 2) {
+		shell_print(shell, 
+			    "Usage:\n"
+			    "%s <ref>\n"
+			    "ref: The raw ref value used for temperature compensation", argv[0]);
+		return -EINVAL;
+	}
+	
+	new_val = atol(argv[1]);
+	adc_calib_info.temp_comp_ref = new_val;
+	int rc = etc_device_write_read_setting(ETC_ADC_TEMPERATURE_REFERENCE_ID, &adc_calib_info.temp_comp_ref,
+					       sizeof(adc_calib_info.temp_comp_ref),
+					       &written_val, sizeof(written_val));
+	if (rc) {
+		shell_error(shell, "Failed to save temperature reference value, %d", rc);
+		return -1;
+	}
+
+	shell_print(shell, "Saved ADC temp ref: %u", written_val);
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(etc_adc_temp_ref, NULL, "Get/set the reference value for the temperature compensation", 
+		       cmd_adc_temp_ref, 1, 1);
 
 static int cmd_adc_get_raw(const struct shell *shell, size_t argc, char **argv)
 {

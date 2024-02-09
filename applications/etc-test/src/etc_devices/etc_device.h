@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-enum {
+enum etc_setting_id {
 	ETC_CONFIG_ID = 0x01,
 	ETC_RECORD_STAT = 0x02,
 	ETC_RECORD_RECLAIM = 0x03,
@@ -14,6 +14,8 @@ enum {
 	ETC_SERIAL_NUMBER_ID = 0x05,
 	ETC_PSK_ID = 0x06,
 	ETC_RTC_CALIBRATION_OFFSET_PPM,
+	/* Reference value to compensate temperature-dependent ADC error */
+	ETC_ADC_TEMPERATURE_REFERENCE_ID,
 	ETC_SETTING_HW_VERSION_ID = 0x100,
 	ETC_SETTING_FW_VERSION_ID,
 	ETC_SETTING_DEVICE_ID,
@@ -41,5 +43,20 @@ enum {
 
 int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_size);
 int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size);
+
+/**
+ * Write a setting value and read back the value from flash.
+ * 
+ * @param setting_id ID of the setting to write @ref "enum etc_setting_id"
+ * @param setting Pointer to the setting data to write
+ * @param setting_size Size of the data to write
+ * @param setting_readback Buffer for the read back value to be stored
+ * @param setting_readback_size Size of the read back buffer
+ * 
+ * @retval 0 success
+ * @retval -1 fail
+*/
+int etc_device_write_read_setting(uint16_t setting_id, void *setting, int setting_size,
+				  void *setting_readback, int setting_readback_size);
 
 #endif /* ETC_DEVICE_H_ */
