@@ -299,4 +299,11 @@ size_t etc_device_record_get_max_sector_index(void);
  */
 size_t etc_device_record_get_element_size(void);
 
+/**
+ * @brief This API will send the number of records to be sent to upper 
+ * layer as requested for reclamation
+ * 
+ * @return Number of records
+ */
+int etc_device_record_num_reclaim_records(void);
 #endif /* ETC_DEVICE_RECORD_H_ */

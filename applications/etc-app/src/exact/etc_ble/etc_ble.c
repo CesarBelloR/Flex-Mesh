@@ -78,6 +78,9 @@ static const struct bt_data ad[] = {
 static ssize_t flex_sensor_on_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
 	uint16_t len, uint16_t offset);
 
+static ssize_t flex_config_on_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
+	uint16_t len, uint16_t offset);
+	
 static void flex_sensor_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value);
 
 static ssize_t flex_reclaim_on_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
@@ -123,7 +126,7 @@ BT_GATT_SERVICE_DEFINE(flex_svc,
 #else
 				BT_GATT_PERM_READ, NULL,
 #endif
-			       NULL, NULL),
+			    NULL, NULL),
 #if defined(CONFIG_BT_SMP)
 	BT_GATT_CCC(flex_reclaim_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
 #else
@@ -131,11 +134,11 @@ BT_GATT_SERVICE_DEFINE(flex_svc,
 #endif
 	BT_GATT_CHARACTERISTIC(BT_UUID_CONFIG_CHAR, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY | BT_GATT_CHRC_WRITE,
 #if defined(CONFIG_BT_SMP)
-				BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT, NULL,
+				BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT, flex_config_on_read,
 #else
-				BT_GATT_PERM_READ | BT_GATT_PERM_WRITE, NULL,
+				BT_GATT_PERM_READ | BT_GATT_PERM_WRITE, flex_config_on_read,
 #endif
-			       flex_config_on_write, NULL),
+			    flex_config_on_write, NULL),
 #if defined(CONFIG_BT_SMP)
 	BT_GATT_CCC(flex_config_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
 #else
@@ -187,6 +190,12 @@ static ssize_t flex_sensor_on_read(struct bt_conn *conn, const struct bt_gatt_at
 	return 0;
 }
 
+static ssize_t flex_config_on_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
+	uint16_t len, uint16_t offset) 
+{
+	return 0;
+}
+
 static ssize_t flex_config_on_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 	const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
@@ -204,8 +213,8 @@ static ssize_t flex_config_on_write(struct bt_conn *conn, const struct bt_gatt_a
 		return -EINVAL;
 	}
 
-	/* {"request" : "reclaim", "start" : xxx, "end" : xxxx} */
 	if (strstr(request_json->valuestring, "reclaim") != NULL) {
+		/* {"request" : "reclaim", "start" : xxx, "end" : xxxx} */
 		LOG_DBG("Reclaim request");
 		cJSON *start_json = cJSON_GetObjectItem(json, "start");
 		cJSON *end_json = cJSON_GetObjectItem(json, "end");
@@ -228,10 +237,44 @@ static ssize_t flex_config_on_write(struct bt_conn *conn, const struct bt_gatt_a
 				}
 			}
 		}
+	} else if (strstr(request_json->valuestring, "query") != NULL) {
+		/* {"request" : "query", "type" : "xxx"} */
+		LOG_DBG("Query request");
+		cJSON *type_json = cJSON_GetObjectItem(json, "type");
+		if (type_json == NULL) {
+			LOG_ERR("Missing type parameter");
+		} else {
+			if (strstr(type_json->valuestring, "unack") != NULL) {
+				LOG_DBG("Query the current number of unacknowledged samples");
+				cJSON *response_json = cJSON_CreateObject();
+				if (response_json == NULL) {
+					LOG_ERR("Can't create response object");
+					goto exit;
+				}
+
+				cJSON_AddStringToObject(response_json, "response", "query");
+				cJSON_AddStringToObject(response_json, "type", "unack");
+				cJSON_AddNumberToObject(response_json, "data", etc_device_nack_count());
+				char* response_msg = cJSON_PrintUnformatted(response_json);
+				if (response_msg == NULL) {
+					LOG_ERR("Can't create response object");
+					cJSON_Delete(response_json);
+					goto exit;
+				} else {
+					LOG_INF("Response message %s", response_msg);
+					etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+					cJSON_free(response_msg);
+					cJSON_Delete(response_json);
+				}
+			} else {
+				LOG_DBG("Unknown request type %s", type_json->valuestring);
+			}
+		}
 	} else {
 		LOG_WRN("Unsupported request %s", request_json->valuestring);
 	}
 
+exit:
 	cJSON_Delete(json);
 	return 0;
 }
@@ -247,7 +290,11 @@ int flex_attr_get_index(int channel) {
 			if (bt_uuid_cmp(BT_UUID_RECLAIM_CHAR, attr->uuid) == 0) {
 				return i;
 			}
-		}
+		} else if (channel == ETC_BLE_CONFIG_CHAR) {
+			if (bt_uuid_cmp(BT_UUID_CONFIG_CHAR, attr->uuid) == 0) {
+				return i;
+			}
+		} 
 
 	}
 	return -ENOENT;
@@ -272,13 +319,18 @@ static int flex_ble_notify(struct bt_conn *conn, int attr_index, const uint8_t *
 
 	int ccc_sensor_index = flex_attr_get_index(ETC_BLE_SENSOR_CHAR);
 	int ccc_reclaim_index = flex_attr_get_index(ETC_BLE_RECLAIM_CHAR);
+	int ccc_config_index = flex_attr_get_index(ETC_BLE_CONFIG_CHAR);
 
 	if (ccc_sensor_index == attr_index) {
 		if (atomic_test_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED)) {
 			return bt_gatt_notify_cb(conn, &params);
 		}
 	} else if (ccc_reclaim_index == attr_index) {
-		if (atomic_test_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED)) {
+		if (atomic_test_bit(flex_ccc_reclaim, FLEX_CCC_SUBSCRIBED)) {
+			return bt_gatt_notify_cb(conn, &params);
+		}
+	} else if (ccc_config_index == attr_index) {
+		if (atomic_test_bit(flex_ccc_config, FLEX_CCC_SUBSCRIBED)) {
 			return bt_gatt_notify_cb(conn, &params);
 		}
 	}
@@ -312,7 +364,7 @@ static uint8_t* etc_ble_encrypt_data(const uint8_t *data, uint16_t len, uint16_t
 }
 #endif
 
-int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
+int etc_ble_notify(int channel, const uint8_t *data, uint16_t len, bool need_encrypt)
 {
 	if (current_conn == NULL) return -ENOTCONN;
 	int attr_index = flex_attr_get_index(channel);
@@ -324,15 +376,21 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 
 	uint16_t encrypted_len = 0;
 	uint8_t *encrypted_buf;
-#ifdef CONFIG_ETC_BLE_ENCRYPTION
-	encrypted_buf = etc_ble_encrypt_data(data, len, &encrypted_len);
-	if (encrypted_buf == NULL) {
-		return -EINVAL;
+	if (need_encrypt) {
+	#ifdef CONFIG_ETC_BLE_ENCRYPTION
+		encrypted_buf = etc_ble_encrypt_data(data, len, &encrypted_len);
+		if (encrypted_buf == NULL) {
+			return -EINVAL;
+		}
+	#else
+		encrypted_len = len;
+		encrypted_buf = (uint8_t*)data;
+	#endif
+	} else {
+		encrypted_len = len;
+		encrypted_buf = (uint8_t*)data;
 	}
-#else
-	encrypted_len = len;
-	encrypted_buf = (uint8_t*)data;
-#endif
+
 	int step = encrypted_len / mtu_size;
 	int remain = encrypted_len % mtu_size;
 	int rc = 0;
@@ -349,6 +407,7 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 		flex_frame.frame_id = i;
 		flex_frame.frame_len = (i == 0) ? encrypted_len : 0;
 		memcpy(flex_frame.frame_payload, &encrypted_buf[i * mtu_size], frame_len);
+		LOG_HEXDUMP_INF(&flex_frame, sizeof(flex_frame), "DATA");
 		rc = flex_ble_notify(current_conn, attr_index, (const uint8_t *)&flex_frame, BT_PAYLOAD_OFFSET + frame_len);
 		if (rc) {
 			LOG_ERR("Failed to notify current characteristic %d", rc);
@@ -359,11 +418,14 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len)
 
 	LOG_DBG("Notified success");
 done:
+	if (need_encrypt) {
 #ifdef CONFIG_ETC_BLE_ENCRYPTION
-	if (encrypted_buf) {
-		k_free(encrypted_buf);
-	}
+		if (encrypted_buf) {
+			k_free(encrypted_buf);
+		}
 #endif
+	}
+
 	return rc;
 }
 
@@ -595,4 +657,27 @@ void etc_ble_set_current_sensor(struct sensor_data* data) {
 
 bool etc_ble_get_is_connected(void) {
 	return (current_conn != NULL);
+}
+
+int etc_ble_notify_reclaim_status(int reclaim_status) {
+	cJSON *response_json = cJSON_CreateObject();
+	if (response_json == NULL) {
+		LOG_ERR("Can't create response object");
+		return -ENOMEM;
+	}
+
+	cJSON_AddStringToObject(response_json, "response", "reclaim");
+	cJSON_AddNumberToObject(response_json, "status", reclaim_status);
+	char* response_msg = cJSON_PrintUnformatted(response_json);
+	if (response_msg == NULL) {
+		LOG_ERR("Can't create response object");
+		cJSON_Delete(response_json);
+		return -EINVAL;
+	} else {
+		LOG_INF("Response message %s", response_msg);
+		etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+		cJSON_free(response_msg);
+		cJSON_Delete(response_json);
+	}
+	return 0;
 }

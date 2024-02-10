@@ -473,11 +473,14 @@ static void data_encode_for_ble()
 		if (ret != 0) {
 			LOG_WRN("No message to send over BLE");
 			return;
-		}	
+		}
 	}
 
 	/* Update reclaim status */							   
 	if (send_status.record_id == 0) {
+		if (reclaim_status) {
+			etc_ble_notify_reclaim_status(0);
+		}
 		LOG_INF("No record found");
 		/* Return early and report data send complete if we don't
 		 * have any new data to send, so other modules can start
@@ -782,6 +785,7 @@ static void on_all_states(struct data_msg_data *msg)
 
 		if (!err) {
 			reclaim_active = true;
+			etc_ble_notify_reclaim_status(etc_device_record_num_reclaim_records());
 			data_encode_for_ble();
 		}
 	}

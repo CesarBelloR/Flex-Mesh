@@ -257,7 +257,7 @@ static void on_connected_states(struct ble_msg_data *msg)
 				LOG_ERR("cloud_wrap_data_export, err: %d", err);
 				SEND_ERROR(ble, BLE_EVT_DATA_EXPORT_FAIL, err);
 			} else {
-				err = etc_ble_notify(ble_channel_out, ble_buf, ble_len);
+				err = etc_ble_notify(ble_channel_out, ble_buf, ble_len, true);
 				if (err) {
 					if (err != -ENOTCONN) {
 						LOG_ERR("Failed to send data to BLE");

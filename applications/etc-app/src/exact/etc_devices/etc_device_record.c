@@ -787,6 +787,19 @@ size_t etc_device_record_get_element_size(void)
 	return sizeof(union etc_device_record);
 }
 
+int etc_device_record_num_reclaim_records(void) {
+	int num_records = 0;
+	if (etc_reclaim_info.flag_in_process) {
+		if (etc_reclaim_info.start_index <= etc_reclaim_info.stop_index) {
+			num_records = etc_reclaim_info.stop_index - etc_reclaim_info.start_index + 1;
+		} else {
+			num_records = MAX_RECORD_NO_OFFSET_ID - etc_reclaim_info.start_index;
+			num_records += etc_reclaim_info.stop_index + 1;
+		}
+	}
+	return num_records;
+}
+
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
 

@@ -40,7 +40,8 @@ struct etc_ble_evt {
 /** @brief The channel charactersitic */
 enum {
 	ETC_BLE_SENSOR_CHAR,
-	ETC_BLE_RECLAIM_CHAR
+	ETC_BLE_RECLAIM_CHAR,
+	ETC_BLE_CONFIG_CHAR
 };
 
 /** @brief Bluetooth library asynchronous event handler.
@@ -81,9 +82,23 @@ void etc_ble_set_current_sensor(struct sensor_data* data);
  * @param channel The characteristic channel will send data out
  * @param data Pointer to the buffer containing data.
  * @param len  Length of the data buffer.
+ * @param need_encrypt Need to apply the encrypt or not (Only use encrypt for reclaim or measure data)
  * @return     Returns 0 on success, non-zero on failure.
  */
-int etc_ble_notify(int channel, const uint8_t *data, uint16_t len);
+int etc_ble_notify(int channel, const uint8_t *data, uint16_t len, bool need_encrypt);
 
+/**
+ * @brief Check if the BLE is connected to central phone app
+ * 
+ * @return Return true if connection is ready.
+ */
 bool etc_ble_get_is_connected(void);
+
+/**
+ * @brief Notify the reclaim status to central app
+ * 
+ * @param reclaim_status Current reclaim status (number of records)
+ * @return Return 0 on success 
+ */
+int etc_ble_notify_reclaim_status(int reclaim_status);
 #endif /* ETC_BLE_H_ */
