@@ -554,16 +554,19 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 
 			struct lwm2m_obj_path paths[CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX];
 
+			struct data_module_data_buffers *buffer = (struct data_module_data_buffers *)
+				msg->module.data.data.buffer.buf;
+
 			__ASSERT(ARRAY_SIZE(paths) ==
-				 ARRAY_SIZE(msg->module.data.data.buffer.paths),
+				 ARRAY_SIZE(buffer->paths),
 				 "Path object list not the same size");
 
 			for (int i = 0; i < ARRAY_SIZE(paths); i++) {
-				paths[i] = msg->module.data.data.buffer.paths[i];
+				paths[i] = buffer->paths[i];
 			}
 
 			err = cloud_wrap_data_send(NULL,
-						   msg->module.data.data.buffer.valid_object_paths,
+						   buffer->valid_object_paths,
 						   true,
 						   0,
 						   paths);

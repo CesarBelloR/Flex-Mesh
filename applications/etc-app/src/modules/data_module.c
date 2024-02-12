@@ -128,6 +128,9 @@ enum coneval_supported_data_type {
  */
 static bool reclaim_active;
 
+/* Define a buffer to save data encoded*/
+static struct data_module_data_buffers data_encoded_buffers;
+
 /* Data module message queue. */
 #define DATA_QUEUE_ENTRY_COUNT		20
 #define DATA_QUEUE_BYTE_ALIGNMENT	4
@@ -343,20 +346,23 @@ static void data_send(enum data_event_type event,
 
 	module_event->type = event;
 
-	BUILD_ASSERT((sizeof(data->paths) == sizeof(module_event->data.buffer.paths)),
+	BUILD_ASSERT((sizeof(data->paths) == sizeof(data_encoded_buffers.paths)),
 			"Size of the object path list does not match");
-	BUILD_ASSERT((sizeof(data->paths[0]) == sizeof(module_event->data.buffer.paths[0])),
+	BUILD_ASSERT((sizeof(data->paths[0]) == sizeof(data_encoded_buffers.paths[0])),
 			"Size of an entry in the object path list does not match");
 
 	send_status.active_send = true;
 
 	if (IS_ENABLED(CONFIG_CLOUD_CODEC_LWM2M)) {
-		memcpy(module_event->data.buffer.paths, data->paths, sizeof(data->paths));
-		module_event->data.buffer.valid_object_paths = data->valid_object_paths;
+		memcpy(data_encoded_buffers.paths, data->paths, sizeof(data->paths));
+		data_encoded_buffers.valid_object_paths = data->valid_object_paths;
 	} else {
-		module_event->data.buffer.buf = data->buf;
-		module_event->data.buffer.len = data->len;
+		data_encoded_buffers.buf = data->buf;
+		data_encoded_buffers.len = data->len;
 	}
+
+	/* Update data buffer */
+	module_event->data.buffer.buf = (uint8_t*)&data_encoded_buffers;
 
 	APP_EVENT_SUBMIT(module_event);
 }

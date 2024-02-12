@@ -111,9 +111,14 @@ struct data_module_data_buffers {
 	uint8_t valid_object_paths;
 };
 
+/** @brief Structure that contains a pointer to relay data. */
 struct relay_data_buffer {
 	const uint8_t *data;
 	uint16_t data_len;
+};
+
+struct data_encoded_buffer {
+	char *buf;
 };
 
 struct data_event {
@@ -122,7 +127,7 @@ struct data_event {
 	enum data_event_type type;
 	union {
 		/** Variable that carries a pointer to data encoded by the module. */
-		struct data_module_data_buffers buffer;
+		struct data_encoded_buffer buffer;
 		/** Code signifying the cause of error. */
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */
