@@ -38,7 +38,7 @@ static const struct socket_op_vtable offload_socket_fd_op_vtable;
 				};						\
 				modem_event_callback(&mdm_evt);
 
-#if defined(CONFIG_MODEM_QUECTEL_BG95_PSM)
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 struct psm_ind {
 	struct k_work_delayable work;
 	/* 1 rising, 0 falling */
@@ -73,7 +73,7 @@ static const struct gpio_dt_spec dtr_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_dtr_gpi
 static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wdisable_gpios);
 #endif
 
-#if defined(CONFIG_MODEM_QUECTEL_BG95_PSM)
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 /* GPIO mdm_psm_ind_gpios indicates the modem's PSM status. 
  * Pin active: modem is in PSM (or off) 
  * Pin inactive: modem is on */
@@ -89,7 +89,7 @@ static int pm_suspend_uart(void);
 static int quectel_bg95_pm_suspend(void);
 #endif
 
-#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 static void psm_workaround_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(psm_workaround_work, psm_workaround_work_fn);
 #endif
@@ -100,7 +100,7 @@ int quectel_bg95_psm_wakeup(void);
 /* Implementation in net/ip/utils.h */
 extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
 
-#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 static void psm_workaround_work_fn(struct k_work *work) 
 {
 	(void)work;
@@ -496,10 +496,10 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_qcsq)
 	int rssi = 0;
 	int rsrp = 0;
 	int rsrq = 0;
-	rssi = ATOI(argv[1], 0, "rssi");
+	rssi = ATOI(argv[1], MDM_RSSI_INVALID, "rssi");
 	if (argc ==  5) {
-		rsrp = ATOI(argv[2], 0, "rsrp");
-		rsrq = ATOI(argv[4], 0, "rsrq");
+		rsrp = ATOI(argv[2], MDM_RSSI_INVALID, "rsrp");
+		rsrq = ATOI(argv[4], MDM_RSSI_INVALID, "rsrq");
 	}
 
 	/* -125 and lower is considered invalid, anything larger is valid. */
@@ -749,10 +749,10 @@ static int pm_resume_uart(void)
 }
 #endif
 
-#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 /**
- * @brief Handler for the PSM_IND modem signal. It signals a wakeup from or
- * entering of PSM.
+ * @brief Handler for the PSM_IND modem signal. It signals a wakeup from PSM or
+ * the entering of PSM (modem going to sleep).
  * The modem changes the PSM_IND's pin status before sending APP RDY.
  * When entering PSM, there are two high -> low transitions with pulses of
  * ~50 ms. This is handled through a "debounce" mechanism.
@@ -859,6 +859,10 @@ MODEM_CMD_DEFINE(on_cmd_unsol_qpsmtimer)
 
 	tau = ATOI(argv[0], 0, "tau");
 	active_timer = ATOI(argv[1], 0, "active_timer");
+
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
+	k_work_cancel_delayable(&psm_workaround_work);
+#endif
 
 	LOG_INF("Entering PSM. TAU: %u, AT: %u", tau, active_timer);
 
@@ -1302,11 +1306,11 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 
 	/* Data was written successfully. */
 	errno = 0;
-	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
 		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
-	#endif
+#endif
 	return ret;
 }
 
@@ -1419,11 +1423,11 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 exit:
 	/* clear socket data */
 	sock->data = NULL;
-	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
 		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
-	#endif
+#endif
 	return ret;
 }
 
@@ -1570,12 +1574,12 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 		}
 	}
 
-	#ifdef CONFIG_PM_DEVICE
+#ifdef CONFIG_PM_DEVICE
 	pm_suspend_uart();
-	#endif
-	#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
+#endif
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	enable_psm_ind_interrupt();
-	#endif
+#endif
 	MODEM_SUBMIT_EVT(MODEM_API_PSM_ENTERED_EVT);
 
 	return 0;
@@ -2313,22 +2317,22 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	sock->is_connected = true;
 	errno = 0;
 
-	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
 		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
-	#endif
+#endif
 	return 0;
 
 exit:
 	(void) modem_cmd_handler_update_cmds(&mdata.cmd_handler_data,
 					     NULL, 0U, false);
 	errno = -ret;
-	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
 		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
-	#endif
+#endif
 	return -1;
 }
 
@@ -2348,11 +2352,11 @@ static int offload_close(void *obj)
 	/* Close the socket */
 	socket_close(sock, false);
 exit:
-	#ifdef CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
 		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
-	#endif
+#endif
 	return 0;
 }
 
@@ -2489,7 +2493,8 @@ static void quectel_bg95_set_connected(bool connected)
 		if (ret < 0) {
 			LOG_ERR("Error activating modem with pdp context");
 		} else if (ret == 0) {
-			bool enable = IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM);
+			bool enable = IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) ||
+				      IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO);
 			quectel_bg95_set_psm(enable,
 					CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT,
 					CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU);
@@ -2643,7 +2648,7 @@ static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("PSM POWER DOWN", on_cmd_psm_power_down, 0U, ""),
 };
 
-#if CONFIG_MODEM_QUECTEL_BG95_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 static const struct setup_cmd psm_wakeup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATE0"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
@@ -2663,9 +2668,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("AT+CFUN=1"),
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
 	SETUP_CMD_NOHANDLE("AT+QURCCFG=\"urcport\",\"uart1\""),
-#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
 	SETUP_CMD_NOHANDLE("AT+QCFG=\"psm/urc\",1"),
-#endif
 
 	/* Commands to read info from the modem (things like IMEI, Model etc). */
 	SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
@@ -2677,7 +2680,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("AT&W")
 };
 
-#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 /* Func: modem_rssi_query_work
  * Desc: Routine to get Modem RSSI.
  */
@@ -2810,10 +2813,6 @@ retry:
 	mdata.power = MODEM_POWER_ON;
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    MDM_WAIT_FOR_RSSI_TIMEOUT);
-	#ifdef CONIFG_MODEM_QUECTEL_BG95_SOFT_PSM
-	k_work_schedule(&psm_workaround_work, 
-		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
-	#endif
 error:
 	return ret;
 }
@@ -3061,7 +3060,7 @@ static int quectel_bg95_close_all_connection(void) {
 }
 
 static int quectel_bg95_cmd(const struct device *dev,
-				enum modem_api_cmd cmd, void *psm_data)
+			    enum modem_api_cmd cmd, void *psm_data)
 {
 	if (cmd == MODEM_API_CMD_PSM_WAKEUP) {
 		return quectel_bg95_psm_wakeup();
@@ -3330,7 +3329,7 @@ static int modem_init(const struct device *dev)
 	/* Init RSSI query */
 	k_work_init_delayable(&mdata.rssi_query_work, modem_rssi_query_work);
 	k_work_init(&mdata.dynamic_data_update_work, modem_dynamic_update_work);
-#ifdef CONFIG_MODEM_QUECTEL_BG95_PSM
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Init PSM work */
 	k_work_init(&mdata.psm_wakeup_work, modem_psm_wakeup_work);
 	setup_psm_ind_interrupt();
@@ -3375,7 +3374,8 @@ int quectel_bg95_psm_wakeup(void)
 #endif
 }
 
-#ifdef CONFIG_PM_DEVICE
+#if IS_ENABLED(CONFIG_PM_DEVICE) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO) || \
+    IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM)
 static int quectel_bg95_pm_suspend(void)
 {
 	int ret;

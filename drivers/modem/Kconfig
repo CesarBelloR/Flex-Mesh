@@ -104,13 +104,19 @@ config MODEM_QUECTEL_BG95_M3_PSK_KEY
 
 choice
 	prompt "Select PSM functionality"
-	default MODEM_QUECTEL_BG95_PSM
+	default MODEM_QUECTEL_BG95_PSM_AUTO
 
 config MODEM_QUECTEL_BG95_PSM
 	bool "Enable/disable PSM functionality"
 
 config MODEM_QUECTEL_BG95_SOFT_PSM
 	bool "Enable/disable software method for PSM functionality"
+
+config MODEM_QUECTEL_BG95_PSM_AUTO
+	bool "Automatically decide what PSM mode to use"
+	help
+	  If PSM is supported by the cellular network, use it. If not,
+	  use soft PSM.
 
 endchoice
 
