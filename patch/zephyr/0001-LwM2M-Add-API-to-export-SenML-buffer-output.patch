@@ -1,17 +1,17 @@
-From 740b00e535061abf4a2be60e0470a6e666026ccf Mon Sep 17 00:00:00 2001
-From: Kien Bui <kien.bui@exacttechnology.com>
-Date: Tue, 12 Dec 2023 14:54:45 +0700
+From 8607783d4af5cf42982f976a3054d36f088a8d40 Mon Sep 17 00:00:00 2001
+From: Bui Trung Kien <kien.bui@exacttechnology.com>
+Date: Thu, 15 Feb 2024 13:26:01 +0700
 Subject: [PATCH] LwM2M: Add API to export SenML buffer output
 
 ---
- subsys/net/lib/lwm2m/lwm2m_message_handling.c | 143 ++++++++++++++++++
+ subsys/net/lib/lwm2m/lwm2m_message_handling.c | 140 ++++++++++++++++++
  subsys/net/lib/lwm2m/lwm2m_message_handling.h |   2 +
  subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c    |  14 +-
  subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.h    |   2 +-
- 4 files changed, 158 insertions(+), 3 deletions(-)
+ 4 files changed, 155 insertions(+), 3 deletions(-)
 
 diff --git a/subsys/net/lib/lwm2m/lwm2m_message_handling.c b/subsys/net/lib/lwm2m/lwm2m_message_handling.c
-index 3c872599cb..7e16f2338b 100644
+index 3c872599cb..c79eefdd8f 100644
 --- a/subsys/net/lib/lwm2m/lwm2m_message_handling.c
 +++ b/subsys/net/lib/lwm2m/lwm2m_message_handling.c
 @@ -2695,7 +2695,58 @@ int lwm2m_perform_composite_read_op(struct lwm2m_message *msg, uint16_t content_
@@ -73,21 +73,7 @@ index 3c872599cb..7e16f2338b 100644
  	/* Read resource from path */
  	SYS_SLIST_FOR_EACH_CONTAINER(lwm2m_path_list, entry, node) {
  		/* Copy path to message path */
-@@ -3068,10 +3119,13 @@ msg_init:
- 		LOG_ERR("Send (err:%d)", ret);
- 		goto cleanup;
- 	}
-+	
- #if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
- 	msg->cache_info = NULL;
- #endif
- 	LOG_INF("Send op to server (/dp)");
-+	LOG_HEXDUMP_INF(msg->out.out_cpkt->data, msg->out.out_cpkt->offset, "SEND");
-+	k_sleep(K_SECONDS(1));
- 	lwm2m_information_interface_send(msg);
- 
- #if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
-@@ -3129,3 +3183,92 @@ int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t pa
+@@ -3129,3 +3180,92 @@ int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t pa
  
  	return lwm2m_send_cb(ctx, lwm2m_path_list, path_list_size, NULL);
  }
@@ -180,7 +166,6 @@ index 3c872599cb..7e16f2338b 100644
 +	return -ENOTSUP;
 +#endif
 +}
-\ No newline at end of file
 diff --git a/subsys/net/lib/lwm2m/lwm2m_message_handling.h b/subsys/net/lib/lwm2m/lwm2m_message_handling.h
 index 99bad786f4..3c740d684a 100644
 --- a/subsys/net/lib/lwm2m/lwm2m_message_handling.h
