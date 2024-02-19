@@ -9,7 +9,7 @@
 
 /* Define a bit lenght for encrypt/decrypt method */
 #define AES_KEY_BITLEN 128
-
+#define AES_KEY_BLOCK_SIZE (AES_KEY_BITLEN / 8)
 /**
  * @brief Validate given data against given lower and upper limits.
  * The limits are inclusive.

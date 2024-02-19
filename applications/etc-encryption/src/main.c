@@ -3,7 +3,7 @@
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-
+#include <zephyr/sys/base64.h>
 #include <mbedtls/aes.h>
 #include <mbedtls/cipher.h>
 #include <stdio.h>
@@ -56,16 +56,13 @@ int decrypt_data(const unsigned char *psk, const unsigned char *input_data, size
 #define ETC_SETTING_PSK_LEN 33
 #define CONFIG_MODEM_QUECTEL_BG95_M3_PSK_KEY "70475440693636213646256D7744"
 
-char msg[516] = {0x00};
+char msg[516] = "1.0.0-rc1,11000011,4.09,49,1708264560,*,*,*,26.26,26.93,47.03,0,";
 char out_msg[2048] = {0x00};
 uint8_t tmp_psk[ETC_SETTING_PSK_LEN];
 char decrypted_msg[2048] = {0x00};
 
 int main(void)
 {
-	for (int i = 0; i < sizeof(msg); i++) {
-		msg[i] = i % 0xFF;
-	}
 	LOG_HEXDUMP_INF(msg, sizeof(msg), "DECRYTPED");
 	int ret;
 	int input_len = strlen(CONFIG_MODEM_QUECTEL_BG95_M3_PSK_KEY);
@@ -75,7 +72,8 @@ int main(void)
 	} else {
 		LOG_HEXDUMP_INF(tmp_psk, ret, "DUMP");
 		memset(out_msg, 0, sizeof(out_msg));
-		ret = encrypt_data(tmp_psk, msg, sizeof(msg), out_msg);
+		size_t out_len = 0;
+		ret = encrypt_data(tmp_psk, msg, strlen(msg), out_msg);
 		if (ret > 0) {
 			LOG_HEXDUMP_INF(out_msg, ret, "ENCRYPTED");
 			ret = decrypt_data(tmp_psk, out_msg, ret, decrypted_msg);

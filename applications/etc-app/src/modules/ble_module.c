@@ -191,7 +191,7 @@ static void ble_module_evt_handler(const struct etc_ble_evt *evt)
 			break;
 		}
 		case ETC_BLE_EVT_CCC_RECLAIM_READY: {
-			ble_channel_out = ETC_BLE_RECLAIM_CHAR;
+			ble_channel_out = ETC_BLE_SENSOR_CHAR;
 			struct ble_event *ble_evt = new_ble_event();
 			ble_evt->type = BLE_EVT_RECLAIM_REQUEST;
 			ble_evt->data.reclaim.start_time_s = evt->reclaim.start_time_s;
@@ -239,8 +239,7 @@ static void on_connected_states(struct ble_msg_data *msg)
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND_BLE)) {
 #ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
 		{
-			int err;
-			err = etc_ble_notify(ble_channel_out, msg->module.data.data.buffer.buf, 
+			int err = etc_ble_notify(ble_channel_out, msg->module.data.data.buffer.buf, 
 				msg->module.data.data.buffer.buf_len, true);
 			if (err) {
 				if (err != -ENOTCONN) {
@@ -289,11 +288,6 @@ static void on_connected_states(struct ble_msg_data *msg)
 			return;
 		}
 #endif
-	}
-
-	if (IS_EVENT(msg, data, DATA_EVT_SEND_COMPLETE)) {
-		/* By default, channel out is sensor characteristic */
-		ble_channel_out = ETC_BLE_SENSOR_CHAR;
 	}
 }
 

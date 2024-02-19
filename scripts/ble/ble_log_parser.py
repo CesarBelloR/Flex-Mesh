@@ -45,11 +45,11 @@ class BleLogParser:
         return all_packets
     
     # Example line:
-    # 2024-02-01T17:07:24.677Z INFO Attribute value changed, handle: 0x1D, value (0x): 23-02-00-00-C2-...
+    # 2024-02-01T17:07:24.677Z INFO Attribute value changed, handle: 0x23, value (0x): 23-02-00-00-C2-...
     def parse_line(self, line: str):
         if len(line) == 0:
             return None
-        if "Attribute value changed, handle: 0x1D, value (0x):" in line:
+        if "Attribute value changed, handle: 0x23, value (0x):" in line:
             entry = ''.join(''.join(line.split(' ')[1:]).split(':')[2:])
             return self.parse_entry(entry)
         

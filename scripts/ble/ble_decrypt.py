@@ -12,8 +12,10 @@ class FlexDataDecrypt:
         if len(key) < 16:
             key = key + (b'\x00' * (16 - len(key)))
 
+        # Create the vector for CBC method
+        iv = bytes(16)
         # Create an AES-128 cipher object with the provided key and ECB mode
-        self.cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+        self.cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
 
     def decrypt_aes_128(self, data):        
         # Create a decryptor object
@@ -31,3 +33,4 @@ if __name__ == "__main__":
         decrypted_data.append(decrypt.decrypt_aes_128(data_entry))
     Util.write_bin_to_file("decrypted_data.bin", decrypted_data)
     Util.write_to_file("decrypted_data.txt", decrypted_data)
+    print(decrypted_data)

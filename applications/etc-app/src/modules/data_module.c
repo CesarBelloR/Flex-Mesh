@@ -506,10 +506,11 @@ static void data_encode_for_ble()
 
 	/* Update reclaim status */							   
 	if (send_status.record_id == 0) {
-		if (reclaim_status) {
-			etc_ble_notify_reclaim_status(0);
-		}
 		LOG_INF("No record found");
+		if (reclaim_active) {
+			etc_ble_notify_reclaim_status(0);
+			reclaim_active = false;
+		}
 		/* Return early and report data send complete if we don't
 		 * have any new data to send, so other modules can start
 		 * sending data.
@@ -816,10 +817,14 @@ static void on_all_states(struct data_msg_data *msg)
 		}
 
 		if (!err) {
-			reclaim_active = true;
-			etc_ble_notify_reclaim_status(etc_device_record_num_reclaim_records());
-			data_encode_for_ble();
+			int num_records = etc_device_record_num_reclaim_records();
+			if (num_records > 0) {
+				reclaim_active = true;
+				data_encode_for_ble();
+			}
+			etc_ble_notify_reclaim_status(num_records);
 		}
+		return;
 	}
 
 	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && 

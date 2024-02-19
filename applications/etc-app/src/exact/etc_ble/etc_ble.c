@@ -342,16 +342,17 @@ static int flex_ble_notify(struct bt_conn *conn, int attr_index, const uint8_t *
 #ifdef CONFIG_ETC_BLE_ENCRYPTION
 static uint8_t* etc_ble_encrypt_data(const uint8_t *data, uint16_t len, uint16_t *encrypted_len)
 {
-	uint16_t max_encrypted_len = (len / AES_KEY_BITLEN) * AES_KEY_BITLEN + AES_KEY_BITLEN;
+	uint16_t max_encrypted_len = (len / AES_KEY_BLOCK_SIZE + 1) * AES_KEY_BLOCK_SIZE;
 	uint8_t* out_buf = (uint8_t* )k_malloc(max_encrypted_len);
 	if (out_buf == NULL) {
 		LOG_ERR("Failed to allocate memory for encrypting data");
 		*encrypted_len = 0;
 		return NULL;
 	}
+	
 	uint8_t buf[ETC_SETTING_PSK_LEN] = {0x00};
 	etc_get_psk(buf, ETC_SETTING_PSK_LEN);
-	int ret = encrypt_data(buf, (const uint8_t*)data, len, out_buf);
+	int ret = encrypt_data(buf, data, len, out_buf);
 	if (ret > 0) {
 		*encrypted_len = ret;
 		LOG_DBG("Encrypted data with length %d (input %d)", ret, len);
@@ -407,7 +408,7 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len, bool need_enc
 		flex_frame.frame_id = i;
 		flex_frame.frame_len = (i == 0) ? encrypted_len : 0;
 		memcpy(flex_frame.frame_payload, &encrypted_buf[i * mtu_size], frame_len);
-		LOG_HEXDUMP_INF(&flex_frame, sizeof(flex_frame), "DATA");
+		LOG_HEXDUMP_INF(&flex_frame, BT_PAYLOAD_OFFSET + frame_le, "DATA");
 		rc = flex_ble_notify(current_conn, attr_index, (const uint8_t *)&flex_frame, BT_PAYLOAD_OFFSET + frame_len);
 		if (rc) {
 			LOG_ERR("Failed to notify current characteristic %d", rc);
