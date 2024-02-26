@@ -87,7 +87,6 @@ struct data_modem_dynamic {
 
 struct data_lora_sensors {
 	int64_t env_ts;
-	char sensor_msg[LORA_EVENT_MSG_DATA_LEN];
 	/** Flag signifying that the data entry is to be encoded. */
 	bool queued : 1;
 };
