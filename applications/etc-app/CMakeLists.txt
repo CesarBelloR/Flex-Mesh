@@ -39,7 +39,9 @@ target_include_directories(app PRIVATE
     ${CMAKE_BINARY_DIR}/app/include 
     src)
 
-target_sources(app PRIVATE src/main.c)
+target_sources(app PRIVATE src/main.c
+  src/common.c)
+
 target_sources_ifdef(CONFIG_MCUMGR_SMP_BT app PRIVATE src/bluetooth.c)
 
 add_subdirectory(src/exact)
