@@ -9,7 +9,6 @@
 extern "C" {
 #endif
 
-#define LORA_EVENT_MSG_DATA_LEN 32
 
 /** @brief Data event types submitted by Data module. */
 enum lora_event_type {
@@ -32,8 +31,6 @@ struct lora_event {
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
-		int64_t timestamp;
-		char sensor_msg[LORA_EVENT_MSG_DATA_LEN];
 	} data;
 };
 

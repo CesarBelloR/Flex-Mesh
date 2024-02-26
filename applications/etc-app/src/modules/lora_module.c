@@ -28,26 +28,23 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #define LORA_RETRY_MAX_TIME	5
 #define LORA_SYNC_TIME_DIFF_SEC 30
 #define LORA_LOGGER_ON_RECV_MODE_MSEC 1500
-#define LORA_LOGGER_ID_LEN	(sizeof("FFFFFFFFFFFFFFFF"))
+#define LORA_LOGGER_ID_LEN	ETC_DEVICE_LORA_LOGGER_ID_SIZE
+
 struct lora_msg_data {
 	union {
 		struct app_event app;
 		struct data_event data;
 		struct util_event util;
+		struct cloud_event cloud;
 	} module;
 };
 
 /* Lora module super states. */
 static enum state_type {
-	STATE_INIT,
-	STATE_RUNNING,
-	STATE_SHUTDOWN
+	STATE_CLOUD_DISCONNECTED,
+	STATE_CLOUD_CONNECTED,
+	STATE_SHUTDOWN,
 } state;
-
-static enum sub_state_type {
-	SUB_STATE_TRANSMIT_MODE,
-	SUB_STATE_RECEIVE_MODE,
-} sub_state;
 
 struct logger_lora_response {
 	bool is_okay;
@@ -62,7 +59,7 @@ struct logger_lora_response {
 struct relay_lora_message {
 	bool is_okay;
 	char relay_id[LORA_LOGGER_ID_LEN];
-	char logger_id[LORA_LOGGER_ID_LEN];
+	struct etc_device_relay_record record;
 };
 
 enum lora_request_type {
@@ -71,22 +68,20 @@ enum lora_request_type {
 	LORA_REQUEST_IN_RUN_LOGGER,	
 };
 
-struct lora_request {
-	enum lora_request_type request;
-};
-
 /* Lora module message queue. */
 #define LORA_QUEUE_ENTRY_COUNT	  20
 #define LORA_QUEUE_BYTE_ALIGNMENT 4
 #define LORA_REQUEST_QUEUE_ENTRY_COUNT 10
 #define LORA_REQUEST_QUEUE_BYTE_ALIGNMENT 1
+
 K_MSGQ_DEFINE(msgq_lora, sizeof(struct lora_msg_data), LORA_QUEUE_ENTRY_COUNT,
 	      LORA_QUEUE_BYTE_ALIGNMENT);
 
-K_MSGQ_DEFINE(msgq_lora_request, sizeof(struct lora_request), LORA_REQUEST_QUEUE_ENTRY_COUNT,
-	      LORA_REQUEST_QUEUE_BYTE_ALIGNMENT);
+K_SEM_DEFINE(lora_request_sem, 0, 1);
+static enum lora_request_type lora_request;
 
-static struct k_thread module_lora_rx_thread_id;
+static struct k_thread module_lora_rx_thread;
+static k_tid_t module_lora_thread_id;
 static void module_lora_rx_thread_fn(void);
 static K_KERNEL_STACK_DEFINE(module_lora_rx_stack, CONFIG_ETC_LORA_MODULE_STACK_SIZE);
 
@@ -127,24 +122,12 @@ static struct module_data self = {
 static char *state2str(enum state_type new_state)
 {
 	switch (new_state) {
-	case STATE_INIT:
-		return "STATE_INIT";
-	case STATE_RUNNING:
-		return "STATE_RUNNING";
+	case STATE_CLOUD_DISCONNECTED:
+		return "STATE_CLOUD_DISCONNECTED";
+	case STATE_CLOUD_CONNECTED:
+		return "STATE_CLOUD_CONNECTED";
 	case STATE_SHUTDOWN:
 		return "STATE_SHUTDOWN";
-	default:
-		return "Unknown";
-	}
-}
-
-static char *sub_state2str(enum sub_state_type new_state)
-{
-	switch (new_state) {
-	case SUB_STATE_TRANSMIT_MODE:
-		return "SUB_STATE_TRANSMIT_MODE";
-	case SUB_STATE_RECEIVE_MODE:
-		return "SUB_STATE_RECEIVE_MODE";
 	default:
 		return "Unknown";
 	}
@@ -160,19 +143,6 @@ static void state_set(enum state_type new_state)
 	LOG_DBG("State transition %s --> %s", state2str(state), state2str(new_state));
 
 	state = new_state;
-}
-
-static void sub_state_set(enum sub_state_type new_state)
-{
-	if (new_state == sub_state) {
-		LOG_DBG("Sub state: %s", sub_state2str(sub_state));
-		return;
-	}
-
-	LOG_DBG("Sub state transition %s --> %s", sub_state2str(sub_state),
-		sub_state2str(new_state));
-
-	sub_state = new_state;
 }
 
 /* Handlers */
@@ -194,6 +164,14 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		msg.module.data = *event;
 		enqueue_msg = true;
 	}
+
+	if (is_cloud_event(aeh)) {
+		struct cloud_event *event = cast_cloud_event(aeh);
+
+		msg.module.cloud = *event;
+		enqueue_msg = true;
+	}
+
 
 	if (is_util_event(aeh)) {
 		struct util_event *event = cast_util_event(aeh);
@@ -229,16 +207,11 @@ static int setup(void)
 		return -1;
 	}
 
-	if (etc_device_is_relay()) {
-		LOG_INF("Relay device mode with Lora");
-	} else {
-		LOG_INF("Logger device mode with Lora");
-	}
-
-	k_thread_create(&module_lora_rx_thread_id, module_lora_rx_stack, K_KERNEL_STACK_SIZEOF(module_lora_rx_stack),
+	module_lora_thread_id = k_thread_create(&module_lora_rx_thread, module_lora_rx_stack, K_KERNEL_STACK_SIZEOF(module_lora_rx_stack),
 			(k_thread_entry_t)module_lora_rx_thread_fn, NULL, NULL, NULL,
 			K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
 
+	k_thread_suspend(module_lora_thread_id);
 	return 0;
 }
 
@@ -246,15 +219,10 @@ static int setup(void)
 static void on_state_init(struct lora_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_START)) {
-		state_set(STATE_RUNNING);
-		sub_state_set(SUB_STATE_RECEIVE_MODE);
+		state_set(STATE_CLOUD_DISCONNECTED);
 	}
 }
 
-/* Message handler for STATE_RUNNING. */
-static void on_state_running(struct lora_msg_data *msg)
-{
-}
 
 static int module_lora_transmit_packet(const uint8_t *decoded_buf, int buf_len)
 {
@@ -307,7 +275,7 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 	return response;
 }
 
-static struct relay_lora_message lora_module_relay_get_message(char* package) 
+static struct relay_lora_message lora_module_relay_get_message(char* package, int16_t rssi) 
 {
 	__ASSERT(package != NULL, "Empty input package");
 	struct relay_lora_message message;
@@ -316,28 +284,46 @@ static struct relay_lora_message lora_module_relay_get_message(char* package)
 	char *ptr;
 	message.is_okay = false;
 	pt = strtok(package, ",");
-	if (pt != NULL) { 
-		for (i = 0; i < 5; i++) {
-			if (pt == NULL) {
+	while (pt != NULL) { 
+		if (pt == NULL) {
+			message.is_okay = false;
+			return message;
+		}
+		if (i == 0) {
+			if (pt[0] != 'S') {
+				LOG_WRN("Unknown start message %s", pt);
 				message.is_okay = false;
 				return message;
 			}
-			if (i == 0) {
-				if (pt[0] != 'S') {
-					LOG_WRN("Unknown start message");
-					message.is_okay = false;
-					return message;
-				}
-			} else if (i == 1) {
-				snprintf(message.relay_id, sizeof(message.relay_id), "%s", pt);
-			} else if (i == 3) {
-				snprintf(message.logger_id, sizeof(message.logger_id), "%s", pt);
-				message.is_okay = true;
+		} else if (i == 1) {
+			snprintf(message.relay_id, sizeof(message.relay_id), "%s", pt);
+		} else if (i == 2) {
+			snprintf(message.record.logger_ver, sizeof(message.record.logger_ver), "%s", pt);
+		} else if (i == 3) {
+			snprintf(message.record.logger_id, sizeof(message.record.logger_id), "%s", pt);
+			message.is_okay = true;
+			message.record.logger_rssi = rssi;
+		} else if (i == 4) {
+			message.record.battery = atof(pt);
+		} else if (i == 6) {
+			message.record.timestamp = atoi(pt);
+		} else if (i >= 7 && i <= 11) { // Temp
+			if (strstr(pt, "*") == NULL) {
+				message.record.sensor[i - 7] = atof(pt);
 			} else {
-				/* No action required */
+				message.record.sensor[i - 7] = SENSOR_TEMP_NO_CONNECTED;
 			}
-			pt = strtok(NULL, ",");
+		} else if (i == 12) {
+			if (strstr(pt, "*") == NULL) {
+				message.record.sensor[SENSOR_INPUT_HUMID] = atof(pt);
+			} else {
+				message.record.sensor[SENSOR_INPUT_HUMID] = SENSOR_HUMID_NO_CONNECTED;
+			}
+		} else {
+			/* No action required */
 		}
+		pt = strtok(NULL, ",");
+		i += 1;
 	}
 	return message;
 }
@@ -435,6 +421,15 @@ static int module_lora_prepare_packet(const char* logger_id, const char* relay_i
 	return 0;
 }
 
+static void lora_data_send(void)
+{
+	struct lora_event *lora_module_event = new_lora_event();
+
+	lora_module_event->type = LORA_EVT_RX_READY;
+
+	APP_EVENT_SUBMIT(lora_module_event);
+}
+
 static int module_lora_relay_wait_packet(void)
 {
 	int ret = 0;
@@ -466,17 +461,24 @@ retry_recv:
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
 		memcpy(lora_rx_buf, decoded_buf, sizeof(decoded_buf));
 		LOG_HEXDUMP_DBG(decoded_buf, ret, "Decrypted data");
-		struct relay_lora_message message = lora_module_relay_get_message(decoded_buf);
+		struct relay_lora_message message = lora_module_relay_get_message(decoded_buf, rssi);
 		if (message.is_okay) {
-			// etc_device_write_relay_record(lora_rx_buf);
-			LOG_INF("Relay ID %s - Logger ID %s", message.relay_id, message.logger_id);
+			LOG_DBG("Relay ID %s - Logger ID %s", message.relay_id, message.record.logger_id);
+			LOG_DBG("Logger info %s", message.record.logger_ver);
+			LOG_DBG("rssi %d - battery %.2f - timestamp %d", message.record.logger_rssi, 
+				message.record.battery, message.record.timestamp);
+			LOG_DBG("Sensor %.2f %.2f %.2f %.2f %.2f %.2f", message.record.sensor[0],
+				message.record.sensor[1], message.record.sensor[2], message.record.sensor[3],
+				message.record.sensor[4], message.record.sensor[5]);
 			if (((strncmp(message.relay_id, "OPEN", strlen("OPEN")) == 0) &&
 				(strlen(message.relay_id) == strlen("OPEN"))) ||
 				(strncmp(message.relay_id, relay_iccid, ETC_SETTING_RELAY_ICCID_LEN) == 0 &&
 				(strlen(message.relay_id) == strlen(relay_iccid)))) {
 					/* Send ACK message */
-					module_lora_prepare_packet(message.logger_id, relay_iccid);
+					module_lora_prepare_packet(message.record.logger_id, relay_iccid);
 			}
+			etc_device_write_relay_data(message.record);
+			lora_data_send();
 		}
 	}
 
@@ -595,19 +597,15 @@ static void on_all_states(struct lora_msg_data *msg)
 	if (etc_device_is_logger_lora()) {
 		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) || 
 			IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD)) {
-			const struct lora_request msg = {
-				.request = LORA_REQUEST_IN_RUN_LOGGER
-			};
-			k_msgq_put(&msgq_lora_request, &msg, K_NO_WAIT);
+			lora_request = LORA_REQUEST_IN_RUN_LOGGER;
+			k_sem_give(&lora_request_sem);
 		}
 	}
 
 	if (etc_device_is_relay()) {
 		if (IS_EVENT(msg, app, APP_EVT_DATA_RECEIVE)) {
-			const struct lora_request msg = {
-				.request = LORA_REQUEST_IN_RUN_RELAY
-			};
-			k_msgq_put(&msgq_lora_request, &msg, K_NO_WAIT);
+			lora_request = LORA_REQUEST_IN_RUN_RELAY;
+			k_sem_give(&lora_request_sem);
 		}
 	}
 
@@ -620,37 +618,31 @@ static void on_all_states(struct lora_msg_data *msg)
 	}
 }
 
-/* Message handler for SUB_STATE_TRANSMIT_MODE. */
-static void on_sub_state_transmit(struct lora_msg_data *msg)
+/* Message handler for STATE_CLOUD_DISCONNECTED. */
+static void on_lora_state_disconnected(struct lora_msg_data *msg)
 {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		state_set(STATE_CLOUD_CONNECTED);
+		k_thread_resume(module_lora_thread_id);
+	}
 }
 
-/* Message handler for SUB_STATE_RECEIVE_MODE. */
-static void on_sub_state_receive(struct lora_msg_data *msg)
+/* Message handler for STATE_CLOUD_CONNECTED. */
+static void on_lora_state_connected(struct lora_msg_data *msg)
 {
-}
-
-static void lora_data_send(const char *msg, int msg_len)
-{
-	struct lora_event *lora_module_event = new_lora_event();
-
-	memcpy(lora_module_event->data.sensor_msg, msg, msg_len);
-	lora_module_event->data.sensor_msg[msg_len] = '\0';
-	lora_module_event->data.timestamp = date_time_now_second();
-	lora_module_event->type = LORA_EVT_RX_DATA_READY;
-
-	APP_EVENT_SUBMIT(lora_module_event);
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
+		state_set(STATE_CLOUD_DISCONNECTED);
+	}
 }
 
 static void module_lora_rx_thread_fn(void)
 {
-	struct lora_request msg_reqest;
 	LOG_INF("Thread RX is running");
 	while (1) {
-		int err = k_msgq_get(&msgq_lora_request, &msg_reqest, K_FOREVER);
+		int err = k_sem_take(&lora_request_sem, K_FOREVER);
 		if (err == 0) {
 			LOG_INF("On request message");
-			switch (msg_reqest.request) {
+			switch (lora_request) {
 				case LORA_REQUEST_IN_IDLE: {
 					LOG_DBG("LORA_REQUEST_IN_IDLE");
 					break;
@@ -672,8 +664,7 @@ static void module_lora_rx_thread_fn(void)
 					do {
 						union etc_device_record record;
 						uint16_t record_id;
-						record_id = etc_device_read_record(&record,
-										NULL);
+						record_id = etc_device_read_record(&record, NULL);
 						if (record_id > 0) {
 							LOG_INF("Sending data over LORA");
 							rc = module_lora_process_packet(record);
@@ -712,8 +703,6 @@ void lora_module_thread_fn(void)
 		SEND_ERROR(lora, LORA_EVT_ERROR, err);
 	}
 
-	state_set(STATE_INIT);
-
 	err = setup();
 	if (err) {
 		LOG_ERR("setup, error: %d", err);
@@ -724,22 +713,11 @@ void lora_module_thread_fn(void)
 		module_get_next_msg(&self, &msg);
 
 		switch (state) {
-		case STATE_INIT:
-			on_state_init(&msg);
+		case STATE_CLOUD_CONNECTED:
+			on_lora_state_connected(&msg);
 			break;
-		case STATE_RUNNING:
-			switch (sub_state) {
-			case SUB_STATE_TRANSMIT_MODE:
-				on_sub_state_transmit(&msg);
-				break;
-			case SUB_STATE_RECEIVE_MODE:
-				on_sub_state_receive(&msg);
-				break;
-			default:
-				LOG_WRN("Unknown application sub state");
-				break;
-			}
-			on_state_running(&msg);
+		case STATE_CLOUD_DISCONNECTED:
+			on_lora_state_disconnected(&msg);
 			break;
 		case STATE_SHUTDOWN:
 			/* The shutdown state has no transition. */
@@ -756,4 +734,5 @@ void lora_module_thread_fn(void)
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
+APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);

@@ -13,10 +13,20 @@
 
 #define ETC_CONFIG_TYPE_SIZE   (32)
 #define ETC_DEVICE_RECORD_SIZE (36)
-#define ETC_DEVICE_NUM_SENSOR  (6) // 5 temperatures + 1 humidity
+/* Logger ID size */
+#define ETC_DEVICE_LORA_LOGGER_ID_SIZE	(sizeof("FFFFFFFFFFFFFFFF"))
+/* App version size */
+#define ETC_DEVICE_APP_VER_SIZE (sizeof("##.##.##") + 1)
+/* Number of sensor */
+#define ETC_DEVICE_NUM_SENSOR  (6)
+/* Lora mode sync with cloud offset */
 #define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR (16)
+/* Equal the buffer for decoded buffer Lora */
+#define ETC_DEVICE_RELAY_BUF_SIZE (128) 
 
 #define IMG_PUBKEY_ID_LEN	4
+/* Max element in record for Relay */
+#define ETC_RELAY_RECORD_MAX_ELEMENT (CONFIG_RELAY_MAX_RECORD_HISTORY)
 
 /* Define an enum to describe the job of logger currently */
 enum etc_device_job {
@@ -112,6 +122,27 @@ union etc_device_record {
 	};
 };
 
+#pragma pack(push, 1)
+
+struct etc_device_relay_record {
+	int16_t logger_rssi;
+	float battery;
+	uint32_t timestamp;
+	char logger_ver[ETC_DEVICE_APP_VER_SIZE];
+	char logger_id[ETC_DEVICE_LORA_LOGGER_ID_SIZE];
+	float sensor[ETC_DEVICE_NUM_SENSOR];
+};
+
+struct etc_device_relay_record_stat {
+	uint16_t read_index;
+	uint16_t write_index;
+	uint16_t number_record;
+	bool flag_error;
+	bool flag_over_flow;
+};
+
+#pragma pack(pop)
+
 /* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
 BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
 
@@ -180,6 +211,22 @@ int etc_device_write_record_sensor(struct sensor_data *sensor);
  * @return	0 on success, an error code otherwise.
  */
 int etc_device_write_record(union etc_device_record *record);
+
+/**
+ * @brief Writes relay data to queue.
+ * 
+ * @param record Relay record containing the data to be written.
+ * @return 0 on success, an error code otherwise.
+ */
+int etc_device_write_relay_data(struct etc_device_relay_record record);
+
+/**
+ * @brief Read relay data from queue.
+ * 
+ * @param record Pointer to the relay record where the read data will be stored.
+ * @return 0 on success, an error code otherwise.
+ */
+int etc_device_read_relay_data(struct etc_device_relay_record* record);
 
 /** 
  * @brief the next-in-line (unack'd) measurement record. If a reclaim is active,

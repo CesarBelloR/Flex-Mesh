@@ -31,7 +31,7 @@ config SERIAL_NUMBER_DEFAULT_VALUE
 
 config RELAY_MAX_RECORD_HISTORY
 	int "Maximum number of record that relay stores in ROM"
-	default 240
+	default 20
 	help
 		Default value for number of record that the Relay can save in ROM.
 

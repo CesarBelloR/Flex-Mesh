@@ -25,9 +25,12 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_DEFAULT_TX_PROBE_SECONDS (21600)
 #define ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE (15)
 
+static enum etc_device_mode etc_device_current_mode;
 extern struct etc_device_record_table *p_etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
 static int etc_nvs_read(uint16_t element_id, void *data, size_t len);
+static int etc_nvs_read_with_len(uint16_t element_id, void *data, size_t len);
+static int etc_nvs_reset_relay_stat(void);
 static struct nvs_fs etc_fs;
 
 static uint16_t ram_nack_record_id;
@@ -35,6 +38,12 @@ static enum etc_device_job logger_job = ETC_DEVICE_JOB_LOG;
 static enum etc_transmit_sub_job transmit_sub_job = ETC_TRANSMIT_NORMAL;
 static uint16_t tx_logger_lora_offset_mins = 0;
 static uint16_t tx_no_probe_offset_mins = 0;
+
+static struct etc_device_relay_record_stat relay_record_stat;
+static struct etc_device_relay_record_stat *p_relay_stat = &relay_record_stat;
+static uint8_t etc_relay_record_buf[ETC_DEVICE_RELAY_BUF_SIZE];
+static struct etc_device_relay_record relay_record_list[ETC_RELAY_RECORD_MAX_ELEMENT];
+K_MUTEX_DEFINE(etc_relay_record_mutex);
 
 /* The public key ID of the current (signed) image. The public key ID 
  * is the first 4 bytes of the public key hash. 
@@ -67,10 +76,20 @@ void etc_device_nvs_init(void)
 			LOG_DBG("Mounted the etc storage successfully");
 	}
 
+	rc = etc_nvs_read(ETC_SETTING_DEVICE_MODE_ID, &etc_device_current_mode, 
+		sizeof(etc_device_current_mode));
+	if (rc) {
+		/* If failed in reading device mode ID */
+		etc_device_current_mode = ETC_SETTING_DEVICE_MODE_DEFAULT;
+	}
+
+	if (etc_device_current_mode == ETC_DEVICE_MODE_RELAY) {
+		etc_nvs_reset_relay_stat();
+	}
+
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
 		FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL), info.size, etc_fs.sector_count);
 	LOG_DBG("Initialised etc setting successfully");
-
 	etc_device_record_init();
 }
 
@@ -116,6 +135,15 @@ static int etc_nvs_read_with_len(uint16_t element_id, void *data, size_t len)
 	}
 
 	return read_len;
+}
+
+static int etc_nvs_reset_relay_stat(void) {
+	relay_record_stat.flag_error = false;
+	relay_record_stat.flag_over_flow = false;
+	relay_record_stat.number_record = 0;
+	relay_record_stat.read_index = 0;
+	relay_record_stat.write_index = 0;
+	return 0;
 }
 
 void etc_device_init(void)
@@ -217,6 +245,38 @@ int etc_device_read_record(union etc_device_record *record, bool *active_reclaim
 
 	LOG_DBG("Record ID %d", rc);
 	return rc;
+}
+
+int etc_device_write_relay_data(struct etc_device_relay_record record) {
+	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
+	memcpy(&relay_record_list[p_relay_stat->write_index], &record, sizeof(record));
+	if (p_relay_stat->number_record < ETC_RELAY_RECORD_MAX_ELEMENT) {
+		p_relay_stat->number_record += 1;
+	} else {
+		p_relay_stat->flag_over_flow = true;
+	}
+	if (++p_relay_stat->write_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
+		p_relay_stat->write_index = 0;
+	}
+	LOG_DBG("Write record okay: %d %d", p_relay_stat->number_record, p_relay_stat->write_index);
+	k_mutex_unlock(&etc_relay_record_mutex);
+	return 0;
+}
+
+int etc_device_read_relay_data(struct etc_device_relay_record* record) {
+	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
+	if (p_relay_stat->number_record == 0) {
+		k_mutex_unlock(&etc_relay_record_mutex);
+		return -ENODATA;
+	}
+	memcpy(record, &relay_record_list[p_relay_stat->read_index], 
+		sizeof(*record));
+	if (++p_relay_stat->read_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
+		p_relay_stat->read_index = 0;
+	}
+	p_relay_stat->number_record -= 1;
+	k_mutex_unlock(&etc_relay_record_mutex);
+	return 0;
 }
 
 int etc_device_set_ack_record(int record_id)

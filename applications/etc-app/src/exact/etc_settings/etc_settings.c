@@ -918,9 +918,11 @@ static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 			if (rc) {
 				shell_error(shell, "Failed to set new mode %d", rc);
 				return 0;
+			} else {
+				shell_print(shell, "Update mode successful");
+				return 0;
 			}
 		}
-
 	}
 	shell_error(shell, "Invalid parameter for setting device mode");
 	return 0;

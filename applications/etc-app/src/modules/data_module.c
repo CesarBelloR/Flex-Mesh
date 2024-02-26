@@ -17,9 +17,6 @@
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE data_module
-#define MODULE_DATA_SENSOR_BUFFER_COUNT 8
-#define MODULE_DATA_BATTERY_BUFFER_COUNT 8
-#define MODULE_LORA_SENSOR_BUFFER_COUNT 8
 
 #include "etc_memfault.h"
 #include "etc_functional_test.h"
@@ -33,7 +30,7 @@
 #include "events/ui_event.h"
 #include "events/util_event.h"
 #include "events/lora_event.h"
-
+#include "common.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -67,9 +64,6 @@ static enum state_type {
 	STATE_SHUTDOWN
 } state;
 
-static struct data_battery bat_buf[MODULE_DATA_BATTERY_BUFFER_COUNT];
-static struct data_lora_sensors lora_buf[MODULE_LORA_SENSOR_BUFFER_COUNT];
-
 static struct data_modem_static modem_stat;
 static struct data_modem_dynamic modem_dynamic;
 
@@ -82,9 +76,10 @@ static bool first_send = true;
 
 /* Head of ringbuffers. */
 static int head_lora_buf = 0;
-static int head_sensor_buf = 0;
 static int head_modem_dyn_buf = 0;
-static int head_bat_buf = 0;
+
+/* Buffer to save relay data */
+static uint8_t data_relay_buf[CONFIG_LWM2M_ETC_RELAY_OBJ_DATA_SIZE] = {0x00};
 
 struct cloud_codec_data codec = { 0 };
 struct cloud_codec_data codec_backup = { 0 };
@@ -454,16 +449,38 @@ static void data_encode(bool split)
 	data_send(DATA_EVT_DATA_SEND, &codec);
 }
 
-static void relay_data_encode(struct relay_data_buffer *relay_data)
+static void relay_data_encode(void)
 {
-	int ret;
+	if (send_status.active_send) {
+		LOG_WRN("Not sending new record."
+			"Record ID %u is already being sent.", send_status.record_id);
+		return;
+	}
 
-	__ASSERT_NO_MSG(relay_data != NULL);
-
-	ret = data_codec_prepare_relay_packet(&codec, relay_data->data, 
-					      relay_data->data_len);
-	if (ret != 0) {
-		LOG_WRN("Publishing relay message failed");
+	struct etc_device_relay_record record = {0x00};
+	int ret = etc_device_read_relay_data(&record);
+	if (!ret) {
+		int data_len = sizeof(data_relay_buf);
+		ret = etc_common_prepare_relay_legacy_data(record, false, data_relay_buf, 
+			&data_len);
+		if (!ret) {
+			LOG_DBG("Relay message %s", data_relay_buf);
+			ret = data_codec_prepare_relay_packet(&codec, data_relay_buf, 
+							data_len);
+			if (ret) {
+				LOG_WRN("Error populating data codec");
+				return;
+			} else {
+				data_send(DATA_EVT_DATA_SEND, &codec);
+			}
+		} else {
+			LOG_ERR("Can't prepare package for relay");
+		}
+	} else {
+		LOG_INF("No record found");
+		SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
+		/* Trigger the OTA pending job */
+		lwm2m_firmware_start_pending_job();
 	}
 }
 
@@ -598,23 +615,30 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_RELAY_DATA_READY)) {
-		relay_data_encode(&msg->module.data.data.relay_data);
+		return;
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		if (functional_test_get_state() == FUNC_TEST_STATE_WAITING_FOR_ACK) {
-			bool ack = true;
-			track_functional_test(DATA_TYPE_ACK, (void *)&ack);
-			stop_functional_test();
-		}
-		data_codec_clear_data(&codec);
-		if (send_status.record_id > 0) {
-			/* Acknowledge record and encode more data, if connected to cloud */
-			etc_device_set_ack_record(send_status.record_id);
-		}
-		reset_send_status(&send_status);
-		if (state == STATE_CLOUD_CONNECTED) {
-			data_encode(false);
+		if (etc_device_is_relay()) {
+			reset_send_status(&send_status);
+			if (state == STATE_CLOUD_CONNECTED) {
+				relay_data_encode();
+			}
+		} else {
+			if (functional_test_get_state() == FUNC_TEST_STATE_WAITING_FOR_ACK) {
+				bool ack = true;
+				track_functional_test(DATA_TYPE_ACK, (void *)&ack);
+				stop_functional_test();
+			}
+			data_codec_clear_data(&codec);
+			if (send_status.record_id > 0) {
+				/* Acknowledge record and encode more data, if connected to cloud */
+				etc_device_set_ack_record(send_status.record_id);
+			}
+			reset_send_status(&send_status);
+			if (state == STATE_CLOUD_CONNECTED) {
+				data_encode(false);
+			}
 		}
 	}
 		
@@ -637,15 +661,9 @@ static void on_all_states(struct data_msg_data *msg)
 		reset_send_status(&send_status);
 	}
 	
-	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
-		#if 0 /* NO MVP */
-		struct data_lora_sensors new_lora_data = {
-			.queued = true,
-			.env_ts = msg->module.lora.data.timestamp,
-		};
-		memcpy(new_lora_data.sensor_msg, msg->module.lora.data.sensor_msg, LORA_EVENT_MSG_DATA_LEN);
-		data_codec_populate_lora_sensor_buffer(lora_buf, &new_lora_data, &head_lora_buf, ARRAY_SIZE(lora_buf));
-		#endif
+	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
+		relay_data_encode();
+		return;
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_RECLAIM_REQUEST)) {
