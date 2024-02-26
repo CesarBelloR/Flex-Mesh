@@ -21,6 +21,16 @@
 				<Description><![CDATA[Data from relayed LoRa loggers, as described in: https://docs.google.com/document/d/1lc0Wl1sfZU4V-kAgGfS_-cVcgKgGyfzzue5PASHXO4A/edit#heading=h.540v6l1fbcv8]]></Description>
 			</Item>
 			<Item ID="2">
+				<Name>Legacy Data</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Data from relayed LoRa loggers in legacy format]]></Description>
+			</Item>
+			<Item ID="3">
 				<Name>Command</Name>
 				<Operations>W</Operations>
 				<MultipleInstances>Single</MultipleInstances>

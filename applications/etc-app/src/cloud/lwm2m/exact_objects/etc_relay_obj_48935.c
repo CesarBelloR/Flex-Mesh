@@ -23,16 +23,18 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define OBJECT_VERSION_MAJOR 1
 #define OBJECT_VERSION_MINOR 0
 
-#define RESOURCES_MAX_ID			2
+#define RESOURCES_MAX_ID			3
 #define RESOURCE_INSTANCE_COUNT			(RESOURCES_MAX_ID)
 
 /* Storage variables to hold relay values. */
 static uint8_t data[ETC_RELAY_DATA_SIZE];
+static uint8_t legacy_data[ETC_RELAY_DATA_SIZE];
 static uint8_t command[ETC_RELAY_COMMAND_SIZE];
 
 static struct lwm2m_engine_obj object;
 static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(ETC_RELAY_OBJ_R_DATA, R, OPAQUE),
+	OBJ_FIELD_DATA(ETC_RELAY_OBJ_R_LEGACY_DATA, R, STRING),
 	OBJ_FIELD_DATA(ETC_RELAY_OBJ_R_COMMAND, W, OPAQUE),
 };
 
@@ -49,6 +51,8 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 	/* Initialize object instance resource data */
 	INIT_OBJ_RES_DATA(ETC_RELAY_OBJ_R_DATA, res, i, res_inst, j,
 			  data, sizeof(data));
+	INIT_OBJ_RES_DATA(ETC_RELAY_OBJ_R_LEGACY_DATA, res, i, res_inst, j,
+			  legacy_data, sizeof(legacy_data));
 	INIT_OBJ_RES_DATA(ETC_RELAY_OBJ_R_COMMAND, res, i, res_inst, j,
 			  command, sizeof(command));
 
