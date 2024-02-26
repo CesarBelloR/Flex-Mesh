@@ -312,11 +312,6 @@ void etc_settings_update(const struct etc_config *new_config)
 		if (rc) {
 			goto done;
 		}
-
-		rc = etc_device_reset_stat_record();
-		if (rc) {
-			LOG_ERR("Failed to reset stat records");
-		}
 	}
 	if (etc_cfg.power_mode != new_config->power_mode) {
 		rc = etc_set_power_mode(new_config->power_mode);
@@ -922,13 +917,6 @@ static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
 			int rc = etc_set_device_mode(new_mode);
 			if (rc) {
 				shell_error(shell, "Failed to set new mode %d", rc);
-				return 0;
-			} else {
-				rc = etc_device_reset_stat_record();
-				if (rc) {
-					shell_error(shell, "Failed to sync record stat");
-					return rc;
-				}
 				return 0;
 			}
 		}

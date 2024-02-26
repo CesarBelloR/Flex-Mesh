@@ -31,7 +31,7 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len);
 static struct nvs_fs etc_fs;
 
 static uint16_t ram_nack_record_id;
-static enum etc_device_job logger_job = ETC_LOGGER_JOB_LOG;
+static enum etc_device_job logger_job = ETC_DEVICE_JOB_LOG;
 static enum etc_transmit_sub_job transmit_sub_job = ETC_TRANSMIT_NORMAL;
 static uint16_t tx_logger_lora_offset_mins = 0;
 static uint16_t tx_no_probe_offset_mins = 0;
@@ -191,7 +191,6 @@ int etc_device_write_record_sensor(struct sensor_data *sensor)
 
 int etc_device_write_record(union etc_device_record *record)
 {
-	
 	struct etc_device_record_index record_index = etc_device_record_get_next_index();
 	uint32_t record_addr = (uint32_t)etc_deviced_record_get_addr_offset_by_index(record_index);
 	uint16_t record_id = etc_device_record_get_id_by_index(record_index);
@@ -218,56 +217,6 @@ int etc_device_read_record(union etc_device_record *record, bool *active_reclaim
 
 	LOG_DBG("Record ID %d", rc);
 	return rc;
-}
-
-int etc_device_write_relay_record(const uint8_t* record) {
-	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
-	memcpy(etc_relay_record_buf, record, ETC_DEVICE_RELAY_BUF_SIZE);
-	int rc = etc_nvs_relay_write(ETC_RECORD_HEADER + p_relay_stat->write_index, 
-		etc_relay_record_buf, ETC_DEVICE_RELAY_BUF_SIZE);
-	if (rc) {
-		LOG_ERR("Relay: Failed to write data");
-		k_mutex_unlock(&etc_relay_record_mutex);
-		return rc;
-	}
-	if (p_relay_stat->number_record < ETC_RELAY_RECORD_MAX_ELEMENT) {
-		p_relay_stat->number_record += 1;
-	} else {
-		p_relay_stat->flag_over_flow = true;
-	}
-	if (++p_relay_stat->write_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
-		p_relay_stat->write_index = 0;
-	}
-	etc_nvs_relay_write(ETC_RECORD_STAT, p_relay_stat, sizeof(relay_record_stat));
-	LOG_DBG("Write record okay: %d %d", p_relay_stat->number_record, p_relay_stat->write_index);
-	k_mutex_unlock(&etc_relay_record_mutex);
-	return 0;
-}
-
-int etc_device_read_relay_record(uint8_t* record) {
-	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
-	if (p_relay_stat->number_record == 0) {
-		k_mutex_unlock(&etc_relay_record_mutex);
-		return -ENODATA;
-	}
-
-	int rc = etc_nvs_relay_read(ETC_RECORD_HEADER + p_relay_stat->read_index, 
-		etc_relay_record_buf, ETC_DEVICE_RELAY_BUF_SIZE);
-	if (rc) {
-		LOG_ERR("Relay: Failed to read data");
-		k_mutex_unlock(&etc_relay_record_mutex);
-		return rc;
-	}
-	memcpy(record, etc_relay_record_buf, ETC_DEVICE_RELAY_BUF_SIZE);
-	if (++p_relay_stat->read_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
-		p_relay_stat->read_index = 0;
-	}
-
-	p_relay_stat->number_record -= 1;
-
-	etc_nvs_relay_write(ETC_RECORD_STAT, p_relay_stat, sizeof(relay_record_stat));
-	k_mutex_unlock(&etc_relay_record_mutex);
-	return 0;
 }
 
 int etc_device_set_ack_record(int record_id)
@@ -392,28 +341,6 @@ int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len)
 static int cmd_erase_configuration(const struct shell *shell, size_t argc, char **argv)
 {
 	etc_device_erase_cfg();
-	return 0;
-}
-
-static int cmd_get_record(const struct shell *shell, size_t argc, char ** argv)
-{
-	uint8_t record[ETC_DEVICE_RELAY_BUF_SIZE];
-	int ret;
-
-	if (etc_device_mode != ETC_DEVICE_MODE_RELAY) {
-		return -ENOTSUP;
-	}
-
-	memset(record, 0, sizeof(record));
-
-	ret = etc_device_read_relay_record(record);
-	if (ret != 0) {
-		shell_error(shell, "Could not read record: %d", ret);
-		return ret;
-	}
-
-	shell_hexdump(shell, record, sizeof(record));
-
 	return 0;
 }
 

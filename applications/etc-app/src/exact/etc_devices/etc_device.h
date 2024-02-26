@@ -266,14 +266,14 @@ enum etc_device_mode etc_device_get_mode(void);
  *
  * @param job	The job to set for the logger.
  */
-void etc_device_set_job(enum etc_logger_job job);
+void etc_device_set_job(enum etc_device_job job);
 
 /**
  * @brief Get the current job of the ETC logger.
  *
  * @return	The current job of the logger.
  */
-enum etc_logger_job etc_device_get_job(void);
+enum etc_device_job etc_device_get_job(void);
 
 /**
  * @brief Sets the transmit sub job for the ETC device.

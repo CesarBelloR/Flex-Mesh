@@ -423,7 +423,7 @@ static int module_lora_prepare_packet(const char* logger_id, const char* relay_i
 	__ASSERT(decoded_buf_len + 1 <= sizeof(decoded_buf), "Out of buffer memory");
 	LOG_DBG("Decoded length %d", decoded_buf_len);
 	LOG_DBG("Msg %s", decoded_buf);
-	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, 21);
+	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, decoded_buf_len + 1, 21);
 	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
 
 	int rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
@@ -468,7 +468,7 @@ retry_recv:
 		LOG_HEXDUMP_DBG(decoded_buf, ret, "Decrypted data");
 		struct relay_lora_message message = lora_module_relay_get_message(decoded_buf);
 		if (message.is_okay) {
-			etc_device_write_relay_record(lora_rx_buf);
+			// etc_device_write_relay_record(lora_rx_buf);
 			LOG_INF("Relay ID %s - Logger ID %s", message.relay_id, message.logger_id);
 			if (((strncmp(message.relay_id, "OPEN", strlen("OPEN")) == 0) &&
 				(strlen(message.relay_id) == strlen("OPEN"))) ||
