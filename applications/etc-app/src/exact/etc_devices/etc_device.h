@@ -26,7 +26,7 @@
 
 #define IMG_PUBKEY_ID_LEN	4
 /* Max element in record for Relay */
-#define ETC_RELAY_RECORD_MAX_ELEMENT (CONFIG_RELAY_MAX_RECORD_HISTORY)
+#define ETC_RELAY_RECORD_MAX_ELEMENT (CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY)
 
 /* Define an enum to describe the job of logger currently */
 enum etc_device_job {
@@ -125,9 +125,11 @@ union etc_device_record {
 #pragma pack(push, 1)
 
 struct etc_device_relay_record {
+	bool is_reclaim;
 	int16_t logger_rssi;
 	float battery;
 	uint32_t timestamp;
+	char relay_id[ETC_DEVICE_LORA_LOGGER_ID_SIZE];
 	char logger_ver[ETC_DEVICE_APP_VER_SIZE];
 	char logger_id[ETC_DEVICE_LORA_LOGGER_ID_SIZE];
 	float sensor[ETC_DEVICE_NUM_SENSOR];

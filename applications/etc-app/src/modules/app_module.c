@@ -294,7 +294,9 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 		int time_to_wakeup = wakeup_time - time_diff - now;
 
 		if (job == ETC_DEVICE_JOB_TX_RX) {
-			time_to_wakeup += tx_delay_sec;
+			if (!etc_device_is_relay()) {
+				time_to_wakeup += tx_delay_sec;
+			}
 		}
 
 		if (time_to_wakeup < MINIMUM_TIME_TO_WAKEUP_S) {

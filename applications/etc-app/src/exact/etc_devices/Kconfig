@@ -34,6 +34,13 @@ config ETC_DEVICE_SAVE_RECORD_SEC
 	int "Number of seconds to save the header ACKs"
 	default 3600
 
+config ETC_DEVICE_RELAY_MAX_RECORD_HISTORY
+	int "Maximum number of record that relay stores in ROM"
+	default 64
+	help
+		Default value for number of record that the Relay can save in ROM.
+
+			
 module = ETC_DEVICE
 module-str = device
 source "subsys/logging/Kconfig.template.log_config"

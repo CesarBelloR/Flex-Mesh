@@ -461,12 +461,11 @@ static void relay_data_encode(void)
 	int ret = etc_device_read_relay_data(&record);
 	if (!ret) {
 		int data_len = sizeof(data_relay_buf);
-		ret = etc_common_prepare_relay_legacy_data(record, false, data_relay_buf, 
-			&data_len);
+		ret = etc_common_prepare_relay_legacy_data(&record, data_relay_buf, &data_len);
 		if (!ret) {
 			LOG_DBG("Relay message %s", data_relay_buf);
 			ret = data_codec_prepare_relay_packet(&codec, data_relay_buf, 
-							data_len);
+												 data_len, true);
 			if (ret) {
 				LOG_WRN("Error populating data codec");
 				return;

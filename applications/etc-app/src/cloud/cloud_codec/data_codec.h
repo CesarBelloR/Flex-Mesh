@@ -204,11 +204,13 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
  * @param cloud_data Pointer to the cloud_data struct.
  * @param[in] relay_data Pointer to the relay data that should be sent to cloud.
  * @param[in] relay_data_len Length of the relay data.
+ * @param[in] is_legacy true if input data is legacy format
  * 
  * @return 0 on success, otherwise a negative value indicating an error.
 */
 int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
-				    const uint8_t *relay_data, uint16_t relay_data_len);
+				    const uint8_t *relay_data, uint16_t relay_data_len,
+					bool is_legacy);
 
 /**
  * Prepare a packet that reflects the current status of devices. This is

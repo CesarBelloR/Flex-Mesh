@@ -58,7 +58,6 @@ struct logger_lora_response {
 
 struct relay_lora_message {
 	bool is_okay;
-	char relay_id[LORA_LOGGER_ID_LEN];
 	struct etc_device_relay_record record;
 };
 
@@ -255,19 +254,27 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 				response.is_okay = false;
 				return response;
 			}
-			if (i == 0) {
-				snprintf(response.logger_id, sizeof(response.logger_id), "%s", pt);
-			} else if (i == 1) {
-				response.tx_interval_in_mins = strtoul(pt, &ptr, 10);
-			} else if (i == 2) {
-				response.relay_id = strtoul(pt, &ptr, 10);
-			} else if (i == 3) {
-				response.current_time = strtoul(pt, &ptr, 10);
-			} else if (i == 4) {
-				response.reclaim_start_time = strtoul(pt, &ptr, 10);
-			} else if (i == 5) {
-				response.reclaim_end_time = strtoul(pt, &ptr, 10);
-				response.is_okay = true;
+			switch (i) {
+				case 0: 
+					snprintf(response.logger_id, sizeof(response.logger_id), "%s", pt); 
+					break;
+				case 1: 
+					response.tx_interval_in_mins = strtoul(pt, &ptr, 10); 
+					break;
+				case 2:	
+					response.relay_id = strtoul(pt, &ptr, 10); 
+					break;
+				case 3: 
+					response.current_time = strtoul(pt, &ptr, 10); 
+					break;
+				case 4: 
+					response.reclaim_start_time = strtoul(pt, &ptr, 10); 
+					break;
+				case 5: 
+					response.reclaim_end_time = strtoul(pt, &ptr, 10);
+					response.is_okay = true;
+					break;
+				default: break;
 			}
 			pt = strtok(NULL, ",");
 		}
@@ -275,57 +282,77 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 	return response;
 }
 
-static struct relay_lora_message lora_module_relay_get_message(char* package, int16_t rssi) 
+static int lora_module_relay_get_message(char* package, int16_t rssi, 
+	struct relay_lora_message* message) 
 {
 	__ASSERT(package != NULL, "Empty input package");
-	struct relay_lora_message message;
+	__ASSERT(message != NULL, "Empty message");
 	uint8_t i = 0;
 	char *pt;
 	char *ptr;
-	message.is_okay = false;
+	message->is_okay = false;
 	pt = strtok(package, ",");
 	while (pt != NULL) { 
 		if (pt == NULL) {
-			message.is_okay = false;
-			return message;
+			message->is_okay = false;
+			return -EINVAL;
 		}
-		if (i == 0) {
-			if (pt[0] != 'S') {
-				LOG_WRN("Unknown start message %s", pt);
-				message.is_okay = false;
-				return message;
-			}
-		} else if (i == 1) {
-			snprintf(message.relay_id, sizeof(message.relay_id), "%s", pt);
-		} else if (i == 2) {
-			snprintf(message.record.logger_ver, sizeof(message.record.logger_ver), "%s", pt);
-		} else if (i == 3) {
-			snprintf(message.record.logger_id, sizeof(message.record.logger_id), "%s", pt);
-			message.is_okay = true;
-			message.record.logger_rssi = rssi;
-		} else if (i == 4) {
-			message.record.battery = atof(pt);
-		} else if (i == 6) {
-			message.record.timestamp = atoi(pt);
-		} else if (i >= 7 && i <= 11) { // Temp
-			if (strstr(pt, "*") == NULL) {
-				message.record.sensor[i - 7] = atof(pt);
-			} else {
-				message.record.sensor[i - 7] = SENSOR_TEMP_NO_CONNECTED;
-			}
-		} else if (i == 12) {
-			if (strstr(pt, "*") == NULL) {
-				message.record.sensor[SENSOR_INPUT_HUMID] = atof(pt);
-			} else {
-				message.record.sensor[SENSOR_INPUT_HUMID] = SENSOR_HUMID_NO_CONNECTED;
-			}
-		} else {
-			/* No action required */
+		switch (i) {
+			case 0:
+				if (pt[0] != 'S') {
+					message->is_okay = false;
+					return -EINVAL;
+				}
+				break;
+			case 1:
+				snprintf(message->record.relay_id, sizeof(message->record.relay_id), "%s", pt);
+				break;
+			case 2:
+				snprintf(message->record.logger_ver, sizeof(message->record.logger_ver), "%s", pt);
+				break;
+			case 3:
+				snprintf(message->record.logger_id, sizeof(message->record.logger_id), "%s", pt);
+				message->is_okay = true;
+				message->record.logger_rssi = rssi;
+				break;
+			case 4:
+				message->record.battery = atof(pt);
+				break;
+			case 6:
+				if (strstr(pt, "*") == NULL) {
+					message->record.timestamp = atoi(pt);
+					message->record.is_reclaim = true;
+				} else {
+					/* If timestamp is *, use relay time */
+					message->record.timestamp = date_time_now_second();
+					message->record.is_reclaim = false;
+				}
+				break;
+			case 7:
+			case 8:
+			case 9:
+			case 10:
+			case 11:
+				if (strstr(pt, "*") == NULL) {
+					message->record.sensor[i - 7] = atof(pt);
+				} else {
+					message->record.sensor[i - 7] = SENSOR_TEMP_NO_CONNECTED;
+				}
+				break;
+			case 12:
+				if (strstr(pt, "*") == NULL) {
+					message->record.sensor[SENSOR_INPUT_HUMID] = atof(pt);
+				} else {
+					message->record.sensor[SENSOR_INPUT_HUMID] = SENSOR_HUMID_NO_CONNECTED;
+				}
+				break;
+			default:
+				break;
 		}
 		pt = strtok(NULL, ",");
 		i += 1;
 	}
-	return message;
+	return 0;
 }
 
 static int module_lora_wait_packet(void)
@@ -404,15 +431,21 @@ static int module_lora_prepare_packet(const char* logger_id, const char* relay_i
 	int decoded_buf_len = 0;
 	int tx_delay_min = etc_get_tx_interval_secs() / 60;
 	int now = date_time_now_second();
-	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "%.*s,%d,%.*s,%d,0,0", strlen(logger_id), 
-		logger_id, tx_delay_min, strlen(relay_iccid), relay_iccid, now);
+	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "%s,%d,%s,%d,0,0", logger_id, 
+								tx_delay_min, relay_iccid, now);
 	__ASSERT(decoded_buf_len + 1 <= sizeof(decoded_buf), "Out of buffer memory");
 	LOG_DBG("Decoded length %d", decoded_buf_len);
 	LOG_DBG("Msg %s", decoded_buf);
 	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, decoded_buf_len + 1, 21);
 	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
 
-	int rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
+	int rc = lora_config(lora_dev, &etc_lora_tx_config);
+	if (rc < 0) {
+		LOG_ERR("Lora_config failed error %d", rc);
+		return -EINVAL;
+	}
+
+	 rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc) {
 		LOG_ERR("Failed to transmit packet");
 		return rc;
@@ -435,7 +468,7 @@ static int module_lora_relay_wait_packet(void)
 	int ret = 0;
 	int16_t rssi;
 	int8_t snr;
-	char relay_iccid[ETC_SETTING_RELAY_ICCID_LEN + 1];
+	
 	int64_t start_time = k_uptime_get();
 	int64_t start_waiting_time_ms = 0;
 	int64_t max_waiting_time_ms = 0;
@@ -448,37 +481,40 @@ static int module_lora_relay_wait_packet(void)
 		return -EINVAL;
 	}
 	
+	char relay_iccid[ETC_SETTING_RELAY_ICCID_LEN + 1] = {0};
 	etc_get_relay_iccid(relay_iccid, sizeof(relay_iccid));
 	relay_iccid[ETC_SETTING_RELAY_ICCID_LEN] = '\0';
+
 	start_waiting_time_ms = k_uptime_get();
 	max_waiting_time_ms = etc_device_get_rx_timeout() * 1000;
 	LOG_INF("Max waiting time %lld", max_waiting_time_ms);
 retry_recv:
-	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), K_MSEC(LORA_LOGGER_ON_RECV_MODE_MSEC), &rssi, &snr);
+	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), 
+		K_MSEC(LORA_LOGGER_ON_RECV_MODE_MSEC), &rssi, &snr);
 	if (ret < 0) {
 		LOG_DBG("No message");
 	} else {
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
-		memcpy(lora_rx_buf, decoded_buf, sizeof(decoded_buf));
 		LOG_HEXDUMP_DBG(decoded_buf, ret, "Decrypted data");
-		struct relay_lora_message message = lora_module_relay_get_message(decoded_buf, rssi);
-		if (message.is_okay) {
-			LOG_DBG("Relay ID %s - Logger ID %s", message.relay_id, message.record.logger_id);
+		struct relay_lora_message message;
+		int ret = lora_module_relay_get_message(decoded_buf, rssi, &message);
+		if (!ret && message.is_okay) {
+			LOG_DBG("Relay ID %s - Logger ID %s", message.record.relay_id, message.record.logger_id);
 			LOG_DBG("Logger info %s", message.record.logger_ver);
 			LOG_DBG("rssi %d - battery %.2f - timestamp %d", message.record.logger_rssi, 
 				message.record.battery, message.record.timestamp);
 			LOG_DBG("Sensor %.2f %.2f %.2f %.2f %.2f %.2f", message.record.sensor[0],
 				message.record.sensor[1], message.record.sensor[2], message.record.sensor[3],
 				message.record.sensor[4], message.record.sensor[5]);
-			if (((strncmp(message.relay_id, "OPEN", strlen("OPEN")) == 0) &&
-				(strlen(message.relay_id) == strlen("OPEN"))) ||
-				(strncmp(message.relay_id, relay_iccid, ETC_SETTING_RELAY_ICCID_LEN) == 0 &&
-				(strlen(message.relay_id) == strlen(relay_iccid)))) {
+			if (etc_common_is_packet_from_parent(relay_iccid, message.record.relay_id)) {
 					/* Send ACK message */
 					module_lora_prepare_packet(message.record.logger_id, relay_iccid);
 			}
 			etc_device_write_relay_data(message.record);
 			lora_data_send();
+		} else {
+			LOG_WRN("Unknown start message");
+			LOG_HEXDUMP_WRN(decoded_buf, ret, "UNKNOWN");
 		}
 	}
 
@@ -500,8 +536,8 @@ static int module_lora_process_packet(union etc_device_record record)
 	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
 	int decoded_buf_len = 0;
 
-	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "S,XXXX,%s,%s,%1.2f,%d,%d,", APP_VERSION_STR, buf_tmp, record.battery,
-		lora_pkt_counter, record.timestamp);
+	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "S,XXXX,%s,%s,%1.2f,%d,%d,", 
+		APP_VERSION_STR, buf_tmp, record.battery, lora_pkt_counter, record.timestamp);
 
 	lora_pkt_counter += 1;
 	if (lora_pkt_counter >= LOGGER_MAXIMUM_COUNTER) {

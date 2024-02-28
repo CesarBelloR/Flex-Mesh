@@ -25,6 +25,8 @@ extern "C" {
 #define SENSOR_ADC_NO_CONNECTED 4090
 /* One-wire probe connected in DVT2 - etc@0.3.0 */
 #define SENSOR_ADC_ONE_WIRE_CONNECTED 50
+/* Invalid timestamp */
+#define SENSOR_TIMESTAMP_INVALID -1
 
 /** @brief Sensor event types submitted by the Sensor module. */
 enum sensor_event_type {

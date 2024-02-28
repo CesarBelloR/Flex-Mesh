@@ -207,7 +207,7 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
 }
 
 int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
-				    const uint8_t *relay_data, uint16_t relay_data_len)
+				    const uint8_t *relay_data, uint16_t relay_data_len, bool is_legacy)
 {
 	int err = 0;
 
@@ -219,7 +219,12 @@ int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 		return -EINVAL;
 	}
 
-	err = lwm2m_codec_helpers_set_relay_data(relay_data, relay_data_len);
+	if (is_legacy) {
+		err = lwm2m_codec_helpers_set_relay_legacy_data(relay_data, relay_data_len);
+	} else {
+		err = lwm2m_codec_helpers_set_relay_data(relay_data, relay_data_len);
+	}
+
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
 			LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_DATA),
