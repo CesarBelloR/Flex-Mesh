@@ -50,6 +50,7 @@ static bool battery_charger_was_connected;
 static int8_t battery_charge_level_percent = -1;
 static uint8_t num_started_ota_attempts;
 static uint8_t num_failed_ota_attempts;
+static uint8_t relay_buffer_max_entries;
 
 void etc_mflt_metrics_init_img_pubkey_id(void)
 {
@@ -134,6 +135,13 @@ void etc_mflt_metrics_send_failed(void)
 	message_stats.num_failed_sends++;
 }
 
+void etc_mflt_metrics_relay_buffer_entries(uint8_t relay_buffer_entries)
+{
+	if (relay_buffer_entries > relay_buffer_max_entries) {
+		relay_buffer_max_entries = relay_buffer_entries;
+	}
+}
+
 char *battery_status_to_string(enum battery_status bat_status) 
 {
 	switch (bat_status) {
@@ -168,6 +176,17 @@ static int32_t average_result_and_reset(struct cumulative_average *avg_data)
 	avg_data->sum = 0;
 	avg_data->n = 0;
 	return avg;
+}
+
+static void collect_relay_metrics(void)
+{
+	/* Only add the metric to hearbeat if value != 0 */
+	if (relay_buffer_max_entries != 0) {
+		memfault_metrics_heartbeat_set_unsigned(MEMFAULT_METRICS_KEY(relay_fifo_max_elements),
+							relay_buffer_max_entries);
+	}
+	
+	relay_buffer_max_entries = 0;
 }
 
 static void collect_ota_metrics(void)
@@ -334,6 +353,7 @@ static void collect_heartbeat_metrics(void)
 	collect_modem_metrics();
 	collect_device_metrics();
 	collect_ota_metrics();
+	collect_relay_metrics();
 }
 
 void memfault_metrics_heartbeat_collect_data(void)

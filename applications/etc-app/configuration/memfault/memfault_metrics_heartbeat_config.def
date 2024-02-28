@@ -39,7 +39,10 @@ MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(device_tx_interval_s,
 MEMFAULT_METRICS_KEY_DEFINE(device_unacked_messages,
                             kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_STRING_KEY_DEFINE(device_img_pubkey_id, 
-                                   sizeof("XXXXXXXX"))                            
+                                   sizeof("XXXXXXXX"))
+
+MEMFAULT_METRICS_KEY_DEFINE(relay_fifo_max_elements,
+                            kMemfaultMetricType_Unsigned)
 
 MEMFAULT_METRICS_KEY_DEFINE(ota_attempts,
                             kMemfaultMetricType_Unsigned)

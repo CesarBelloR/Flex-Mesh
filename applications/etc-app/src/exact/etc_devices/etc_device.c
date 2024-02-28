@@ -13,6 +13,7 @@
 #include "etc_settings.h"
 #include "etc_device_record.h"
 #include "etc_img.h"
+#include "etc_memfault_metrics.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
@@ -252,8 +253,10 @@ int etc_device_write_relay_data(struct etc_device_relay_record record) {
 	memcpy(&relay_record_list[p_relay_stat->write_index], &record, sizeof(record));
 	if (p_relay_stat->number_record < ETC_RELAY_RECORD_MAX_ELEMENT) {
 		p_relay_stat->number_record += 1;
+		etc_mflt_metrics_relay_buffer_entries(p_relay_stat->number_record);
 	} else {
 		p_relay_stat->flag_over_flow = true;
+		LOG_WRN("relay buffer overflow");
 	}
 	if (++p_relay_stat->write_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
 		p_relay_stat->write_index = 0;

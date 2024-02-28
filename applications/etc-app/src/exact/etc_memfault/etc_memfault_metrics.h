@@ -56,6 +56,13 @@ void etc_mflt_metrics_send_successful(void);
 void etc_mflt_metrics_send_failed(void);
 
 /**
+ * Track the number of entries currently in the relay buffer.
+ * 
+ * @param relay_buffer_entries Current number of entries in the relay buffer/FIFO
+*/
+void etc_mflt_metrics_relay_buffer_entries(uint8_t relay_buffer_entries);
+
+/**
  * To be called when an OTA attempt is started.
 */
 void etc_mflt_metrics_ota_started(void);
