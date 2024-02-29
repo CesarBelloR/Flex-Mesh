@@ -523,8 +523,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	k_work_submit(&advertise_work);
 	/* Restart the scheduler for magnet advertising */
 	if (flex_ble_is_magnet_trigger) {
-		k_work_reschedule(&flex_ble_adv_magnet_work, 
-			K_SECONDS(CONFIG_ETC_BLE_ADV_MAGET_TIMEOUT_SEC));
+		k_work_reschedule(&flex_ble_adv_magnet_work, K_SECONDS(CONFIG_ETC_BLE_ADV_MAGNET_TIMEOUT_SEC));
 	}
 	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
 }
@@ -697,10 +696,15 @@ void etc_ble_start_adv(void) {
 }
 
 void etc_ble_start_adv_with_timeout(void) {
-	flex_ble_is_magnet_trigger = true;
+	if (current_conn != NULL) {
+		return;
+	}
+
+	if (etc_get_device_mode() != ETC_DEVICE_MODE_BLE) {
+		flex_ble_is_magnet_trigger = true;
+		k_work_schedule(&flex_ble_adv_magnet_work, K_SECONDS(CONFIG_ETC_BLE_ADV_MAGNET_TIMEOUT_SEC));
+	}
 	k_work_submit(&advertise_work);
-	k_work_schedule(&flex_ble_adv_magnet_work, 
-		K_SECONDS(CONFIG_ETC_BLE_ADV_MAGET_TIMEOUT_SEC));
 }
 
 void etc_ble_set_current_sensor(struct sensor_data* data) {

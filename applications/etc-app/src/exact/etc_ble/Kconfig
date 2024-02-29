@@ -13,7 +13,7 @@ config ETC_BLE_ENCRYPTION
 config ETC_BLE_ADV_MAGET_TIMEOUT_SEC
 	int "Timeout in seconds for magnet advertise"
 	default  120
-
+	
 config ETC_BLE_PAYLOAD_LEGACY_FORMAT
 	bool "Enabe/disable the format payload"
 	default y
