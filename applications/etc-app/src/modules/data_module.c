@@ -465,7 +465,7 @@ static void relay_data_encode(void)
 		if (!ret) {
 			LOG_DBG("Relay message %s", data_relay_buf);
 			ret = data_codec_prepare_relay_packet(&codec, data_relay_buf, 
-												 data_len, true);
+							     data_len, true);
 			if (ret) {
 				LOG_WRN("Error populating data codec");
 				return;
@@ -500,6 +500,9 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 			   ((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
 			    (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))) {
 			data_encode(false);
+		} else if (etc_device_is_relay()) {
+			reset_send_status(&send_status);
+			relay_data_encode();
 		}
 	}
 }
@@ -661,7 +664,9 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 	
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
-		relay_data_encode();
+		if (state == STATE_CLOUD_CONNECTED) {
+			relay_data_encode();
+		}
 		return;
 	}
 

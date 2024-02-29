@@ -206,11 +206,11 @@ static int setup(void)
 		return -1;
 	}
 
-	module_lora_thread_id = k_thread_create(&module_lora_rx_thread, module_lora_rx_stack, K_KERNEL_STACK_SIZEOF(module_lora_rx_stack),
-			(k_thread_entry_t)module_lora_rx_thread_fn, NULL, NULL, NULL,
-			K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
+	module_lora_thread_id = k_thread_create(&module_lora_rx_thread, module_lora_rx_stack, 
+						K_KERNEL_STACK_SIZEOF(module_lora_rx_stack),
+						(k_thread_entry_t)module_lora_rx_thread_fn, NULL, NULL, NULL,
+						K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
 
-	k_thread_suspend(module_lora_thread_id);
 	return 0;
 }
 
@@ -497,7 +497,7 @@ retry_recv:
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
 		LOG_HEXDUMP_DBG(decoded_buf, ret, "Decrypted data");
 		struct relay_lora_message message;
-		int ret = lora_module_relay_get_message(decoded_buf, rssi, &message);
+		ret = lora_module_relay_get_message(decoded_buf, rssi, &message);
 		if (!ret && message.is_okay) {
 			LOG_DBG("Relay ID %s - Logger ID %s", message.record.relay_id, message.record.logger_id);
 			LOG_DBG("Logger info %s", message.record.logger_ver);
@@ -514,7 +514,6 @@ retry_recv:
 			lora_data_send();
 		} else {
 			LOG_WRN("Unknown start message");
-			LOG_HEXDUMP_WRN(decoded_buf, ret, "UNKNOWN");
 		}
 	}
 
@@ -659,7 +658,7 @@ static void on_lora_state_disconnected(struct lora_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		state_set(STATE_CLOUD_CONNECTED);
-		k_thread_resume(module_lora_thread_id);
+		/* No action required now */
 	}
 }
 
@@ -668,6 +667,7 @@ static void on_lora_state_connected(struct lora_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
 		state_set(STATE_CLOUD_DISCONNECTED);
+		/* No action required now */
 	}
 }
 

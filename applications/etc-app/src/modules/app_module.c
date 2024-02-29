@@ -686,7 +686,6 @@ static int setup(void)
 	if (etc_device_is_relay()) {
 		/* No action required */
 		LOG_DBG("Device is relay");
-		SEND_EVENT(app, APP_EVT_DATA_GET);
 	} else {
 		static bool is_send = false;
 		if (is_send == false) {
