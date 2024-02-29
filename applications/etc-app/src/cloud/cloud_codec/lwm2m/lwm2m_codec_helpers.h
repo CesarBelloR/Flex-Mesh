@@ -189,7 +189,7 @@ int lwm2m_codec_helpers_set_relay_data(const uint8_t *data, uint16_t data_len);
  * 
  * @return 0 If successful, otherwise a negative value indicating the reason of failure.
 */
-int lwm2m_codec_helpers_set_relay_legacy_data(const uint8_t *data, uint16_t data_len);
+int lwm2m_codec_helpers_set_relay_legacy_data(const char *data, uint16_t data_len);
 /**
  * Log the paths contained in the path_list in INFO log level.
  *

@@ -220,7 +220,7 @@ int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 	}
 
 	if (is_legacy) {
-		err = lwm2m_codec_helpers_set_relay_legacy_data(relay_data, relay_data_len);
+		err = lwm2m_codec_helpers_set_relay_legacy_data((const char*)relay_data, relay_data_len);
 	} else {
 		err = lwm2m_codec_helpers_set_relay_data(relay_data, relay_data_len);
 	}

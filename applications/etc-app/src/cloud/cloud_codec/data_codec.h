@@ -210,7 +210,7 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
 */
 int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 				    const uint8_t *relay_data, uint16_t relay_data_len,
-					bool is_legacy);
+				    bool is_legacy);
 
 /**
  * Prepare a packet that reflects the current status of devices. This is

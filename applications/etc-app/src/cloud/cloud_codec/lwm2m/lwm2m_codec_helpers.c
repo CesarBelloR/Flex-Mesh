@@ -752,12 +752,16 @@ int lwm2m_codec_helpers_set_relay_data(const uint8_t *data, uint16_t data_len)
 	return err;
 }
 
-int lwm2m_codec_helpers_set_relay_legacy_data(const uint8_t *data, uint16_t data_len)
+int lwm2m_codec_helpers_set_relay_legacy_data(const char *data, uint16_t data_len)
 {
 	int err;
 
-	err = lwm2m_set_opaque(&LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_LEGACY_DATA),
-			       data, data_len);
+	if (strlen(data) != data_len) {
+		return -EINVAL;
+	}
+	
+	err = lwm2m_set_string(&LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_LEGACY_DATA),
+			       data);
 
 	return err;
 }
