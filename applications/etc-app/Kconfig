@@ -14,7 +14,7 @@ config APP_AWS_IOT
 
 config ETC_BLE_ENCRYPTION
 	bool "Enable/disable the encryption data for BLE module"
-	default n
+	default y
 
 config ETC_BLE_PAYLOAD_LEGACY_FORMAT
 	bool "Enabe/disable the format payload"

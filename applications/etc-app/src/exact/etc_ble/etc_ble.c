@@ -3,6 +3,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/random/rand32.h>
 #include <zephyr/mgmt/mcumgr/transport/smp_bt.h>
 #define LOG_LEVEL LOG_LEVEL_DBG
@@ -587,6 +588,35 @@ static void etc_ble_notify_evt(enum etc_ble_evt_type type) {
 	}
 }
 
+
+static void etc_ble_set_serial(void) {
+#if defined(CONFIG_BT_DIS_SETTINGS)
+	char hw_id[ETC_SETTINGS_DEVICE_ID_LEN + 1];
+	char serial_number[CONFIG_BT_DIS_STR_MAX + 1];
+	int len;
+
+#if defined(CONFIG_LWM2M_INTEGRATION_ENDPOINT_HWINFO)
+	etc_get_hw_id(hw_id, sizeof(hw_id));
+#elif defined(CONFIG_LWM2M_INTEGRATION_ENDPOINT_SERIALNUMBER)
+	etc_get_device_id(hw_id, sizeof(hw_id));
+#else
+#error "Endpoint type not defined"
+#endif
+
+	len = snprintk(serial_number, sizeof(serial_number), "%s%s",
+		       CONFIG_LWM2M_INTEGRATION_ENDPOINT_PREFIX, hw_id);
+	
+	if ((len < 0) || (len >= sizeof(serial_number))) {
+		LOG_WRN("Buffer too small");
+	}
+
+	LOG_DBG("Set serial number: %s", serial_number);
+	settings_save_one("bt/dis/serial", serial_number, strlen(serial_number));
+	settings_load_subtree("bt/dis");
+#endif
+}
+
+
 int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 	int rc = 0;
 
@@ -608,7 +638,7 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 	}
 #endif
 	bt_gatt_cb_register(&gatt_callbacks);
-
+	etc_ble_set_serial();
 	/* Enable Bluetooth. */
 	rc = bt_enable(NULL);
 	if (rc != 0) {

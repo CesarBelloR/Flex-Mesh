@@ -14,6 +14,7 @@
 #include "etc_settings.h"
 #include "etc_device.h"
 #include "etc_ble.h"
+#include "etc_battery.h"
 #include "cloud/lwm2m/lwm2m_firmware.h"
 #include "cloud/cloud_wrapper.h"
 
