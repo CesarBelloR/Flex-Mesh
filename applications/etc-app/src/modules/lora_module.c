@@ -445,7 +445,7 @@ static int module_lora_prepare_packet(const char* logger_id, const char* relay_i
 		return -EINVAL;
 	}
 
-	 rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
+	rc = module_lora_transmit_packet(encoded_buffer, decoded_buf_len + 1);
 	if (rc) {
 		LOG_ERR("Failed to transmit packet");
 		return rc;
@@ -490,7 +490,7 @@ static int module_lora_relay_wait_packet(void)
 	LOG_INF("Max waiting time %lld", max_waiting_time_ms);
 retry_recv:
 	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), 
-		K_MSEC(LORA_LOGGER_ON_RECV_MODE_MSEC), &rssi, &snr);
+			K_MSEC(LORA_LOGGER_ON_RECV_MODE_MSEC), &rssi, &snr);
 	if (ret < 0) {
 		LOG_DBG("No message");
 	} else {

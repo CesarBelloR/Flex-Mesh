@@ -10,7 +10,7 @@
 static char decoded_buf[PAYLOAD_LEGACY_LEN] = {0x00};
 
 int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record, 
-										char* out_buf, int* out_len) 
+					char* out_buf, int* out_len) 
 {
 	static uint8_t pkt_counter = 0;
 	int decoded_buf_len = 0;
@@ -36,11 +36,11 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
 		if (data_codec_compare_temperature_is_valid(record->sensor[i])) {
 			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-							sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
-							record->sensor[i]);
+				sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
+				record->sensor[i]);
 		} else {
 			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-							sizeof(decoded_buf) - decoded_buf_len, "*,");
+				sizeof(decoded_buf) - decoded_buf_len, "*,");
 		}
 	}
 	

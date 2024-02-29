@@ -25,7 +25,7 @@ typedef enum {
  * @return 0 on success
  */
 int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record, 
-        char* out_buf, int* out_len);
+	char* out_buf, int* out_len);
 
 /**
  * @brief Checks if a packet is from the parent relay.
