@@ -315,8 +315,10 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 	}
 
 	if (job == ETC_DEVICE_JOB_TX_RX) {
-		/* Add tx_delay for tx wake ups */
-		wakeup_time += tx_delay_sec;
+		if (!etc_device_is_relay()) {
+			/* Add tx_delay for tx wake ups */
+			wakeup_time += tx_delay_sec;
+		}
 	}
 
 	return wakeup_time;
