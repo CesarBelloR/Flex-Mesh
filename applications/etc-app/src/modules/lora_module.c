@@ -214,15 +214,6 @@ static int setup(void)
 	return 0;
 }
 
-/* Message handler for STATE_INIT. */
-static void on_state_init(struct lora_msg_data *msg)
-{
-	if (IS_EVENT(msg, app, APP_EVT_START)) {
-		state_set(STATE_CLOUD_DISCONNECTED);
-	}
-}
-
-
 static int module_lora_transmit_packet(const uint8_t *decoded_buf, int buf_len)
 {
 	int ret = lora_config(lora_dev, &etc_lora_tx_config);
@@ -432,7 +423,7 @@ static int module_lora_prepare_packet(const char* logger_id, const char* relay_i
 	int tx_delay_min = etc_get_tx_interval_secs() / 60;
 	int now = date_time_now_second();
 	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "%s,%d,%s,%d,0,0", logger_id, 
-								tx_delay_min, relay_iccid, now);
+				   tx_delay_min, relay_iccid, now);
 	__ASSERT(decoded_buf_len + 1 <= sizeof(decoded_buf), "Out of buffer memory");
 	LOG_DBG("Decoded length %d", decoded_buf_len);
 	LOG_DBG("Msg %s", decoded_buf);

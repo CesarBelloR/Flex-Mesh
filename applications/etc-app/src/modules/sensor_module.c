@@ -374,12 +374,10 @@ static void on_state_running(struct sensor_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		/* In boot-up, device connected to cloud, start a sensor poll to get data */
 		static bool is_send = false;
-		if (etc_device_is_logger_lora() == false) {
-			if (!is_send) {
-				LOG_DBG("Device is online. Collecting and sending first sensor data");
-				is_send = true;
-				sensor_poll_handler(false);
-			}
+		if (!is_send) {
+			LOG_DBG("Device is online. Collecting and sending first sensor data");
+			is_send = true;
+			sensor_poll_handler(false);
 		}
 		return;
 	}
