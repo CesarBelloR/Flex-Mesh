@@ -18,4 +18,17 @@ config MODEM_MODULE_MAX_CONNECTION_TIME_S
 	  the modem is turned off manually until the next scheduled transmit or
 	  other wakeup event.
 
+config MODEM_MODULE_RELAY_PSM_RAT
+	string "Requested PSM active time in relay mode"
+	default "00100010"
+
+config MODEM_MODULE_RELAY_PSM_RPTAU
+	string "Requested PSM periodic TAU in relay mode, default 2 minutes"
+	default "00111000"
+
+config MODEM_MODULE_RELAY_SOFT_PSM_TIMEOUT_S
+	int "Requested soft PSM timeout in relay mode"
+	default 90
+
+
 endif

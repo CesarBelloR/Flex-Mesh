@@ -523,6 +523,21 @@ static int setup(void)
 			sub_state_lte_connected_set(SUB_STATE_MODEM_OFF);
 		}
 	}
+
+	/* Adjust the PSM values if the device is configured as a relay. */
+	if (etc_get_device_mode() == ETC_DEVICE_MODE_RELAY) {
+		struct modem_api_psm_timers psm_timers;
+		uint16_t soft_psm_timeout_s = CONFIG_MODEM_MODULE_RELAY_SOFT_PSM_TIMEOUT_S;
+
+		BUILD_ASSERT(sizeof(CONFIG_MODEM_MODULE_RELAY_PSM_RAT) == PSM_TIMER_VALUE_SIZE);
+		BUILD_ASSERT(sizeof(CONFIG_MODEM_MODULE_RELAY_PSM_RPTAU) == PSM_TIMER_VALUE_SIZE);
+		memcpy(psm_timers.active_timer, CONFIG_MODEM_MODULE_RELAY_PSM_RAT,
+		       sizeof(psm_timers.active_timer));
+		memcpy(psm_timers.tau, CONFIG_MODEM_MODULE_RELAY_PSM_RPTAU,
+		       sizeof(psm_timers.tau));
+		modem_cmd(modem_dev, MODEM_API_SET_PSM_VALUES, &psm_timers);
+		modem_cmd(modem_dev, MODEM_API_SET_SOFT_PSM_VALUES, &soft_psm_timeout_s);
+	}
 	return 0;
 }
  
