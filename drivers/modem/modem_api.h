@@ -17,6 +17,8 @@
 #define MDM_IMSI_LENGTH			  16
 #define MDM_ICCID_LENGTH		  23
 
+#define PSM_TIMER_VALUE_SIZE	sizeof("00000000")
+
 enum cereg_stat {
 	STAT_NOT_REGISTERED = 0,
 	STAT_REGISTERED_HOME = 1,
@@ -95,10 +97,19 @@ struct modem_api_psk {
 	uint16_t psk_len;
 };
 
+struct modem_api_psm_timers {
+	/* 8-bit notation active timer value */
+	char active_timer[PSM_TIMER_VALUE_SIZE];
+	/* 8-bit notation periodic TAU timer value */
+	char tau[PSM_TIMER_VALUE_SIZE];
+};
+
 enum modem_api_cmd {
 	MODEM_API_CMD_PSM_WAKEUP,
 	MODEM_API_CMD_POWER_ON,
 	MODEM_API_CMD_CLOSE_CONNECTION,
+	MODEM_API_SET_PSM_VALUES,
+	MODEM_API_SET_SOFT_PSM_VALUES
 };
 
 struct modem_static_info {

@@ -75,6 +75,13 @@
 #define ATOI(s_, value_, desc_)		modem_atoi(s_, value_, desc_, __func__, 10)
 #define ATOI_HEX(s_, value_, desc_)	modem_atoi(s_, value_, desc_, __func__, 16)
 
+struct modem_psm_timers {
+	/* 8-bit notation active timer value */
+	char active_timer[PSM_TIMER_VALUE_SIZE];
+	/* 8-bit notation periodic TAU timer value */
+	char tau[PSM_TIMER_VALUE_SIZE];
+};
+
 /* driver data */
 struct modem_data {
 	struct net_if *net_iface;
@@ -116,7 +123,7 @@ struct modem_data {
 	int mdm_rsrq;
 
 	struct modem_network_data mdm_network;
-	struct k_mutex mdm_network_mutex;
+	struct k_mutex mdm_data_mutex;
 
 	/* bytes written to socket in last transaction */
 	int sock_written;
@@ -156,6 +163,12 @@ struct modem_data {
 	struct modem_psk psk;
 #endif
 
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
+	struct modem_psm_timers mdm_psm_timers;
+#endif
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
+	uint16_t mdm_soft_psm_timeout_s;
+#endif
 	/* Semaphore(s) */
 	struct k_sem sem_response;
 	struct k_sem sem_ready;

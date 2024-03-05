@@ -16,8 +16,6 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #include <zephyr/pm/device.h>
 #endif
 
-#define PSM_TIMER_VAL_LEN	sizeof("00000011")
-
 #define MDM_TCP_ERROR_NO_MEMORY		553
 #define MDM_TCP_ERROR_TIMEOUT		569
 #define MDM_TCP_ERROR_SOCKET_IN_USE	563
@@ -79,8 +77,8 @@ static const struct gpio_dt_spec wdisable_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wd
  * Pin inactive: modem is on */
 static const struct gpio_dt_spec psm_ind_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_psm_ind_gpios);
 #if 0 // Uncomment when use
-static char psm_param_rat[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT;
-static char psm_param_rptau[PSM_TIMER_VAL_LEN] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU;
+static char psm_param_rat[PSM_TIMER_VALUE_SIZE] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT;
+static char psm_param_rptau[PSM_TIMER_VALUE_SIZE] = CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU;
 #endif 
 #endif
 
@@ -876,7 +874,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_cereg)
 	struct modem_network_data *nw_data = &mdm_data->mdm_network;
 	int ret;
 
-	ret = k_mutex_lock(&mdm_data->mdm_network_mutex, MDM_CMD_TIMEOUT);
+	ret = k_mutex_lock(&mdm_data->mdm_data_mutex, MDM_CMD_TIMEOUT);
 	__ASSERT_NO_MSG(ret == 0);
 	if (ret != 0) {
 		return -1;
@@ -899,7 +897,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_cereg)
 
 		nw_data->periodic_tau_s = tau_to_seconds(argv[7], strlen(argv[7]));
 	}
-	k_mutex_unlock(&mdm_data->mdm_network_mutex);
+	k_mutex_unlock(&mdm_data->mdm_data_mutex);
 	LOG_INF("Status: %u, tac: %u, ci: %u, AcT: %u, AT: %u, TAU: %u", 
 		nw_data->stat, nw_data->tac, nw_data->cell_id, nw_data->act,
 		nw_data->active_time_s, nw_data->periodic_tau_s);
@@ -944,7 +942,7 @@ MODEM_CMD_DEFINE(on_cmd_cops)
 		return COPS_WRONG_FORMAT;
 	}
 
-	ret = k_mutex_lock(&mdm_data->mdm_network_mutex, MDM_CMD_TIMEOUT);
+	ret = k_mutex_lock(&mdm_data->mdm_data_mutex, MDM_CMD_TIMEOUT);
 	__ASSERT_NO_MSG(ret == 0);
 	if (ret != 0) {
 		return -1;
@@ -955,7 +953,7 @@ MODEM_CMD_DEFINE(on_cmd_cops)
 	} else {
 		LOG_WRN("COPS: not enough args");
 	}
-	k_mutex_unlock(&mdm_data->mdm_network_mutex);
+	k_mutex_unlock(&mdm_data->mdm_data_mutex);
 
 	LOG_INF("MCC: %u, MNC: %u", nw_data->mcc, nw_data->mnc);
 	
@@ -1309,7 +1307,7 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 #if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
-		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
+			  K_SECONDS(mdata.mdm_soft_psm_timeout_s));
 #endif
 	return ret;
 }
@@ -1426,7 +1424,7 @@ exit:
 #if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
-		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
+			  K_SECONDS(mdata.mdm_soft_psm_timeout_s));
 #endif
 	return ret;
 }
@@ -1770,8 +1768,8 @@ static int quectel_bg95_set_psm(bool enable, char *req_rat, char *req_rptau)
 
 	if (enable) {
 		if (req_rat == NULL || req_rptau == NULL ||
-		    strlen(req_rat) != PSM_TIMER_VAL_LEN - 1 ||
-		    strlen(req_rptau) != PSM_TIMER_VAL_LEN - 1) {
+		    strlen(req_rat) != PSM_TIMER_VALUE_SIZE - 1 ||
+		    strlen(req_rptau) != PSM_TIMER_VALUE_SIZE - 1) {
 			return -EINVAL;
 		}
 		snprintk(buf, sizeof(buf), "AT+QPSMS=1,,,\"%s\",\"%s\"",
@@ -2320,7 +2318,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 #if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
-		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
+		K_SECONDS(mdata.mdm_soft_psm_timeout_s));
 #endif
 	return 0;
 
@@ -2331,7 +2329,7 @@ exit:
 #if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
-		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
+		K_SECONDS(mdata.mdm_soft_psm_timeout_s));
 #endif
 	return -1;
 }
@@ -2355,7 +2353,7 @@ exit:
 #if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	/* Reschedule for PSM workaround */
 	k_work_reschedule(&psm_workaround_work, 
-		K_SECONDS(CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC));
+		K_SECONDS(mdata.mdm_soft_psm_timeout_s));
 #endif
 	return 0;
 }
@@ -2468,6 +2466,29 @@ static int modem_event_callback(const struct modem_api_evt *evt)
 	return 0;
 }
 
+static void quectel_bg95_update_psm_values(void)
+{
+	int ret;
+	struct modem_psm_timers psm_timers;
+	/* Copy PSM values into temporary buffer to avoid locking mutex for
+	 * longer than necessary */
+	ret = k_mutex_lock(&mdata.mdm_data_mutex, MDM_CMD_TIMEOUT);
+	__ASSERT_NO_MSG(ret == 0);
+	if (ret != 0) {
+		LOG_WRN("could not lock mutex");
+		return;
+	}
+	memcpy(psm_timers.active_timer, mdata.mdm_psm_timers.active_timer, sizeof(psm_timers.active_timer));
+	memcpy(psm_timers.tau, mdata.mdm_psm_timers.tau, sizeof(psm_timers.tau));
+	k_mutex_unlock(&mdata.mdm_data_mutex);
+
+	bool enable = IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) ||
+		      IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO);
+	quectel_bg95_set_psm(enable,
+			     psm_timers.active_timer,
+			     psm_timers.tau);
+}
+
 /**
  * @brief Set modem status to connected/disconnected and call event callback.
  * When modem state changes to connected, activate pdp context.
@@ -2493,11 +2514,7 @@ static void quectel_bg95_set_connected(bool connected)
 		if (ret < 0) {
 			LOG_ERR("Error activating modem with pdp context");
 		} else if (ret == 0) {
-			bool enable = IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) ||
-				      IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO);
-			quectel_bg95_set_psm(enable,
-					CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT,
-					CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU);
+			quectel_bg95_update_psm_values();
 			MODEM_SUBMIT_EVT(MODEM_API_CONNECTED_EVT);
 			LOG_INF("Network connected.");
 			mdata.is_connected = true;
@@ -2515,13 +2532,13 @@ static void modem_dynamic_update_work(struct k_work *work)
 
 	get_operator_info();
 
-	ret = k_mutex_lock(&mdata.mdm_network_mutex, MDM_CMD_TIMEOUT);
+	ret = k_mutex_lock(&mdata.mdm_data_mutex, MDM_CMD_TIMEOUT);
 	__ASSERT_NO_MSG(ret == 0);
 	if (ret != 0) {
 		return;
 	}
 	memcpy(&nw_data, &mdata.mdm_network, sizeof(nw_data));
-	k_mutex_unlock(&mdata.mdm_network_mutex);
+	k_mutex_unlock(&mdata.mdm_data_mutex);
 
 	evt.dynamic_data = &nw_data;
 
@@ -3059,12 +3076,47 @@ static int quectel_bg95_close_all_connection(void) {
 	return 0;
 }
 
+static int quectel_bg95_set_psm_values(struct modem_api_psm_timers *psm_timers)
+{
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
+	int ret = k_mutex_lock(&mdata.mdm_data_mutex, MDM_CMD_TIMEOUT);
+	__ASSERT_NO_MSG(ret == 0);
+	if (ret != 0) {
+		return -EAGAIN;
+	}
+	memcpy(mdata.mdm_psm_timers.active_timer, psm_timers->active_timer, PSM_TIMER_VALUE_SIZE);
+	memcpy(mdata.mdm_psm_timers.tau, psm_timers->tau, PSM_TIMER_VALUE_SIZE);
+	k_mutex_unlock(&mdata.mdm_data_mutex);
+
+	if (mdata.is_connected) {
+		quectel_bg95_update_psm_values();
+	}
+
+	return 0;
+#endif
+	return -ENOTSUP;
+}
+
+static int quectel_bg95_set_soft_psm_values(uint16_t *active_time_s)
+{
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)	
+	mdata.mdm_soft_psm_timeout_s = *active_time_s;
+	if (mdata.is_connected) {
+		k_work_reschedule(&psm_workaround_work,
+				  K_SECONDS(mdata.mdm_soft_psm_timeout_s));
+	}
+	return 0;
+#endif
+	return -ENOTSUP;
+}
+
 static int quectel_bg95_cmd(const struct device *dev,
 			    enum modem_api_cmd cmd, void *psm_data)
 {
-	if (cmd == MODEM_API_CMD_PSM_WAKEUP) {
+	switch (cmd) {
+	case MODEM_API_CMD_PSM_WAKEUP:
 		return quectel_bg95_psm_wakeup();
-	} else if (cmd == MODEM_API_CMD_POWER_ON) {
+	case MODEM_API_CMD_POWER_ON:
 		enum pm_device_state pm_state;
 		int rc = pm_device_state_get(mctx.iface.dev, &pm_state);
 		if (!rc && pm_state == PM_DEVICE_STATE_SUSPENDED) {
@@ -3072,8 +3124,14 @@ static int quectel_bg95_cmd(const struct device *dev,
 			pm_resume_uart();
 		}
 		return modem_setup();
-	} else if (cmd == MODEM_API_CMD_CLOSE_CONNECTION) {
+	case MODEM_API_CMD_CLOSE_CONNECTION:
 		return quectel_bg95_close_all_connection();
+	case MODEM_API_SET_PSM_VALUES:
+		__ASSERT_NO_MSG(psm_data != NULL);
+		return quectel_bg95_set_psm_values((struct modem_api_psm_timers *)psm_data);
+	case MODEM_API_SET_SOFT_PSM_VALUES:
+		__ASSERT_NO_MSG(psm_data != NULL);
+		return quectel_bg95_set_soft_psm_values((uint16_t *)psm_data);
 	}
 
 	return -EINVAL;
@@ -3114,13 +3172,13 @@ static int quectel_bg95_modem_get_dynamic_info(const struct device *dev,
 		return -EINVAL;
 	}
 
-	ret = k_mutex_lock(&mdm_data->mdm_network_mutex, MDM_CMD_TIMEOUT);
+	ret = k_mutex_lock(&mdm_data->mdm_data_mutex, MDM_CMD_TIMEOUT);
 	__ASSERT_NO_MSG(ret == 0);
 	if (ret != 0) {
 		return -ETIMEDOUT;
 	}
 	memcpy(data, &mdm_data->mdm_network, sizeof(*data));
-	k_mutex_unlock(&mdm_data->mdm_network_mutex);
+	k_mutex_unlock(&mdm_data->mdm_data_mutex);
 
 	return 0;
 }
@@ -3194,7 +3252,7 @@ static int modem_init(const struct device *dev)
 	k_sem_init(&mdata.sem_shutdown, 0, 1);
 	k_sem_init(&mdata.sem_ntp_ready, 0, 1);
 	
-	k_mutex_init(&mdata.mdm_network_mutex);
+	k_mutex_init(&mdata.mdm_data_mutex);
 
 	k_work_queue_start(&modem_workq, modem_workq_stack,
 			   K_KERNEL_STACK_SIZEOF(modem_workq_stack),
@@ -3249,6 +3307,13 @@ static int modem_init(const struct device *dev)
 
 	/* Set qual and RSSI to 99 (means not known/not connected) */
 	mdata.mdm_rssi = MDM_RSSI_INVALID;
+
+	/* Set PSM defaults */
+	BUILD_ASSERT(sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT) == PSM_TIMER_VALUE_SIZE);
+	memcpy(mdata.mdm_psm_timers.active_timer, CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RAT, PSM_TIMER_VALUE_SIZE);
+	BUILD_ASSERT(sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU) == PSM_TIMER_VALUE_SIZE);
+	memcpy(mdata.mdm_psm_timers.tau, CONFIG_MODEM_QUECTEL_BG95_M3_PSM_REQ_RPTAU, PSM_TIMER_VALUE_SIZE);
+	mdata.mdm_soft_psm_timeout_s = CONFIG_MODEM_SOFT_PSM_WAIT_TIME_SEC;
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 	ret = gpio_pin_configure_dt(&on_off_gpio, GPIO_OUTPUT_LOW);
