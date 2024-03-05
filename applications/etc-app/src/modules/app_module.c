@@ -327,9 +327,12 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transmit_interval_s, 
 	enum etc_sensor_status sensor_status) {
 	LOG_DBG("%d %d", sensor_status, etc_get_power_mode());
-	if ((sensor_status == SENSOR_NO_CONNECTION) && 
-		(etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
-		return -1;
+	/* If device is not Relay, check sensor and probe mode */
+	if (etc_get_device_mode() != ETC_DEVICE_MODE_RELAY) {
+		if ((sensor_status == SENSOR_NO_CONNECTION) && 
+			(etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
+			return -1;
+		}
 	}
 	
 	return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
@@ -337,6 +340,10 @@ static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transm
 
 static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mins, 
 	enum etc_sensor_status sensor_status) {
+	/* Ignore this time in Relay Mode */
+	if (etc_get_device_mode() == ETC_DEVICE_MODE_RELAY) {
+		return -1;	
+	}
 	if ((sensor_status != SENSOR_NO_CONNECTION) || (etc_get_power_mode() != ETC_POWER_MODE_PROBE)) {
 		return -1;
 	}
