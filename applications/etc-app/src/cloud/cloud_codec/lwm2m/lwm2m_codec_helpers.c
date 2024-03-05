@@ -609,7 +609,7 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 	}
 #endif
 
-	err = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+	err = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
 			    (int8_t)modem_dynamic->rsrp);
 	if (err) {
 		return err;
