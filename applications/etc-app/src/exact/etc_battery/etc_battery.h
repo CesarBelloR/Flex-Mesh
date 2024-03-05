@@ -4,12 +4,12 @@
 #include <stdint.h>
 
 enum battery_level {
-	/* Battery low level from 0 to < 20 */
+	/* Battery low level from 0 to < 6 */
 	BATTERY_MIN_LOW = 0,
-	/* Battery medium level from 20 to < 80 */
-	BATTERY_MIN_MED = 20,
-	/* Battery full level from 80 to 100 */
-	BATTERY_MIN_FULL = 80
+	/* Battery medium level from 6 to < 21 */
+	BATTERY_MIN_MED = 6,
+	/* Battery full level from 21 to 100 */
+	BATTERY_MIN_FULL = 21
 };
 
 enum battery_status {
