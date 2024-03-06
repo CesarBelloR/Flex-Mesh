@@ -224,7 +224,8 @@ int cloud_wrap_resume(void);
  * @return 0 on success, or a negative error code on failure.
  */
 int cloud_wrap_data_export(const struct lwm2m_obj_path path_list[], size_t len, 
-	uint8_t* out_buf, int* out_len) ;
+	uint8_t* out_buf, int* out_len);
+	
 #ifdef __cplusplus
 }
 #endif

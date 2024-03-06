@@ -24,6 +24,7 @@
 #include "modules_common.h"
 #include "events/app_event.h"
 #include "events/cloud_event.h"
+#include "events/ble_event.h"
 #include "events/data_event.h"
 #include "events/modem_event.h"
 #include "events/sensor_event.h"
@@ -41,6 +42,7 @@ struct data_msg_data {
 	union {
 		struct modem_event modem;
 		struct cloud_event cloud;
+		struct ble_event ble;
 		struct ui_event ui;
 		struct sensor_event sensor;
 		struct data_event data;
@@ -187,6 +189,13 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct cloud_event *event = cast_cloud_event(aeh);
 
 		msg.module.cloud = *event;
+		enqueue_msg = true;
+	}
+
+	if (is_ble_event(aeh)) {
+		struct ble_event *event = cast_ble_event(aeh);
+
+		msg.module.ble = *event;
 		enqueue_msg = true;
 	}
 
@@ -677,14 +686,32 @@ static void on_all_states(struct data_msg_data *msg)
 				etc_device_set_ack_record(send_status.record_id);
 			}
 			reset_send_status(&send_status);
-			if (etc_get_device_mode() != ETC_DEVICE_MODE_BLE) {
-				if (state == STATE_CLOUD_CONNECTED) {
-					data_encode_for_cloud(false);
-				}
+			if (state == STATE_CLOUD_CONNECTED) {
+				data_encode_for_cloud(false);
 			}
 		}
 	}
-		
+
+	if (IS_EVENT(msg, ble, BLE_EVT_DATA_SEND_ACK)) {
+		data_codec_clear_data(&codec);
+		LOG_DBG("Record ID %d", send_status.record_id);
+		if (send_status.record_id > 0) {
+			/* Acknowledge record and encode more data, if connected to cloud */
+			etc_device_set_ack_record(send_status.record_id);
+		}
+		reset_send_status(&send_status);
+		data_encode_for_ble();
+	}
+
+	if (IS_EVENT(msg, ble, BLE_EVT_DATA_SEND_FAIL)) {
+		/* Reset send status on fail */
+		reset_send_status(&send_status);
+		if (msg->module.ble.data.err == -ENOTCONN) {
+			/* No connection, notify send complete */
+			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
+		}
+	}
+ 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
 		bool split = false;
 		if (msg->module.cloud.data.err == -ENOMEM ||
@@ -694,11 +721,9 @@ static void on_all_states(struct data_msg_data *msg)
 		}
 		/* Reset send status on fail */
 		reset_send_status(&send_status);
-		if (etc_get_device_mode() != ETC_DEVICE_MODE_BLE) {
-			ETC_MEMFAULT_TRACE_EVENT(send_fail);
-			if (state == STATE_CLOUD_CONNECTED) {
-				data_encode_for_cloud(split);
-			}
+		ETC_MEMFAULT_TRACE_EVENT(send_fail);
+		if (state == STATE_CLOUD_CONNECTED) {
+			data_encode_for_cloud(split);
 		}
 	}
 
@@ -755,6 +780,10 @@ static void on_all_states(struct data_msg_data *msg)
 		data_encode_for_ble();
 		return;
 	}
+
+	if (IS_EVENT(msg, ble, BLE_EVT_CONN_READY)) {
+		data_encode_for_ble();
+	}
 }
 
 void data_module_thread_fn(void)
@@ -805,6 +834,7 @@ APP_EVENT_SUBSCRIBE(MODULE, util_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, modem_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, cloud_event);
+APP_EVENT_SUBSCRIBE_EARLY(MODULE, ble_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, sensor_event);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, lora_event);

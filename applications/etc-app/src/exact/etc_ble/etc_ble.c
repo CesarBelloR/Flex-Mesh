@@ -35,8 +35,10 @@ LOG_MODULE_REGISTER(etc_ble);
 static struct k_work advertise_work;
 static char flex_device_name[CONFIG_BT_DEVICE_NAME_MAX] = { 0x00 };
 static struct bt_conn *current_conn;
+static uint8_t msg_id_cnt = 0;
 static struct sensor_data last_sensor_data;
 static struct flex_ble_frame flex_frame;
+static etc_ble_evt_handler_t ble_evt_handler;
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 static uint8_t adv_data[] = {
@@ -67,6 +69,8 @@ static ssize_t flex_config_on_write(struct bt_conn *conn, const struct bt_gatt_a
 	const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
 static void flex_config_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value);
+
+static void etc_ble_notify_evt(enum etc_ble_evt_type type);
 
 static void etc_ble_set_bt_name(void)
 {
@@ -100,6 +104,7 @@ static void flex_sensor_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 				  uint16_t value)
 {
 	LOG_DBG("Notification has been turned %s", value == BT_GATT_CCC_NOTIFY ? "on" : "off");
+	etc_ble_notify_evt(ETC_BLE_EVT_CCC_MEASURE_READY);
 }
 
 static void flex_reclaim_ccc_cfg_changed(const struct bt_gatt_attr *attr,
@@ -132,7 +137,6 @@ int flex_attr_get_index(const struct bt_uuid *uuid) {
 	for (int i = 0; i < flex_svc.attr_count; i++) {
 		const struct bt_gatt_attr *attr = &flex_svc.attrs[i];
 		bt_uuid_to_str(attr->uuid, uuid_str, sizeof(uuid_str));
-		// LOG_INF("UUID %s", uuid_str);
 		if (bt_uuid_cmp(uuid, attr->uuid) == 0) {
 			return i;
 		}
@@ -170,9 +174,13 @@ int etc_ble_sensor_notify(const uint8_t *data, uint16_t len)
 	int step = len / ETC_BLE_FRAME_PAYLOAD_MAX_LEN;
 	int remain = len % ETC_BLE_FRAME_PAYLOAD_MAX_LEN;
 	int rc = 0;
+
+	uint8_t msg_id = msg_id_cnt;
+	msg_id_cnt = (msg_id_cnt + 1) % 255;
+
 	for (int i = 0; i <= step; i++) {
 		int frame_len = (i == step) ? remain : ETC_BLE_FRAME_PAYLOAD_MAX_LEN;
-		flex_frame.msg_id = 0;
+		flex_frame.msg_id = msg_id;
 		flex_frame.frame_id = i;
 		flex_frame.frame_len = (i == 0) ? len : 0;
 		memcpy(flex_frame.frame_payload, &data[i * ETC_BLE_FRAME_PAYLOAD_MAX_LEN], frame_len);
@@ -241,6 +249,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		int rc = bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
 		if (rc) {
 			LOG_ERR("Can't exchange MTU request %d", rc);
+		} else {
+			etc_ble_notify_evt(ETC_BLE_EVT_CONNECTING);
 		}
 	}
 }
@@ -250,6 +260,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	current_conn = NULL;
 	LOG_INF("Disconnected (reason 0x%02x)", reason);
 	k_work_submit(&advertise_work);
+	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
 }
 
 #if defined(CONFIG_BT_SMP)
@@ -262,6 +273,7 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 
 	if (!err) {
 		LOG_INF("Security changed: %s level %u", addr, level);
+		etc_ble_notify_evt(ETC_BLE_EVT_CONNECTED);
 	} else {
 		LOG_WRN("Security failed: %s level %u err %d", addr,
 			level, err);
@@ -283,6 +295,7 @@ static void auth_cancel(struct bt_conn *conn)
 	char addr[BT_ADDR_LE_STR_LEN];
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 	LOG_INF("Pairing cancelled: %s", addr);
+	etc_ble_notify_evt(ETC_BLE_EVT_ERR);
 }
 
 static void pairing_complete(struct bt_conn *conn, bool bonded)
@@ -292,12 +305,12 @@ static void pairing_complete(struct bt_conn *conn, bool bonded)
 	LOG_INF("Pairing completed: %s, bonded: %d", addr, bonded);
 }
 
-
 static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 	LOG_INF("Pairing failed conn: %s, reason %d", addr, reason);
+	etc_ble_notify_evt(ETC_BLE_EVT_ERR);
 }
 
 void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
@@ -318,8 +331,22 @@ static struct bt_gatt_cb gatt_callbacks = {
 	.att_mtu_updated = mtu_updated
 };
 
-int etc_ble_init(void) {
+static void etc_ble_notify_evt(enum etc_ble_evt_type type) {
+	if (ble_evt_handler != NULL) {
+		struct etc_ble_evt evt = {
+			.type = type
+		};
+		ble_evt_handler(&evt);
+	}
+}
+
+int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 	int rc = 0;
+
+	if (evt_handler != NULL) {
+		ble_evt_handler = evt_handler;
+	}
+
 	rc = bt_conn_auth_cb_register(&conn_auth_callbacks);
 	if (rc) {
 		LOG_ERR("Failed to register authorization callbacks");
@@ -338,6 +365,7 @@ int etc_ble_init(void) {
 	rc = bt_enable(NULL);
 	if (rc != 0) {
 		LOG_ERR("Bluetooth init failed (err %d)", rc);
+		etc_ble_notify_evt(ETC_BLE_EVT_ERR);
 		return rc;
 	}
 
@@ -345,6 +373,7 @@ int etc_ble_init(void) {
 		rc = settings_load();
 		if (rc) {
 			LOG_ERR("settings load failed (err %d)", rc);
+			etc_ble_notify_evt(ETC_BLE_EVT_ERR);
 			return rc;
 		}
 	}
@@ -356,6 +385,7 @@ int etc_ble_init(void) {
 	memset(last_sensor_data.sensor, 0, sizeof(last_sensor_data.sensor));
 	k_work_init(&advertise_work, advertise);
 	k_work_submit(&advertise_work);
+	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
 	return 0;
 }
 

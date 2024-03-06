@@ -18,12 +18,34 @@ struct flex_ble_frame {
 
 #pragma pack(pop)
 
+/** @brief Bluetooth notification event types used to signal the application. */
+enum etc_ble_evt_type {
+	ETC_BLE_EVT_DISCONNECTED,
+	ETC_BLE_EVT_CONNECTING,
+	ETC_BLE_EVT_CONNECTED,
+	ETC_BLE_EVT_CCC_MEASURE_READY,
+	ETC_BLE_EVT_ERR
+};
+
+/** @brief Struct with data received from the bluetooth library. */
+struct etc_ble_evt {
+	/** Type of event. */
+	enum etc_ble_evt_type type;
+};
+
+/** @brief Bluetooth library asynchronous event handler.
+ *
+ *  @param[in] evt The event and any associated parameters.
+ */
+typedef void (*etc_ble_evt_handler_t)(const struct etc_ble_evt *evt);
+
+
 /**
  * @brief Initialize the BLE peripheral for ETC
  * 
  * @return	0 on success, an error code otherwise. 
  */
-int etc_ble_init(void);
+int etc_ble_init(etc_ble_evt_handler_t evt_handler);
 
 /**
  * @brief Sets the current sensor data for the ETC BLE module.

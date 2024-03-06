@@ -28,6 +28,7 @@ LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define MODULE_APP_THREAD_STACK_SIZE	2048
 #define MODULE_CLOUD_THREAD_STACK_SIZE	4096
+#define MODULE_BLE_THREAD_STACK_SIZE	2048
 #define MODULE_DATA_THREAD_STACK_SIZE	2048
 #define MODULE_LORA_THREAD_STACK_SIZE	2048
 #define MODULE_MODEM_THREAD_STACK_SIZE	2048
@@ -35,6 +36,7 @@ LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
 static struct k_thread app_thread;
 static struct k_thread cloud_thread;
+static struct k_thread ble_thread;
 static struct k_thread data_thread;
 static struct k_thread lora_thread;
 static struct k_thread modem_thread;
@@ -42,6 +44,7 @@ static struct k_thread sensor_thread;
 
 static K_KERNEL_STACK_DEFINE(app_stack, MODULE_APP_THREAD_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(cloud_stack, MODULE_CLOUD_THREAD_STACK_SIZE);
+static K_KERNEL_STACK_DEFINE(ble_stack, MODULE_BLE_THREAD_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(data_stack, MODULE_DATA_THREAD_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(lora_stack, MODULE_LORA_THREAD_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(modem_stack, MODULE_MODEM_THREAD_STACK_SIZE);
@@ -81,6 +84,7 @@ char key[] = "ElL10TaC4T";
 
 extern void app_module_thread_fn(void);
 extern void cloud_module_thread_fn(void);
+extern void ble_module_thread_fn(void);
 extern void data_module_thread_fn(void);
 extern void lora_module_thread_fn(void);
 extern void modem_module_thread_fn(void);
@@ -128,18 +132,16 @@ int main(void)
 	etc_settings_init();
 	etc_device_init();
 	ui_init();
-#if defined(CONFIG_BT)
-	etc_set_device_mode(ETC_DEVICE_MODE_BLE);
-	if (etc_device_get_mode() == ETC_DEVICE_MODE_BLE) {
-		etc_ble_init();
-	}
-#endif
+
 	/* Initialize all threads */
 	k_thread_create(&app_thread, app_stack, K_KERNEL_STACK_SIZEOF(app_stack),
 			(k_thread_entry_t)app_module_thread_fn, NULL, NULL, NULL,
 			K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
 	k_thread_create(&cloud_thread, cloud_stack, K_KERNEL_STACK_SIZEOF(cloud_stack),
 			(k_thread_entry_t)cloud_module_thread_fn, NULL, NULL, NULL,
+			K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
+	k_thread_create(&ble_thread, ble_stack, K_KERNEL_STACK_SIZEOF(ble_stack),
+			(k_thread_entry_t)ble_module_thread_fn, NULL, NULL, NULL,
 			K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
 	k_thread_create(&data_thread, data_stack, K_KERNEL_STACK_SIZEOF(data_stack),
 			(k_thread_entry_t)data_module_thread_fn, NULL, NULL, NULL,
