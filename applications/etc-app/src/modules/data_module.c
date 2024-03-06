@@ -369,7 +369,7 @@ static void data_send(enum data_event_type event,
  * @param split If true, split new record for transmission, as it might
  * 		be too large to fit into one message.
 */
-static void data_encode(bool split) 
+static void data_encode_for_cloud(bool split) 
 {
 	union etc_device_record record;
 	int ret;
@@ -449,7 +449,46 @@ static void data_encode(bool split)
 	data_send(DATA_EVT_DATA_SEND, &codec);
 }
 
-static void relay_data_encode(void)
+static void data_encode_for_ble() 
+{
+	union etc_device_record record;
+	int ret;
+	bool reclaim_status;
+	send_status.record_id = etc_device_read_record(&record, &reclaim_status);
+	/* Only add a record if it is valid. */
+	if (send_status.record_id != 0) {
+		ret = data_codec_prepare_ble_packet(&codec, &record);
+		if (ret != 0) {
+			LOG_WRN("No message to send over BLE");
+			return;
+		}	
+	}
+
+	/* Update reclaim status */							   
+	if (reclaim_status != reclaim_active) {
+		if (reclaim_status) {
+			data_codec_update_reclaim_state(&codec,
+							RECLAIM_IN_PROGRESS);
+			reclaim_active = true;
+		} else {
+			data_codec_update_reclaim_state(&codec,
+							RECLAIM_SUCCESS);
+			reclaim_active = false;
+		}
+	} else if (send_status.record_id == 0) {
+		LOG_INF("No record found");
+		/* Return early and report data send complete if we don't
+		 * have any new data to send, so other modules can start
+		 * sending data.
+		 */
+		SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
+		return;
+	}
+
+	data_send(DATA_EVT_DATA_SEND_BLE, &codec);
+}
+
+static void relay_data_encode_for_cloud(struct relay_data_buffer *relay_data)
 {
 	if (send_status.active_send) {
 		LOG_WRN("Not sending new record."
@@ -513,7 +552,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && 
 	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER)
 	{
-		data_encode(false);
+		data_encode_for_cloud(false);
 		return;
 	}
 
@@ -522,7 +561,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA)) || 
 		(etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
 		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET)))) {
-		data_encode(false);
+		data_encode_for_cloud(false);
 		return;
 	}
 
@@ -638,14 +677,15 @@ static void on_all_states(struct data_msg_data *msg)
 				etc_device_set_ack_record(send_status.record_id);
 			}
 			reset_send_status(&send_status);
-			if (state == STATE_CLOUD_CONNECTED) {
-				data_encode(false);
+			if (etc_get_device_mode() != ETC_DEVICE_MODE_BLE) {
+				if (state == STATE_CLOUD_CONNECTED) {
+					data_encode_for_cloud(false);
+				}
 			}
 		}
 	}
 		
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
-		ETC_MEMFAULT_TRACE_EVENT(send_fail);
 		bool split = false;
 		if (msg->module.cloud.data.err == -ENOMEM ||
 		    msg->module.cloud.data.err == -ECONNREFUSED ||
@@ -654,8 +694,11 @@ static void on_all_states(struct data_msg_data *msg)
 		}
 		/* Reset send status on fail */
 		reset_send_status(&send_status);
-		if (state == STATE_CLOUD_CONNECTED) {
-			data_encode(split);
+		if (etc_get_device_mode() != ETC_DEVICE_MODE_BLE) {
+			ETC_MEMFAULT_TRACE_EVENT(send_fail);
+			if (state == STATE_CLOUD_CONNECTED) {
+				data_encode_for_cloud(split);
+			}
 		}
 	}
 
@@ -686,7 +729,7 @@ static void on_all_states(struct data_msg_data *msg)
 			data_codec_update_reclaim_state(&codec,
 							RECLAIM_IN_PROGRESS);
 			reclaim_active = true;
-			data_encode(false);
+			data_encode_for_cloud(false);
 		} else {
 			data_codec_update_reclaim_state(&codec,
 							RECLAIM_ERROR);
@@ -705,6 +748,12 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_END)) {
 		stop_functional_test();
+	}
+
+	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && 
+		etc_get_device_mode() == ETC_DEVICE_MODE_BLE) {
+		data_encode_for_ble();
+		return;
 	}
 }
 
@@ -731,7 +780,6 @@ void data_module_thread_fn(void)
 
 	while (true) {
 		module_get_next_msg(&self, &msg);
-
 		switch (state) {
 		case STATE_CLOUD_DISCONNECTED:
 			on_cloud_state_disconnected(&msg);

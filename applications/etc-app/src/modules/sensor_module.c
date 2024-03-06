@@ -11,6 +11,7 @@
 #include "etc_device.h"
 #include "etc_sensor.h"
 #include "etc_battery.h"
+#include "etc_ble.h"
 #include "watchdog_app.h"
 #define MODULE sensor_module
 #include "cloud/cloud_codec/data_codec.h"
@@ -329,7 +330,7 @@ static int sensor_poll_handler(bool is_test) {
 		sensor_module_send_sensor(data, is_test);
 	}
 	sensor_is_processing = false;
-
+	etc_ble_set_current_sensor(data);
 	ret = date_time_now(&now_ms);
 	if (!ret) {
 		last_poll_complete_time_ms = now_ms;

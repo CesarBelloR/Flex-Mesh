@@ -535,3 +535,21 @@ int cloud_wrap_batch_send(char *buf, size_t len, bool ack, uint32_t id)
 {
 	return -ENOTSUP;
 }
+
+extern int lwm2m_engine_export_data(const struct lwm2m_obj_path path_list[], uint8_t path_list_size,
+	uint8_t* out_buf, int* out_len);
+
+int cloud_wrap_data_export(const struct lwm2m_obj_path path_list[], size_t len, uint8_t* out_buf, int* out_len) 
+{
+	int err;
+
+	lwm2m_codec_helpers_path_list_log(path_list, len);
+	
+	err = lwm2m_engine_export_data(path_list, len, out_buf, out_len);
+	if (err) {
+		LOG_ERR("lwm2m_send, error: %d", err);
+		return err;
+	}
+
+	return 0;
+}

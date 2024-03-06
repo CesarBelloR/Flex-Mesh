@@ -31,6 +31,7 @@ enum data_event_type {
 	 */
 	DATA_EVT_DATA_SEND,
 
+	DATA_EVT_DATA_SEND_BLE,
 	/**
 	 * Sending data is complete and there is no more data to send
 	 * currently.

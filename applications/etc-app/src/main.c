@@ -129,7 +129,10 @@ int main(void)
 	etc_device_init();
 	ui_init();
 #if defined(CONFIG_BT)
-	etc_ble_init();
+	etc_set_device_mode(ETC_DEVICE_MODE_BLE);
+	if (etc_device_get_mode() == ETC_DEVICE_MODE_BLE) {
+		etc_ble_init();
+	}
 #endif
 	/* Initialize all threads */
 	k_thread_create(&app_thread, app_stack, K_KERNEL_STACK_SIZEOF(app_stack),

@@ -213,6 +213,18 @@ int cloud_wrap_pause(void);
 */
 int cloud_wrap_resume(void);
 
+/**
+ * @brief Export data as LwM2M package
+ *
+ * @param[in] path_list Pointer to list of LwM2M objects to be sent.
+ * @param[in] len Length of path_list.
+ * @param[in] out_buf Pointer to buffer to be stored the exported data .
+ * @param[in] out_len Pointer to out length of exported data.
+ *
+ * @return 0 on success, or a negative error code on failure.
+ */
+int cloud_wrap_data_export(const struct lwm2m_obj_path path_list[], size_t len, 
+	uint8_t* out_buf, int* out_len) ;
 #ifdef __cplusplus
 }
 #endif

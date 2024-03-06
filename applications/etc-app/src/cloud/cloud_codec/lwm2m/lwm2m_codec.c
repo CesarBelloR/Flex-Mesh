@@ -307,6 +307,23 @@ int data_codec_prepare_functional_test_data(struct cloud_codec_data *cloud_data,
 	return err;
 }
 
+int data_codec_prepare_ble_packet(struct cloud_codec_data *cloud_data,
+	union etc_device_record *record)
+{
+	int err = 0;
+
+	if (cloud_data == NULL) {
+		LOG_ERR("Null cloud data");
+		return -ENOMEM;
+	}
+
+	if (record != NULL) {
+		data_codec_prepare_record_packet(cloud_data, record);
+	}
+	
+	return err;
+}
+
 int data_codec_has_data(struct cloud_codec_data *cloud_data)
 {
 	__ASSERT_NO_MSG(cloud_data != NULL);
