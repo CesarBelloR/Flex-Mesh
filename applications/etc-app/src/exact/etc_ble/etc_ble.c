@@ -349,7 +349,7 @@ static uint8_t* etc_ble_encrypt_data(const uint8_t *data, uint16_t len, uint16_t
 		*encrypted_len = 0;
 		return NULL;
 	}
-	
+
 	uint8_t buf[ETC_SETTING_PSK_LEN] = {0x00};
 	etc_get_psk(buf, ETC_SETTING_PSK_LEN);
 	int ret = encrypt_data(buf, data, len, out_buf);
@@ -408,7 +408,7 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len, bool need_enc
 		flex_frame.frame_id = i;
 		flex_frame.frame_len = (i == 0) ? encrypted_len : 0;
 		memcpy(flex_frame.frame_payload, &encrypted_buf[i * mtu_size], frame_len);
-		LOG_HEXDUMP_INF(&flex_frame, BT_PAYLOAD_OFFSET + frame_le, "DATA");
+		LOG_HEXDUMP_INF(&flex_frame, BT_PAYLOAD_OFFSET + frame_len, "DATA");
 		rc = flex_ble_notify(current_conn, attr_index, (const uint8_t *)&flex_frame, BT_PAYLOAD_OFFSET + frame_len);
 		if (rc) {
 			LOG_ERR("Failed to notify current characteristic %d", rc);
@@ -679,6 +679,13 @@ int etc_ble_notify_reclaim_status(int reclaim_status) {
 		etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
 		cJSON_free(response_msg);
 		cJSON_Delete(response_json);
+	}
+	return 0;
+}
+
+int etc_ble_notify_battery(uint8_t level) {
+	if (etc_ble_get_is_connected()) {
+		return bt_bas_set_battery_level(level);
 	}
 	return 0;
 }

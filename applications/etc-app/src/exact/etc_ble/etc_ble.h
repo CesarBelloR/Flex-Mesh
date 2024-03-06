@@ -101,4 +101,14 @@ bool etc_ble_get_is_connected(void);
  * @return Return 0 on success 
  */
 int etc_ble_notify_reclaim_status(int reclaim_status);
+
+/** @brief Update battery level value.
+ *
+ * Update the characteristic value of the battery level
+ *
+ *  @param level The battery level in percent.
+ *
+ *  @return Zero in case of success and error code in case of error.
+ */
+int etc_ble_notify_battery(uint8_t level);
 #endif /* ETC_BLE_H_ */

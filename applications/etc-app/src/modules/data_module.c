@@ -684,8 +684,12 @@ static void on_all_states(struct data_msg_data *msg)
 			/* No action required */
 		} else {
 			etc_device_write_record_sensor(msg->module.sensor.data.sensors);
+			uint8_t bat_percent = 
+				etc_battery_percentage_from_voltage(msg->module.sensor.data.sensors->battery_mV);
+			etc_ble_notify_battery(bat_percent);
+			SEND_EVENT(data, DATA_EVT_DATA_READY);
 		}
-		SEND_EVENT(data, DATA_EVT_DATA_READY);
+
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY)) {
