@@ -38,6 +38,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define DEVICE_SETTINGS_KEY			"data_module"
 #define DEVICE_SETTINGS_CONFIG_KEY		"config"
+#define DEVICE_PAYLOAD_LEGACY_LEN	128
 
 struct data_msg_data {
 	union {
@@ -129,6 +130,9 @@ static bool reclaim_active;
 
 /* Define a buffer to save data encoded*/
 static struct data_module_data_buffers data_encoded_buffers;
+
+/* Define a payload buffer with legacy format */
+static char data_payload_buf[DEVICE_PAYLOAD_LEGACY_LEN] = {0x00};
 
 /* Data module message queue. */
 #define DATA_QUEUE_ENTRY_COUNT		20
@@ -373,6 +377,21 @@ static void data_send(enum data_event_type event,
 	APP_EVENT_SUBMIT(module_event);
 }
 
+#ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
+static void data_send_buf(enum data_event_type event, uint8_t* buf, uint8_t buf_len)
+{
+	struct data_event *module_event = new_data_event();
+
+	__ASSERT(module_event, "Not enough heap left to allocate event");
+
+	module_event->type = event;
+
+	/* Update data buffer */
+	module_event->data.buffer.buf = buf;
+	module_event->data.buffer.buf_len = buf_len;
+	APP_EVENT_SUBMIT(module_event);
+}
+#endif
 
 /**
  * Encode the current LwM2M data to be sent in a message.
@@ -465,11 +484,20 @@ static void data_encode_for_ble()
 	if (!etc_ble_get_is_connected()) return;
 	union etc_device_record record;
 	int ret;
+	uint8_t data_payload_len = sizeof(data_payload_buf);
 	bool reclaim_status;
 	send_status.record_id = etc_device_read_record(&record, &reclaim_status);
 	/* Only add a record if it is valid. */
 	if (send_status.record_id != 0) {
+#ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
+		ret = etc_common_prepare_logger_legacy_data(record, reclaim_status,
+			data_payload_buf, &data_payload_len);
+		if (ret == 0) {
+			LOG_DBG("Legacy payload: %.*s", data_payload_len, data_payload_buf);
+		}
+#else
 		ret = data_codec_prepare_ble_packet(&ble_codec, &record);
+#endif
 		if (ret != 0) {
 			LOG_WRN("No message to send over BLE");
 			return;
@@ -490,7 +518,11 @@ static void data_encode_for_ble()
 		return;
 	}
 
+#ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
+	data_send_buf(DATA_EVT_DATA_SEND_BLE, data_payload_buf, data_payload_len);
+#else
 	data_send(DATA_EVT_DATA_SEND_BLE, &ble_codec);
+#endif
 }
 
 static void relay_data_encode(struct relay_data_buffer *relay_data)

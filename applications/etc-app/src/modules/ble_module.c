@@ -237,22 +237,41 @@ static void on_state_shutdown(struct ble_msg_data *msg)
 static void on_connected_states(struct ble_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND_BLE)) {
+#ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
+		{
+			int err;
+			err = etc_ble_notify(ble_channel_out, msg->module.data.data.buffer.buf, 
+				msg->module.data.data.buffer.buf_len, true);
+			if (err) {
+				if (err != -ENOTCONN) {
+					LOG_ERR("Failed to send data to BLE");
+				}
+				SEND_ERROR(ble, BLE_EVT_DATA_SEND_FAIL, err);
+			} else {
+				SEND_EVENT(ble, BLE_EVT_DATA_SEND_ACK);
+			}
+			return;
+		}
+#else
 		if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
 			int err;
 
 			struct lwm2m_obj_path paths[CONFIG_CLOUD_CODEC_LWM2M_PATH_LIST_ENTRIES_MAX];
 
+			struct data_module_data_buffers *buffer = (struct data_module_data_buffers *)
+				msg->module.data.data.buffer.buf;
+
 			__ASSERT(ARRAY_SIZE(paths) ==
-				 ARRAY_SIZE(msg->module.data.data.buffer.paths),
+				 ARRAY_SIZE(buffer->paths),
 				 "Path object list not the same size");
 
 			for (int i = 0; i < ARRAY_SIZE(paths); i++) {
-				paths[i] = msg->module.data.data.buffer.paths[i];
+				paths[i] = buffer->paths[i];
 			}
 
 			int ble_len = sizeof(ble_buf);
 			err = cloud_wrap_data_export(paths, 
-				msg->module.data.data.buffer.valid_object_paths, ble_buf, &ble_len);
+				buffer->valid_object_paths, ble_buf, &ble_len);
 			if (err) {
 				LOG_ERR("cloud_wrap_data_export, err: %d", err);
 				SEND_ERROR(ble, BLE_EVT_DATA_EXPORT_FAIL, err);
@@ -269,6 +288,7 @@ static void on_connected_states(struct ble_msg_data *msg)
 			}
 			return;
 		}
+#endif
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_SEND_COMPLETE)) {

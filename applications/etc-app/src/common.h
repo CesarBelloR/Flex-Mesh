@@ -39,4 +39,21 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
  * @return true if the packet is from the parent relay, false otherwise.
  */
 bool etc_common_is_packet_from_parent(char* relay_iccid, char* relay_id);
+#ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
+/**
+ * @brief Prepares legacy logger data for the common ETC device.
+ * 
+ * This function prepares legacy logger data for the common ETC device based on the provided device record.
+ * 
+ * @param record The device record containing necessary data.
+ * @param is_reclaim Flag indicating if the operation is a reclaim.
+ * @param out_buf Pointer to the buffer where the prepared data will be stored.
+ * @param out_len Pointer to the variable storing the length of the prepared data.
+ * 
+ * @return 0 on success
+ */
+int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool is_reclaim, 
+	char* out_buf, uint8_t* out_len) ;
+#endif
+
 #endif /* COMMON_H_ */

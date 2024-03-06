@@ -120,6 +120,7 @@ struct relay_data_buffer {
 
 struct data_encoded_buffer {
 	char *buf;
+	uint8_t buf_len;
 };
 
 struct data_event {

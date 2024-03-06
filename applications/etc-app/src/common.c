@@ -74,3 +74,59 @@ bool etc_common_is_packet_from_parent(char* relay_iccid, char* relay_id) {
 	}
 	return false;
 }
+
+#ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
+#define PAYLOAD_LEGACY_LEN	128
+
+static char decoded_buf[PAYLOAD_LEGACY_LEN] = {0x00};
+static char buf_tmp[ETC_SETTINGS_DEVICE_ID_LEN];
+
+int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool is_reclaim, 
+	char* out_buf, uint8_t* out_len) 
+{
+	static uint8_t pkt_counter = 0;
+	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
+	int decoded_buf_len = 0;
+
+	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), 
+		"%s,%s,%1.2f,%d,%d,", APP_VERSION_STR, buf_tmp, record.battery,
+		pkt_counter, record.timestamp);
+
+	pkt_counter += 1;
+	if (pkt_counter >= LOGGER_MAXIMUM_COUNTER) {
+		pkt_counter = 0;
+	}
+
+	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
+		if (data_codec_compare_temperature_is_valid(record.sensor[i])) {
+			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+							sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
+							record.sensor[i]);
+		} else {
+			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+							sizeof(decoded_buf) - decoded_buf_len, "*,");
+		}
+	}
+	
+	if (data_codec_compare_humidity_is_valid(record.sensor[SENSOR_INPUT_HUMID])) {
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+			sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
+			record.sensor[SENSOR_INPUT_HUMID]);
+	} else {
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+			sizeof(decoded_buf) - decoded_buf_len, "*,");
+	}
+
+	decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+		sizeof(decoded_buf) - decoded_buf_len, "%d", is_reclaim ? 1 : 0);
+	decoded_buf_len += 1;
+	decoded_buf[decoded_buf_len] = '\0';
+	if (decoded_buf_len > *out_len) {
+		return -ENOMEM;
+	}
+
+	memcpy(out_buf, decoded_buf, decoded_buf_len);
+	*out_len = decoded_buf_len;
+	return 0;
+}
+#endif

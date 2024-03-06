@@ -16,6 +16,10 @@ config ETC_BLE_ENCRYPTION
 	bool "Enable/disable the encryption data for BLE module"
 	default n
 
+config ETC_BLE_PAYLOAD_LEGACY_FORMAT
+	bool "Enabe/disable the format payload"
+	default y
+
 rsource "src/exact/Kconfig"
 rsource "src/cloud/Kconfig"
 rsource "src/cloud/Kconfig.lwm2m"
