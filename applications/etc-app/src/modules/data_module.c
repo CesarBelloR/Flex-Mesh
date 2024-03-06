@@ -487,7 +487,7 @@ static void data_encode_for_ble()
 	data_send(DATA_EVT_DATA_SEND_BLE, &codec);
 }
 
-static void relay_data_encode_for_cloud(struct relay_data_buffer *relay_data)
+static void relay_data_encode(struct relay_data_buffer *relay_data)
 {
 	if (send_status.active_send) {
 		LOG_WRN("Not sending new record."
@@ -536,8 +536,8 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 		} else if ((etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
 			   (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET) ||
 			   ((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
-			    (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))) {
-			data_encode(false);
+			   (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))) {
+			data_encode_for_cloud(false);
 		} else if (etc_device_is_relay()) {
 			reset_send_status(&send_status);
 			relay_data_encode();
@@ -582,7 +582,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		int rsrp = quectel_bg95_get_rsrp();
 		track_functional_test(DATA_TYPE_MODEM, &rsrp);
 		functional_test_set_state(FUNC_TEST_STATE_SENDING_DATA);
-		data_encode(false);
+		data_encode_for_cloud(false);
 	}
 }
 
