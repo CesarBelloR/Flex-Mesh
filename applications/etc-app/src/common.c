@@ -76,9 +76,7 @@ bool etc_common_is_packet_from_parent(char* relay_iccid, char* relay_id) {
 }
 
 #ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
-#define PAYLOAD_LEGACY_LEN	128
 
-static char decoded_buf[PAYLOAD_LEGACY_LEN] = {0x00};
 static char buf_tmp[ETC_SETTINGS_DEVICE_ID_LEN];
 
 int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool is_reclaim, 

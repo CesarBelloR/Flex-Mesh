@@ -184,7 +184,7 @@ int etc_device_write_setting(uint16_t setting_id, const void *setting, int setti
 
 int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size)
 {
-	LOG_DBG("Read setting ID %d", setting_id);
+	// LOG_DBG("Read setting ID %d", setting_id);
 	return etc_nvs_read(setting_id, setting, setting_size);
 }
 
@@ -195,7 +195,7 @@ int etc_device_delete_setting(uint16_t setting_id)
 
 int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int setting_size)
 {
-	LOG_DBG("Read setting ID %d", setting_id);
+	// LOG_DBG("Read setting ID %d", setting_id);
 	return etc_nvs_read_with_len(setting_id, setting, setting_size);
 }
 

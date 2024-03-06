@@ -89,6 +89,6 @@ int etc_device_write_setting(uint16_t setting_id, void *setting, int setting_siz
 
 int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size)
 {
-	LOG_DBG("Read setting ID %d", setting_id);
+	// LOG_DBG("Read setting ID %d", setting_id);
 	return etc_nvs_read(setting_id, setting, setting_size);
 }

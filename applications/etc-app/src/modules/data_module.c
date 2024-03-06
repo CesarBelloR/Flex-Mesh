@@ -527,7 +527,7 @@ static void data_encode_for_ble()
 #endif
 }
 
-static void relay_data_encode(struct relay_data_buffer *relay_data)
+static void relay_data_encode(void)
 {
 	if (send_status.active_send) {
 		LOG_WRN("Not sending new record."
