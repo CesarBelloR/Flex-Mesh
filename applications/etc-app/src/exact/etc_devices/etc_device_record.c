@@ -68,6 +68,11 @@ static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb re
 		return -ENOENT;
 	}
 
+	if (etc_device_record.record_sync_flag == ETC_DEVICE_RECORD_FLAG) {
+		/* Loaded */
+		return 0;
+	}
+
 	uint16_t len;
 	len = read_cb(cb_arg, &etc_device_record, sizeof(etc_device_record));
 	if (len <= 0) {
@@ -79,6 +84,12 @@ static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb re
 		LOG_ERR("Invalid length for device record");
 		return -EINVAL;
 	}
+
+	LOG_DBG("\tNewest record (%d,%d)", p_etc_device_record_table->newest.sector_idx,
+		p_etc_device_record_table->newest.element_idx);
+	LOG_DBG("\tOldest record (%d,%d)", p_etc_device_record_table->oldest.sector_idx,
+		p_etc_device_record_table->oldest.element_idx);
+	LOG_DBG("\tTotal record %d", p_etc_device_record_table->total);
 
 	return 0;
 }
@@ -102,7 +113,8 @@ static struct settings_handler etc_device_record_settings = {
 	.h_set = etc_device_on_set,
 };
 
-static void etc_device_set_status(int total, int start, int end, int ack) {
+static void etc_device_set_status(int total, int start, int end, int ack)
+{
 	uint16_t count = 0;
 	uint16_t current_record = end;
 	while (count < total) {
@@ -129,14 +141,15 @@ static void etc_device_set_status(int total, int start, int end, int ack) {
 static void etc_device_export_old_structure(void)
 {
 	int rc = etc_device_read_setting(ETC_RECORD_STAT, &old_etc_device_record_table,
-		sizeof(old_etc_device_record_table));
+					 sizeof(old_etc_device_record_table));
 	if (rc == -ENOENT) {
 		/* No old structure here */
 		return;
 	}
 
 	LOG_DBG("Export from old structure");
-	memcpy(p_etc_device_record_table, &old_etc_device_record_table, sizeof(old_etc_device_record_table));
+	memcpy(p_etc_device_record_table, &old_etc_device_record_table,
+	       sizeof(old_etc_device_record_table));
 	uint16_t oldest_id = etc_device_record_get_oldest_id() + ETC_RECORD_HEADER;
 	uint16_t newest_id = etc_device_record_get_latest_id() + ETC_RECORD_HEADER;
 	uint16_t total_record = etc_device_record_get_total_record();
@@ -144,17 +157,13 @@ static void etc_device_export_old_structure(void)
 	uint16_t count = 0;
 	LOG_INF("Old structure %d %d %d %d", oldest_id, newest_id, total_record, last_ack_record);
 	/* If last ack record is zero, set all data to NACK */
-	if (last_ack_record == 0) 
-	{
+	if (last_ack_record == 0) {
 		etc_device_set_status(total_record, oldest_id, newest_id, 0);
-	} 
+	}
 	/* Last ack record is latest ID, set all data to ACK */
-	else if (last_ack_record == newest_id) 
-	{
+	else if (last_ack_record == newest_id) {
 		etc_device_set_status(total_record, oldest_id, newest_id, 1);
-	} 
-	else 
-	{
+	} else {
 		uint16_t total_ack = 0;
 		if (oldest_id <= last_ack_record) {
 			total_ack = last_ack_record - oldest_id + 1;
@@ -171,7 +180,8 @@ static void etc_device_export_old_structure(void)
 	etc_device_delete_setting(ETC_RECORD_STAT);
 }
 
-static void etc_device_record_reset_stat(void) {
+static void etc_device_record_reset_stat(void)
+{
 	pRecord->record_stat.newest.sector_idx = 0;
 	pRecord->record_stat.oldest.sector_idx = 0;
 	pRecord->record_stat.newest.element_idx = 0;
@@ -212,18 +222,18 @@ void etc_device_record_init(void)
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)record_fs.offset,
 		FLASH_AREA_SIZE(ETC_DEVICE_RECORD_NODE_LABEL), info.size, record_fs.sector_count);
 	rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)pRecord,
-				   sizeof(struct etc_device_record_data));
+			       sizeof(struct etc_device_record_data));
 
 	if ((rc) || (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
 		/* Clean up the memory RAM in no-init region */
 		retained_mem_clear(retained_ram_dev);
 		/* Clean up the record in app RAM */
 		memset(pRecord, 0, sizeof(struct etc_device_record_data));
+		/* Reset stat record */
+		etc_device_record_reset_stat();
 		/* Reload from setting subsys - Don't need to check the return here */
 		etc_device_record_load();
 		pRecord->record_sync_flag = ETC_DEVICE_RECORD_FLAG;
-		/* Reset stat record */
-		etc_device_record_reset_stat();
 		/* Export old structure if it is available */
 		etc_device_export_old_structure();
 		/* Save it */
@@ -238,14 +248,14 @@ void etc_device_record_init(void)
 	}
 
 	rc = etc_device_read_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
-					 sizeof(etc_reclaim_info));
+				     sizeof(etc_reclaim_info));
 	if (rc != 0) {
 		etc_reclaim_info.current_index = 0;
 		etc_reclaim_info.start_index = 0;
 		etc_reclaim_info.stop_index = 0;
 		etc_reclaim_info.flag_in_process = 0;
 		rc = etc_device_write_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
-						  sizeof(etc_reclaim_info));
+					      sizeof(etc_reclaim_info));
 		if (rc != 0) {
 			LOG_ERR("Failed to write reclaim info");
 		} else {
@@ -277,8 +287,8 @@ void etc_device_record_set_ack(int record_id)
 	etc_device_record_set_ack_status(record_id, 1);
 	uint8_t byte_position = record_id / 8;
 	int rc = retained_mem_write(retained_ram_dev, RECORD_ARRAY_OFFSET(byte_position),
-					(uint8_t *)&pRecord->record_bits[byte_position],
-					sizeof(uint8_t));
+				    (uint8_t *)&pRecord->record_bits[byte_position],
+				    sizeof(uint8_t));
 	if (rc) {
 		LOG_ERR("Failed to write data - err %d", rc);
 	}
@@ -289,8 +299,8 @@ void etc_device_record_set_nack(int record_id)
 	etc_device_record_set_ack_status(record_id, 0);
 	uint8_t byte_position = record_id / 8;
 	int rc = retained_mem_write(retained_ram_dev, RECORD_ARRAY_OFFSET(byte_position),
-					(uint8_t *)&pRecord->record_bits[byte_position],
-					sizeof(uint8_t));
+				    (uint8_t *)&pRecord->record_bits[byte_position],
+				    sizeof(uint8_t));
 	if (rc) {
 		LOG_ERR("Failed to write data - err %d", rc);
 	}
@@ -355,13 +365,13 @@ static void etc_device_save_work_handler(struct k_work *work)
 uint16_t etc_device_record_get_latest_id(void)
 {
 	return ETC_RECORD_MAX_PER_SECTOR * pRecord->record_stat.newest.sector_idx +
-		   pRecord->record_stat.newest.element_idx;
+	       pRecord->record_stat.newest.element_idx;
 }
 
 uint16_t etc_device_record_get_oldest_id(void)
 {
 	return ETC_RECORD_MAX_PER_SECTOR * pRecord->record_stat.oldest.sector_idx +
-		   pRecord->record_stat.oldest.element_idx;
+	       pRecord->record_stat.oldest.element_idx;
 }
 
 uint16_t etc_device_record_get_total_record(void)
@@ -369,10 +379,10 @@ uint16_t etc_device_record_get_total_record(void)
 	return pRecord->record_stat.total;
 }
 
-off_t etc_deviced_record_get_addr_offset_by_index(struct etc_device_record_index index)
+off_t etc_device_record_get_addr_offset_by_index(struct etc_device_record_index index)
 {
 	return (record_fs.offset) + index.sector_idx * record_fs.sector_size +
-		   index.element_idx * ETC_DEVICE_RECORD_SIZE;
+	       index.element_idx * ETC_DEVICE_RECORD_SIZE;
 }
 
 uint16_t etc_device_record_get_id_by_index(struct etc_device_record_index index)
@@ -388,6 +398,64 @@ struct etc_device_record_index etc_device_get_index_by_id(uint16_t record_id)
 	return index;
 }
 
+struct etc_device_record_index etc_device_get_index_by_addr_offset(off_t offset)
+{
+	off_t start_addr = offset - record_fs.offset;
+	__ASSERT_NO_MSG(start_addr >= 0);
+	struct etc_device_record_index index;
+
+	index.sector_idx = (start_addr) / record_fs.sector_size;
+	index.element_idx = ((start_addr) % record_fs.sector_size) / ETC_DEVICE_RECORD_SIZE;
+
+	return index;
+}
+
+struct etc_device_record_index etc_device_get_next_index_byte_addr_offset(off_t offset)
+{
+	struct etc_device_record_index offset_index = etc_device_get_index_by_addr_offset(offset);
+	if (offset_index.element_idx < ETC_RECORD_MAX_PER_SECTOR - 1) {
+		offset_index.element_idx += 1;
+	} else {
+		offset_index.element_idx = 0;
+		if (offset_index.sector_idx < ETC_RECORD_MAX_SECTOR - 1) {
+			offset_index.sector_idx += 1;
+		} else {
+			offset_index.sector_idx = 0;
+		}
+	}
+	return offset_index;
+}
+
+struct etc_device_record_index etc_device_get_previous_index_byte_addr_offset(off_t offset)
+{
+	struct etc_device_record_index offset_index = etc_device_get_index_by_addr_offset(offset);
+	if (offset_index.element_idx > 0) {
+		offset_index.element_idx -= 1;
+	} else {
+		offset_index.element_idx = ETC_RECORD_MAX_PER_SECTOR - 1;
+		if (offset_index.sector_idx > 0) {
+			offset_index.sector_idx -= 1;
+		} else {
+			offset_index.sector_idx = ETC_RECORD_MAX_SECTOR - 1;
+		}
+	}
+	return offset_index;
+}
+
+off_t etc_device_get_next_addr_byte_addr_offset(off_t offset)
+{
+	struct etc_device_record_index next_index =
+		etc_device_get_next_index_byte_addr_offset(offset);
+	return etc_device_record_get_addr_offset_by_index(next_index);
+}
+
+off_t etc_device_get_previous_addr_byte_addr_offset(off_t offset)
+{
+	struct etc_device_record_index previous_index =
+		etc_device_get_previous_index_byte_addr_offset(offset);
+	return etc_device_record_get_addr_offset_by_index(previous_index);
+}
+
 static bool etc_device_record_buffer_is_erased(uint8_t *buf, uint8_t length)
 {
 	for (int i = 0; i < length; i++) {
@@ -397,6 +465,82 @@ static bool etc_device_record_buffer_is_erased(uint8_t *buf, uint8_t length)
 	}
 
 	return true;
+}
+
+static int etc_device_record_validate_record(union etc_device_record previous,
+					     union etc_device_record current)
+{
+	if (previous.timestamp == -1 || current.timestamp == -1) {
+		/* TODO: Need to find better solution for this case */
+		return -EINVAL;
+	}
+
+	if (current.timestamp < previous.timestamp) {
+		/* If the previous record is newer than check record, erase it.*/
+		LOG_DBG("%d", __LINE__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int etc_device_record_recover_data(off_t *addr)
+{
+	union etc_device_record previous_record;
+	union etc_device_record check_record;
+	off_t offset_addr = *addr;
+	off_t previous_offset = etc_device_get_previous_addr_byte_addr_offset(offset_addr);
+
+	int rc = flash_read(record_fs.flash_device, previous_offset, previous_record.data,
+			    ETC_DEVICE_RECORD_SIZE);
+	if (rc != 0) {
+		LOG_ERR("Error in reading previous record 0x%08x - err %d",
+			(uint32_t)previous_offset, rc);
+		return rc;
+	}
+
+	rc = flash_read(record_fs.flash_device, offset_addr, check_record.data,
+			ETC_DEVICE_RECORD_SIZE);
+	if (rc != 0) {
+		LOG_ERR("Error in reading current record 0x%08x - err %d", (uint32_t)offset_addr,
+			rc);
+		return rc;
+	}
+
+	if (!(offset_addr == record_fs.offset && previous_record.timestamp == -1)) {
+		rc = etc_device_record_validate_record(previous_record, check_record);
+		if (rc) {
+			*addr = offset_addr;
+			return 0;
+		}
+	}
+
+	do {
+		previous_record = check_record;
+		previous_offset = offset_addr;
+		offset_addr = etc_device_get_next_addr_byte_addr_offset(previous_offset);
+		rc = flash_read(record_fs.flash_device, offset_addr, check_record.data,
+				ETC_DEVICE_RECORD_SIZE);
+		if (rc != 0) {
+			LOG_ERR("Error in reading flash err %d", rc);
+			return rc;
+		}
+
+		if (etc_device_record_buffer_is_erased(check_record.data, ETC_DEVICE_RECORD_SIZE)) {
+			*addr = offset_addr;
+			return 1;
+		} else {
+			rc = etc_device_record_validate_record(previous_record, check_record);
+			if (rc) {
+				LOG_DBG("%d", __LINE__);
+				*addr = offset_addr;
+				return 0;
+			} else {
+				/* Continue to check */
+			}
+		}
+	} while (1);
+	return -EINVAL;
 }
 
 int etc_device_record_write_data(off_t addr, void *data, int data_len)
@@ -413,11 +557,47 @@ int etc_device_record_write_data(off_t addr, void *data, int data_len)
 		/* Need to erase flash */
 		LOG_WRN("Data in address is not empty 0x%08x", (uint32_t)addr);
 		LOG_HEXDUMP_DBG(buf, ETC_DEVICE_RECORD_SIZE, "DUMP");
-		uint32_t offset_sector = addr - addr % record_fs.sector_size;
-		rc = flash_erase(record_fs.flash_device, offset_sector, record_fs.sector_size);
-		if (rc != 0) {
-			LOG_ERR("Error in erasing flash err %d 0x%08x", rc, offset_sector);
-			return rc;
+		off_t new_addr = addr;
+		rc = etc_device_record_recover_data(&new_addr);
+		LOG_DBG("New Addr 0x%08x - rc %d", (uint32_t)new_addr, rc);
+		if (rc == 1) {
+			/* Found erased address */
+			struct etc_device_record_index new_index =
+				etc_device_get_index_by_addr_offset(new_addr);
+			LOG_DBG("Updated new record to new address 0x%08x (%d,%d)",
+				(uint32_t)new_addr, new_index.sector_idx, new_index.element_idx);
+			p_etc_device_record_table->newest = new_index;
+			addr = new_addr;
+		} else if (rc == 0) {
+			int offset_sector = new_addr - (new_addr % record_fs.sector_size);
+			uint32_t remain_data_size = new_addr - offset_sector;
+			if (remain_data_size == 0) {
+				rc = flash_erase(record_fs.flash_device, offset_sector,
+						 record_fs.sector_size);
+				__ASSERT_NO_MSG(rc == 0);
+			} else {
+				uint8_t *tmp_buf = (uint8_t *)k_malloc(remain_data_size);
+				__ASSERT_NO_MSG(tmp_buf != NULL);
+				rc = flash_read(record_fs.flash_device, offset_sector, tmp_buf,
+						remain_data_size);
+				__ASSERT_NO_MSG(rc == 0);
+				rc = flash_erase(record_fs.flash_device, offset_sector,
+						 record_fs.sector_size);
+				__ASSERT_NO_MSG(rc == 0);
+				rc = flash_write(record_fs.flash_device, offset_sector, tmp_buf,
+						 remain_data_size);
+				k_free(tmp_buf);
+			}
+
+			struct etc_device_record_index new_index =
+				etc_device_get_index_by_addr_offset(new_addr);
+			LOG_DBG("Updated new record to new address 0x%08x (%d,%d)",
+				(uint32_t)new_addr, new_index.sector_idx, new_index.element_idx);
+			p_etc_device_record_table->newest = new_index;
+			addr = new_addr;
+		} else {
+			/* Error in this case */
+			__ASSERT_NO_MSG(false);
 		}
 	}
 
@@ -472,7 +652,7 @@ uint16_t etc_device_record_get_num_ack(void)
 void etc_device_record_save_stat(void)
 {
 	int rc = retained_mem_write(retained_ram_dev, RECORD_STAT_OFFSET,
-					(uint8_t *)&pRecord->record_stat, sizeof(pRecord->record_stat));
+				    (uint8_t *)&pRecord->record_stat, sizeof(pRecord->record_stat));
 	if (rc) {
 		LOG_ERR("Failed to write data - err %d", rc);
 	}
@@ -483,7 +663,7 @@ int etc_device_record_reading(uint16_t record_id, void *data)
 	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
 	union etc_device_record *record = (union etc_device_record *)data;
 	struct etc_device_record_index index = etc_device_get_index_by_id(record_id);
-	uint32_t record_addr = (uint32_t)etc_deviced_record_get_addr_offset_by_index(index);
+	uint32_t record_addr = (uint32_t)etc_device_record_get_addr_offset_by_index(index);
 	LOG_DBG("Record to read data %d (0x%08x) (%d,%d)", record_id, record_addr, index.sector_idx,
 		index.element_idx);
 	int rc = etc_device_record_read_data(record_addr, buf, ETC_DEVICE_RECORD_SIZE);
@@ -503,7 +683,7 @@ void etc_device_record_clean_up(void)
 	pRecord->record_sync_flag = ETC_DEVICE_RECORD_FLAG;
 	etc_device_record_reset_stat();
 	int rc = retained_mem_write(retained_ram_dev, 0, (uint8_t *)&etc_device_record,
-					sizeof(etc_device_record));
+				    sizeof(etc_device_record));
 	if (rc) {
 		LOG_ERR("Failed to write data - err %d", rc);
 	}
@@ -539,7 +719,7 @@ int etc_device_record_reclaim(int start_time, int stop_time)
 	}
 
 	int rc = 0;
-	
+
 	etc_reclaim_info.start_index = 0;
 	etc_reclaim_info.stop_index = 0;
 	uint16_t oldest_id = etc_device_record_get_oldest_id();
@@ -576,11 +756,11 @@ int etc_device_record_reclaim(int start_time, int stop_time)
 	}
 
 	if ((rc == 0) && (etc_reclaim_info.start_index != 0) &&
-		(etc_reclaim_info.stop_index != 0)) {
+	    (etc_reclaim_info.stop_index != 0)) {
 		etc_reclaim_info.flag_in_process = 1U;
 		etc_reclaim_info.current_index = etc_reclaim_info.start_index;
 		rc = etc_device_write_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
-						  sizeof(etc_reclaim_info));
+					      sizeof(etc_reclaim_info));
 		if (rc != 0) {
 			LOG_ERR("Failed to write reclaim info");
 		} else {
@@ -634,7 +814,7 @@ struct etc_device_record_index etc_device_record_get_next_index(void)
 		} else {
 			p_etc_device_record_table->oldest.element_idx = 0;
 			if (p_etc_device_record_table->oldest.sector_idx <
-				ETC_RECORD_MAX_SECTOR - 1) {
+			    ETC_RECORD_MAX_SECTOR - 1) {
 				p_etc_device_record_table->oldest.sector_idx += 1;
 			} else {
 				p_etc_device_record_table->oldest.sector_idx = 0;
@@ -651,7 +831,7 @@ static int etc_device_reclaim_data(etc_device_record_reading_callback reading_ca
 	if (etc_reclaim_info.flag_in_process == 1) {
 		if (etc_reclaim_info.start_index <= etc_reclaim_info.stop_index) {
 			if ((etc_reclaim_info.current_index >= etc_reclaim_info.start_index) &&
-				(etc_reclaim_info.stop_index >= etc_reclaim_info.current_index)) {
+			    (etc_reclaim_info.stop_index >= etc_reclaim_info.current_index)) {
 				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
 				rc = reading_callback(etc_reclaim_info.current_index, data);
 				if (rc > 0) { // Return record_id;
@@ -664,7 +844,7 @@ static int etc_device_reclaim_data(etc_device_record_reading_callback reading_ca
 				etc_reclaim_info.flag_in_process = 0;
 				etc_reclaim_info.current_index = 0;
 				rc = etc_device_write_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
-								  sizeof(etc_reclaim_info));
+							      sizeof(etc_reclaim_info));
 				if (rc != 0) {
 					LOG_ERR("Failed to write reclaim info");
 				} else {
@@ -673,12 +853,12 @@ static int etc_device_reclaim_data(etc_device_record_reading_callback reading_ca
 			}
 		} else {
 			if (etc_reclaim_info.current_index >= etc_reclaim_info.start_index &&
-				etc_reclaim_info.current_index <= MAX_RECORD_NO_OFFSET_ID) {
+			    etc_reclaim_info.current_index <= MAX_RECORD_NO_OFFSET_ID) {
 				rc = reading_callback(etc_reclaim_info.current_index, data);
 				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
 				if (rc > 0) { // Return record_id;
 					if (etc_reclaim_info.current_index ==
-						MAX_RECORD_NO_OFFSET_ID) {
+					    MAX_RECORD_NO_OFFSET_ID) {
 						etc_reclaim_info.current_index =
 							MIN_RECORD_NO_OFFSET_ID;
 					} else {
@@ -691,12 +871,12 @@ static int etc_device_reclaim_data(etc_device_record_reading_callback reading_ca
 			}
 
 			if (etc_reclaim_info.current_index >= MIN_RECORD_NO_OFFSET_ID &&
-				etc_reclaim_info.current_index <= etc_reclaim_info.stop_index) {
+			    etc_reclaim_info.current_index <= etc_reclaim_info.stop_index) {
 				rc = reading_callback(etc_reclaim_info.current_index, data);
 				LOG_DBG("Reclaim at %d", etc_reclaim_info.current_index);
 				if (rc > 0) { // Return record_id;
 					if (etc_reclaim_info.current_index ==
-						etc_reclaim_info.stop_index) {
+					    etc_reclaim_info.stop_index) {
 						etc_reclaim_info.flag_in_process = 0;
 						etc_reclaim_info.current_index = 0;
 						rc = etc_device_write_setting(
@@ -787,11 +967,13 @@ size_t etc_device_record_get_element_size(void)
 	return sizeof(union etc_device_record);
 }
 
-int etc_device_record_num_reclaim_records(void) {
+int etc_device_record_num_reclaim_records(void)
+{
 	int num_records = 0;
 	if (etc_reclaim_info.flag_in_process) {
 		if (etc_reclaim_info.start_index <= etc_reclaim_info.stop_index) {
-			num_records = etc_reclaim_info.stop_index - etc_reclaim_info.start_index + 1;
+			num_records =
+				etc_reclaim_info.stop_index - etc_reclaim_info.start_index + 1;
 		} else {
 			num_records = MAX_RECORD_NO_OFFSET_ID - etc_reclaim_info.start_index;
 			num_records += etc_reclaim_info.stop_index + 1;
@@ -859,7 +1041,7 @@ static int cmd_parser_hex_record(const struct shell *shell, size_t argc, char **
 		for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 			if (data_codec_compare_temperature_is_valid(record.sensor[i])) {
 				buf_len += snprintf(buf + buf_len, sizeof(buf) - buf_len, "%2.2f,",
-							record.sensor[i]);
+						    record.sensor[i]);
 			} else {
 				buf_len += snprintf(buf + buf_len, sizeof(buf) - buf_len, "*,");
 			}
@@ -893,12 +1075,56 @@ static int cmd_reclaim_record(const struct shell *shell, size_t argc, char **arg
 	return 0;
 }
 
+static int cmd_save_record(const struct shell *shell, size_t argc, char **argv)
+{
+	etc_device_record_save();
+	shell_info(shell, "Save done");
+	return 0;
+}
+
+static int cmd_reload_record(const struct shell *shell, size_t argc, char **argv)
+{
+	etc_device_record_load();
+	shell_info(shell, "Reload done");
+	return 0;
+}
+
+static int cmd_reset_record(const struct shell *shell, size_t argc, char **argv)
+{
+	etc_device_record_reset_stat();
+	etc_device_record.record_sync_flag = 0;
+	shell_info(shell, "Reset done");
+	return 0;
+}
+
+static int cmd_erase_record(const struct shell *shell, size_t argc, char **argv)
+{
+	int rc = flash_erase(record_fs.flash_device, record_fs.offset,
+			     record_fs.sector_count * record_fs.sector_size);
+	shell_info(shell, "Erase done %d", rc);
+	return 0;
+}
+
 static int cmd_generate_record(const struct shell *shell, size_t argc, char **argv)
 {
 	if (argc == 2) {
 		int num_of_sample = atoi(argv[1]);
 		extern void ui_module_test_data_request(int num_of_sample);
 		ui_module_test_data_request(num_of_sample);
+	} else {
+		shell_error(shell, "Invalid input parameter for generating record");
+	}
+
+	return 0;
+}
+
+static int cmd_generate_at_record(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc == 3) {
+		p_etc_device_record_table->newest.sector_idx = atoi(argv[1]);
+		p_etc_device_record_table->newest.element_idx = atoi(argv[2]);
+		extern void ui_module_test_data_request(int num_of_sample);
+		ui_module_test_data_request(1);
 	} else {
 		shell_error(shell, "Invalid input parameter for generating record");
 	}
@@ -913,8 +1139,14 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(clean, NULL, "Clean the records", cmd_clean_records),
 	SHELL_CMD(parser, NULL, "Parser the hex record", cmd_parser_hex_record),
 	SHELL_CMD(reclaim, NULL, "Reclaim ", cmd_reclaim_record),
+	SHELL_CMD(save, NULL, "Save record stat ", cmd_save_record),
+	SHELL_CMD(reload, NULL, "Reload record stat ", etc_device_record_load),
+	SHELL_CMD(reset, NULL, "Reset record stat ", cmd_reset_record),
+	SHELL_CMD(erase, NULL, "Erase record ", cmd_erase_record),
 	SHELL_CMD(generate, NULL, "Generate a certain number of samples to fill up the flash ",
 		  cmd_generate_record),
+	SHELL_CMD(generate_at, NULL, "Generate a record at <sector,index> ",
+		  cmd_generate_at_record),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(record, &sub_record, "ETC Record Management", NULL);
 #endif /* CONFIG_SHELL */

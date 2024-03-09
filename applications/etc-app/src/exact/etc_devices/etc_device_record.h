@@ -9,19 +9,29 @@
  *
  */
 #define ETC_FLASH_SECTOR_SIZE	  (4096)
+
 /**
  * @brief Define maximum record per sector
  */
+#ifndef CONFIG_ETC_RECORD_MAX_PER_SECTOR
 #define ETC_RECORD_MAX_PER_SECTOR ((int)(ETC_FLASH_SECTOR_SIZE) / (ETC_DEVICE_RECORD_SIZE))
+#else
+#define ETC_RECORD_MAX_PER_SECTOR CONFIG_ETC_RECORD_MAX_PER_SECTOR
+#endif
 /**
  * @brief Maximum record in requirement
  */
 #define ETC_RECORD_MAX_RECORD	  (90 * 24 * 4)
+
 /**
  * @brief Max sector = round(fit sector + 1 free sector for swap) (ETC_RECORD_MAX_RECORD /
  * ETC_RECORD_MAX_PER_SECTOR) + 1
  */
+#ifndef CONFIG_ETC_RECORD_MAX_SECTOR
 #define ETC_RECORD_MAX_SECTOR	  ((int)((ETC_RECORD_MAX_RECORD) / (ETC_RECORD_MAX_PER_SECTOR)) + 1)
+#else
+#define ETC_RECORD_MAX_SECTOR CONFIG_ETC_RECORD_MAX_SECTOR
+#endif
 
 #define ETC_RECORD_ID_HEADER(x) (x + ETC_RECORD_HEADER)
 #define ETC_RECORD_ID(x) (x - ETC_RECORD_HEADER)
@@ -171,7 +181,7 @@ uint16_t etc_device_record_get_total_record(void);
  * @param index The index of the record.
  * @return The address offset for the specified record index.
  */
-off_t etc_deviced_record_get_addr_offset_by_index(struct etc_device_record_index index);
+off_t etc_device_record_get_addr_offset_by_index(struct etc_device_record_index index);
 
 /**
  * @brief Retrieves the record ID for a record based on its index.
@@ -188,6 +198,17 @@ uint16_t etc_device_record_get_id_by_index(struct etc_device_record_index index)
  * @return The record index for the specified record ID.
  */
 struct etc_device_record_index etc_device_get_index_by_id(uint16_t record_id);
+
+/**
+ * @brief Calculates the device record index based on the given address offset.
+ *
+ * This function reverses the calculation performed in etc_deviced_record_get_addr_offset_by_index
+ * to retrieve the device record index corresponding to the given address offset.
+ *
+ * @param offset The address offset for which to calculate the device record index.
+ * @return The device record index corresponding to the given address offset.
+ */
+struct etc_device_record_index etc_device_get_index_by_addr_offset(off_t offset);
 
 /**
  * @brief Writes data to the specified address offset in the device's records.

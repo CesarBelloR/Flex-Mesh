@@ -221,9 +221,9 @@ int etc_device_write_record_sensor(struct sensor_data *sensor)
 int etc_device_write_record(union etc_device_record *record)
 {
 	struct etc_device_record_index record_index = etc_device_record_get_next_index();
-	uint32_t record_addr = (uint32_t)etc_deviced_record_get_addr_offset_by_index(record_index);
+	off_t record_addr = etc_device_record_get_addr_offset_by_index(record_index);
 	uint16_t record_id = etc_device_record_get_id_by_index(record_index);
-	LOG_DBG("Record to write data %d (0x%08x) (%d,%d)", ETC_RECORD_ID_HEADER(record_id), record_addr,
+	LOG_DBG("Record to write data %d (0x%08x) (%d,%d)", ETC_RECORD_ID_HEADER(record_id), (uint32_t)record_addr,
 		record_index.sector_idx, record_index.element_idx);
 	int rc = etc_device_record_write_data(record_addr, record->data, ETC_DEVICE_RECORD_SIZE);
 	if (rc) {

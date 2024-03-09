@@ -39,7 +39,24 @@ config ETC_DEVICE_RELAY_MAX_RECORD_HISTORY
 	default 64
 	help
 		Default value for number of record that the Relay can save in ROM.
+		
+config ETC_RECORD_TEST
+	bool "Enable ETC Record Test"
+	default n
 
+config ETC_RECORD_MAX_PER_SECTOR
+	int "Maximum ETC Records per Sector"
+	depends on ETC_RECORD_TEST
+	default 12
+	help
+	  This option sets the maximum number of ETC records per sector.
+
+config ETC_RECORD_MAX_SECTOR
+	int "Maximum Records Sector"
+	depends on ETC_RECORD_TEST
+	default 2
+	help
+	  This option sets the maximum number of ETC sectors to save record.
 			
 module = ETC_DEVICE
 module-str = device
