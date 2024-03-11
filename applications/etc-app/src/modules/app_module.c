@@ -363,8 +363,12 @@ static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mi
 }
 
 static time_t app_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logger_lora_mins,
-	enum etc_sensor_status sensor_status) {
-	if (etc_get_device_mode() != ETC_DEVICE_MODE_LORA_LOGGER) return -1;
+						    enum etc_sensor_status sensor_status) 
+{
+	if (etc_get_device_mode() != ETC_DEVICE_MODE_LORA_LOGGER) {
+		return -1;
+	}
+	time_t wakeup_s;
 	struct tm tm_time = {0};
 	gmtime_r(&now, &tm_time);
 	int tx_logger_lora_diff_hours = 0;
@@ -373,9 +377,17 @@ static time_t app_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logg
 	} else {
 		tx_logger_lora_diff_hours = (24 - tm_time.tm_hour) + ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR;
 	}
+
+	wakeup_s = (time_t)(now + tx_logger_lora_diff_hours * 3600 + 
+		   (tx_logger_lora_mins  - tm_time.tm_min) * 60 - tm_time.tm_sec);
+
+	/* Return invalid time when new wakeup time is in the past or too close to current time. */
+	if (wakeup_s < (now + MINIMUM_TIME_TO_WAKEUP_S)) {
+		return -1;
+	}
+
 	/* Return the next transmit for logger lora mode to sync with cloud */
-	return (time_t)(now + tx_logger_lora_diff_hours * 3600 + 
-		(tx_logger_lora_mins  - tm_time.tm_min) * 60 - tm_time.tm_sec);
+	return wakeup_s;
 }
 
 static void app_set_next_wakeup_time_for_job(enum etc_device_job job) 
