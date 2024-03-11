@@ -60,10 +60,13 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler);
 
 /**
  * @brief Start the adv for BLE
- *  
- * @note FIXME: Need to start ADV after the first connection to cloud done  
  */
 void etc_ble_start_adv(void);
+
+/**
+ * @brief Start the adv for BLE with timeout for magnet event
+ */
+void etc_ble_start_adv_with_timeout(void);
 
 /**
  * @brief Sets the current sensor data for the ETC BLE module.

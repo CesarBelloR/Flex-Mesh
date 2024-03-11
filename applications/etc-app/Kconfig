@@ -12,14 +12,6 @@ config APP_AWS_IOT
 	bool "Enable/disable use of AWS IoT to connect to cloud"
 	default y
 
-config ETC_BLE_ENCRYPTION
-	bool "Enable/disable the encryption data for BLE module"
-	default n
-
-config ETC_BLE_PAYLOAD_LEGACY_FORMAT
-	bool "Enabe/disable the format payload"
-	default y
-
 rsource "src/exact/Kconfig"
 rsource "src/cloud/Kconfig"
 rsource "src/cloud/Kconfig.lwm2m"
@@ -28,7 +20,6 @@ rsource "src/modules/Kconfig.modem_module"
 rsource "src/modules/Kconfig.ui_module"
 rsource "src/modules/Kconfig.lora_module"
 rsource "src/cloud/cloud_codec/Kconfig"
-
 endmenu
 
 menu "Zephyr Kernel"

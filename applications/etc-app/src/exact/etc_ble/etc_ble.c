@@ -51,6 +51,9 @@ ATOMIC_DEFINE(flex_ccc_reclaim, FLEX_CCC_NUM_FLAGS);
 static void flex_ble_sensor_work_handler(struct k_work* work);
 static K_WORK_DELAYABLE_DEFINE(flex_ble_sensor_work, flex_ble_sensor_work_handler);
 
+static void flex_ble_adv_magnet_work_handler(struct k_work* work);
+static K_WORK_DELAYABLE_DEFINE(flex_ble_adv_magnet_work, flex_ble_adv_magnet_work_handler);
+
 static struct k_work advertise_work;
 static char flex_device_name[CONFIG_BT_DEVICE_NAME_MAX] = { 0x00 };
 static struct bt_conn *current_conn;
@@ -60,6 +63,7 @@ static struct flex_ble_frame flex_frame;
 static etc_ble_evt_handler_t ble_evt_handler;
 static uint8_t flex_ble_notify_sub_cnt = 0;
 static bool flex_ble_is_ready = false;
+static bool flex_ble_is_magnet_trigger = false;
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 static uint8_t adv_data[] = {
@@ -465,6 +469,12 @@ static void flex_ble_sensor_work_handler(struct k_work* work) {
 	etc_ble_notify_evt(ETC_BLE_EVT_CCC_MEASURE_READY);
 }
 
+static void flex_ble_adv_magnet_work_handler(struct k_work* work) {
+	flex_ble_is_magnet_trigger = false;
+	/* Stop adv */
+	bt_le_adv_stop();
+}
+
 static void mtu_exchange_cb(struct bt_conn *conn, uint8_t err,
 			    struct bt_gatt_exchange_params *params)
 {
@@ -489,8 +499,13 @@ static void connected(struct bt_conn *conn, uint8_t err)
 			LOG_ERR("Can't exchange MTU request %d", rc);
 		}
 
+		/* Cancel work scheduler for stop advertising */
+		if (flex_ble_is_magnet_trigger) {
+			k_work_cancel_delayable(&flex_ble_adv_magnet_work);
+		}
+
 #if !defined(CONFIG_BT_SMP)
-	etc_ble_notify_evt(ETC_BLE_EVT_CONNECTED);
+		etc_ble_notify_evt(ETC_BLE_EVT_CONNECTED);
 #endif
 	}
 }
@@ -504,7 +519,13 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	atomic_clear_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED);
 	atomic_clear_bit(flex_ccc_reclaim, FLEX_CCC_SUBSCRIBED);
 
+	/* Submit work for advertise */
 	k_work_submit(&advertise_work);
+	/* Restart the scheduler for magnet advertising */
+	if (flex_ble_is_magnet_trigger) {
+		k_work_reschedule(&flex_ble_adv_magnet_work, 
+			K_SECONDS(CONFIG_ETC_BLE_ADV_MAGET_TIMEOUT_SEC));
+	}
 	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
 }
 
@@ -673,6 +694,13 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 
 void etc_ble_start_adv(void) {
 	k_work_submit(&advertise_work);
+}
+
+void etc_ble_start_adv_with_timeout(void) {
+	flex_ble_is_magnet_trigger = true;
+	k_work_submit(&advertise_work);
+	k_work_schedule(&flex_ble_adv_magnet_work, 
+		K_SECONDS(CONFIG_ETC_BLE_ADV_MAGET_TIMEOUT_SEC));
 }
 
 void etc_ble_set_current_sensor(struct sensor_data* data) {

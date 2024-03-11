@@ -635,6 +635,7 @@ static void app_input_handler(enum etc_interface_event_type type)
 		app_peripheral_on(true);
 	} else if (type == ETC_INTERFACE_EVENT_HALL) {
 		app_set_tx_work_type(APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK);
+		etc_ble_start_adv_with_timeout();
 		app_peripheral_on(false);
 	} else {
 		/* No action required */
