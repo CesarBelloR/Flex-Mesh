@@ -732,6 +732,13 @@ void etc_ble_start_adv_with_timeout(void) {
 	k_work_submit(&advertise_work);
 }
 
+void etc_ble_start_adv_with_timeout(void) {
+	flex_ble_is_magnet_trigger = true;
+	k_work_submit(&advertise_work);
+	k_work_schedule(&flex_ble_adv_magnet_work, 
+		K_SECONDS(CONFIG_ETC_BLE_ADV_MAGET_TIMEOUT_SEC));
+}
+
 void etc_ble_set_current_sensor(struct sensor_data* data) {
 	if (!flex_ble_is_adversting) {
 		return;
