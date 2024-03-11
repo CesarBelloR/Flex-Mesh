@@ -150,6 +150,49 @@ int etc_get_psk(uint8_t *psk_buf, uint8_t buf_len)
 	return copy_size;
 }
 
+static inline uint16_t etc_get_wake_early_secs_max(void) 
+{
+	return etc_get_tx_interval_secs() - etc_get_rx_duration_secs() -
+	       ETC_SETTING_WAKEUP_EARLY_SECS_BUFFER;
+}
+
+/**
+ * Clip wake_early to allowed maximum if it exceeds the current maximum.
+ * 
+ * @retval 1 clipped
+ * @retval 0 not clipped
+ * @retval <0 error
+*/
+static int etc_clip_wake_early(void) 
+{
+	int ret = 1;
+	uint16_t wake_early_s_max = etc_get_wake_early_secs_max();
+	uint16_t wake_early_s_set = 0;
+	/* Adjust previous max value to new wake early default value. This ensures
+	 * devices with earlier firmware use the correct default value.
+	 * 
+	 * Otherwise, clip wake_early to the maximum (currently) allowed value if it is exceeded.
+	*/
+	if (etc_cfg.wake_early_secs > ETC_SETTING_WAKEUP_EARLY_SECS_MAX) {
+		wake_early_s_set = ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT;
+	} else if (etc_cfg.wake_early_secs > wake_early_s_max) {
+		wake_early_s_set = wake_early_s_max;
+	}
+
+	if (wake_early_s_set != 0) {
+		ret = etc_set_wake_early_secs(wake_early_s_set);
+	}
+
+	if (ret == 0) {
+		LOG_INF("wake_early clipped to %u", wake_early_s_set);
+		return 1;
+	} else if (ret < 0) {
+		return ret;
+	}
+
+	return 0;
+}
+
 int etc_settings_init(void)
 {
 	int ret;
@@ -246,10 +289,18 @@ int etc_settings_init(void)
 		etc_set_tx_probe_secs(ETC_SETTING_TX_PROBE_SECS);
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_RX_DURATION_SECS_ID, &etc_cfg.rx_duration_secs,
+				      sizeof(etc_cfg.rx_duration_secs));
+	if (ret) {
+		etc_set_rx_duration_secs(ETC_SETTING_RX_DURATION_SECS_DEFAULT);
+	}
+
 	ret = etc_device_read_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
 				      sizeof(etc_cfg.wake_early_secs));
 	if (ret) {
 		etc_set_wake_early_secs(ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT);
+	} else {
+		etc_clip_wake_early();
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_TX_DELAY_MSEC_ID, &etc_cfg.tx_delay_msec,
@@ -263,12 +314,6 @@ int etc_settings_init(void)
 			tx_delay_msec = ETC_SETTING_TX_DELAY_MSEC_MIN_LTE;
 		}
 		etc_set_tx_delay_msec(tx_delay_msec);
-	}
-
-	ret = etc_device_read_setting(ETC_SETTING_RX_DURATION_SECS_ID, &etc_cfg.rx_duration_secs,
-				      sizeof(etc_cfg.rx_duration_secs));
-	if (ret) {
-		etc_set_rx_duration_secs(ETC_SETTING_RX_DURATION_SECS_DEFAULT);
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_ALARM_THRESHOLD_ID, &etc_cfg.alarm_threshold,
@@ -367,6 +412,10 @@ int etc_set_device_mode(enum etc_device_mode mode)
 		LOG_DBG("set %u", mode);
 	}
 	k_mutex_unlock(&setting_mutex);
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+	date_time_force_event(DATE_TIME_SYSTEM_RELOAD);
+#endif
+
 	return rc;
 }
 
@@ -480,6 +529,7 @@ int etc_set_tx_interval_secs(uint32_t second)
 	if (rc == 0) {
 		LOG_DBG("set %u", second);
 	}
+	etc_clip_wake_early();
 	k_mutex_unlock(&setting_mutex);
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 	date_time_force_event(DATE_TIME_SYSTEM_RELOAD);
@@ -540,6 +590,11 @@ int etc_set_wake_early_secs(uint16_t second)
 		k_mutex_unlock(&setting_mutex);
 		return 0;
 	}
+	uint16_t wake_early_s_max = etc_get_wake_early_secs_max();
+	if (second > wake_early_s_max) {
+		k_mutex_unlock(&setting_mutex);
+		return -EINVAL;
+	}
 	etc_cfg.wake_early_secs = second;
 	rc = etc_device_write_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
 				      sizeof(etc_cfg.wake_early_secs));
@@ -547,6 +602,10 @@ int etc_set_wake_early_secs(uint16_t second)
 		LOG_DBG("set %u", second);
 	}
 	k_mutex_unlock(&setting_mutex);
+#if IS_ENABLED(CONFIG_ETC_DATE_TIME)
+	date_time_force_event(DATE_TIME_SYSTEM_RELOAD);
+#endif
+
 	return rc;
 }
 
@@ -590,6 +649,7 @@ int etc_set_rx_duration_secs(uint16_t second)
 	if (rc == 0) {
 		LOG_DBG("set %u", second);
 	}
+	etc_clip_wake_early();
 	k_mutex_unlock(&setting_mutex);
 	return rc;
 }
