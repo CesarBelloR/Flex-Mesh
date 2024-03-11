@@ -10,7 +10,7 @@ config ETC_BLE_ENCRYPTION
 	bool "Enable/disable the encryption data for BLE module"
 	default n
 
-config ETC_BLE_ADV_MAGET_TIMEOUT_SEC
+config ETC_BLE_ADV_MAGNET_TIMEOUT_SEC
 	int "Timeout in seconds for magnet advertise"
 	default  120
 	

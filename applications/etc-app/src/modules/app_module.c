@@ -13,6 +13,7 @@
 #include "etc_interface.h"
 #include "etc_device.h"
 #include "etc_sensor.h"
+#include "etc_ble.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
