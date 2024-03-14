@@ -373,6 +373,11 @@ int etc_set_device_mode(enum etc_device_mode mode)
 int etc_set_power_mode(enum etc_power_mode_e power)
 {
 	int rc = 0;
+	if (power < ETC_SETTING_POWER_MODE_MIN ||
+	    power > ETC_SETTING_POWER_MODE_MAX) {
+		return -EINVAL;
+	}
+	
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	if (etc_cfg.power_mode == power) {
 		k_mutex_unlock(&setting_mutex);
