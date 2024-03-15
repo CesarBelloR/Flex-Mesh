@@ -61,8 +61,7 @@ static uint8_t msg_id_cnt = 0;
 static struct sensor_data last_sensor_data;
 static struct flex_ble_frame flex_frame;
 static etc_ble_evt_handler_t ble_evt_handler;
-static uint8_t flex_ble_notify_sub_cnt = 0;
-static bool flex_ble_is_ready = false;
+static bool flex_ble_is_adversting = false;
 static bool flex_ble_is_magnet_trigger = false;
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
@@ -471,6 +470,7 @@ static void flex_ble_sensor_work_handler(struct k_work* work) {
 
 static void flex_ble_adv_magnet_work_handler(struct k_work* work) {
 	flex_ble_is_magnet_trigger = false;
+	flex_ble_is_adversting = false;
 	/* Stop adv */
 	bt_le_adv_stop();
 }
@@ -687,12 +687,15 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler) {
 	memset(last_sensor_data.sensor, 0, sizeof(last_sensor_data.sensor));
 	k_work_init(&advertise_work, advertise);
 	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
-	flex_ble_is_ready = true;
-	k_work_submit(&advertise_work);
+	flex_ble_is_adversting = false;
 	return 0;
 }
 
 void etc_ble_start_adv(void) {
+	if (current_conn != NULL) {
+		return;
+	}
+	flex_ble_is_adversting = true;
 	k_work_submit(&advertise_work);
 }
 
@@ -700,6 +703,8 @@ void etc_ble_start_adv_with_timeout(void) {
 	if (current_conn != NULL) {
 		return;
 	}
+
+	flex_ble_is_adversting = true;
 
 	if (etc_get_device_mode() != ETC_DEVICE_MODE_BLE) {
 		flex_ble_is_magnet_trigger = true;
@@ -710,7 +715,7 @@ void etc_ble_start_adv_with_timeout(void) {
 }
 
 void etc_ble_set_current_sensor(struct sensor_data* data) {
-	if (!flex_ble_is_ready) {
+	if (!flex_ble_is_adversting) {
 		return;
 	}
 

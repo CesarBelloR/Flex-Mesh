@@ -211,12 +211,17 @@ static void ble_module_evt_handler(const struct etc_ble_evt *evt)
 
 static int setup(void)
 {
-#if defined(CONFIG_BT)
-	if (etc_device_get_mode() == ETC_DEVICE_MODE_BLE) {
-		return etc_ble_init(ble_module_evt_handler);
+	int rc = etc_ble_init(ble_module_evt_handler);
+	if (!rc) {
+		if (etc_device_get_mode() == ETC_DEVICE_MODE_BLE) {
+			LOG_DBG("Start adversiting BLE");
+			etc_ble_start_adv();
+		}
+	} else {
+		LOG_ERR("Failed to initialize the BLE module %d", rc);
 	}
-#endif
-	return 0;
+
+	return rc;
 }
 
 /* Message handler for STATE_LTE_INIT. */
