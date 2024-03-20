@@ -209,7 +209,14 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
 int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 				    const uint8_t *relay_data, uint16_t relay_data_len, bool is_legacy)
 {
+	static const struct lwm2m_obj_path path_list[] = {
+		LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_DATA),
+	};
+	static const struct lwm2m_obj_path legacy_path_list[] = {
+		LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_LEGACY_DATA),
+	};
 	int err = 0;
+	const struct lwm2m_obj_path *path_list_ptr;
 
 	__ASSERT_NO_MSG(cloud_data != NULL);
 	__ASSERT_NO_MSG(relay_data != NULL);
@@ -220,18 +227,18 @@ int data_codec_prepare_relay_packet(struct cloud_codec_data *cloud_data,
 	}
 
 	if (is_legacy) {
+		path_list_ptr = legacy_path_list;
 		err = lwm2m_codec_helpers_set_relay_legacy_data((const char*)relay_data, relay_data_len);
 	} else {
+		path_list_ptr = path_list;
 		err = lwm2m_codec_helpers_set_relay_data(relay_data, relay_data_len);
 	}
 
 	if (err == 0) {
-		static const struct lwm2m_obj_path path_list[] = {
-			LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_DATA),
-		};
 		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
-							       path_list,
+							       path_list_ptr,
 							       ARRAY_SIZE(path_list));
+		BUILD_ASSERT(ARRAY_SIZE(path_list) == ARRAY_SIZE(legacy_path_list));
 		if (err) {
 			LOG_ERR("Failed populating object path list, error: %d", err);
 			return err;
