@@ -705,6 +705,7 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
 		if (etc_device_is_relay()) {
 			reset_send_status(&send_status);
+			data_codec_clear_data(&codec);
 			if (state == STATE_CLOUD_CONNECTED) {
 				relay_data_encode();
 			}
@@ -714,12 +715,12 @@ static void on_all_states(struct data_msg_data *msg)
 				track_functional_test(DATA_TYPE_ACK, (void *)&ack);
 				stop_functional_test();
 			}
-			data_codec_clear_data(&codec);
 			if (send_status.record_id > 0) {
 				/* Acknowledge record and encode more data, if connected to cloud */
 				etc_device_set_ack_record(send_status.record_id);
 			}
 			reset_send_status(&send_status);
+			data_codec_clear_data(&codec);
 			if (state == STATE_CLOUD_CONNECTED) {
 				data_encode_for_cloud(false);
 			}
