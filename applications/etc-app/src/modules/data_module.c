@@ -755,7 +755,6 @@ static void on_all_states(struct data_msg_data *msg)
 		}
 		/* Reset send status on fail */
 		reset_send_status(&send_status);
-		ETC_MEMFAULT_TRACE_EVENT(send_fail);
 		if (state == STATE_CLOUD_CONNECTED) {
 			data_encode_for_cloud(split);
 		}

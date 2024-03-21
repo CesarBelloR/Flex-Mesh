@@ -1,4 +1,4 @@
 /* Application-specific trace reasons can be defined here.
  * Please refer to https://docs.memfault.com/docs/embedded/trace-events for more details.
  */
-MEMFAULT_TRACE_REASON_DEFINE(send_fail)
+MEMFAULT_TRACE_REASON_DEFINE(lengths_dont_match)

@@ -222,7 +222,7 @@ int etc_device_write_record(union etc_device_record *record);
  * @param record Relay record containing the data to be written.
  * @return 0 on success, an error code otherwise.
  */
-int etc_device_write_relay_data(struct etc_device_relay_record record);
+int etc_device_write_relay_data(struct etc_device_relay_record *record);
 
 /**
  * @brief Read relay data from queue.
@@ -230,7 +230,7 @@ int etc_device_write_relay_data(struct etc_device_relay_record record);
  * @param record Pointer to the relay record where the read data will be stored.
  * @return 0 on success, an error code otherwise.
  */
-int etc_device_read_relay_data(struct etc_device_relay_record* record);
+int etc_device_read_relay_data(struct etc_device_relay_record *record);
 
 /** 
  * @brief the next-in-line (unack'd) measurement record. If a reclaim is active,

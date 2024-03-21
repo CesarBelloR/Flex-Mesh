@@ -20,6 +20,7 @@
 #include "etc_settings.h"
 #include "etc_sensor.h"
 #include "etc_battery.h"
+#include "etc_memfault.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lwm2m_codec_helpers, CONFIG_CLOUD_CODEC_LOG_LEVEL);
 
@@ -757,7 +758,8 @@ int lwm2m_codec_helpers_set_relay_legacy_data(const char *data, uint16_t data_le
 	int err;
 
 	if (strlen(data) != data_len) {
-		return -EINVAL;
+		ETC_MEMFAULT_TRACE_EVENT(lengths_dont_match);
+		LOG_WRN("String length does no match data length");
 	}
 	
 	err = lwm2m_set_string(&LWM2M_OBJ(ETC_RELAY_OBJECT_ID, 0, ETC_RELAY_OBJ_R_LEGACY_DATA),

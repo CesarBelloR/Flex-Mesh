@@ -248,9 +248,10 @@ int etc_device_read_record(union etc_device_record *record, bool *active_reclaim
 	return rc;
 }
 
-int etc_device_write_relay_data(struct etc_device_relay_record record) {
+int etc_device_write_relay_data(struct etc_device_relay_record *record)
+{
 	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
-	memcpy(&relay_record_list[p_relay_stat->write_index], &record, sizeof(record));
+	memcpy(&relay_record_list[p_relay_stat->write_index], record, sizeof(*record));
 	if (p_relay_stat->number_record < ETC_RELAY_RECORD_MAX_ELEMENT) {
 		p_relay_stat->number_record += 1;
 		etc_mflt_metrics_relay_buffer_entries(p_relay_stat->number_record);
@@ -266,7 +267,8 @@ int etc_device_write_relay_data(struct etc_device_relay_record record) {
 	return 0;
 }
 
-int etc_device_read_relay_data(struct etc_device_relay_record* record) {
+int etc_device_read_relay_data(struct etc_device_relay_record *record)
+{
 	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
 	if (p_relay_stat->number_record == 0) {
 		k_mutex_unlock(&etc_relay_record_mutex);
@@ -290,7 +292,8 @@ int etc_device_set_ack_record(int record_id)
 	return 0;
 }
 
-uint16_t etc_device_nack_count(void) {
+uint16_t etc_device_nack_count(void)
+{
 	return (etc_device_record_get_total_record() - 
 		etc_device_record_get_num_ack());
 }

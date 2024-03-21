@@ -501,7 +501,7 @@ retry_recv:
 					/* Send ACK message */
 					module_lora_prepare_packet(message.record.logger_id, relay_iccid);
 			}
-			etc_device_write_relay_data(message.record);
+			etc_device_write_relay_data(&message.record);
 			lora_data_send();
 		} else {
 			LOG_WRN("Unknown start message");
