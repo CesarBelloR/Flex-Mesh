@@ -59,7 +59,7 @@
 #define NB_IOT_BEARER 7U
 
 /* Temperature sensor metadata. */
-#define TEMP_MIN_RANGE_VALUE -40.0
+#define TEMP_MIN_RANGE_VALUE -30.0
 #define TEMP_MAX_RANGE_VALUE 120.0
 #define TEMP_UNIT "Cel"
 

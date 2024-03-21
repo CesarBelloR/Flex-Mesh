@@ -12,7 +12,7 @@ MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(Battery_ChargeLevel,
                                        0, 100)
 
 MEMFAULT_METRICS_KEY_DEFINE_WITH_RANGE(nRF_Temp_C, kMemfaultMetricType_Signed, 
-                                       -40, 85)
+                                       -30, 85)
 
 MEMFAULT_METRICS_KEY_DEFINE(failed_sends, kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_KEY_DEFINE(successful_sends, kMemfaultMetricType_Unsigned)

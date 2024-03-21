@@ -14,7 +14,7 @@ extern "C" {
 /* Humid value when no probe */
 #define SENSOR_HUMID_NO_CONNECTED -1.0
 /* Minimum sensor temperature that is a valid reading. */
-#define SENSOR_TEMP_C_MIN	-40.0f
+#define SENSOR_TEMP_C_MIN	-30.0f
 /* Maximum sensor temperature that is a valid reading. */
 #define SENSOR_TEMP_C_MAX	120.0f
 /* Minimum sensor humidity that is a valid reading. */
