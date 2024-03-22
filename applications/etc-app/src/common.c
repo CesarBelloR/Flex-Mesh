@@ -119,13 +119,14 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 
 	decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 		sizeof(decoded_buf) - decoded_buf_len, "%d", is_reclaim ? 1 : 0);
-	decoded_buf_len += 1;
 	decoded_buf[decoded_buf_len] = '\0';
-	if (decoded_buf_len > *out_len) {
+	/* Include null terminator. Do not increment decodec_buf_len, as this
+	 * would also modify out_len. */
+	if ((decoded_buf_len + 1) > *out_len) {
 		return -ENOMEM;
 	}
 
-	memcpy(out_buf, decoded_buf, decoded_buf_len);
+	memcpy(out_buf, decoded_buf, decoded_buf_len + 1);
 	*out_len = decoded_buf_len;
 	return 0;
 }
