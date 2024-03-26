@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt.h>
-#include <zephyr/mgmt/mcumgr/grp/img_mgmt/image.h>
+#include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt_client.h>
 #include <zephyr/mgmt/mcumgr/mgmt/mgmt.h>
 
 int etc_img_get_pubkey_hash(uint8_t *hash);

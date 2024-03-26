@@ -182,7 +182,7 @@ void bq25618_register_callback(bq25618_evt_handler_t evt) {
 static void bq25618_work_fn(struct k_work *work)
 {
 	struct bq25618_data *drv_data =
-		CONTAINER_OF(work, struct bq25618_data, work);
+		CONTAINER_OF(k_work_delayable_from_work(work), struct bq25618_data, work);
 	const struct device *dev = drv_data->dev;
 	const struct bq25618_dev_config *cfg = dev->config;
 	uint16_t curr_lim = 0;

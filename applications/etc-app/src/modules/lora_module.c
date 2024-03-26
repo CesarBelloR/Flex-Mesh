@@ -3,7 +3,7 @@
 #include <app_event_manager.h>
 #include <zephyr/drivers/lora.h>
 #include <zephyr/kernel.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 #include "etc_date_time.h"
 #include "etc_device.h"
 #include "etc_settings.h"

@@ -11,9 +11,6 @@ CONFIG_ARM_MPU=y
 # enable console
 CONFIG_CONSOLE=y
 
-# additional board options
-CONFIG_GPIO_AS_PINRESET=n
-
 # Enable UART Console
 CONFIG_UART_CONSOLE=y
 

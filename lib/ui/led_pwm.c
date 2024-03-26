@@ -87,7 +87,7 @@ static void pwm_off(struct led *led)
 
 static void work_handler(struct k_work *work)
 {
-	struct led *led = CONTAINER_OF(work, struct led, work);
+	struct led *led = CONTAINER_OF(k_work_delayable_from_work(work), struct led, work);
 	const struct led_effect_step *effect_step =
 		&leds.effect->steps[leds.effect_step];
 	int substeps_left = effect_step->substep_count - leds.effect_substep;

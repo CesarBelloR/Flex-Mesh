@@ -3,7 +3,7 @@
 #include <ctype.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/drivers/hwinfo.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include "app_version.h"

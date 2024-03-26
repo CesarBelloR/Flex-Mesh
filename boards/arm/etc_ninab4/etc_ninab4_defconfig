@@ -8,9 +8,6 @@ CONFIG_ARM_MPU=y
 # Enable hardware stack protection
 CONFIG_HW_STACK_PROTECTION=y
 
-# additional board options
-CONFIG_GPIO_AS_PINRESET=n
-
 # enable console
 CONFIG_CONSOLE=y
 
@@ -31,9 +28,6 @@ CONFIG_GPIO=y
 
 # Enable RTT
 CONFIG_USE_SEGGER_RTT=n
-
-# additional board options
-CONFIG_GPIO_AS_PINRESET=y
 
 CONFIG_I2C=y
 CONFIG_SPI=y

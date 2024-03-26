@@ -3,7 +3,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/settings/settings.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 #define LOG_LEVEL LOG_LEVEL_DBG
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(flex_ble);

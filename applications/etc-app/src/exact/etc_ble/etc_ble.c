@@ -4,7 +4,7 @@
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/bluetooth/services/bas.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 #include <zephyr/mgmt/mcumgr/transport/smp_bt.h>
 #define LOG_LEVEL LOG_LEVEL_DBG
 #include <zephyr/logging/log.h>

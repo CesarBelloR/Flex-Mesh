@@ -5,7 +5,6 @@
 #ifndef MODEM_API_H
 #define MODEM_API_H
 
-#include <zephyr/syscall_handler.h>
 #include <zephyr/device.h>
 #include <zephyr/net/net_if.h>
 #include <errno.h>
