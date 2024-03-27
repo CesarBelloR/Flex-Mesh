@@ -33,6 +33,8 @@ static struct etc_device_record_table old_etc_device_record_table;
 static struct nvs_fs record_fs;
 static bool etc_device_need_save;
 
+static atomic_t etc_reclaim_status = ATOMIC_INIT(false);
+
 struct etc_device_record_data etc_device_record;
 struct etc_device_record_data *pRecord = &etc_device_record;
 struct etc_device_record_table *p_etc_device_record_table = &etc_device_record.record_stat;
@@ -705,6 +707,8 @@ static int etc_device_update_reclaim(uint16_t record_id, int start_time, int sto
 			} else {
 				etc_reclaim_info.stop_index = record_id;
 			}
+		} else if ((record.timestamp > stop_time) && (etc_reclaim_info.stop_index != 0)) {
+			return 1;
 		}
 	} else {
 		return -EINVAL;
@@ -712,13 +716,17 @@ static int etc_device_update_reclaim(uint16_t record_id, int start_time, int sto
 	return 0;
 }
 
-int etc_device_record_reclaim(int start_time, int stop_time)
+int etc_device_record_reclaim(int start_time, int stop_time, bool need_sync)
 {
-	if (start_time > stop_time) {
-		return -EINVAL;
+	if (!atomic_cas(&etc_reclaim_status, false, true)) {
+		return -EINPROGRESS;
 	}
 
 	int rc = 0;
+	if (start_time > stop_time) {
+		rc = -EINVAL;
+		goto done;
+	}
 
 	etc_reclaim_info.start_index = -1;
 	etc_reclaim_info.stop_index = -1;
@@ -730,44 +738,78 @@ int etc_device_record_reclaim(int start_time, int stop_time)
 	if (oldest_id < newest_id) {
 		for (int i = oldest_id; i < newest_id; i++) {
 			rc = etc_device_update_reclaim(i, start_time, stop_time);
-			if (rc != 0) {
+			if (rc < 0) {
 				LOG_ERR("Failed to find and update ACK based on reclaim "
 					"information");
-				return rc;
+				goto done;
+			} else if (rc == 1) {
+				LOG_DBG("Found the range data for current request");
+				goto update;
 			}
 		}
 	} else {
 		for (int i = oldest_id; i < MAX_RECORD_NO_OFFSET_ID; i++) {
 			rc = etc_device_update_reclaim(i, start_time, stop_time);
-			if (rc != 0) {
+			if (rc < 0) {
 				LOG_ERR("Failed to find and update ACK based on reclaim "
 					"information");
-				return rc;
+				goto done;
+			} else if (rc == 1) {
+				LOG_DBG("Found the range data for current request");
+				goto update;
 			}
 		}
 		for (int i = MIN_RECORD_NO_OFFSET_ID; i < newest_id; i++) {
 			rc = etc_device_update_reclaim(i, start_time, stop_time);
-			if (rc != 0) {
+			if (rc < 0) {
 				LOG_ERR("Failed to find and update ACK based on reclaim "
 					"information");
-				return rc;
+				goto done;
+			} else if (rc == 1) {
+				LOG_DBG("Found the range data for current request");
+				goto update;
 			}
 		}
 	}
-
+	
+update:
 	if ((rc == 0) && (etc_reclaim_info.start_index != -1) &&
 	    (etc_reclaim_info.stop_index != -1)) {
-		etc_reclaim_info.flag_in_process = 1U;
-		etc_reclaim_info.current_index = etc_reclaim_info.start_index;
-		rc = etc_device_write_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
-					      sizeof(etc_reclaim_info));
-		if (rc != 0) {
-			LOG_ERR("Failed to write reclaim info");
+		LOG_INF("Reclaim info successful %d %d",
+			etc_reclaim_info.start_index, etc_reclaim_info.stop_index);
+		if (!need_sync) {
+			etc_reclaim_info.flag_in_process = 1U;
+			etc_reclaim_info.current_index = etc_reclaim_info.start_index;
+			rc = etc_device_write_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
+						sizeof(etc_reclaim_info));
+			if (rc != 0) {
+				LOG_ERR("Failed to write reclaim info");
+				goto done;
+			} else {
+				LOG_INF("Updated the reclaim info successful");
+			}
 		} else {
-			LOG_INF("Updated the reclaim info successful %d %d",
-				etc_reclaim_info.start_index, etc_reclaim_info.stop_index);
+			int num_records = 0;
+			if (etc_reclaim_info.start_index <= etc_reclaim_info.stop_index) {
+				num_records = etc_reclaim_info.stop_index - etc_reclaim_info.start_index + 1;
+			} else {
+				num_records = MAX_RECORD_NO_OFFSET_ID - etc_reclaim_info.start_index;
+				num_records += etc_reclaim_info.stop_index + 1;
+			}
+			
+			/* Reset start/stop index */
+			etc_reclaim_info.start_index = 0;
+			etc_reclaim_info.stop_index = 0;
+			etc_reclaim_info.current_index = 0;
+			etc_reclaim_info.flag_in_process = 0;
+			LOG_INF("Total number of record <%d, %d>: %d", start_time, stop_time, num_records);
+			atomic_set(&etc_reclaim_status, false);
+			return num_records;
 		}
 	}
+
+done:
+	atomic_set(&etc_reclaim_status, false);
 	return rc;
 }
 
@@ -979,8 +1021,7 @@ int etc_device_record_num_reclaim_records(void)
 	int num_records = 0;
 	if (etc_reclaim_info.flag_in_process) {
 		if (etc_reclaim_info.start_index <= etc_reclaim_info.stop_index) {
-			num_records =
-				etc_reclaim_info.stop_index - etc_reclaim_info.start_index + 1;
+			num_records = etc_reclaim_info.stop_index - etc_reclaim_info.start_index + 1;
 		} else {
 			num_records = MAX_RECORD_NO_OFFSET_ID - etc_reclaim_info.start_index;
 			num_records += etc_reclaim_info.stop_index + 1;
@@ -1066,12 +1107,12 @@ static int cmd_reclaim_record(const struct shell *shell, size_t argc, char **arg
 {
 	if (argc == 3) {
 		int start_time = atoi(argv[1]);
-		int stop_time = atoi(argv[2]);
-		int rc = etc_device_record_reclaim(start_time, stop_time);
+		int stop_time = atoi(argv[2]); 
+		int rc = etc_device_record_reclaim(start_time, stop_time, false);
 		if (rc != 0) {
 			shell_error(shell, "Failed to reclaim record");
 		} else {
-			shell_info(shell, "Reclaimed record success");
+			shell_info(shell, "Reclaimed recordsuccess");
 			shell_info(shell, "Start ID %d - Stop %d", etc_reclaim_info.start_index,
 				   etc_reclaim_info.stop_index);
 		}

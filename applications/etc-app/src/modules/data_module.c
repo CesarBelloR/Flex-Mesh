@@ -778,7 +778,7 @@ static void on_all_states(struct data_msg_data *msg)
 		
 		ret = etc_device_record_reclaim(
 			msg->module.cloud.data.reclaim.start_time_s,
-			msg->module.cloud.data.reclaim.end_time_s);
+			msg->module.cloud.data.reclaim.end_time_s, false);
 		if (ret != 0) {
 			LOG_ERR("Reclaim failed, %d", err);
 			err = true;
@@ -815,10 +815,11 @@ static void on_all_states(struct data_msg_data *msg)
 		
 		ret = etc_device_record_reclaim(
 			msg->module.ble.data.reclaim.start_time_s,
-			msg->module.ble.data.reclaim.end_time_s);
+			msg->module.ble.data.reclaim.end_time_s, false);
 		if (ret != 0) {
 			LOG_ERR("Reclaim failed, %d", err);
 			err = true;
+			etc_ble_notify_error(ETC_BLE_ERR_QUERY_TYPE, err);
 		}
 
 		if (!err) {
@@ -828,6 +829,23 @@ static void on_all_states(struct data_msg_data *msg)
 				data_encode_for_ble();
 			}
 			etc_ble_notify_reclaim_status(num_records);
+		}
+		return;
+	}
+
+	if (IS_EVENT(msg, ble, BLE_EVT_QUERY_RECLAIM)) {
+		int ret;
+		bool err = false;
+		
+		ret = etc_device_record_reclaim(
+			msg->module.ble.data.reclaim.start_time_s,
+			msg->module.ble.data.reclaim.end_time_s, true);
+		if (ret < 0) {
+			LOG_ERR("Reclaim failed, %d", err);
+			etc_ble_notify_error(ETC_BLE_ERR_QUERY_TYPE, err);
+			err = true;
+		} else {
+			etc_ble_notify_query_reclaim(ret);
 		}
 		return;
 	}

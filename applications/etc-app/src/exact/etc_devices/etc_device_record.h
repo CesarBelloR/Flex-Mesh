@@ -236,9 +236,12 @@ int etc_device_record_read_data(off_t addr, void* data, int data_len);
  *
  * @param start_time	The start time of the reclaim range.
  * @param stop_time	The stop time of the reclaim range.
- * @return	0 on success, an error code otherwise.
+ * @param is_sync	A boolean flag indicating whether to synchronize with the reclaim range.
+ * @return
+ * 	With is_sync false: 0 if successful, otherwise an error code.
+ * 	With is_sync true: non-negative number if successful, otherwise an error code.
  */
-int etc_device_record_reclaim(int start_time, int stop_time);
+int etc_device_record_reclaim(int start_time, int stop_time, bool is_sync);
 
 /**
  * @brief Get the status of records in the ETC device.

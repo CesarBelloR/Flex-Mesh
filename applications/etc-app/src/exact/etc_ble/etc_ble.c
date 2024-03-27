@@ -273,6 +273,29 @@ static ssize_t flex_config_on_write(struct bt_conn *conn, const struct bt_gatt_a
 					cJSON_free(response_msg);
 					cJSON_Delete(response_json);
 				}
+			} else if (strstr(type_json->valuestring, "reclaim") != NULL){
+				LOG_DBG("Query reclaim");
+				cJSON *start_json = cJSON_GetObjectItem(json, "start");
+				cJSON *end_json = cJSON_GetObjectItem(json, "end");
+				if (start_json == NULL || end_json == NULL) {
+					LOG_ERR("Missing start/stop parameter");
+				} else {
+					int start_time = (int)start_json->valuedouble;
+					int end_time = (int)end_json->valuedouble;
+					if (start_time > end_time) {
+						LOG_ERR("start_time > end_time");
+					} else {
+						LOG_DBG("Start %d - End %d", start_time, end_time);
+						if (ble_evt_handler != NULL) {
+							struct etc_ble_evt evt = {
+								.type = ETC_BLE_EVT_CCC_QUERY_RECLAIM,
+								.reclaim.start_time_s = start_time,
+								.reclaim.end_time_s = end_time,
+							};
+							ble_evt_handler(&evt);
+						}
+					}
+				}
 			} else {
 				LOG_DBG("Unknown request type %s", type_json->valuestring);
 			}
@@ -777,9 +800,67 @@ int etc_ble_notify_reclaim_status(int reclaim_status) {
 	return 0;
 }
 
+int etc_ble_notify_query_reclaim(int reclaim_status) {
+	cJSON *response_json = cJSON_CreateObject();
+	if (response_json == NULL) {
+		LOG_ERR("Can't create response object");
+		return -ENOMEM;
+	}
+
+	cJSON_AddStringToObject(response_json, "response", "query");
+	cJSON_AddStringToObject(response_json, "type", "reclaim");
+	cJSON_AddNumberToObject(response_json, "status", reclaim_status);
+	char* response_msg = cJSON_PrintUnformatted(response_json);
+	if (response_msg == NULL) {
+		LOG_ERR("Can't create response object");
+		cJSON_Delete(response_json);
+		return -EINVAL;
+	} else {
+		LOG_INF("Response message %s", response_msg);
+		etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+		cJSON_free(response_msg);
+		cJSON_Delete(response_json);
+	}
+	return 0;
+}
+
 int etc_ble_notify_battery(uint8_t level) {
 	if (etc_ble_get_is_connected()) {
 		return bt_bas_set_battery_level(level);
+	}
+	return 0;
+}
+
+static const char* etc_ble_error_type_to_string(int type) {
+	switch (type) {
+		case ETC_BLE_ERR_RECLAIM_TYPE:
+			return "reclaim";
+		case ETC_BLE_ERR_QUERY_TYPE:
+			return "query";
+	}
+	return "unknown";
+}
+
+int etc_ble_notify_error(int type, int error) {
+	cJSON *response_json = cJSON_CreateObject();
+	if (response_json == NULL) {
+		LOG_ERR("Can't create response object");
+		return -ENOMEM;
+	}
+
+	cJSON_AddStringToObject(response_json, "response", "error");
+	cJSON_AddStringToObject(response_json, "type", etc_ble_error_type_to_string(type));
+	cJSON_AddNumberToObject(response_json, "status", error);
+	char* response_msg = cJSON_PrintUnformatted(response_json);
+	if (response_msg == NULL) {
+		LOG_ERR("Can't create response object");
+		cJSON_Delete(response_json);
+		return -EINVAL;
+	} else {
+		LOG_INF("Response message %s", response_msg);
+		etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+		cJSON_free(response_msg);
+		cJSON_Delete(response_json);
 	}
 	return 0;
 }

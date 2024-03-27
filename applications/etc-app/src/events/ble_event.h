@@ -44,6 +44,9 @@ enum ble_event_type {
 	/** Reclaim request received from BLE */
 	BLE_EVT_RECLAIM_REQUEST,
 
+	/** Query record for reclaiming data */
+	BLE_EVT_QUERY_RECLAIM,
+	
 	/** The cloud module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
 	 */

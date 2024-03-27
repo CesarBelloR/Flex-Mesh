@@ -405,7 +405,7 @@ retry_recv:
 					response.relay_id, response.reclaim_start_time,
 					response.reclaim_end_time);
 				etc_device_record_reclaim(response.reclaim_start_time,
-							  response.reclaim_end_time);
+							  response.reclaim_end_time, false);
 			}
 			return 0;
 		}

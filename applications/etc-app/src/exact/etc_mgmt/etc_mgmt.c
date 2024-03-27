@@ -175,7 +175,7 @@ static int etc_mgmt_record_reclaim(struct smp_streamer *ctxt)
 		return MGMT_ERR_EINVAL;
 	}
 
-	etc_device_record_reclaim(start, stop);
+	etc_device_record_reclaim(start, stop, false);
 
 	/* Encode the response. */
 	ok = etc_mgmt_rsp(zse, MGMT_ERR_EOK);

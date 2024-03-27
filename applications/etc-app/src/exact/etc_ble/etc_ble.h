@@ -26,6 +26,7 @@ enum etc_ble_evt_type {
 	ETC_BLE_EVT_CONNECTED,
 	ETC_BLE_EVT_CCC_MEASURE_READY,
 	ETC_BLE_EVT_CCC_RECLAIM_READY,
+	ETC_BLE_EVT_CCC_QUERY_RECLAIM,
 	ETC_BLE_EVT_ERR
 };
 
@@ -42,6 +43,12 @@ enum {
 	ETC_BLE_SENSOR_CHAR,
 	ETC_BLE_RECLAIM_CHAR,
 	ETC_BLE_CONFIG_CHAR
+};
+
+/** @brief The error type for BLE */
+enum {
+	ETC_BLE_ERR_RECLAIM_TYPE = 0x01,
+	ETC_BLE_ERR_QUERY_TYPE,
 };
 
 /** @brief Bluetooth library asynchronous event handler.
@@ -110,6 +117,14 @@ bool etc_ble_get_is_connected(void);
  */
 int etc_ble_notify_reclaim_status(int reclaim_status);
 
+/**
+ * @brief Notify the query reclaim to central app
+ * 
+ * @param reclaim_status Current number of record based on query reclaim
+ * @return Return 0 on success 
+ */
+int etc_ble_notify_query_reclaim(int reclaim_status);
+
 /** @brief Update battery level value.
  *
  * Update the characteristic value of the battery level
@@ -119,4 +134,13 @@ int etc_ble_notify_reclaim_status(int reclaim_status);
  *  @return Zero in case of success and error code in case of error.
  */
 int etc_ble_notify_battery(uint8_t level);
+
+/**
+ * @brief Notify the error response to central app
+ * 
+ * @param type Type of current error (reclaim, query etc...)
+ * @param error The error code based on current status
+ * @return Return 0 on success 
+ */
+int etc_ble_notify_error(int type, int error);
 #endif /* ETC_BLE_H_ */
