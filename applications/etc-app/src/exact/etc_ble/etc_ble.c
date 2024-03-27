@@ -809,7 +809,7 @@ int etc_ble_notify_query_reclaim(int reclaim_status) {
 
 	cJSON_AddStringToObject(response_json, "response", "query");
 	cJSON_AddStringToObject(response_json, "type", "reclaim");
-	cJSON_AddNumberToObject(response_json, "status", reclaim_status);
+	cJSON_AddNumberToObject(response_json, "data", reclaim_status);
 	char* response_msg = cJSON_PrintUnformatted(response_json);
 	if (response_msg == NULL) {
 		LOG_ERR("Can't create response object");

@@ -17,7 +17,6 @@
 #include "cloud/cloud_codec/data_codec.h"
 #include "modules_common.h"
 #include "events/app_event.h"
-#include "events/data_event.h"
 #include "events/sensor_event.h"
 #include "events/util_event.h"
 #include "events/ui_event.h"
@@ -28,7 +27,6 @@ LOG_MODULE_REGISTER(sensor_module, CONFIG_ETC_APP_LOG_LEVEL);
 struct sensor_msg_data {
 	union {
 		struct app_event app;
-		struct data_event data;
 		struct util_event util;
 		struct ui_event ui;
 		struct cloud_event cloud;
@@ -109,13 +107,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct app_event *event = cast_app_event(aeh);
 
 		msg.module.app = *event;
-		enqueue_msg = true;
-	}
-
-	if (is_data_event(aeh)) {
-		struct data_event *event = cast_data_event(aeh);
-
-		msg.module.data = *event;
 		enqueue_msg = true;
 	}
 
@@ -450,7 +441,6 @@ void sensor_module_thread_fn(void)
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
-APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
 APP_EVENT_SUBSCRIBE(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
