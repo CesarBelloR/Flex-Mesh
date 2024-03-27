@@ -1114,7 +1114,7 @@ static int cmd_reclaim_record(const struct shell *shell, size_t argc, char **arg
 		if (rc != 0) {
 			shell_error(shell, "Failed to reclaim record");
 		} else {
-			shell_info(shell, "Reclaimed record success");
+			shell_info(shell, "Reclaimed recordsuccess");
 			shell_info(shell, "Start ID %d - Stop %d", etc_reclaim_info.start_index,
 				   etc_reclaim_info.stop_index);
 		}
