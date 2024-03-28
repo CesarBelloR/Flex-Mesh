@@ -26,15 +26,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: zephyrprojectrtos/ci:v0.24.6
-    env:
-      ZEPHYR_SDK_INSTALL_DIR: "/opt/toolchains/zephyr-sdk-0.15.2"
     strategy:
       matrix:
         type: [base, memfault]
         key: [dev, production]
 
     steps:
+      - name: Free space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -51,12 +55,12 @@ jobs:
         id: vars
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
-
-      - name: Init West
-        working-directory: etc-firmware
+     
+      - name: Install python dependencies
         run: |
-          west init -l .
-      
+          pip3 install memfault-cli
+          pip3 install imgtool==2.0.0
+
       - name: Cache West dependencies
         uses: actions/cache@v3
         env:
@@ -75,12 +79,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
       
-      - name: Setup
+      - name: Setup Zephyr project
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: etc-firmware
+          toolchains: arm-zephyr-eabi
+          sdk-version: 0.16.5-1
+      
+      - name: Apply patches
         working-directory: etc-firmware
         run: |
-          west update
-          pip3 install memfault-cli
-          pip3 install imgtool==2.0.0
           ./scripts/apply_patches.sh
 
       - name: Retrieve signing key and save to file
@@ -143,8 +151,9 @@ jobs:
           mkdir -p out/update
           cp build/zephyr/merged.hex out/flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.hex
           cp build/zephyr/app_update.bin "out/update/update_flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.bin"
-          mkdir out/test
-          cp build/zephyr/app_signed.hex "out/test/update_test_flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.hex"
+          mkdir out/misc
+          cp build/zephyr/app_signed.hex "out/misc/update_test_flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.hex"
+          cp build/zephyr/zephyr.elf "out/misc/flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.elf"
 
       - name: Upload output files
         uses: actions/upload-artifact@v4
