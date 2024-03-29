@@ -57,7 +57,6 @@ enum {
  */
 typedef void (*etc_ble_evt_handler_t)(const struct etc_ble_evt *evt);
 
-
 /**
  * @brief Initialize the BLE peripheral for ETC
  * 
