@@ -46,6 +46,7 @@ LOG_MODULE_REGISTER(rtc_calib, CONFIG_ETC_TEST_LOG_LEVEL);
 
 nrfx_timer_t timer_rtc_inst = NRFX_TIMER_INSTANCE(TIMER_RTC_COUNT_INST_IDX);
 nrfx_timer_t timer_ref_inst = NRFX_TIMER_INSTANCE(TIMER_REF_COUNT_INST_IDX);
+nrfx_gpiote_t gpiote_inst = NRFX_GPIOTE_INSTANCE(0);
 
 nrfx_egu_t egu_inst = NRFX_EGU_INSTANCE(EGU_INST_IDX);
 
@@ -107,23 +108,18 @@ static void assign_egu_evt_to_timer_task(nrf_egu_event_t egu_evt,
 static void gpiote_init(void)
 {
 	nrfx_err_t status;
-	// if (!nrfx_gpiote_is_init()) {
-	// 	nrfx_gpiote_init();
-	// }
-	nrfx_gpiote_input_config_t in_cfg = {
-		.pull = NRF_GPIO_PIN_PULLUP
-	};
 	uint8_t rtc_in_channel;
 	uint8_t ref_in_channel;
-	status = nrfx_gpiote_channel_alloc(&rtc_in_channel);
+	status = nrfx_gpiote_channel_alloc(&gpiote_inst, &rtc_in_channel);
 	__ASSERT_NO_MSG(status == NRFX_SUCCESS);
-	status = nrfx_gpiote_channel_alloc(&ref_in_channel);
+	status = nrfx_gpiote_channel_alloc(&gpiote_inst, &ref_in_channel);
 	__ASSERT_NO_MSG(status == NRFX_SUCCESS);
 
 	/* Use high to low edge trigger due to RTC /INTA (CLK) pin 
 	 * being open drain. Rising edge will have a delay due to low 13k
 	 * internal pull up.
 	 */
+	nrf_gpio_pin_pull_t pull_cfg = NRF_GPIO_PIN_PULLUP;
 	nrfx_gpiote_trigger_config_t trigger_cfg = {
 		.trigger = NRFX_GPIOTE_TRIGGER_HITOLO
 	};
@@ -131,23 +127,29 @@ static void gpiote_init(void)
 		.handler = gpiote_handler,
 		.p_context = NULL
 	};
+	nrfx_gpiote_input_pin_config_t input_config = {
+		.p_pull_config = &pull_cfg,
+		.p_trigger_config = &trigger_cfg,
+		.p_handler_config = &handler_cfg
+	};
+
 	trigger_cfg.p_in_channel = &rtc_in_channel;
-	status = nrfx_gpiote_input_configure(rtc_pin,
-					     &in_cfg, &trigger_cfg, &handler_cfg);
+	status = nrfx_gpiote_input_configure(&gpiote_inst, rtc_pin,
+					     &input_config);
 	__ASSERT_NO_MSG(status == NRFX_SUCCESS);
 	
-	in_cfg.pull = NRF_GPIO_PIN_NOPULL;
+	pull_cfg = NRF_GPIO_PIN_NOPULL;
 	trigger_cfg.p_in_channel = &ref_in_channel;
-	status = nrfx_gpiote_input_configure(dev_pin,
-				    &in_cfg, &trigger_cfg, &handler_cfg);
+	status = nrfx_gpiote_input_configure(&gpiote_inst, dev_pin,
+				    	     &input_config);
 	__ASSERT_NO_MSG(status == NRFX_SUCCESS);
 	
-	nrfx_gpiote_trigger_enable(rtc_pin, false);
-	nrfx_gpiote_trigger_enable(dev_pin, false);
+	nrfx_gpiote_trigger_enable(&gpiote_inst, rtc_pin, false);
+	nrfx_gpiote_trigger_enable(&gpiote_inst, dev_pin, false);
 
 #if defined(__ZEPHYR__)
 	IRQ_DIRECT_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_GPIOTE),
-			   IRQ_PRIO_LOWEST, nrfx_gpiote_irq_handler, 0);
+			   IRQ_PRIO_LOWEST, nrfx_gpiote_0_irq_handler, 0);
 #endif
 }
 
@@ -160,7 +162,7 @@ static void assign_pin_to_timer_count(nrfx_gpiote_pin_t pin, nrfx_timer_t *timer
 	__ASSERT_NO_MSG(status == NRFX_SUCCESS);
 
 	status = nrfx_ppi_channel_assign(ppi_channel,
-		nrfx_gpiote_in_event_addr_get(pin),
+		nrfx_gpiote_in_event_address_get(&gpiote_inst, pin),
 		nrf_timer_task_address_get(timer->p_reg,
 					   NRF_TIMER_TASK_COUNT));
 	__ASSERT_NO_MSG(status == NRFX_SUCCESS);
@@ -213,7 +215,7 @@ static void timer_init(void)
 {
 	nrfx_err_t status;
 
-	nrfx_timer_config_t config = NRFX_TIMER_DEFAULT_CONFIG;
+	nrfx_timer_config_t config = NRFX_TIMER_DEFAULT_CONFIG(NRF_TIMER_FREQ_16MHz);
 	config.mode = NRF_TIMER_MODE_COUNTER;
 	config.bit_width = NRF_TIMER_BIT_WIDTH_32;
 	config.p_context = &timer_rtc_inst;
