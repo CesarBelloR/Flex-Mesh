@@ -10,6 +10,7 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include "etc_device.h"
 #include "etc_settings.h"
 #include "pcf85263a.h"
+#include "etc_ble.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
@@ -403,6 +404,11 @@ int etc_set_device_mode(enum etc_device_mode mode)
 	if (etc_cfg.device_mode == mode) {
 		k_mutex_unlock(&setting_mutex);
 		return 0;
+	}
+
+	/* Start adverstising if new mode is BLE */
+	if (mode == ETC_DEVICE_MODE_BLE) {
+		etc_ble_start_adv();
 	}
 
 	etc_cfg.device_mode = mode;
