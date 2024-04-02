@@ -172,12 +172,6 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 	}
 
 	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
-						IP_ADDRESSES, 0));
-	if (err) {
-		return err;
-	}
-
-	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
 						APN, 0));
 	if (err) {
 		return err;
@@ -185,8 +179,8 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
 					   APN, 0), 
 				CONFIG_MODEM_QUECTEL_BG95_M3_APN, 
-				sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_APN) - 1,
-				sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_APN) - 1,
+				sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_APN),
+				sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_APN),
 				LWM2M_RES_DATA_FLAG_RO);
 
 	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
@@ -365,8 +359,8 @@ int lwm2m_codec_helpers_setup_resources(void)
 		}
 		err = lwm2m_set_res_buf(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, 
 						   i, SENSOR_UNITS_RID),
-					TEMP_UNIT, (uint16_t)strlen(TEMP_UNIT),
-					(uint16_t)strlen(TEMP_UNIT), LWM2M_RES_DATA_FLAG_RO);
+					TEMP_UNIT, (uint16_t)strlen(TEMP_UNIT) + 1,
+					(uint16_t)strlen(TEMP_UNIT) + 1, LWM2M_RES_DATA_FLAG_RO);
 		if (err) {
 			return err;
 		}
@@ -382,8 +376,8 @@ int lwm2m_codec_helpers_setup_resources(void)
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0,
 					   SENSOR_UNITS_RID),
-				HUMID_UNIT, (uint16_t)strlen(HUMID_UNIT),
-				(uint16_t)strlen(HUMID_UNIT),
+				HUMID_UNIT, (uint16_t)strlen(HUMID_UNIT) + 1,
+				(uint16_t)strlen(HUMID_UNIT) + 1,
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
@@ -599,19 +593,8 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 		return err;
 	}
 
-#if 0
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID,
-					   0, IP_ADDRESSES, 0),
-				modem_dynamic->ip, (uint16_t)strlen(modem_dynamic->ip),
-				(uint16_t)strlen(modem_dynamic->ip),
-				LWM2M_RES_DATA_FLAG_RO);
-	if (err) {
-		return err;
-	}
-#endif
-
-	err = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
-			    (int8_t)modem_dynamic->rsrp);
+	err = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+			    modem_dynamic->rsrp);
 	if (err) {
 		return err;
 	}
@@ -640,8 +623,8 @@ int lwm2m_codec_helpers_set_device_data(void)
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MODEL_NUMBER_RID),
 				CONFIG_CLOUD_CODEC_MODEL,
-				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MODEL),
-				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MODEL),
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MODEL) + 1,
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MODEL) + 1,
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
@@ -649,8 +632,8 @@ int lwm2m_codec_helpers_set_device_data(void)
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, MANUFACTURER_RID),
 				CONFIG_CLOUD_CODEC_MANUFACTURER,
-				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MANUFACTURER),
-				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MANUFACTURER),
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MANUFACTURER) + 1,
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_MANUFACTURER) + 1,
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
@@ -658,8 +641,8 @@ int lwm2m_codec_helpers_set_device_data(void)
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_TYPE_RID),
 				CONFIG_CLOUD_CODEC_DEVICE_TYPE,
-				(uint16_t)strlen(CONFIG_CLOUD_CODEC_DEVICE_TYPE),
-				(uint16_t)strlen(CONFIG_CLOUD_CODEC_DEVICE_TYPE),
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_DEVICE_TYPE) + 1,
+				(uint16_t)strlen(CONFIG_CLOUD_CODEC_DEVICE_TYPE) + 1,
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
@@ -667,8 +650,8 @@ int lwm2m_codec_helpers_set_device_data(void)
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, FIRMWARE_VERSION_RID),
 				APP_VERSION_STR,
-				(uint16_t)strlen(APP_VERSION_STR),
-				(uint16_t)strlen(APP_VERSION_STR),
+				(uint16_t)strlen(APP_VERSION_STR) + 1,
+				(uint16_t)strlen(APP_VERSION_STR) + 1,
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
@@ -678,8 +661,8 @@ int lwm2m_codec_helpers_set_device_data(void)
 
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, HARDWARE_VERSION_RID),
 				hardware_version,
-				(uint16_t)strlen(hardware_version),
-				(uint16_t)strlen(hardware_version),
+				(uint16_t)strlen(hardware_version) + 1,
+				(uint16_t)strlen(hardware_version) + 1,
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
@@ -690,8 +673,8 @@ int lwm2m_codec_helpers_set_device_data(void)
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
 				DEVICE_SERIAL_NUMBER_ID),
 				device_id,
-				(uint16_t)strlen(device_id),
-				(uint16_t)strlen(device_id),
+				(uint16_t)strlen(device_id) + 1,
+				(uint16_t)strlen(device_id) + 1,
 				LWM2M_RES_DATA_FLAG_RO);
 	if (err) {
 		return err;
