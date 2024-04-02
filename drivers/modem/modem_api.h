@@ -7,6 +7,8 @@
 
 #include <zephyr/device.h>
 #include <zephyr/net/net_if.h>
+#include <zephyr/net/offloaded_netdev.h>
+#include <zephyr/net/net_offload.h>
 #include <errno.h>
 
 #define MDM_MANUFACTURER_LENGTH		  10
@@ -166,7 +168,7 @@ struct modem_api {
 	 * net_if_api structure. So we make current structure pointer
 	 * that can be casted to a net_if_api structure pointer.
 	 */
-	struct net_if_api iface_api;
+	struct offloaded_if_api offloaded_iface_api;
 
 	/* API function to initialize the callback for the 
 	 * modem event handler.

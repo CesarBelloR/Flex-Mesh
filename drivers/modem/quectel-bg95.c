@@ -3429,7 +3429,7 @@ static int quectel_bg95_get_data(const struct device *dev,
 }
 
 static struct modem_api api_funcs = {
-	.iface_api.init = modem_net_iface_init,
+	.offloaded_iface_api.iface_api.init = modem_net_iface_init,
 
 	.evt_handler_init = quectel_bg95_evt_handler_init,
 	.set_credentials = quectel_bg95_set_credentials,
