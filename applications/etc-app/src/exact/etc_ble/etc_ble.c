@@ -699,6 +699,15 @@ void etc_ble_start_adv(void) {
 	k_work_submit(&advertise_work);
 }
 
+void etc_ble_stop_adv(void) {
+	if (current_conn != NULL) {
+		bt_le_adv_stop();
+	} else {
+		bt_conn_disconnect(current_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+		bt_le_adv_stop();
+	}
+}
+
 void etc_ble_start_adv_with_timeout(void) {
 	if (current_conn != NULL) {
 		return;

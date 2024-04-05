@@ -64,6 +64,11 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler);
 void etc_ble_start_adv(void);
 
 /**
+ * @brief Stop the adv for BLE
+ */
+void etc_ble_stop_adv(void);
+
+/**
  * @brief Start the adv for BLE with timeout for magnet event
  */
 void etc_ble_start_adv_with_timeout(void);

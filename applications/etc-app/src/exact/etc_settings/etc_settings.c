@@ -406,9 +406,13 @@ int etc_set_device_mode(enum etc_device_mode mode)
 		return 0;
 	}
 
-	/* Start adverstising if new mode is BLE */
+	/* Start adversting if new mode is BLE */
 	if (mode == ETC_DEVICE_MODE_BLE) {
 		etc_ble_start_adv();
+	} else {
+		if (etc_cfg.device_mode == ETC_DEVICE_MODE_BLE) {
+			etc_ble_stop_adv();
+		}
 	}
 
 	etc_cfg.device_mode = mode;
