@@ -256,6 +256,9 @@ static int lora_module_relay_get_message(char* package, int16_t rssi,
 			case 4:
 				message->record.battery = atof(pt);
 				break;
+			case 5:
+				message->record.packet_number = atoi(pt);
+				break;
 			case 6:
 				if (strstr(pt, "*") == NULL) {
 					message->record.timestamp = atoi(pt);

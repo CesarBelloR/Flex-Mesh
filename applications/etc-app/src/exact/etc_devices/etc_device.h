@@ -134,6 +134,7 @@ struct etc_device_relay_record {
 	bool is_reclaim;
 	int16_t logger_rssi;
 	float battery;
+	int8_t packet_number;
 	uint32_t timestamp;
 	char relay_id[ETC_DEVICE_LORA_LOGGER_ID_SIZE];
 	char logger_ver[ETC_DEVICE_APP_VER_SIZE];

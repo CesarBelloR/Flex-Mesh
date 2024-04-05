@@ -1,6 +1,7 @@
 #include "etc_device.h"
 #include "etc_sensor.h"
 #include "etc_settings.h"
+#include "etc_battery.h"
 #include "app_version.h"
 #include "common.h"
 #include "cloud/cloud_codec/data_codec.h"
@@ -12,7 +13,6 @@ static char decoded_buf[PAYLOAD_LEGACY_LEN] = {0x00};
 int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record, 
 					char* out_buf, int* out_len) 
 {
-	static uint8_t pkt_counter = 0;
 	int decoded_buf_len = 0;
 	bool is_parent = false;
 
@@ -24,14 +24,18 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 		is_parent = true;  
 	}
 	
+	/* Legacy format: 
+		<Logger FW Ver>,<Logger RSSI>,<Logger ID>,<Logger Vbat>,
+		`<Relay RSSI>`,`<Relay Vbat>`,`<Relay Qual>`,<Relay FW Ver>,
+		<packet #>,<timestamp>,
+		<temp 1>,<temp 2>,<temp 3>,<temp 4>,<temp 5>,<Humidity>,
+		<isParent?>,<isReclaimed?>
+	 */
+	float relay_vbat = (float)etc_battery_get_voltage_mV() / 1000.0;
 	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), 
-		"%s,%d,%s,%.2f,*,*,*,%s,%d,", record->logger_ver, record->logger_rssi, 
-		record->logger_id, record->battery, APP_VERSION_STR, record->timestamp);
-
-	pkt_counter += 1;
-	if (pkt_counter >= LOGGER_MAXIMUM_COUNTER) {
-		pkt_counter = 0;
-	}
+				   "%s,%d,%s,%.2f,*,%.2f,*,%s,%d,%d,", record->logger_ver, 
+				   record->logger_rssi, record->logger_id, record->battery, relay_vbat,
+				   APP_VERSION_STR, record->packet_number, record->timestamp);
 
 	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
 		if (data_codec_compare_temperature_is_valid(record->sensor[i])) {
@@ -101,6 +105,12 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
 	int decoded_buf_len = 0;
 
+	/* Legacy format:
+		<Firmware version>,<ID/Serial number>,<Battery voltage>,
+		<packet #>,<timestamp>,
+		<temp 1>,<temp 2>,<temp 3>,<temp 4>,<temp 5>,<humidity>,
+		<isReclaimed>
+	 */
 	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), 
 		"%s,%s,%1.2f,%d,%d,", APP_VERSION_STR, buf_tmp, record.battery,
 		pkt_counter, record.timestamp);
