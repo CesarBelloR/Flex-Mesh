@@ -326,11 +326,12 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 	return wakeup_time;
 }
 
-static time_t app_backoff_interval_no_probe(time_t now) {
-	int tx_interval_second = etc_device_get_tx_interval_second();
-	int tx_max_offset_probe_second = etc_device_get_tx_probe_second();
-	int transmit_interval_s = app_last_multiple_backoff * tx_interval_second;
-	if ((tx_interval_second * app_last_multiple_backoff) <= tx_max_offset_probe_second) {
+static time_t app_backoff_interval_no_probe(time_t now) 
+{
+	int tx_interval_s = etc_device_get_tx_interval_second();
+	int tx_max_offset_probe_s = etc_device_get_tx_probe_second();
+	int transmit_interval_s = app_last_multiple_backoff * tx_interval_s;
+	if ((tx_interval_s * app_last_multiple_backoff) <= tx_max_offset_probe_s) {
 		app_last_multiple_backoff = app_last_multiple_backoff * 2;
 	}
 	return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
@@ -362,13 +363,15 @@ static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mi
 		return -1;
 	}
 
-	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
-	struct tm tm_time = {0};
+
 	/* If NACK is more than zero */
 	if (etc_device_nack_count() > 0) {
 		time_t next_transmit = app_backoff_interval_no_probe(now);
-		return next_transmit + tx_delay_sec;
+		return next_transmit;
 	}
+	
+	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
+	struct tm tm_time = {0};
 	/* Otherwise, proceed as normal */
 	gmtime_r(&now, &tm_time); 
 	int hour_offset = etc_device_get_tx_probe_second() / 3600;
