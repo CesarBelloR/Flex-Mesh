@@ -91,7 +91,7 @@ enum data_event_type {
 
 	/* Functional test complete */
 	DATA_EVT_FUNCTIONAL_TEST_COMPLETE,
-
+	DATA_EVT_FUNCTIONAL_UI_TEST_COMPLETE,
 	/** The data module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
 	 */
