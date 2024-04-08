@@ -695,50 +695,26 @@ bool etc_ble_get_is_connected(void) {
 }
 
 int etc_ble_notify_reclaim_status(int reclaim_status) {
-	cJSON *response_json = cJSON_CreateObject();
-	if (response_json == NULL) {
-		LOG_ERR("Can't create response object");
-		return -ENOMEM;
+	char* response_msg = ble_helpers_prepare_response("reclaim", "reclaim", true, reclaim_status);;
+	if (response_msg == NULL) {
+		return -EINVAL;
 	}
 
-	cJSON_AddStringToObject(response_json, "response", "reclaim");
-	cJSON_AddNumberToObject(response_json, "status", reclaim_status);
-	char* response_msg = cJSON_PrintUnformatted(response_json);
-	if (response_msg == NULL) {
-		LOG_ERR("Can't create response object");
-		cJSON_Delete(response_json);
-		return -EINVAL;
-	} else {
-		LOG_INF("Response message %s", response_msg);
-		etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
-		cJSON_free(response_msg);
-		cJSON_Delete(response_json);
-	}
+	LOG_INF("Response message %s", response_msg);
+	etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+	cJSON_free(response_msg);
 	return 0;
 }
 
 int etc_ble_notify_query_reclaim(int reclaim_status) {
-	cJSON *response_json = cJSON_CreateObject();
-	if (response_json == NULL) {
-		LOG_ERR("Can't create response object");
-		return -ENOMEM;
-	}
-
-	cJSON_AddStringToObject(response_json, "response", "query");
-	cJSON_AddStringToObject(response_json, "type", "reclaim");
-	cJSON_AddNumberToObject(response_json, "data", reclaim_status);
-	char* response_msg = cJSON_PrintUnformatted(response_json);
+	char* response_msg = ble_helpers_prepare_response("query", "reclaim", true, reclaim_status);
 	if (response_msg == NULL) {
-		LOG_ERR("Can't create response object");
-		cJSON_Delete(response_json);
 		return -EINVAL;
 	} 
 	
 	LOG_INF("Response message %s", response_msg);
 	etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
 	cJSON_free(response_msg);
-	cJSON_Delete(response_json);
-	
 	return 0;
 }
 
@@ -760,25 +736,16 @@ static const char* etc_ble_error_type_to_string(int type) {
 }
 
 int etc_ble_notify_error(int type, int error) {
-	cJSON *response_json = cJSON_CreateObject();
-	if (response_json == NULL) {
-		LOG_ERR("Can't create response object");
-		return -ENOMEM;
-	}
-
-	cJSON_AddStringToObject(response_json, "response", "error");
-	cJSON_AddStringToObject(response_json, "type", etc_ble_error_type_to_string(type));
-	cJSON_AddNumberToObject(response_json, "status", error);
-	char* response_msg = cJSON_PrintUnformatted(response_json);
+	char* response_msg = ble_helpers_prepare_response("error", etc_ble_error_type_to_string(type),
+		false, error);
 	if (response_msg == NULL) {
 		LOG_ERR("Can't create response object");
-		cJSON_Delete(response_json);
 		return -EINVAL;
-	} else {
-		LOG_INF("Response message %s", response_msg);
-		etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
-		cJSON_free(response_msg);
-		cJSON_Delete(response_json);
-	}
+	} 
+
+	LOG_INF("Response message %s", response_msg);
+	etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+	cJSON_free(response_msg);
+
 	return 0;
 }

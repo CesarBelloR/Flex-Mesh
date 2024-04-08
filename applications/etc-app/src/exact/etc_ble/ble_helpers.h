@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+char* ble_helpers_prepare_response(const char* response_type, 
+	const char* type, bool is_data, int response_data) ;
 void ble_helpers_handle_reclaim_request(cJSON* json, etc_ble_evt_handler_t handler);
 void ble_helpers_handle_query_request(cJSON* json, etc_ble_evt_handler_t handler);
 

@@ -4,28 +4,71 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ble_helpers);
 
-void ble_helpers_handle_reclaim_request(cJSON* json, etc_ble_evt_handler_t handler) {
-	/* {"request" : "reclaim", "start" : xxx, "end" : xxxx} */
-	LOG_DBG("Reclaim request");
+struct ble_reclaim_info {
+	int start;
+	int end;
+};
+
+static int ble_helpers_get_reclaim_info(cJSON *json, struct ble_reclaim_info *info) {
+	if (json == NULL || info == NULL) {
+		return -EINVAL;
+	}
+
 	cJSON *start_json = cJSON_GetObjectItem(json, "start");
 	cJSON *end_json = cJSON_GetObjectItem(json, "end");
 	if (start_json == NULL || end_json == NULL) {
 		LOG_ERR("Missing start/stop parameter");
-	} else {
-		int start_time = (int)start_json->valuedouble;
-		int end_time = (int)end_json->valuedouble;
-		if (start_time > end_time) {
-			LOG_ERR("start_time > end_time");
-		} else {
-			LOG_DBG("Start %d - End %d", start_time, end_time);
-			if (handler != NULL) {
-				struct etc_ble_evt evt = {
-					.type = ETC_BLE_EVT_CCC_RECLAIM_READY,
-					.reclaim.start_time_s = start_time,
-					.reclaim.end_time_s = end_time,
-				};
-				handler(&evt);
-			}
+		return -EINVAL;
+	} 
+
+	int start_time = (int)start_json->valuedouble;
+	int end_time = (int)end_json->valuedouble;
+	if (start_time > end_time) {
+		LOG_ERR("start_time > end_time");
+		return -EINVAL;
+	} 
+	
+	LOG_DBG("Start %d - End %d", start_time, end_time);
+	info->start = start_time;
+	info->end = end_time;
+	return 0;
+}
+
+char* ble_helpers_prepare_response(const char* response_type, 
+	const char* type, bool is_data, int response_data) 
+{
+	cJSON *response_json = cJSON_CreateObject();
+	if (response_json == NULL) {
+		LOG_ERR("Can't create response object");
+		return NULL;
+	}
+
+	cJSON_AddStringToObject(response_json, "response", response_type);
+	cJSON_AddStringToObject(response_json, "type", type);
+	cJSON_AddNumberToObject(response_json, is_data ? "data" : "status", response_data);
+	char *response_msg = cJSON_PrintUnformatted(response_json);
+	if (response_msg == NULL) {
+		LOG_ERR("Can't create response object");
+		cJSON_Delete(response_json);
+		return;
+	} 
+	cJSON_Delete(response_json);
+	return response_msg;
+}
+
+void ble_helpers_handle_reclaim_request(cJSON* json, etc_ble_evt_handler_t handler) {
+	/* {"request" : "reclaim", "start" : xxx, "end" : xxxx} */
+	LOG_DBG("Reclaim request");
+	struct ble_reclaim_info reclaim_info = {0x00};
+	int rc = ble_helpers_get_reclaim_info(json, &reclaim_info);
+	if (!rc) {
+		if (handler != NULL) {
+			struct etc_ble_evt evt = {
+				.type = ETC_BLE_EVT_CCC_RECLAIM_READY,
+				.reclaim.start_time_s = reclaim_info.start,
+				.reclaim.end_time_s = reclaim_info.end,
+			};
+			handler(&evt);
 		}
 	}
 }
@@ -39,48 +82,28 @@ void ble_helpers_handle_query_request(cJSON* json, etc_ble_evt_handler_t handler
 	} else {
 		if (strstr(type_json->valuestring, "unack") != NULL) {
 			LOG_DBG("Query the current number of unacknowledged samples");
-			cJSON *response_json = cJSON_CreateObject();
-			if (response_json == NULL) {
-				LOG_ERR("Can't create response object");
-				return;
-			}
-
-			cJSON_AddStringToObject(response_json, "response", "query");
-			cJSON_AddStringToObject(response_json, "type", "unack");
-			cJSON_AddNumberToObject(response_json, "data", etc_device_nack_count());
-			char *response_msg = cJSON_PrintUnformatted(response_json);
+			uint16_t unack_data = etc_device_nack_count();
+			char *response_msg = ble_helpers_prepare_response("query", "unack", true, unack_data);
 			if (response_msg == NULL) {
-				LOG_ERR("Can't create response object");
-				cJSON_Delete(response_json);
 				return;
 			} else {
 				LOG_INF("Response message %s", response_msg);
 				etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg,
 					       strlen(response_msg), false);
 				cJSON_free(response_msg);
-				cJSON_Delete(response_json);
 			}
 		} else if (strstr(type_json->valuestring, "reclaim") != NULL) {
 			LOG_DBG("Query reclaim");
-			cJSON *start_json = cJSON_GetObjectItem(json, "start");
-			cJSON *end_json = cJSON_GetObjectItem(json, "end");
-			if (start_json == NULL || end_json == NULL) {
-				LOG_ERR("Missing start/stop parameter");
-			} else {
-				int start_time = (int)start_json->valuedouble;
-				int end_time = (int)end_json->valuedouble;
-				if (start_time > end_time) {
-					LOG_ERR("start_time > end_time");
-				} else {
-					LOG_DBG("Start %d - End %d", start_time, end_time);
-					if (handler != NULL) {
-						struct etc_ble_evt evt = {
-							.type = ETC_BLE_EVT_CCC_QUERY_RECLAIM,
-							.reclaim.start_time_s = start_time,
-							.reclaim.end_time_s = end_time,
-						};
-						handler(&evt);
-					}
+			struct ble_reclaim_info reclaim_info = {0x00};
+			int rc = ble_helpers_get_reclaim_info(json, &reclaim_info);
+			if (!rc) {
+				if (handler != NULL) {
+					struct etc_ble_evt evt = {
+						.type = ETC_BLE_EVT_CCC_QUERY_RECLAIM,
+						.reclaim.start_time_s = reclaim_info.start,
+						.reclaim.end_time_s = reclaim_info.end,
+					};
+					handler(&evt);
 				}
 			}
 		} else {
