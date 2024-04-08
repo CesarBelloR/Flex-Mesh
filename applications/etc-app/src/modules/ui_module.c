@@ -67,6 +67,7 @@ static void led_pattern_update_work_fn(struct k_work *work);
 #define HOLD_FOREVER -1
 #define UI_LED_WAIT_TIME K_MSEC(2000)
 #define UI_LED_WAIT_NORMAL_DURATION_MSEC (5000)
+#define UI_LED_WAIT_SWITCH_STATE_MSEC (1000)
 #define UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC (100)
 #define UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC (9900)
 #define UI_LED_ERROR_BASE_DURATION_MSEC (1000)
@@ -113,6 +114,10 @@ static char *state2str(enum state_type new_state)
 		return "STATE_INIT";
 	case STATE_RUNNING:
 		return "STATE_RUNNING";
+	case STATE_FOTA_UPDATE:
+		return "STATE_FOTA_UPDATE";
+	case STATE_FUNCTIONAL_TEST:
+		return "STATE_FUNCTIONAL_TEST";
 	case STATE_SHUTDOWN:
 		return "STATE_SHUTDOWN";
 	default:
@@ -613,42 +618,16 @@ static void on_state_running(struct ui_msg_data *msg)
 		}
 	}
 
-	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_UI_TEST_START)) {
 		transition_list_append(LED_STATE_FUNCTIONAL_TEST_IN_PROGRESS, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_FUNCTIONAL_TEST);
 	}
-}
 
-/* Message handler for STATE_CLOUD_CONNECTING. */
-static void on_state_cloud_connecting(struct ui_msg_data *msg)
-{
-}
-
-/* Message handler for STATE_CLOUD_ASSOCIATING. */
-static void on_state_cloud_associating(struct ui_msg_data *msg)
-{
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		transition_list_append(LED_STATE_CLOUD_CONNECTED, UI_LED_WAIT_NORMAL_DURATION_MSEC);
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
+		transition_list_append(LED_STATE_FUNCTIONAL_TEST_IN_PROGRESS, HOLD_FOREVER);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_RUNNING);
-	}
-}
-
-/* Message handler for STATE_LORA_TRANSMITTING. */
-static void on_state_lora_transmitting(struct ui_msg_data *msg)
-{
-	/* No action here */
-}
-
-/* Message handler for STATE_LORA_RECEIVING. */
-static void on_state_lora_receiving(struct ui_msg_data *msg)
-{
-	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
-		transition_list_clear();
-		transition_list_append(LED_STATE_LORA_LISTEN, UI_LED_WAIT_NORMAL_DURATION_MSEC);
-		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
-		state_set(STATE_RUNNING);
+		state_set(STATE_FUNCTIONAL_TEST);
 	}
 }
 
@@ -682,9 +661,25 @@ static void on_state_functional_test(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 	}
 
+	if (IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_UI_TEST_COMPLETE)) {
+		if (msg->module.data.data.test_result == FUNC_TEST_SUCCESS) {
+			transition_list_append(LED_STATE_FUNCTIONAL_TEST_PASS, HOLD_FOREVER);
+		} else {
+			transition_list_append(LED_STATE_FUNCTIONAL_TEST_FAIL, HOLD_FOREVER);
+		}
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+	}
+
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_END)) {
 		transition_list_clear();
-		transition_list_append(LED_STATE_TURN_OFF, HOLD_FOREVER);
+		transition_list_append(LED_STATE_TURN_OFF, UI_LED_WAIT_SWITCH_STATE_MSEC);
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		state_set(STATE_RUNNING);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_UI_TEST_END)) {
+		transition_list_clear();
+		transition_list_append(LED_STATE_TURN_OFF, UI_LED_WAIT_SWITCH_STATE_MSEC);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_RUNNING);
 	}
@@ -708,6 +703,28 @@ static void on_all_states(struct ui_msg_data *msg)
 		 */
 		SEND_SHUTDOWN_ACK(ui, UI_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
+	}
+
+	if (state != STATE_RUNNING) {
+		if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_IN_CHARGING)) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
+		}
+
+		if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
+		}
+
+		if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_FULL)) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
+		}
+
+		if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_MED)) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_MED);
+		}
+
+		if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_NORMAL_LOW)) {
+			last_sub_state_set(SUB_STATE_NORMAL_BAT_LOW);
+		}
 	}
 }
 
@@ -868,6 +885,27 @@ static int cmd_ui_battery_error(const struct shell *shell, size_t argc, char **a
 	return 0;
 }
 
+static int cmd_ui_func_test_start(const struct shell *shell, size_t argc, char **argv)
+{
+	SEND_EVENT(sensor, SENSOR_EVT_FUNCTIONAL_UI_TEST_START);
+	return 0;
+}
+
+static int cmd_ui_func_test_complete_pass(const struct shell *shell, size_t argc, char **argv)
+{
+	struct data_event *data_event = new_data_event();
+	data_event->type = DATA_EVT_FUNCTIONAL_UI_TEST_COMPLETE;
+	data_event->data.test_result = FUNC_TEST_SUCCESS;
+	APP_EVENT_SUBMIT(data_event);
+	return 0;
+}
+
+static int cmd_ui_func_test_stop(const struct shell *shell, size_t argc, char **argv)
+{
+	SEND_EVENT(sensor, SENSOR_EVT_FUNCTIONAL_UI_TEST_END);
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_ui_event,
 	SHELL_CMD(status, NULL, "List status of transition", cmd_ui_status),
@@ -888,6 +926,12 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(bat_complete, NULL, "Event complete charge", cmd_ui_battery_charge_complete),
 	SHELL_CMD(bat_charging, NULL, "Event wip charge", cmd_ui_battery_charge_wip),
 	SHELL_CMD(bat_error, NULL, "Event error battery", cmd_ui_battery_error),
+	SHELL_CMD(self_test_start, NULL, "Event to test self test function start", 
+		cmd_ui_func_test_start),
+	SHELL_CMD(self_test_complete_pass, NULL, "Event to test self test function complete pass", 
+		cmd_ui_func_test_complete_pass),
+	SHELL_CMD(self_test_stop, NULL, "Event to test self test function stop", 
+		cmd_ui_func_test_stop),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(ui_event, &sub_ui_event, "Trigger app event", NULL);
 
