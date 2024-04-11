@@ -1524,6 +1524,28 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 	}
 }
 
+/**
+ * Stop rssi query work, reset modem status to disconnected, 
+ * invalidate all sockets, and reset connection values
+*/
+static void modem_turn_off_work(void) 
+{
+	/* stop RSSI delay work */
+	k_work_cancel_delayable(&mdata.rssi_query_work);
+
+	/* Set RSSI to invalid */
+	mdata.mdm_rssi = MDM_RSSI_INVALID;
+
+	/* Set status to disconnected and invalidate all sockets */
+	quectel_bg95_set_connected(false);
+	for(int i = 0; i < MDM_MAX_SOCKETS; i++) {
+		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_id) {
+			LOG_DBG("invalidating socket: %u", mdata.sockets[i].id);
+			modem_socket_put(&mdata.socket_config, mdata.sockets[i].sock_fd);
+		}
+	}
+}
+
 /* Handler: +QFLSt: <filename>,<file_size> */
 MODEM_CMD_DEFINE(on_cmd_file_list)
 {
@@ -1560,17 +1582,8 @@ MODEM_CMD_DEFINE(on_cmd_data_done)
 
 MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 {	
-	/* stop RSSI delay work */
-	k_work_cancel_delayable(&mdata.rssi_query_work);
-
+	modem_turn_off_work();
 	mdata.power = MODEM_POWER_PSM;
-	quectel_bg95_set_connected(false);
-	for(int i = 0; i < MDM_MAX_SOCKETS; i++) {
-		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_id) {
-			LOG_DBG("invalidating socket: %u", mdata.sockets[i].id);
-			modem_socket_put(&mdata.socket_config, mdata.sockets[i].sock_fd);
-		}
-	}
 
 #ifdef CONFIG_PM_DEVICE
 	pm_suspend_uart();
@@ -1652,8 +1665,7 @@ static int quectel_bg95_power_down()
 	if (ret != 0) {
 		goto error;
 	}
-	// Set modem as disconnected after power down.
-	mdata.is_connected = false;
+	modem_turn_off_work();
 
 	/* unset handler commands and ignore any errors */
 	modem_cmd_handler_update_cmds(mctx.cmd_handler.cmd_handler_data,
