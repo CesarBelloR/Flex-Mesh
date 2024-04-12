@@ -327,10 +327,11 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 	return wakeup_time;
 }
 
-static void app_backoff_check_multiple_value(void) {
+static void app_backoff_check_multiple_value(void)
+{
 	enum etc_sensor_status sensor_status = etc_sensor_get_status();
-	if ((sensor_status == SENSOR_NO_CONNECTION) && (etc_get_power_mode() == ETC_POWER_MODE_PROBE)) 
-	{
+	if ((sensor_status == SENSOR_NO_CONNECTION) &&
+	    (etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
 		if ((app_backoff_last_multiple * 2) != app_backoff_multiple) {
 			app_backoff_multiple = app_backoff_last_multiple;
 		} else {
@@ -369,14 +370,16 @@ static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transm
 	return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
 }
 
-static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mins, 
-	enum etc_sensor_status sensor_status) {
+static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mins,
+					     enum etc_sensor_status sensor_status)
+{
 	/* Ignore this time in Relay Mode */
 	if (etc_get_device_mode() == ETC_DEVICE_MODE_RELAY) {
 		return -1;	
 	}
 
-	if ((sensor_status != SENSOR_NO_CONNECTION) || (etc_get_power_mode() != ETC_POWER_MODE_PROBE)) {
+	if ((sensor_status != SENSOR_NO_CONNECTION) ||
+	    (etc_get_power_mode() != ETC_POWER_MODE_PROBE)) {
 		return -1;
 	}
 
@@ -384,10 +387,6 @@ static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mi
 	if (etc_device_nack_count() > 0) {
 		time_t next_transmit = app_backoff_interval_no_probe(now);
 		return next_transmit;
-	} else {
-		/* Reset the backoff */
-		app_backoff_multiple = 1;
-		app_backoff_last_multiple = 1;
 	}
 	
 	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
@@ -534,7 +533,8 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 
 		pcf85263a_alarm_config_type_2(config_2);
 		pcf85263a_alarm_enable_type_2(flag_2);
-		LOG_DBG("Next wakeup for logging at: %02d:%02d:%02d", tm_log_time.tm_hour, tm_log_time.tm_min, 0);
+		LOG_DBG("Next wakeup for logging at: %02d:%02d:%02d", tm_log_time.tm_hour,
+			tm_log_time.tm_min, 0);
 	}
 
 	if (next_transmit != 0) {
@@ -542,7 +542,9 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 			int16_t wakeup_early = (int16_t)etc_get_wake_early_secs();
 			int16_t sleep_time = next_transmit - now;
 			if (wakeup_early < sleep_time) {
-				next_transmit = next_transmit > wakeup_early ? next_transmit - wakeup_early : next_transmit;
+				next_transmit = next_transmit > wakeup_early
+							? next_transmit - wakeup_early
+							: next_transmit;
 			} else {
 				/* No minus wakeup_early */
 			}
@@ -575,10 +577,11 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 		} else {
 			type = APP_WAKEUP_TX_INTERVAL_WORK;
 		}
-		LOG_DBG("Transmit time for each mode [%d] %d %d %d", type, (int)next_transmit_logger_lora_sync_cloud, 
-			(int)next_transmit_no_probe, (int)next_transmit_normal);
-		LOG_DBG("Next wakeup for transmitting at: %02d:%02d:%02d", tm_transmit_time.tm_hour, tm_transmit_time.tm_min, tm_transmit_time.tm_sec);
-
+		LOG_DBG("Transmit time for each mode [%d] %d %d %d", type,
+			(int)next_transmit_logger_lora_sync_cloud, (int)next_transmit_no_probe,
+			(int)next_transmit_normal);
+		LOG_DBG("Next wakeup for transmitting at: %02d:%02d:%02d", tm_transmit_time.tm_hour,
+			tm_transmit_time.tm_min, tm_transmit_time.tm_sec);
 
 		if ((wakeup == 0) || (wakeup > next_transmit)) {
 			wakeup = next_transmit;
@@ -652,6 +655,7 @@ static void app_peripheral_on(bool is_rtc)
 		}
 		case ETC_DEVICE_JOB_TX_RX: {
 			etc_device_set_job(ETC_DEVICE_JOB_TX_RX);
+			app_backoff_check_multiple_value();
 			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_TX_RX);
 			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
@@ -670,6 +674,7 @@ static void app_peripheral_on(bool is_rtc)
 		}
 		case ETC_DEVICE_JOB_BOTH: {
 			LOG_DBG("Doing both job");
+			app_backoff_check_multiple_value();
 			etc_device_set_job(ETC_DEVICE_JOB_BOTH);
 			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_BOTH);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
@@ -687,7 +692,6 @@ static void app_peripheral_on(bool is_rtc)
 static void app_input_handler(enum etc_interface_event_type type)
 {
 	if (type == ETC_INTERFACE_EVENT_RTC) {
-		app_backoff_check_multiple_value();
 		app_peripheral_on(true);
 	} else if (type == ETC_INTERFACE_EVENT_HALL) {
 		app_set_tx_work_type(APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK);
