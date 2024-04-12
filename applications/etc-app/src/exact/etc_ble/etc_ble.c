@@ -731,6 +731,8 @@ static const char* etc_ble_error_type_to_string(int type) {
 			return "reclaim";
 		case ETC_BLE_ERR_QUERY_TYPE:
 			return "query";
+		case ETC_BLE_ERR_RETRIEVE_TYPE:
+			return "retrieve";
 	}
 	return "unknown";
 }
@@ -738,6 +740,21 @@ static const char* etc_ble_error_type_to_string(int type) {
 int etc_ble_notify_error(int type, int error) {
 	char* response_msg = ble_helpers_prepare_response("error", etc_ble_error_type_to_string(type),
 		false, error);
+	if (response_msg == NULL) {
+		LOG_ERR("Can't create response object");
+		return -EINVAL;
+	} 
+
+	LOG_INF("Response message %s", response_msg);
+	etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+	cJSON_free(response_msg);
+
+	return 0;
+}
+
+int etc_ble_notify_status(int type, int status) {
+	char* response_msg = ble_helpers_prepare_response("status", etc_ble_error_type_to_string(type),
+		false, status);
 	if (response_msg == NULL) {
 		LOG_ERR("Can't create response object");
 		return -EINVAL;

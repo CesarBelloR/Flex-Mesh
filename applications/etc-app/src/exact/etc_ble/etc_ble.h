@@ -49,6 +49,7 @@ enum {
 enum {
 	ETC_BLE_ERR_RECLAIM_TYPE = 0x01,
 	ETC_BLE_ERR_QUERY_TYPE,
+	ETC_BLE_ERR_RETRIEVE_TYPE
 };
 
 /** @brief Bluetooth library asynchronous event handler.
@@ -142,4 +143,13 @@ int etc_ble_notify_battery(uint8_t level);
  * @return Return 0 on success 
  */
 int etc_ble_notify_error(int type, int error);
+
+/**
+ * @brief Notify the status response to central app
+ * 
+ * @param type Type of current status (reclaim, query etc...)
+ * @param error The error code based on current status
+ * @return Return 0 on success 
+ */
+int etc_ble_notify_status(int type, int status);
 #endif /* ETC_BLE_H_ */

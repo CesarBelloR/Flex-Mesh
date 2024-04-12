@@ -511,6 +511,8 @@ static void data_encode_for_ble()
 		if (reclaim_active) {
 			etc_ble_notify_reclaim_status(0);
 			reclaim_active = false;
+		} else {
+			etc_ble_notify_status(ETC_BLE_ERR_RETRIEVE_TYPE, 0);
 		}
 		/* Return early and report data send complete if we don't
 		 * have any new data to send, so other modules can start

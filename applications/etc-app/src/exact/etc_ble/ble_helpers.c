@@ -50,7 +50,7 @@ char* ble_helpers_prepare_response(const char* response_type,
 	if (response_msg == NULL) {
 		LOG_ERR("Can't create response object");
 		cJSON_Delete(response_json);
-		return;
+		return NULL;
 	} 
 	cJSON_Delete(response_json);
 	return response_msg;
