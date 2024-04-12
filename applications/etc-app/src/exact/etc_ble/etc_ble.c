@@ -13,6 +13,7 @@ LOG_MODULE_REGISTER(etc_ble);
 #include <cJSON.h>
 #include <cJSON_os.h>
 #include "etc_ble.h"
+#include "etc_battery.h"
 #include "etc_settings.h"
 #include "etc_util.h"
 
@@ -66,6 +67,8 @@ static bool flex_ble_is_magnet_trigger = false;
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
 static uint8_t adv_data[] = {
+	0x00, // Battery status
+	0x00, // Battery
 	0x00, 0x00, 0x00, 0x00, // Probe 1
 	0x00, 0x00, 0x00, 0x00, // Probe 2
 	0x00, 0x00, 0x00, 0x00, // Probe 3
@@ -439,6 +442,13 @@ static void advertise(struct k_work *work)
 	int rc;
 	/* Sync last sensor data */
 	int offset = 0;
+	uint8_t battery = 0;
+	enum battery_status bat_status = etc_battery_get_status();
+	memcpy(&adv_data[offset], &bat_status, sizeof(enum battery_status));
+	offset += sizeof(enum battery_status);
+	battery = etc_battery_percentage_from_voltage(last_sensor_data.battery_mV);
+	memcpy(&adv_data[offset], &battery, sizeof(uint8_t));
+	offset += sizeof(uint8_t);
 	memcpy(&adv_data[offset], &last_sensor_data.sensor[SENSOR_INPUT_IN1], sizeof(float));
 	offset += sizeof(float);
 	memcpy(&adv_data[offset], &last_sensor_data.sensor[SENSOR_INPUT_IN2], sizeof(float));
