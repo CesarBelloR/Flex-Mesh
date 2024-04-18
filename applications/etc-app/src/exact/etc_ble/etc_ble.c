@@ -695,7 +695,7 @@ bool etc_ble_get_is_connected(void) {
 }
 
 int etc_ble_notify_reclaim_status(int reclaim_status) {
-	char* response_msg = ble_helpers_prepare_response("reclaim", "reclaim", true, reclaim_status);;
+	char* response_msg = ble_helpers_prepare_response("reclaim", "reclaim", false, reclaim_status);
 	if (response_msg == NULL) {
 		return -EINVAL;
 	}
@@ -739,7 +739,7 @@ static const char* etc_ble_error_type_to_string(int type) {
 
 int etc_ble_notify_error(int type, int error) {
 	char* response_msg = ble_helpers_prepare_response("error", etc_ble_error_type_to_string(type),
-		false, error);
+							  false, error);
 	if (response_msg == NULL) {
 		LOG_ERR("Can't create response object");
 		return -EINVAL;
@@ -754,7 +754,7 @@ int etc_ble_notify_error(int type, int error) {
 
 int etc_ble_notify_status(int type, int status) {
 	char* response_msg = ble_helpers_prepare_response("status", etc_ble_error_type_to_string(type),
-		false, status);
+							  false, status);
 	if (response_msg == NULL) {
 		LOG_ERR("Can't create response object");
 		return -EINVAL;

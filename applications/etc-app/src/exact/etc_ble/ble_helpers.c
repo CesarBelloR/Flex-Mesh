@@ -9,7 +9,8 @@ struct ble_reclaim_info {
 	int end;
 };
 
-static int ble_helpers_get_reclaim_info(cJSON *json, struct ble_reclaim_info *info) {
+static int ble_helpers_get_reclaim_info(cJSON *json, struct ble_reclaim_info *info)
+{
 	if (json == NULL || info == NULL) {
 		return -EINVAL;
 	}
@@ -19,23 +20,23 @@ static int ble_helpers_get_reclaim_info(cJSON *json, struct ble_reclaim_info *in
 	if (start_json == NULL || end_json == NULL) {
 		LOG_ERR("Missing start/stop parameter");
 		return -EINVAL;
-	} 
+	}
 
 	int start_time = (int)start_json->valuedouble;
 	int end_time = (int)end_json->valuedouble;
 	if (start_time > end_time) {
 		LOG_ERR("start_time > end_time");
 		return -EINVAL;
-	} 
-	
+	}
+
 	LOG_DBG("Start %d - End %d", start_time, end_time);
 	info->start = start_time;
 	info->end = end_time;
 	return 0;
 }
 
-char* ble_helpers_prepare_response(const char* response_type, 
-	const char* type, bool is_data, int response_data) 
+char *ble_helpers_prepare_response(const char *response_type, const char *type, bool is_data,
+				   int response_data)
 {
 	cJSON *response_json = cJSON_CreateObject();
 	if (response_json == NULL) {
@@ -51,12 +52,13 @@ char* ble_helpers_prepare_response(const char* response_type,
 		LOG_ERR("Can't create response object");
 		cJSON_Delete(response_json);
 		return NULL;
-	} 
+	}
 	cJSON_Delete(response_json);
 	return response_msg;
 }
 
-void ble_helpers_handle_reclaim_request(cJSON* json, etc_ble_evt_handler_t handler) {
+void ble_helpers_handle_reclaim_request(cJSON *json, etc_ble_evt_handler_t handler)
+{
 	/* {"request" : "reclaim", "start" : xxx, "end" : xxxx} */
 	LOG_DBG("Reclaim request");
 	struct ble_reclaim_info reclaim_info = {0x00};
@@ -73,7 +75,8 @@ void ble_helpers_handle_reclaim_request(cJSON* json, etc_ble_evt_handler_t handl
 	}
 }
 
-void ble_helpers_handle_query_request(cJSON* json, etc_ble_evt_handler_t handler) {
+void ble_helpers_handle_query_request(cJSON *json, etc_ble_evt_handler_t handler)
+{
 	/* {"request" : "query", "type" : "xxx"} */
 	LOG_DBG("Query request");
 	cJSON *type_json = cJSON_GetObjectItem(json, "type");
