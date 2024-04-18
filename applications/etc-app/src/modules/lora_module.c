@@ -523,11 +523,20 @@ retry_recv:
 static int module_lora_process_packet(union etc_device_record record)
 {
 	LOG_HEXDUMP_DBG((uint8_t *)&record, sizeof(record), "RECORD");
-	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
+	int now = date_time_now_second();
 	int decoded_buf_len = 0;
+	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
 
-	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "S,XXXX,%s,%s,%1.2f,%d,%d,", 
-		APP_VERSION_STR, buf_tmp, record.battery, lora_pkt_counter, record.timestamp);
+	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "S,XXXX,%s,%s,%1.2f,%d,", 
+				    APP_VERSION_STR, buf_tmp, record.battery, lora_pkt_counter);
+
+	if (record.timestamp > (now - 120) && record.timestamp < now) { 
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+					    sizeof(decoded_buf) - decoded_buf_len, "*,");
+	} else {
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+					    sizeof(decoded_buf) - decoded_buf_len, "%d,", record.timestamp);
+	}
 
 	lora_pkt_counter += 1;
 	if (lora_pkt_counter >= LOGGER_MAXIMUM_COUNTER) {
