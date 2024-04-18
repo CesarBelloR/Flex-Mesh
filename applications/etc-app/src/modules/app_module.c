@@ -352,7 +352,11 @@ static void app_backoff_check_multiple_value(void)
 static time_t app_backoff_interval_no_probe(time_t now) 
 {
 	int tx_interval_s = etc_device_get_tx_interval_second();
+	int tx_max_offset_probe_s = etc_device_get_tx_probe_second();
 	int transmit_interval_s = app_backoff_multiple * tx_interval_s;
+	if (transmit_interval_s > tx_max_offset_probe_s) {
+		transmit_interval_s = tx_max_offset_probe_s;
+	}
 	return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
 }
 
