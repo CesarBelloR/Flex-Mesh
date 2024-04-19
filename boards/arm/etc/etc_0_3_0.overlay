@@ -1,4 +1,5 @@
 #include "etc_0_3_0.dtsi"
+#include <dt-bindings/modem.h>
 
 / {
 	board-control {
@@ -44,11 +45,15 @@
 
 	quectel_bg95: quectel_bg95 {
 		compatible = "quectel,bg95";
-		label      = "quectel-bg95";
 		status     = "okay";
 		mdm-power-gpios = <&gpio0 25 0>;
 		mdm-pon-trig-gpios = <&gpio1 13 0>;
 		mdm-psm-ind-gpios = <&gpio0 2 0>;
 		mdm-uart-oe-gpios = <&gpio0 30 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)>;
+		nb-iot-bands = <(LTE_BAND_3 | LTE_BAND_8 | LTE_BAND_20) 0 0>;
+		cat-m-bands = <(LTE_BAND_1 | LTE_BAND_2 | LTE_BAND_3 | LTE_BAND_4 | LTE_BAND_5 |
+				LTE_BAND_8 | LTE_BAND_12 | LTE_BAND_13 | LTE_BAND_18 | LTE_BAND_19 |
+				LTE_BAND_20 | LTE_BAND_25 | LTE_BAND_26 | LTE_BAND_27 | LTE_BAND_28)
+				0 (LTE_BAND_66 | LTE_BAND_85)>;
 	};
 };

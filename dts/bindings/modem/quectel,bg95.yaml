@@ -39,3 +39,23 @@ properties:
     mdm-wdisable-gpios:
       type: phandle-array
       required: false
+
+    cat-m-bands:
+      type: array
+      description: |
+       Specify the LTE CAT-M1 bands to be used. The first element contains bands
+       1 to 32, second element contains bands 33 to 64 and the third element
+       contains bands 65 to 96. There MUST be values for all 3 elements. Specify
+       0 if no band should be enabled.
+       The values for bands are specified in dt-bindings/modem.h
+      required: false
+
+    nb-iot-bands:
+      type: array
+      description: |
+       Specify the NB-IoT bands to be used. The first element contains bands
+       1 to 32, second element contains bands 33 to 64 and the third element
+       contains bands 65 to 96. There MUST be values for all 3 elements. Specify
+       0 if no band should be enabled.
+       The values for bands are specified in dt-bindings/modem.h
+      required: false

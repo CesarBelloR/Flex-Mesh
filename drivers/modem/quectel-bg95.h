@@ -69,6 +69,8 @@
 #define MDM_USERNAME			CONFIG_MODEM_QUECTEL_BG95_M3_USERNAME
 #define MDM_PASSWORD			CONFIG_MODEM_QUECTEL_BG95_M3_PASSWORD
 
+#define MDM_BAND_SIZE			3
+
 #define CONFIG_DNS_RESOLVER
 
 /* Modem ATOI routine. */
@@ -150,8 +152,15 @@ struct modem_data {
 
 	/* Modem status */
 	bool is_connected;
-
 	enum modem_power_state power;
+
+	/* Bands that are currently enabled on the modem 
+	 * [0]: Bands 1 to 32
+	 * [1]: Bands 33 to 64
+	 * [2]: Bands 65 to 96
+	 */
+	uint32_t lte_bands[MDM_BAND_SIZE];
+	uint32_t nbiot_bands[MDM_BAND_SIZE];
 
 	/* SIM initialization status reported by modem */
 	int8_t sim_ini_stat;

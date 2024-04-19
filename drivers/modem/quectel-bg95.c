@@ -21,6 +21,9 @@ LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 #define MDM_TCP_ERROR_SOCKET_IN_USE	563
 #define MDM_TCP_ERROR_UNKNOWN		550
 
+/* Number of bytes in 32 bit */
+#define NUM_8_BIT_IN_32_BIT (sizeof(uint32_t) / sizeof(uint8_t))
+
 static struct k_thread	       modem_rx_thread;
 static struct k_work_q	       modem_workq;
 static struct modem_data       mdata;
@@ -515,7 +518,113 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_qcsq)
 	return 0;
 }
 
+/**
+ * Assemble bands into a hex string buffer to use with AT+QCFG="band".
+ *
+ * @param buf Input buffer that will hold the hex string with a 0x prefix
+ * @param buf_size Size of the input buffer
+ * @param band_val Desired value of bands to be set. Must be maximum of size @ref MDM_BAND_SIZE.
+ *
+ * @retval 0 success
+ * @retval <0 fail
+*/
+static int assemble_bands(char *buf, uint8_t buf_size, uint32_t *band_val)
+{
+	__ASSERT_NO_MSG(buf != NULL);
+	__ASSERT_NO_MSG(band_val != NULL);
 
+	int ret;
+	uint8_t bands[NUM_8_BIT_IN_32_BIT * MDM_BAND_SIZE];
+
+	if (buf_size < sizeof("0x")) {
+		return -ENOMEM;
+	}
+
+	memset(bands, 0, sizeof(bands));
+	/* Convert bands from the internal 32-bit array structure to binary that
+	 * can be converted to a string.
+	*/
+	uint8_t base_index;
+	uint8_t shift_count;
+	for (int i = 0; i < sizeof(bands); i++) {
+		base_index = MDM_BAND_SIZE - (i / NUM_8_BIT_IN_32_BIT) - 1;
+		shift_count = (NUM_8_BIT_IN_32_BIT - (i % NUM_8_BIT_IN_32_BIT + 1)) * 8;
+		bands[i] = (band_val[base_index] >> shift_count) & 0xFF;
+	}
+
+	ret = snprintk(buf, buf_size, "0x");
+	bin2hex(bands, sizeof(bands), buf + ret, buf_size - ret);
+
+	return 0;
+}
+
+/**
+ * Parse a band value received from the modem.
+ *
+ * @param buf Band data received from the modem in null-terminated string buffer
+ * @param band_val Buffer for resulting band value. Needs to be at least of size
+ * 		   MDM_BAND_SIZE. The lowest 32 bit value contains the lowest band values.
+ *
+ * @retval 0 success
+ * @retval <0 fail
+*/
+static int parse_bands(char *buf, uint32_t *band_val)
+{
+	__ASSERT_NO_MSG(buf != NULL);
+	__ASSERT_NO_MSG(band_val != NULL);
+
+	uint8_t bands[NUM_8_BIT_IN_32_BIT * MDM_BAND_SIZE];
+	/* Skip 0x */
+	const char *band_buf_start = buf + 2;
+	uint8_t band_len = strlen(band_buf_start);
+
+	/* Exit with error if input band value is out of range */
+	if (band_len > sizeof(bands) * 2) {
+		return -ENOMEM;
+	}
+	memset(bands, 0, sizeof(bands));
+
+	/* Shift the start index for the intemediary bands buffer if the hex string in the input
+	 * buffer does not fully fill the bands buffer. This leaves "leading" 0s in the bands
+	 * buffer and ensures the buffer is parsed correctly.
+	 * When the buffer's length is uneven, round up (band_len % 2).
+	 */
+	uint8_t bands_index_start = sizeof(bands) - (band_len / 2 + band_len % 2);
+	hex2bin(band_buf_start, band_len, &bands[bands_index_start], sizeof(bands) - bands_index_start);
+	/* Add parsed bands to band_val output. The lowest 32-bit value contains
+	 * the lowest bands (1 to 32).
+	*/
+	uint8_t base_index;
+	for (int i = 0; i < MDM_BAND_SIZE; i++) {
+		base_index = (MDM_BAND_SIZE - i - 1) * NUM_8_BIT_IN_32_BIT;
+		band_val[i] = (bands[base_index] << (3 * 8)) |
+			      (bands[base_index + 1] << (2 * 8)) |
+			      (bands[base_index + 2] << 8) | bands[base_index + 3];
+	}
+	return 0;
+}
+
+/* Handler: +QCFG: "band", GSM_bandval[1], eMTC_bandval[2], NB-IoT_bandval[3] */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_band)
+{
+	int ret;
+
+	/* Parse LTE-M bands */
+	ret = parse_bands(argv[2], mdata.lte_bands);
+	if (ret != 0) {
+		return ret;
+	}
+	/* Parse NB-IoT bands */
+	ret = parse_bands(argv[3], mdata.nbiot_bands);
+	if (ret != 0) {
+		return ret;
+	}
+
+	LOG_HEXDUMP_INF(mdata.lte_bands, sizeof(mdata.lte_bands), "LTE-M bands");
+	LOG_HEXDUMP_INF(mdata.nbiot_bands, sizeof(mdata.nbiot_bands), "NB-IoT bands");
+
+	return 0;
+}
 
 /* Handler: +QIOPEN: <connect_id>[0], <err>[1] */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sockopen)
@@ -2737,6 +2846,121 @@ static void modem_psm_wakeup_work(struct k_work *work)
 #endif
 
 /**
+ * Retrieve bands from modem. If successful, they will be saved in the modem_data
+ * struct in mdata.lte_bands and mdata.nbiot_bands.
+ *
+ * @retval 0 success
+ * @retval <0 fail
+*/
+static int modem_retrieve_bands(void)
+{
+	struct modem_cmd cmd =
+		MODEM_CMD("+QCFG: \"band\"", on_cmd_atcmdinfo_band, 4U, ",");
+	static char *send_cmd = "AT+QCFG=\"band\"";
+	int ret;
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     &cmd, 1U, send_cmd, &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+QCFG\"band\" ret:%d", ret);
+		return -1;
+	}
+
+	return 0;
+}
+
+/**
+ * Compare the current and desired band values.
+ *
+ * @param bands_current Array of bands currently sent on modem. Needs to be of size @ref MDM_BAND_SIZE.
+ * @param bands_desired Array of desired modem band configuration. Needs to be of size @ref MDM_BAND_SIZE.
+ *
+ * @retval 0 if bands are set as desired
+ * @retval 1 if bands need to be adjusted
+*/
+static int compare_bands(uint32_t *bands_current, uint32_t *bands_desired)
+{
+	__ASSERT_NO_MSG(bands_desired != NULL);
+	__ASSERT_NO_MSG(bands_current != NULL);
+
+	int ret;
+
+	for (int i = 0; i < MDM_BAND_SIZE; i++) {
+		if (bands_current[i] != bands_desired[i]) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * Set modem's LTE-M and NB-IoT bands with AT+QCFG="band" command.
+ *
+ * @param ltem_bands Modem LTE-M band value as hex string. Set to "0" if bands should
+ * 		     should not be adjusted.
+ * @param nbiot_bands Modem NB-IoT band value as hex string. Set to "0" if bands should
+ * 		      should not be adjusted.
+ *
+ * @retval 0 success
+ * @retval <0 fail
+*/
+static int qcfg_set_bands(const char *ltem_bands, const char *nbiot_bands)
+{
+	struct modem_cmd cmd =
+		MODEM_CMD("+QCFG: \"band\"", on_cmd_atcmdinfo_band, 4U, ",");
+	char send_cmd[sizeof("AT+QCFG=\"band\",0,0x########################,"
+			     "0x########################")];
+	int ret;
+
+	snprintk(send_cmd, sizeof(send_cmd), "AT+QCFG=\"band\",0,%s,%s", ltem_bands, nbiot_bands);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     &cmd, 1U, send_cmd, &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+QCFG=\"band\" ret:%d", ret);
+		return -1;
+	}
+
+	return 0;
+}
+
+/**
+ * Set the modem's LTE-M and NB-IoT active bands if the bands are configured in the device tree.
+ * The configuration band value is taken from device tree properties cat-m-bands and nb-iot-bands.
+*/
+static void modem_set_bands(void)
+{
+	char lte_hex_bands[sizeof("0x") + MDM_BAND_SIZE * NUM_8_BIT_IN_32_BIT * 2] = "0";
+	char nbiot_hex_bands[sizeof("0x") + MDM_BAND_SIZE * NUM_8_BIT_IN_32_BIT * 2] = "0";
+#if DT_NODE_HAS_PROP(DT_DRV_INST(0), cat_m_bands)
+	uint32_t lte_band_cfg[] = DT_PROP(DT_DRV_INST(0), cat_m_bands);
+	BUILD_ASSERT(ARRAY_SIZE(lte_band_cfg) == MDM_BAND_SIZE);
+
+	if (compare_bands(mdata.lte_bands, lte_band_cfg)) {
+		LOG_DBG("LTE-M desired bands don't match set.");
+		assemble_bands(lte_hex_bands, sizeof(lte_hex_bands), lte_band_cfg);
+	}
+#endif
+#if DT_NODE_HAS_PROP(DT_DRV_INST(0), nb_iot_bands)
+	uint32_t nb_band_cfg[] = DT_PROP(DT_DRV_INST(0), nb_iot_bands);
+	BUILD_ASSERT(ARRAY_SIZE(nb_band_cfg) == MDM_BAND_SIZE);
+
+	if (compare_bands(mdata.nbiot_bands, nb_band_cfg)) {
+		assemble_bands(nbiot_hex_bands, sizeof(nbiot_hex_bands), nb_band_cfg);
+		LOG_INF("Set NB-IoT bands to: %s", nbiot_hex_bands);
+	}
+#endif
+
+	if ((strlen(nbiot_hex_bands) > 1) || (strlen(lte_hex_bands) > 1)) {
+		qcfg_set_bands(lte_hex_bands, nbiot_hex_bands);
+	} else {
+		LOG_INF("No change in modem bands");
+	}
+}
+
+/**
  * Retrieve SIM initialization status from modem.
  * 
  * @return true if ready, false if not ready or error.
@@ -2836,6 +3060,8 @@ retry:
 	}
 
 	modem_retrieve_sim_numbers();
+	modem_retrieve_bands();
+	modem_set_bands();
 
 	/* Modem is ready - Start RSSI work in the background. */
 	LOG_INF("Modem is initialized.");
