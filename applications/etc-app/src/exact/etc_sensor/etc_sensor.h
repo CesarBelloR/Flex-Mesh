@@ -21,6 +21,22 @@ enum etc_sensor_status {
 
 typedef void(*etc_sensor_evt_handler_t)(enum etc_sensor_status status);
 
+static inline bool etc_sensor_rr_value_is_valid(int rr_value) {
+	if ((rr_value >= SENSOR_RR_VALID_MIN_VALUE) && 
+	    (rr_value <= SENSOR_RR_VALID_MAX_VALUE)) {
+		return true;
+	}
+	return false;
+}
+
+static inline bool etc_sensor_temp_ambient_for_rr_is_valid(float temp) {
+	if ((temp >= SENSOR_AMBIENT_C_RR_VALID_MIN_VALUE) && 
+	    (temp <= SENSOR_AMBIENT_C_RR_VALID_MAX_VALUE)) {
+		return true;
+	}
+	return false;
+}
+
 /**
  * @brief Initialize the sensor system.
  * 

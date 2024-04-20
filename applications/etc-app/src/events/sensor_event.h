@@ -27,7 +27,14 @@ extern "C" {
 #define SENSOR_ADC_ONE_WIRE_CONNECTED 50
 /* Invalid timestamp */
 #define SENSOR_TIMESTAMP_INVALID -1
-
+/* Define a valid minimum for Rr */
+#define SENSOR_RR_VALID_MIN_VALUE (200)
+/* Define a valid maximum for Rr */
+#define SENSOR_RR_VALID_MAX_VALUE (3900)
+/* Define a valid minimum ambient in C to set Rr */
+#define SENSOR_AMBIENT_C_RR_VALID_MIN_VALUE (22.0)
+/* Define a valid maximum ambient in C to set Rr */
+#define SENSOR_AMBIENT_C_RR_VALID_MAX_VALUE (25.0)
 /** @brief Sensor event types submitted by the Sensor module. */
 enum sensor_event_type {
 	SENSOR_EVT_ENVIRONMENTAL_AQUIRING,

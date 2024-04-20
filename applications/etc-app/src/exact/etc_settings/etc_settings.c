@@ -30,6 +30,7 @@ static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
 static uint8_t saved_psk[ETC_SETTING_PSK_LEN];
 static uint8_t saved_psk_len;
 static int flag_etc_config_load;
+static int saved_rr_value;
 static enum etc_serial_number_types saved_serial_number_type;
 struct etc_config etc_cfg;
 
@@ -334,6 +335,13 @@ int etc_settings_init(void)
 		}
 	} else {
 		LOG_WRN("No RTC calibration available");
+	}
+
+	/* Read Rr for ambient reference */
+	ret = etc_device_read_setting(ETC_ADC_TEMPERATURE_REFERENCE, &saved_rr_value,
+				      sizeof(saved_rr_value));
+	if (ret != 0) {
+		saved_rr_value = 0;
 	}
 
 	LOG_DBG("Load settings successfully");
@@ -713,6 +721,24 @@ int etc_set_relay_iccid(const char* iccid) {
 	return 0;
 }
 
+int etc_set_rr_value(int value) 
+{
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (saved_rr_value == value) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	saved_rr_value = value;
+	rc = etc_device_write_setting(ETC_ADC_TEMPERATURE_REFERENCE, &saved_rr_value,
+				      sizeof(saved_rr_value));
+	if (rc == 0) {
+		LOG_DBG("set %d: %u", ETC_ADC_TEMPERATURE_REFERENCE, saved_rr_value);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 enum etc_device_mode etc_get_device_mode(void)
 {
 	enum etc_device_mode mode;
@@ -830,6 +856,15 @@ int etc_get_relay_iccid(char *buf, int buf_len)
 	memcpy(buf, saved_relay_iccid, copy_size);
 	k_mutex_unlock(&setting_mutex);
 	return copy_size;
+}
+
+int etc_get_rr_value(void)
+{
+	int rr_value = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	rr_value = saved_rr_value;
+	k_mutex_unlock(&setting_mutex);
+	return rr_value;
 }
 
 #ifdef CONFIG_SHELL
