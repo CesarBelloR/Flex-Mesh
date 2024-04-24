@@ -5,6 +5,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+/* Define a enum to describe about device mode */
+enum etc_device_mode {
+	ETC_DEVICE_MODE_RELAY = 0x00,
+	ETC_DEVICE_MODE_LORA_LOGGER = 0x01,
+	ETC_DEVICE_MODE_LTE_LOGGER = 0x02,
+	ETC_DEVICE_MODE_BLE = 0x03,
+};
 
 enum etc_setting_id {
 	ETC_CONFIG_ID = 0x01,

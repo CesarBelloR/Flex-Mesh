@@ -1813,7 +1813,8 @@ static int cmd_get_device_id(const struct shell *shell, size_t argc, char **argv
 	int ret;
 	
 	memset(tmp_device_id, 0, sizeof(tmp_device_id));
-	ret = etc_device_read_setting(ETC_SETTING_DEVICE_ID, (char *)tmp_device_id, ETC_SETTINGS_DEVICE_ID_LEN);
+	ret = etc_device_read_setting(ETC_SETTING_DEVICE_ID, (char *)tmp_device_id, 
+				      ETC_SETTINGS_DEVICE_ID_LEN);
 	if (ret) {
 		shell_error(shell, "Error reading device ID");
 		return -1;
@@ -1823,10 +1824,52 @@ static int cmd_get_device_id(const struct shell *shell, size_t argc, char **argv
 	return 0;
 }
 
+static enum etc_device_mode device_mode = ETC_DEVICE_MODE_RELAY;
+
+static int cmd_set_device(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		int mode = atoi(argv[1]);
+		if (mode > ETC_DEVICE_MODE_BLE || mode < ETC_DEVICE_MODE_RELAY) {
+			shell_error(shell, "Invalid device mode input %d", mode);
+			return -1;
+		}
+		device_mode = (enum etc_device_mode)mode;
+		int rc = etc_device_write_setting(ETC_SETTING_DEVICE_MODE_ID, &device_mode, 
+						  sizeof(device_mode));
+		if (rc) {
+			shell_error(shell, "Failed to set new mode %d", rc);
+			return -1;
+		} else {
+			shell_print(shell, "Update mode successful");
+			return 0;
+		}
+	}
+	shell_error(shell, "Invalid parameter for setting device mode");
+	return 0;
+}
+
+static int cmd_get_device(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	
+	ret = etc_device_read_setting(ETC_SETTING_DEVICE_MODE_ID, &device_mode, 
+				      sizeof(device_mode));
+	if (ret) {
+		shell_error(shell, "Error reading device mode %d", ret);
+		return -1;
+	}
+
+	shell_print(shell, "Device mode %s", device_mode);
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings, 
 	SHELL_CMD(set_device_id, NULL, "Set device ID", cmd_set_device_id),
 	SHELL_CMD(set_psk, NULL, "Set the PSK used for cloud authentication", cmd_set_psk),
 	SHELL_CMD(get_device_id, NULL, "Get device ID", cmd_get_device_id),
+	SHELL_CMD(set_device, NULL, "Set device mode", cmd_set_device),
+	SHELL_CMD(get_device, NULL, "Get device mode", cmd_get_device),
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
 SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);
