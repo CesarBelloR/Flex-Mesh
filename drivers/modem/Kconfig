@@ -144,6 +144,6 @@ config MODEM_NTP_SERVER
 
 config MODEM_SOFT_PSM_WAIT_TIME_SEC
 	int "The timeout to put the modem to sleep mode like PSM"
-	default 20
+	default 30
 	
 endif
