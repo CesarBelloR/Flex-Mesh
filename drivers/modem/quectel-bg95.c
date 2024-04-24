@@ -90,10 +90,9 @@ static int pm_suspend_uart(void);
 static int quectel_bg95_pm_suspend(void);
 #endif
 
-#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
-static void psm_workaround_work_fn(struct k_work *work);
-static K_WORK_DELAYABLE_DEFINE(psm_workaround_work, psm_workaround_work_fn);
-#endif
+static void soft_psm_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(soft_psm_work, soft_psm_work_fn);
+
 
 static void quectel_bg95_set_connected(bool connected);
 static int modem_event_callback(const struct modem_api_evt *evt);
@@ -101,25 +100,16 @@ int quectel_bg95_psm_wakeup(void);
 /* Implementation in net/ip/utils.h */
 extern char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad);
 
-#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
-static void psm_workaround_work_fn(struct k_work *work) 
+static void soft_psm_work_fn(struct k_work *work)
 {
 	(void)work;
-	/* stop RSSI delay work */
-	k_work_cancel_delayable(&mdata.rssi_query_work);
-
-	quectel_bg95_set_connected(false);
-	for(int i = 0; i < MDM_MAX_SOCKETS; i++) {
-		if (mdata.sockets[i].id >= mdata.socket_config.base_socket_id) {
-			LOG_DBG("invalidating socket: %u", mdata.sockets[i].id);
-			modem_socket_put(&mdata.socket_config, mdata.sockets[i].sock_fd);
-		}
-	}
-
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
+	LOG_INF("Modem entering soft PSM after %u s inactivity",
+		mdata.mdm_soft_psm_timeout_s);
 	quectel_bg95_pm_suspend();
 	MODEM_SUBMIT_EVT(MODEM_API_SOFT_PSM_EVT);
-}
 #endif
+}
 
 static inline int digits(int n)
 {
@@ -333,6 +323,17 @@ static inline int parse_oper(char *buf, uint8_t buf_len, uint8_t format)
 	return 0;
 }
 
+static inline int reset_soft_psm_timer(void)
+{
+	/* Reschedule for soft PSM */
+	return k_work_reschedule(&soft_psm_work, K_SECONDS(mdata.mdm_soft_psm_timeout_s));
+}
+
+static inline int disable_soft_psm_timer(void)
+{
+	return k_work_cancel_delayable(&soft_psm_work);
+}
+
 
 /* Func: on_cmd_sockread_common
  * Desc: Function to successfully read data from the modem on a given socket.
@@ -431,16 +432,21 @@ static void socket_close(struct modem_socket *sock, bool force_close)
 		snprintk(buf, sizeof(buf), "AT+QICLOSE=%d", sock->id);
 	}
 	
+	k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, K_FOREVER);
+	disable_soft_psm_timer();
 	k_sem_reset(&mdata.sem_response);
 	/* Tell the modem to close the socket, if connected */
 	if (sock->is_connected || force_close) {
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0U, buf,
-				&mdata.sem_response, MDM_CMD_TIMEOUT);
+		ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
+					    NULL, 0U, buf,
+					    &mdata.sem_response, MDM_CMD_TIMEOUT);
 		if (ret < 0) {
 			LOG_ERR("%s ret:%d", buf, ret);
 		}
 	}
+
+	reset_soft_psm_timer();
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 
 	if (ret == 0) {
 		modem_socket_put(&mdata.socket_config, sock->sock_fd);
@@ -968,7 +974,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_qpsmtimer)
 	active_timer = ATOI(argv[1], 0, "active_timer");
 
 #if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
-	k_work_cancel_delayable(&psm_workaround_work);
+	k_work_cancel_delayable(&soft_psm_work);
 #endif
 
 	LOG_INF("Entering PSM. TAU: %u, AT: %u", tau, active_timer);
@@ -1294,6 +1300,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 	/* Setup the locks correctly. */
 	k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, K_FOREVER);
 	k_sem_reset(&mdata.sem_tx_ready);
+	disable_soft_psm_timer();
 
 	/* Create a buffer with the correct params. */
 	mdata.sock_written = buf_len;
@@ -1348,6 +1355,8 @@ exit:
 	(void)modem_cmd_handler_update_cmds(&mdata.cmd_handler_data,
 					    NULL, 0U, false);
 	bytes_written = mdata.sock_written;
+
+	reset_soft_psm_timer();
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 
 	if (ret < 0) {
@@ -1413,11 +1422,6 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 
 	/* Data was written successfully. */
 	errno = 0;
-#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
-	/* Reschedule for PSM workaround */
-	k_work_reschedule(&psm_workaround_work, 
-			  K_SECONDS(mdata.mdm_soft_psm_timeout_s));
-#endif
 	return ret;
 }
 
@@ -1483,6 +1487,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 		errno = EAGAIN;
 		return -1;
 	}
+	disable_soft_psm_timer();
 	/* Socket read settings */
 	(void) memset(&sock_data, 0, sizeof(sock_data));
 	sock_data.recv_buf     = buf;
@@ -1494,6 +1499,8 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
 			     data_cmd, ARRAY_SIZE(data_cmd), sendbuf, &mdata.sem_response,
 			     MDM_RECV_TIMEOUT);
+
+	reset_soft_psm_timer();
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	if (ret < 0) {
 		errno = -ret;
@@ -1530,11 +1537,6 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 exit:
 	/* clear socket data */
 	sock->data = NULL;
-#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
-	/* Reschedule for PSM workaround */
-	k_work_reschedule(&psm_workaround_work, 
-			  K_SECONDS(mdata.mdm_soft_psm_timeout_s));
-#endif
 	return ret;
 }
 
@@ -2382,6 +2384,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		errno = EAGAIN;
 		return -1;
 	}
+	disable_soft_psm_timer();
 
 	/* Send out the command. */
 	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
@@ -2390,16 +2393,12 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", buf, ret);
 		LOG_ERR("Closing the socket!!!");
-		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock, false);
 		goto exit;
 	}
 
 	/* set command handlers */
 	ret = modem_cmd_handler_update_cmds(&mdata.cmd_handler_data, cmd, ARRAY_SIZE(cmd), true);
 	if (ret < 0) {
-		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock, false);
 		goto exit;
 	}
 
@@ -2408,8 +2407,6 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (ret < 0) {
 		LOG_ERR("Timeout waiting for socket open");
 		LOG_ERR("Closing the socket!!!");
-		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock, false);
 		goto exit;
 	}
 
@@ -2425,33 +2422,24 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		} else {
 			ret = -ret;
 		}
-		k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
-		socket_close(sock, force_close);
 		goto exit;
 	}
-
+	reset_soft_psm_timer();
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 
 	/* Connected successfully. */
 	sock->is_connected = true;
 	errno = 0;
 
-#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
-	/* Reschedule for PSM workaround */
-	k_work_reschedule(&psm_workaround_work, 
-		K_SECONDS(mdata.mdm_soft_psm_timeout_s));
-#endif
 	return 0;
 
 exit:
 	(void) modem_cmd_handler_update_cmds(&mdata.cmd_handler_data,
 					     NULL, 0U, false);
 	errno = -ret;
-#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
-	/* Reschedule for PSM workaround */
-	k_work_reschedule(&psm_workaround_work, 
-		K_SECONDS(mdata.mdm_soft_psm_timeout_s));
-#endif
+	reset_soft_psm_timer();
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
+	socket_close(sock, false);
 	return -1;
 }
 
@@ -2471,11 +2459,6 @@ static int offload_close(void *obj)
 	/* Close the socket */
 	socket_close(sock, false);
 exit:
-#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
-	/* Reschedule for PSM workaround */
-	k_work_reschedule(&psm_workaround_work, 
-		K_SECONDS(mdata.mdm_soft_psm_timeout_s));
-#endif
 	return 0;
 }
 
@@ -2884,8 +2867,6 @@ static int compare_bands(uint32_t *bands_current, uint32_t *bands_desired)
 	__ASSERT_NO_MSG(bands_desired != NULL);
 	__ASSERT_NO_MSG(bands_current != NULL);
 
-	int ret;
-
 	for (int i = 0; i < MDM_BAND_SIZE; i++) {
 		if (bands_current[i] != bands_desired[i]) {
 			return 1;
@@ -3215,20 +3196,22 @@ static int offload_getaddrinfo(const char *node, const char *service,
 		return DNS_EAI_NONAME;
 	}
 	/* Ensure only one DNS request is processed at a time.*/
-	ret = k_sem_take(&mdata.sem_dns_busy, MDM_TX_LOCK_TIMEOUT);
+	ret = k_sem_take(&mdata.cmd_handler_data.sem_tx_lock, MDM_TX_LOCK_TIMEOUT);
 	if (ret != 0) {
 		free(*res);
 		return DNS_EAI_AGAIN;
 	}
+	disable_soft_psm_timer();
 	mdata.dns_ai = *res;
 	mdata.dns_ready = false;
 	mdata.dns_request = true;
 	mdata.dns_result = 0;
 	snprintk(sendbuf, sizeof(sendbuf), "AT+QIDNSGIP=1,\"%s\"", node);
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0, sendbuf, &mdata.sem_dns_ready,
-				MDM_DNS_TIMEOUT);
-	k_sem_give(&mdata.sem_dns_busy);
+	ret = modem_cmd_send_nolock(&mctx.iface, &mctx.cmd_handler,
+				    NULL, 0, sendbuf, &mdata.sem_dns_ready,
+				    MDM_DNS_TIMEOUT);
+	reset_soft_psm_timer();
+	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	if (ret < 0) {
 		return ret;
 	}
@@ -3340,8 +3323,7 @@ static int quectel_bg95_set_soft_psm_values(uint16_t *active_time_s)
 #if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_SOFT_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)	
 	mdata.mdm_soft_psm_timeout_s = *active_time_s;
 	if (mdata.is_connected) {
-		k_work_reschedule(&psm_workaround_work,
-				  K_SECONDS(mdata.mdm_soft_psm_timeout_s));
+		reset_soft_psm_timer();
 	}
 	return 0;
 #endif
@@ -3684,9 +3666,6 @@ static int quectel_bg95_pm_suspend(void)
 	int ret;
 	
 	LOG_INF("PM_DEVICE_ACTION_SUSPEND");
-
-	/* stop RSSI delay work */
-	k_work_cancel_delayable(&mdata.rssi_query_work);
 
 	ret = quectel_bg95_power_down();
 	if (ret != 0) {
