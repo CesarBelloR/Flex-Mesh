@@ -393,6 +393,20 @@ static void etc_sensor_load_calibration(void)
 	etc_sensor_adc_calibration_info.loaded = true;
 }
 
+static float etc_sensor_temperature_compensation(float temp) 
+{
+	int rr_value = etc_get_rr_value();
+	if (!etc_sensor_rr_value_is_valid(rr_value)) {
+		return temp;
+	}
+
+	if (etc_sensor_rr_value_is_valid(sensor_r_hw_raw_adc)) {
+		temp = temp + 0.6 * (float)(rr_value - sensor_r_hw_raw_adc) * temp /
+				      (float)sensor_r_hw_raw_adc;
+	}
+	return temp;
+}
+
 void etc_sensor_init(etc_sensor_evt_handler_t handler)
 {
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
@@ -458,17 +472,7 @@ float etc_sensor_get_probe_temp(enum sensor_input input)
 							1000.0f,
 						adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
 #endif
-		int rr_value = etc_get_rr_value();
-		if (!etc_sensor_rr_value_is_valid(rr_value)) {
-			return temp;
-		} else {
-			if (etc_sensor_rr_value_is_valid(sensor_r_hw_raw_adc)) {
-				temp = temp + 0.6 * (float)(rr_value - sensor_r_hw_raw_adc) * temp /
-						      (float)sensor_r_hw_raw_adc;
-			}
-			return temp;
-		}
-
+		return etc_sensor_temperature_compensation(temp);
 	} else if (list_sensor_type[input] == SENSOR_TYPE_DIGITAL) {
 		return list_sensor_digital_temp[input];
 	} else {
@@ -520,7 +524,8 @@ void etc_sensor_run_acquisition(void)
 	etc_sensor_probe_check();
 	/* Populate Rr value if needed */
 	if (!etc_sensor_rr_value_is_valid(etc_get_rr_value())) {
-		if (etc_sensor_get_ambient_temp() && (etc_sensor_rr_value_is_valid(sensor_ambient_raw_adc))) {
+		if (etc_sensor_temp_ambient_for_rr_is_valid(etc_sensor_get_ambient_temp()) && 
+		    (etc_sensor_rr_value_is_valid(sensor_ambient_raw_adc))) {
 			etc_set_rr_value(sensor_ambient_raw_adc);
 		}
 	}

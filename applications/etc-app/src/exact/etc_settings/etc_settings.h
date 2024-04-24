@@ -88,6 +88,13 @@ int etc_set_rx_duration_secs(uint16_t second);
 int etc_set_alarm_threshold(uint16_t threshold);
 int etc_set_serial_number_type(enum etc_serial_number_types type);
 int etc_set_relay_iccid(const char *iccid);
+
+/**
+ * Set the Rr value for temperature compensation
+ *
+ * @param value: the input Rr that will store to @ref ETC_ADC_TEMPERATURE_REFERENCE 
+ * @return 0 on success, <0 on error.
+ */
 int etc_set_rr_value(int value);
 int etc_get_hw_version(char *buf, int buf_len);
 int etc_get_fw_version(char *buf, int buf_len);
@@ -126,5 +133,11 @@ uint16_t etc_get_tx_delay_msec(void);
 uint16_t etc_get_rx_duration_secs(void);
 uint16_t etc_get_alarm_threshold(void);
 int etc_get_relay_iccid(char *buf, int buf_len);
+
+/**
+ * Get the Rr value for temperature compensation
+ *
+ * @return The Rr value that stores in NVS @ref ETC_ADC_TEMPERATURE_REFERENCE
+ */
 int etc_get_rr_value(void);
 #endif /* ETC_SETTINGS_H__ */
