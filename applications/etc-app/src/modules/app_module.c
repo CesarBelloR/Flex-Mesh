@@ -375,7 +375,7 @@ static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transm
 }
 
 static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mins,
-					     enum etc_sensor_status sensor_status)
+					     enum etc_sensor_status sensor_status, enum etc_device_job job)
 {
 	/* Ignore this time in Relay Mode */
 	if (etc_get_device_mode() == ETC_DEVICE_MODE_RELAY) {
@@ -402,9 +402,14 @@ static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mi
 	if (next_hour >= 24) {
 		next_hour = 24;
 	}
+
+	/* Update next transmit interval in seconds */
+	int transmit_interval_s = (next_hour - tm_time.tm_hour) * 3600 + 
+				  (tx_no_probe_mins - tm_time.tm_min) * 60 - tm_time.tm_sec;
+	transmit_interval_s = ((transmit_interval_s / DEFAULT_PUBLISH_INTERVAL_S) + 1) * 
+				DEFAULT_PUBLISH_INTERVAL_S;
 	/* Return next transmit for no probe */
-	return (time_t)(now + (next_hour - tm_time.tm_hour) * 3600 + 
-		(tx_no_probe_mins - tm_time.tm_min) * 60 - tm_time.tm_sec + tx_delay_sec); 
+	return align_wakeup(now, transmit_interval_s, job);
 }
 
 static time_t app_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logger_lora_mins,
@@ -476,7 +481,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 				tx_offset_logger_lora_mins, sensor_status);
 			/* Get next transmit in no probe case (-1 is no plan for next transmit) */
 			next_transmit_no_probe = app_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
-				sensor_status);
+				sensor_status, job);
 			/* Cast all next transmit to highest integer value if -1 */
 			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
 				(uint32_t)next_transmit_logger_lora_sync_cloud, 
@@ -494,7 +499,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 				tx_offset_logger_lora_mins, sensor_status);
 			/* Get next transmit in no probe case (-1 is no plan for next transmit) */
 			next_transmit_no_probe = app_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
-				sensor_status);
+				sensor_status, job);
 			/* Cast all next transmit to highest integer value if -1 */
 			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
 				(uint32_t)next_transmit_logger_lora_sync_cloud, 
