@@ -135,6 +135,7 @@ struct etc_device_relay_record {
 	char logger_ver[ETC_DEVICE_APP_VER_SIZE];
 	char logger_id[ETC_DEVICE_LORA_LOGGER_ID_SIZE];
 	float sensor[ETC_DEVICE_NUM_SENSOR];
+	int error;
 };
 
 struct etc_device_relay_record_stat {

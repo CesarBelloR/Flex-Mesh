@@ -223,8 +223,9 @@ static int lora_module_relay_get_message(char* package, int16_t rssi,
 	char *pt;
 	char *ptr;
 	message->is_okay = false;
+	message->record.error = 0;
 	pt = strtok(package, ",");
-	while (pt != NULL) { 
+	do {
 		if (pt == NULL) {
 			message->is_okay = false;
 			return -EINVAL;
@@ -278,12 +279,15 @@ static int lora_module_relay_get_message(char* package, int16_t rssi,
 					message->record.sensor[SENSOR_INPUT_HUMID] = SENSOR_HUMID_NO_CONNECTED;
 				}
 				break;
+			case 13: 
+				message->record.error = atoi(pt);
+				break;
 			default:
 				break;
 		}
 		pt = strtok(NULL, ",");
 		i += 1;
-	}
+	} while (pt != NULL);
 	return 0;
 }
 
@@ -439,8 +443,8 @@ retry_recv:
 				message.record.sensor[1], message.record.sensor[2], message.record.sensor[3],
 				message.record.sensor[4], message.record.sensor[5]);
 			if (etc_common_is_packet_from_parent(relay_iccid, message.record.relay_id)) {
-					/* Send ACK message */
-					module_lora_prepare_packet(message.record.logger_id, relay_iccid);
+				/* Send ACK message */
+				module_lora_prepare_packet(message.record.logger_id, relay_iccid);
 			}
 			etc_device_write_relay_data(&message.record);
 			lora_data_send();
