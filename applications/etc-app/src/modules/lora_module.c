@@ -33,18 +33,9 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 struct lora_msg_data {
 	union {
 		struct app_event app;
-		struct data_event data;
 		struct util_event util;
-		struct cloud_event cloud;
 	} module;
 };
-
-/* Lora module super states. */
-static enum state_type {
-	STATE_CLOUD_DISCONNECTED,
-	STATE_CLOUD_CONNECTED,
-	STATE_SHUTDOWN,
-} state;
 
 struct logger_lora_response {
 	bool is_okay;
@@ -68,7 +59,7 @@ enum lora_request_type {
 };
 
 /* Lora module message queue. */
-#define LORA_QUEUE_ENTRY_COUNT	  20
+#define LORA_QUEUE_ENTRY_COUNT	  36
 #define LORA_QUEUE_BYTE_ALIGNMENT 4
 #define LORA_REQUEST_QUEUE_ENTRY_COUNT 10
 #define LORA_REQUEST_QUEUE_BYTE_ALIGNMENT 1
@@ -117,33 +108,6 @@ static struct module_data self = {
 	.supports_shutdown = true,
 };
 
-/* Convenience functions used in internal state handling. */
-static char *state2str(enum state_type new_state)
-{
-	switch (new_state) {
-	case STATE_CLOUD_DISCONNECTED:
-		return "STATE_CLOUD_DISCONNECTED";
-	case STATE_CLOUD_CONNECTED:
-		return "STATE_CLOUD_CONNECTED";
-	case STATE_SHUTDOWN:
-		return "STATE_SHUTDOWN";
-	default:
-		return "Unknown";
-	}
-}
-
-static void state_set(enum state_type new_state)
-{
-	if (new_state == state) {
-		LOG_DBG("State: %s", state2str(state));
-		return;
-	}
-
-	LOG_DBG("State transition %s --> %s", state2str(state), state2str(new_state));
-
-	state = new_state;
-}
-
 /* Handlers */
 static bool app_event_handler(const struct app_event_header *aeh)
 {
@@ -156,21 +120,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		msg.module.app = *event;
 		enqueue_msg = true;
 	}
-
-	if (is_data_event(aeh)) {
-		struct data_event *event = cast_data_event(aeh);
-
-		msg.module.data = *event;
-		enqueue_msg = true;
-	}
-
-	if (is_cloud_event(aeh)) {
-		struct cloud_event *event = cast_cloud_event(aeh);
-
-		msg.module.cloud = *event;
-		enqueue_msg = true;
-	}
-
 
 	if (is_util_event(aeh)) {
 		struct util_event *event = cast_util_event(aeh);
@@ -190,14 +139,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	}
 
 	return false;
-}
-
-static void lora_module_on_stop(void)
-{
-}
-
-static void lora_module_on_start(void)
-{
 }
 
 static int setup(void)
@@ -649,25 +590,6 @@ static void on_all_states(struct lora_msg_data *msg)
 		 * report back immediately.
 		 */
 		SEND_SHUTDOWN_ACK(lora, LORA_EVT_SHUTDOWN_READY, self.id);
-		state_set(STATE_SHUTDOWN);
-	}
-}
-
-/* Message handler for STATE_CLOUD_DISCONNECTED. */
-static void on_lora_state_disconnected(struct lora_msg_data *msg)
-{
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
-		state_set(STATE_CLOUD_CONNECTED);
-		/* No action required now */
-	}
-}
-
-/* Message handler for STATE_CLOUD_CONNECTED. */
-static void on_lora_state_connected(struct lora_msg_data *msg)
-{
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
-		state_set(STATE_CLOUD_DISCONNECTED);
-		/* No action required now */
 	}
 }
 
@@ -747,28 +669,10 @@ void lora_module_thread_fn(void)
 
 	while (true) {
 		module_get_next_msg(&self, &msg);
-
-		switch (state) {
-		case STATE_CLOUD_CONNECTED:
-			on_lora_state_connected(&msg);
-			break;
-		case STATE_CLOUD_DISCONNECTED:
-			on_lora_state_disconnected(&msg);
-			break;
-		case STATE_SHUTDOWN:
-			/* The shutdown state has no transition. */
-			break;
-		default:
-			LOG_WRN("Unknown lora module state.");
-			break;
-		}
-
 		on_all_states(&msg);
 	}
 }
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
-APP_EVENT_SUBSCRIBE(MODULE, data_event);
-APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
