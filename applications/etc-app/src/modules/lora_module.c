@@ -223,7 +223,12 @@ static int lora_module_relay_get_message(char* package, int16_t rssi,
 	char *pt;
 	char *ptr;
 	message->is_okay = false;
-	message->record.error = 0;
+
+	/* Set extra element with -1 as initialization value */
+	for (int i = 0; i < ETC_DEVICE_NUM_EXTRA_ELEMENT; i++) {
+		message->record.data[i] = -1;
+	}
+
 	pt = strtok(package, ",");
 	do {
 		if (pt == NULL) {
@@ -279,11 +284,12 @@ static int lora_module_relay_get_message(char* package, int16_t rssi,
 					message->record.sensor[SENSOR_INPUT_HUMID] = SENSOR_HUMID_NO_CONNECTED;
 				}
 				break;
-			case 13: 
-				message->record.error = atoi(pt);
+			default: {
+				if (i >= 13) {
+					message->record.data[i - 13] = atoi(pt);
+				}
 				break;
-			default:
-				break;
+			}
 		}
 		pt = strtok(NULL, ",");
 		i += 1;

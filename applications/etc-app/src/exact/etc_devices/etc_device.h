@@ -23,7 +23,9 @@
 #define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR (16)
 /* Equal the buffer for decoded buffer Lora */
 #define ETC_DEVICE_RELAY_BUF_SIZE (128) 
-
+/* Number of extra elements in logger data */
+#define ETC_DEVICE_NUM_EXTRA_ELEMENT (4)
+/* Define a pubkey ID length */
 #define IMG_PUBKEY_ID_LEN	4
 /* Max element in record for Relay */
 #define ETC_RELAY_RECORD_MAX_ELEMENT (CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY)
@@ -135,7 +137,7 @@ struct etc_device_relay_record {
 	char logger_ver[ETC_DEVICE_APP_VER_SIZE];
 	char logger_id[ETC_DEVICE_LORA_LOGGER_ID_SIZE];
 	float sensor[ETC_DEVICE_NUM_SENSOR];
-	int error;
+	int data[ETC_DEVICE_NUM_EXTRA_ELEMENT];
 };
 
 struct etc_device_relay_record_stat {
