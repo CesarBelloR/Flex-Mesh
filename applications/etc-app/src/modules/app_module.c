@@ -406,10 +406,12 @@ static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mi
 	/* Update next transmit interval in seconds */
 	int transmit_interval_s = (next_hour - tm_time.tm_hour) * 3600 + 
 				  (tx_no_probe_mins - tm_time.tm_min) * 60 - tm_time.tm_sec;
-	transmit_interval_s = ((transmit_interval_s / DEFAULT_PUBLISH_INTERVAL_S) + 1) * 
-				DEFAULT_PUBLISH_INTERVAL_S;
-	/* Return next transmit for no probe */
-	return align_wakeup(now, transmit_interval_s, job);
+	if (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
+		transmit_interval_s = ((transmit_interval_s / DEFAULT_PUBLISH_INTERVAL_S) + 1) * 
+					DEFAULT_PUBLISH_INTERVAL_S;
+		return align_wakeup(now, transmit_interval_s, job);
+	}
+	return (time_t)(transmit_interval_s + tx_delay_sec); 
 }
 
 static time_t app_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logger_lora_mins,
