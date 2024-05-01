@@ -25,6 +25,8 @@
 #define ETC_DEVICE_RELAY_BUF_SIZE (128) 
 /* Number of extra elements in logger data */
 #define ETC_DEVICE_NUM_EXTRA_ELEMENT (4)
+/* Define a invalid for element in Logger data */
+#define ETC_DEVICE_INVALID_VALUE_ELEMENT (0xCAFEBEEF)
 /* Define a pubkey ID length */
 #define IMG_PUBKEY_ID_LEN	4
 /* Max element in record for Relay */

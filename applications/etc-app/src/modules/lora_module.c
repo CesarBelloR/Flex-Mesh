@@ -226,7 +226,7 @@ static int lora_module_relay_get_message(char* package, int16_t rssi,
 
 	/* Set extra element with -1 as initialization value */
 	for (int i = 0; i < ETC_DEVICE_NUM_EXTRA_ELEMENT; i++) {
-		message->record.data[i] = -1;
+		message->record.data[i] = ETC_DEVICE_INVALID_VALUE_ELEMENT;
 	}
 
 	pt = strtok(package, ",");
@@ -285,8 +285,12 @@ static int lora_module_relay_get_message(char* package, int16_t rssi,
 				}
 				break;
 			default: {
-				if (i >= 13) {
-					message->record.data[i - 13] = atoi(pt);
+				if ((i >= 13) && i <= (13 + ETC_DEVICE_NUM_EXTRA_ELEMENT)) {
+					if (strstr(pt, "*") == NULL) {
+						message->record.data[i - 13] = atoi(pt);
+					} else {
+						message->record.data[i - 13] = -1;
+					}
 				}
 				break;
 			}

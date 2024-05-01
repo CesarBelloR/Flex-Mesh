@@ -57,9 +57,16 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 				   sizeof(decoded_buf) - decoded_buf_len, "%d,%d,", 
 				   record->is_reclaim ? 1 : 0, is_parent ? 1 : 0);
 	for (int i = 0; i < ETC_DEVICE_NUM_EXTRA_ELEMENT; i++) {
-		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-					    sizeof(decoded_buf) - decoded_buf_len, 
-					    record->data[i] == -1 ? "*," : "%d,", record->data[i]);
+		if (record->data[i] == -1) {
+			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+						    sizeof(decoded_buf) - decoded_buf_len, "*,");
+		} else if (record->data[i] != ETC_DEVICE_INVALID_VALUE_ELEMENT){
+			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+						    sizeof(decoded_buf) - decoded_buf_len, 
+						    "%d,", record->data[i]);
+		} else {
+			break;
+		}
 	}
 	decoded_buf[decoded_buf_len] = '\0';
 	/* Include null terminator. Do not increment decodec_buf_len, as this
