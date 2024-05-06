@@ -6,6 +6,7 @@
 LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
 
 #include "quectel-bg95.h"
+#include "quectel-bg95_gnss.h"
 #include "certificates.h"
 
 #ifdef CONFIG_PM_DEVICE
@@ -3044,6 +3045,13 @@ retry:
 	modem_retrieve_bands();
 	modem_set_bands();
 
+#ifdef CONFIG_MODEM_QUECTEL_BG95_M3_GNSS
+	ret = quectel_bg95_gnss_setup(&mctx, &mdata);
+	if (ret < 0) {
+		goto error;
+	}
+#endif
+
 	/* Modem is ready - Start RSSI work in the background. */
 	LOG_INF("Modem is initialized.");
 	mdata.power = MODEM_POWER_ON;
@@ -3331,7 +3339,7 @@ static int quectel_bg95_set_soft_psm_values(uint16_t *active_time_s)
 }
 
 static int quectel_bg95_cmd(const struct device *dev,
-			    enum modem_api_cmd cmd, void *psm_data)
+			    enum modem_api_cmd cmd, void *data)
 {
 	switch (cmd) {
 	case MODEM_API_CMD_PSM_WAKEUP:
@@ -3347,14 +3355,30 @@ static int quectel_bg95_cmd(const struct device *dev,
 	case MODEM_API_CMD_CLOSE_CONNECTION:
 		return quectel_bg95_close_all_connection();
 	case MODEM_API_SET_PSM_VALUES:
-		__ASSERT_NO_MSG(psm_data != NULL);
-		return quectel_bg95_set_psm_values((struct modem_api_psm_timers *)psm_data);
+		__ASSERT_NO_MSG(data != NULL);
+		return quectel_bg95_set_psm_values((struct modem_api_psm_timers *)data);
 	case MODEM_API_SET_SOFT_PSM_VALUES:
-		__ASSERT_NO_MSG(psm_data != NULL);
-		return quectel_bg95_set_soft_psm_values((uint16_t *)psm_data);
+		__ASSERT_NO_MSG(data != NULL);
+		return quectel_bg95_set_soft_psm_values((uint16_t *)data);
+#ifdef CONFIG_MODEM_QUECTEL_BG95_M3_GNSS
+	case MODEM_API_CMD_START_GNSS: {
+		struct quectel_bg95_gnss_cfg default_cfg = {
+			.fix_count = 0,
+			.fix_rate = 1
+		};
+		struct quectel_bg95_gnss_cfg *cfg = (struct quectel_bg95_gnss_cfg *)data;
+		
+		if (data == NULL) {
+			cfg = &default_cfg;
+		}
+		return quectel_bg95_turn_on_gnss(&mctx, &mdata, cfg);
+	}
+	case MODEM_API_CMD_STOP_GNSS:
+		return quectel_bg95_turn_off_gnss(&mctx, &mdata);
+#endif
 	}
 
-	return -EINVAL;
+	return -ENOTSUP;
 }
 
 
@@ -3817,3 +3841,35 @@ int quectel_bg95_get_rsrq(void)
 {
 	return mdata.mdm_rsrq;
 }
+
+
+#ifdef CONFIG_MODEM_QUECTEL_BG95_M3_GNSS_SHELL
+
+#include <zephyr/shell/shell.h>
+
+static int cmd_gnss_on(const struct shell *shell, size_t argc, char **argv)
+{
+	struct quectel_bg95_gnss_cfg cfg = {
+		.fix_count = 0,
+		.fix_rate = 1
+	};
+	int ret;
+	ret = quectel_bg95_turn_on_gnss(&mctx, &mdata, &cfg);
+	shell_print(shell, "result %d", ret);
+}
+
+static int cmd_gnss_off(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	ret = quectel_bg95_turn_off_gnss(&mctx, &mdata);
+	shell_print(shell, "result %d", ret);
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_gnss,
+	SHELL_CMD(on, NULL, "Turn on GNSS", cmd_gnss_on),
+	SHELL_CMD(off, NULL, "Turn off GNSS", cmd_gnss_off),
+	SHELL_SUBCMD_SET_END);
+/* Creating root (level 0) command "demo" */
+SHELL_CMD_REGISTER(modem_gnss, &sub_gnss, "ETC Modem GNSS", NULL);
+#endif

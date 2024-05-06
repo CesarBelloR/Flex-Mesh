@@ -75,7 +75,7 @@ enum modem_api_evt_type {
 	/* Modem dynamic data changed (e.g. cellular network, PSM parameters) */
 	MODEM_API_DYNAMIC_DATA_UPDATE_EVT,
 	/* Modem Soft PSM event */
-	MODEM_API_SOFT_PSM_EVT,
+	MODEM_API_SOFT_PSM_EVT
 };
 
 struct modem_api_evt {
@@ -110,7 +110,9 @@ enum modem_api_cmd {
 	MODEM_API_CMD_POWER_ON,
 	MODEM_API_CMD_CLOSE_CONNECTION,
 	MODEM_API_SET_PSM_VALUES,
-	MODEM_API_SET_SOFT_PSM_VALUES
+	MODEM_API_SET_SOFT_PSM_VALUES,
+	MODEM_API_CMD_START_GNSS,
+	MODEM_API_CMD_STOP_GNSS
 };
 
 struct modem_static_info {
@@ -262,8 +264,8 @@ inline static int modem_set_credentials(const struct device *dev,
 }
 
 inline static int modem_cmd(const struct device *dev,
-			        enum modem_api_cmd api_cmd,
-			        void *data)
+			    enum modem_api_cmd api_cmd,
+			    void *data)
 {
 	const struct modem_api *api =
 		(const struct modem_api *)dev->api;
@@ -276,8 +278,8 @@ inline static int modem_cmd(const struct device *dev,
 }
 
 inline static int modem_get_data(const struct device *dev,
-				enum modem_api_data_request request,
-				struct modem_api_data *data)
+				 enum modem_api_data_request request,
+				 struct modem_api_data *data)
 {
 	const struct modem_api *api =
 		(const struct modem_api *)dev->api;

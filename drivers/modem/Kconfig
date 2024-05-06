@@ -147,3 +147,5 @@ config MODEM_SOFT_PSM_WAIT_TIME_SEC
 	default 30
 	
 endif
+
+rsource "Kconfig.gnss"
