@@ -39,6 +39,13 @@
 	};
 };
 
+&uart0 {
+	status = "okay";
+	quectel_bg95_gnss: gnss_nmea_generic {
+		compatible = "gnss-nmea-generic";
+	};
+};
+
 &uart1 {
 	compatible = "nordic,nrf-uarte";
 	status = "okay";
