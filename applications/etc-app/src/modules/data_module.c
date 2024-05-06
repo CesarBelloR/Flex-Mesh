@@ -69,6 +69,8 @@ static enum state_type {
 	STATE_SHUTDOWN
 } state;
 
+static struct etc_gnss_data gnss_data = { 0 };
+
 static struct data_modem_static modem_stat;
 static struct data_modem_dynamic modem_dynamic;
 
@@ -326,6 +328,13 @@ static int setup(void)
 		LOG_ERR("cloud_codec_init, error: %d", err);
 		return err;
 	}
+
+	err = etc_device_retrieve_location(&gnss_data);
+	if (err) {
+		LOG_WRN("Could not retrieve location");
+		return 0;
+	}
+	data_codec_update_location(&codec, &gnss_data);
 
 	return 0;
 }
@@ -806,6 +815,11 @@ static void on_all_states(struct data_msg_data *msg)
 		}
 	}
 
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_LOCATION_REQUEST) ||
+	    IS_EVENT(msg, app, APP_EVT_REQUEST_LOCATION)) {
+		etc_device_set_location_request(ETC_GNSS_LOCATION_REQUESTED);
+	}
+
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
 		bool device_id_is_default = etc_device_id_is_default();
 		functional_test_start(functional_test_event_handler);
@@ -868,6 +882,20 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, ble, BLE_EVT_CONN_READY)) {
 		data_encode_for_ble();
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_GNSS_ACQUIRED)) {
+		int ret;
+		uint32_t time_utc;
+		gnss_data.latitude = msg->module.modem.data.gnss_data.latitude;
+		gnss_data.longitude = msg->module.modem.data.gnss_data.longitude;
+		date_time_utc_second(&time_utc);
+		gnss_data.timestamp = time_utc;
+		data_codec_update_location(&codec, &gnss_data);
+		ret = etc_device_set_location(&gnss_data);
+		if (ret) {
+			LOG_WRN("Could not save location");
+		}
 	}
 }
 

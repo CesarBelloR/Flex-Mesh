@@ -10,6 +10,18 @@
 /* Define a bit lenght for encrypt/decrypt method */
 #define AES_KEY_BITLEN 128
 #define AES_KEY_BLOCK_SIZE (AES_KEY_BITLEN / 8)
+
+#define NANODEGREE_TO_DEGREE(x) (x / 1000000000.0f)
+
+/**
+ * Convert `tm_year` in a `struct tm` to a human-readable year format.
+*/
+#define TM_YEAR_TO_YEAR(x) (x + 1900)
+/**
+ * Convert `tm_mon` in a `struct tm` to a human-readable month format.
+*/
+#define TM_MON_TO_MONTH(x) (x + 1)
+
 /**
  * @brief Validate given data against given lower and upper limits.
  * The limits are inclusive.

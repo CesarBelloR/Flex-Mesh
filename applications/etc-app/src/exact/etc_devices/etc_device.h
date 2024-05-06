@@ -66,6 +66,13 @@ enum etc_alarm_direction {
 	ETC_ALARM_DIR_LESS = 0x01,
 };
 
+enum gnss_location_request_status {
+	ETC_GNSS_LOCATION_NO_REQUEST,
+	ETC_GNSS_LOCATION_REQUESTED,
+	ETC_GNSS_LOCATION_ACQUIRED,
+	ETC_GNSS_LOCATION_TIMEOUT
+};
+
 enum etc_setting_id {
 	ETC_CONFIG_ID = 0x01,
 	ETC_RECORD_STAT = 0x02,
@@ -76,6 +83,12 @@ enum etc_setting_id {
 	ETC_RTC_CALIBRATION_OFFSET_PPM,
 	/* Reference value to compensate temperature-dependent ADC error */
 	ETC_ADC_TEMPERATURE_REFERENCE,
+	/* Current status of GNSS location request */
+	ETC_GNSS_LOCATION_REQUEST_STATUS,
+	/* Last location information retrieved through GNSS */
+	ETC_GNSS_LAST_LOCATION,
+	/* Time when GNSS was last requested */
+	ETC_GNSS_TIME_LAST_REQUEST,
 	ETC_SETTING_HW_VERSION_ID = 0x100,
 	ETC_SETTING_FW_VERSION_ID,
 	ETC_SETTING_DEVICE_ID,
@@ -97,6 +110,8 @@ enum etc_setting_id {
 	ETC_SETTING_TX_PROBE_SEC_ID,
 	ETC_SETTING_LORA_PROBE_MODE_OFFSET_SEC_ID,
 	ETC_SETTING_LTE_PROBE_MODE_OFFSET_SEC_ID,
+	ETC_SETTING_GNSS_INTERVAL_SEC_ID,
+	ETC_SETTING_GNSS_TIMEOUT_SEC_ID,
 	ETC_CALIBRATION_OFFSET_ID = 0xFF0,
 	ETC_CALIBRATION_RAWHIGH_ID,
 	ETC_CALIBRATION_REF_ID,
@@ -113,12 +128,14 @@ struct etc_config {
 	uint32_t tx_interval_secs;
 	uint32_t tx_interval_alarm_secs;
 	uint32_t tx_probe_secs;
+	uint32_t gnss_interval_secs;
 	uint16_t wake_early_secs;
 	uint16_t tx_delay_msec;
 	uint16_t rx_duration_secs;
 	uint16_t alarm_threshold;
 	uint16_t lora_probe_offset_secs;
 	uint16_t lte_probe_offset_secs;
+	uint16_t gnss_timeout_secs;
 };
 
 union etc_device_record {
@@ -152,6 +169,11 @@ struct etc_device_relay_record_stat {
 	uint16_t number_record;
 	bool flag_error;
 	bool flag_over_flow;
+};
+struct etc_gnss_data {
+	int64_t latitude;
+	int64_t longitude;
+	time_t timestamp;
 };
 
 #pragma pack(pop)
@@ -405,5 +427,72 @@ void etc_device_set_next_transmit(time_t next_transmit_s);
  * @return Returns the number of seconds until the next transmission.
  */
 time_t etc_device_get_next_transmit(void);
+ 
+/**
+ * Set a GNSS location request status. The modem module uses this information
+ * to determine if a location should be searched through GNSS.
+ * 
+ * @param status New status of type @ref enum gnss_location_request_status
+ * 
+ * @retval 0 success
+ * @retval <0 fail
+*/
+int etc_device_set_location_request(enum gnss_location_request_status status);
+
+/**
+ * Check if a location through GNSS was requested. If there is an active request,
+ * GNSS should be enabled to try to determine a location.
+ * 
+ * @retval true A GNSS location was requested.
+ * @retval false A GNSS location was not requested.
+*/
+bool etc_device_is_location_requested(void);
+
+/**
+ * Set the time that GNSS was last requested and save to non-volatile memory.
+ * Storing the last requested time in nv memory ensures that there is not a GNSS
+ * request on every reboot.
+ * 
+ * NOT THREAD SAFE
+ * 
+ * @param time_requested Last time GNSS was requested in seconds since epoch.
+ * 
+ * @retval 0 success
+ * @retval <0 fail
+*/
+int etc_device_set_last_time_gnss_request(time_t time_requested);
+
+/**
+ * Get the time that GNSS was last requested.
+ * 
+ * NOT THREAD SAFE
+ * 
+ * @return Time GNSS was last requested in seconds since epoch.
+*/
+time_t etc_device_get_last_time_gnss_request(void);
+
+/**
+ * Write the location information to non-volatile memory.
+ * 
+ * NOT THREAD SAFE
+ * 
+ * @param data Buffer containing GNSS data.
+ * 
+ * @retval 0 success
+ * @retval <0 error
+*/
+int etc_device_set_location(struct etc_gnss_data *data);
+
+/**
+ * Retrieve the last saved GNSS location from non-volatile memory.
+ * 
+ * NOT THREAD SAFE
+ * 
+ * @param data Buffer to write retrieved GNSS data to.
+ * 
+ * @retval 0 success
+ * @retval <0 error
+*/
+int etc_device_retrieve_location(struct etc_gnss_data *data);
 
 #endif /* ETC_DEVICE_H_ */

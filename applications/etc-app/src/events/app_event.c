@@ -27,6 +27,8 @@ static char *get_evt_type_str(enum app_event_type type)
 		return "APP_EVT_DATA_TRANSMIT";
 	case APP_EVT_DATA_SYNC_CLOUD:
 		return "APP_EVT_DATA_SYNC_CLOUD";
+	case APP_EVT_REQUEST_LOCATION:
+		return "APP_EVT_REQUEST_LOCATION";
 	case APP_EVT_DATA_RECEIVE:
 		return "APP_EVT_DATA_RECEIVE";
 	case APP_EVT_CONFIG_GET:

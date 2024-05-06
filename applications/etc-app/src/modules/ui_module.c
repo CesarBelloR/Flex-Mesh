@@ -472,7 +472,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
 	}
 
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY)) {
 		transition_list_clear();
 		sub_state_set(SUB_STATE_LTE_CONNECTED);
 		transition_list_append(LED_STATE_LTE_CONNECTED, HOLD_FOREVER);

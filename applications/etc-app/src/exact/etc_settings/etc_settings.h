@@ -25,6 +25,8 @@ enum etc_serial_number_types {
 #define ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT	    20
 #define ETC_SETTING_RX_DURATION_SECS_DEFAULT	    120
 #define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    0
+#define ETC_SETTING_GNSS_INTERVAL_SECS_DEFAULT	    (60 * 60 * 24) /* 24 hours */
+#define ETC_SETTING_GNSS_TIMEOUT_SECS_DEFAULT	    CONFIG_MODEM_MODULE_GNSS_TIMEOUT_S
 
 #define ETC_SETTING_POWER_MODE_MIN		ETC_POWER_MODE_INTERVAL
 #define ETC_SETTING_LOG_INTERVAL_SECS_MAX	86400
@@ -36,6 +38,7 @@ enum etc_serial_number_types {
 #define ETC_SETTING_RX_DURATION_SECS_MAX	120
 #define ETC_SETTING_ALARM_THRESHOLD_MAX		120
 #define ETC_SETTING_LTE_PROBE_OFFSET_SECS_MAX	3540
+#define ETC_SETTING_GNSS_INTERVAL_SECS_MAX	(60 * 60 * 24 * 7) /* 7 days */
 
 #define ETC_SETTING_POWER_MODE_MAX		ETC_POWER_MODE_PROBE
 #define ETC_SETTING_LOG_INTERVAL_SECS_MIN	60
@@ -48,6 +51,7 @@ enum etc_serial_number_types {
 #define ETC_SETTING_RX_DURATION_SECS_MIN	30
 #define ETC_SETTING_ALARM_THRESHOLD_MIN		-20
 #define ETC_SETTING_LTE_PROBE_OFFSET_SECS_MIN	0
+#define ETC_SETTING_GNSS_INTERVAL_SECS_MIN	(60 * 60) /* 1 hour */
 
 #define ETC_SETTING_TX_PROBE_SECS 21600
 
@@ -110,6 +114,29 @@ int etc_set_lora_probe_offset_secs(uint16_t second);
  * @return 0 on success, <0 on error.
  */
 int etc_set_lte_probe_offset_secs(uint16_t second);
+
+/** 
+ * Set a new GPS request interval in seconds and save the new interval to non-volatile
+ * memory.
+ *
+ * @param interval_secs New GNSS interval in seconds.
+ *
+ * @retval 0 success
+ * @retval <0 error
+*/
+int etc_set_gnss_interval_secs(uint32_t interval_secs);
+
+/**
+ * Set the GNSS timeout value and save to non-volatile memory. If no location is found
+ * through GNSS when this timeout expires, GNSS is turned off.
+ *
+ * @param timeout_secs GNSS timeout in seconds.
+ *
+ * @retval 0 success
+ * @retval <0 error
+*/
+int etc_set_gnss_timeout_secs(uint16_t timeout_secs);
+
 /**
  * Set the Rr value for temperature compensation
  *
@@ -170,10 +197,26 @@ uint16_t etc_get_lora_probe_offset_secs(void);
  * @return uint16_t The current LTE probe offset time in seconds.
  */
 uint16_t etc_get_lte_probe_offset_secs(void);
+ 
+/** 
+ * Get the current GNSS request interval in seconds.
+ *
+ * @return Current GNSS request interval in seconds.
+*/
+uint32_t etc_get_gnss_interval_secs(void);
+
+/**
+ * Get the current GNSS timeout value.
+ *
+ * @return Current GNSS timoeut in seconds.
+*/
+uint16_t etc_get_gnss_timeout_secs(void);
+
 /**
  * Get the Rr value for temperature compensation
  *
  * @return The Rr value that stores in NVS @ref ETC_ADC_TEMPERATURE_REFERENCE
  */
 int etc_get_rr_value(void);
+
 #endif /* ETC_SETTINGS_H__ */

@@ -509,7 +509,7 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 /* Message handler for STATE_LTE_DISCONNECTED. */
 static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED))
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY))
 	{
 		state_set(STATE_LTE_CONNECTED);
 		 /* If we are using the debug module, delay connecting to cloud

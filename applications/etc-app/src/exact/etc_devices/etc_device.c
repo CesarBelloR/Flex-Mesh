@@ -46,6 +46,10 @@ static uint8_t etc_relay_record_buf[ETC_DEVICE_RELAY_BUF_SIZE];
 static struct etc_device_relay_record relay_record_list[ETC_RELAY_RECORD_MAX_ELEMENT];
 K_MUTEX_DEFINE(etc_relay_record_mutex);
 
+static enum gnss_location_request_status gnss_request;
+K_MUTEX_DEFINE(gnss_request_mutex);
+static time_t time_last_gnss_request;
+
 /* The public key ID of the current (signed) image. The public key ID 
  * is the first 4 bytes of the public key hash. 
  */
@@ -147,6 +151,23 @@ static int etc_nvs_reset_relay_stat(void) {
 	return 0;
 }
 
+static void etc_device_init_gnss(void)
+{
+	int ret;
+
+	ret = etc_device_read_setting(ETC_GNSS_LOCATION_REQUEST_STATUS, &gnss_request,
+				      sizeof(gnss_request));
+	if (ret) {
+		etc_device_set_location_request(ETC_GNSS_LOCATION_NO_REQUEST);
+	}
+
+	ret = etc_device_read_setting(ETC_GNSS_TIME_LAST_REQUEST, &time_last_gnss_request,
+				      sizeof(time_last_gnss_request));
+	if (ret) {
+		etc_device_set_last_time_gnss_request(0);
+	}
+}
+
 void etc_device_init(void)
 {
 	char *dev_str = "Unknown";
@@ -174,6 +195,8 @@ void etc_device_init(void)
 		LOG_HEXDUMP_DBG(hash, IMAGE_HASH_LEN, "pubkey hash");
 		memcpy(img_pubkey_id, hash, sizeof(img_pubkey_id));
 	}
+
+	etc_device_init_gnss();
 }
 
 int etc_device_write_setting(uint16_t setting_id, const void *setting, int setting_size)
@@ -416,6 +439,74 @@ time_t etc_device_get_next_transmit(void)
 	return device_next_transmit_s;
 }
 
+int etc_device_set_location_request(enum gnss_location_request_status status)
+{
+	int rc = 0;
+
+	k_mutex_lock(&gnss_request_mutex, K_FOREVER);
+	if (gnss_request == status) {
+		goto exit;
+	}
+	gnss_request = status;
+	rc = etc_device_write_setting(ETC_GNSS_LOCATION_REQUEST_STATUS, &gnss_request,
+				      sizeof(gnss_request));
+exit:
+	k_mutex_unlock(&gnss_request_mutex);
+
+	if (status == ETC_GNSS_LOCATION_REQUESTED) {
+		LOG_INF("Location request set");
+	}
+
+	return rc;
+}
+
+bool etc_device_is_location_requested(void)
+{
+	bool rc = false;
+
+	k_mutex_lock(&gnss_request_mutex, K_FOREVER);
+	if (gnss_request == ETC_GNSS_LOCATION_REQUESTED) {
+		rc = true;
+	}
+	k_mutex_unlock(&gnss_request_mutex);
+
+	return rc;
+}
+
+int etc_device_set_last_time_gnss_request(time_t time_requested)
+{
+	int rc;
+
+	if (time_last_gnss_request == time_requested) {
+		return 0;
+	}
+
+	time_last_gnss_request = time_requested;
+	rc = etc_device_write_setting(ETC_GNSS_TIME_LAST_REQUEST, &time_last_gnss_request,
+				      sizeof(time_last_gnss_request));
+	return rc;
+}
+
+time_t etc_device_get_last_time_gnss_request(void)
+{
+	return time_last_gnss_request;
+}
+
+int etc_device_set_location(struct etc_gnss_data *data)
+{
+	int rc;
+
+	rc = etc_device_write_setting(ETC_GNSS_LAST_LOCATION, data, sizeof(*data));
+	return rc;
+}
+
+int etc_device_retrieve_location(struct etc_gnss_data *data)
+{
+	int rc;
+
+	rc = etc_device_read_setting(ETC_GNSS_LAST_LOCATION, data, sizeof(*data));
+	return rc;
+}
 
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>

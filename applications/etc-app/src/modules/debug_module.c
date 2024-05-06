@@ -236,11 +236,16 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 	/* If the module is configured to use Memfaults internal HTTP transport, coredumps are
 	 * sent on an established connection to LTE.
 	 */
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY)) {
 		etc_mflt_metrics_modem_conn_time(msg->module.modem.data.time_to_connect_ms);
 		/* Send coredump on LTE CONNECTED. */
 		send_type = COREDUMP;
 		send_memfault_data();
+		return;
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_GNSS_BUSY)) {
+		etc_mflt_metrics_modem_conn_time(msg->module.modem.data.time_to_connect_ms);
 		return;
 	}
 

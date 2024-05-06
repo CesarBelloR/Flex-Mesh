@@ -29,10 +29,25 @@ enum modem_event_type {
 	 */
 	MODEM_EVT_INITIALIZED,
 
-	/** The device has been registered with an LTE network.
-	 *  The event has no associated payload.
+	/** The device has been registered with an LTE network and is ready for
+	 *  cloud connections.
+	 *  The event has associated payload of type uint64_t in the
+	 *  `data.time_to_connect_ms` member.
 	 */
-	MODEM_EVT_LTE_CONNECTED,
+	MODEM_EVT_LTE_CONNECTED_READY,
+
+	/** The device has been registered with an LTE network, but is busy.
+	 *  A cloud connection can't be established yet.
+	 *  The event has associated payload of type uint64_t in the
+	 *  `data.time_to_connect_ms` member.
+	*/
+	MODEM_EVT_LTE_CONNECTED_GNSS_BUSY,
+
+	/** A location through GNSS has beeen acquired.
+	 *  The event has associated payload of type @ref struct modem_gnss_data
+	 *  in the `data.gnss_data` member.
+	*/
+	MODEM_EVT_GNSS_ACQUIRED,
 
 	/** The device has been de-registered with an LTE network.
 	 *  The event has no associated payload.
@@ -168,6 +183,13 @@ struct modem_dynamic_modem_data {
 	uint16_t mnc;
 };
 
+struct modem_gnss_data {
+	/** Latitudal position in nanodegrees (0 to +-180E9) */
+	int64_t latitude;
+	/** Longitudal position in nanodegrees (0 to +-180E9) */
+	int64_t longitude;
+};
+
 /** @brief Modem event. */
 struct modem_event {
 	struct app_event_header header;
@@ -175,6 +197,8 @@ struct modem_event {
 	union {
 		struct modem_static_modem_data modem_static;
 		struct modem_dynamic_modem_data modem_dynamic;
+		/* Sent with MODEM_EVT_GNSS_ACQUIRED */
+		struct modem_gnss_data gnss_data;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
 		int err;

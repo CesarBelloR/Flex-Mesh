@@ -17,6 +17,7 @@
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
+#include "etc_util.h"
 
 #define MODULE			     app
 
@@ -284,6 +285,12 @@ static void app_peripheral_off(void)
 #endif
 }
 
+static inline bool is_aligned_interval(int interval_s)
+{
+	return (DEFAULT_PUBLISH_INTERVAL_S % interval_s) == 0 ||
+	       (interval_s % DEFAULT_PUBLISH_INTERVAL_S) == 0;
+}
+
 static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 {
 	time_t wakeup_time;
@@ -291,8 +298,7 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 
 	wakeup_time = now + interval_s;
 
-	if ((DEFAULT_PUBLISH_INTERVAL_S % interval_s) == 0 ||
-	    (interval_s % DEFAULT_PUBLISH_INTERVAL_S) == 0) {
+	if (is_aligned_interval(interval_s)) {
 		int time_diff = wakeup_time % interval_s;
 		int time_to_wakeup = wakeup_time - time_diff - now;
 
@@ -325,6 +331,51 @@ static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 	}
 
 	return wakeup_time;
+}
+
+#define GNSS_TIME_INACCURACY_S 60
+
+/**
+ * Determine if the current wakeup interval is a GNSS request interval.
+*/
+static bool is_gnss_request_interval(time_t now)
+{
+	time_t time_last_aligned_gnss_request = etc_device_get_last_time_gnss_request();
+	uint32_t interval_s = etc_get_gnss_interval_secs();
+	time_t next_interval = time_last_aligned_gnss_request + interval_s;
+
+	if (interval_s == 0) {
+		return false;
+	}
+
+	if (now >= next_interval) {
+		struct tm tm_time = {0};
+
+		if (is_aligned_interval(interval_s)) {
+			/* Assign the aligned interval closest to the current time as last interval. */
+			time_last_aligned_gnss_request = round_int32(now, interval_s);
+		} else {
+			time_last_aligned_gnss_request = now;
+		}
+		etc_device_set_last_time_gnss_request(time_last_aligned_gnss_request);
+		
+		gmtime_r(&time_last_aligned_gnss_request, &tm_time);
+		LOG_INF("GNSS request interval detected");
+		LOG_INF("Next GNSS request interval at: %04d-%02d-%02d %02d:%02d:%02d", 
+			TM_YEAR_TO_YEAR(tm_time.tm_year), TM_MON_TO_MONTH(tm_time.tm_mon), tm_time.tm_mday,
+			tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
+
+		return true;
+	}
+
+	return false;
+}
+
+static void set_gnss_request(time_t now)
+{
+	if (is_gnss_request_interval(now)) {
+		SEND_EVENT(app, APP_EVT_REQUEST_LOCATION);
+	}
 }
 
 static void app_backoff_check_multiple_value(void)
@@ -636,7 +687,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 }
 
 static void app_peripheral_on(bool is_rtc)
-{	
+{
 	int ret;
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (!device_is_ready(cons)) {
@@ -655,22 +706,24 @@ static void app_peripheral_on(bool is_rtc)
 	if (is_rtc) {
 		LOG_DBG("Wakeup from sleep");
 #if defined(CONFIG_PCF85263)
-	time_t now = 0;
-	pcf85263a_rtc_get_time(&now);
-	bool flag_1 = pcf85263a_is_alarm_1_flags();
-	bool flag_2 = pcf85263a_is_alarm_2_flags();
-	
-	enum etc_device_job job = ETC_DEVICE_JOB_BOTH;
-	if (flag_1 && flag_2) {
-		job = ETC_DEVICE_JOB_BOTH;
-	} else if (flag_1) {
-		job = ETC_DEVICE_JOB_TX_RX;
-	} else if (flag_2) {
-		job = ETC_DEVICE_JOB_LOG;
-	} 
+		time_t now = 0;
+		pcf85263a_rtc_get_time(&now);
+		bool flag_1 = pcf85263a_is_alarm_1_flags();
+		bool flag_2 = pcf85263a_is_alarm_2_flags();
 
-	LOG_DBG("UTC time %d - Job %d", (int)now, job);
-	switch (job) {
+		set_gnss_request(now);
+		
+		enum etc_device_job job = ETC_DEVICE_JOB_BOTH;
+		if (flag_1 && flag_2) {
+			job = ETC_DEVICE_JOB_BOTH;
+		} else if (flag_1) {
+			job = ETC_DEVICE_JOB_TX_RX;
+		} else if (flag_2) {
+			job = ETC_DEVICE_JOB_LOG;
+		}
+
+		LOG_DBG("UTC time %d - Job %d", (int)now, job);
+		switch (job) {
 		case ETC_DEVICE_JOB_LOG: {
 			LOG_DBG("Doing log");
 			etc_device_set_job(ETC_DEVICE_JOB_LOG);
@@ -694,7 +747,7 @@ static void app_peripheral_on(bool is_rtc)
 					SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
 				}
 			}
-			
+
 			break;
 		}
 		case ETC_DEVICE_JOB_BOTH: {
@@ -705,7 +758,7 @@ static void app_peripheral_on(bool is_rtc)
 			SEND_EVENT(app, APP_EVT_DATA_GET);
 			break;
 		}
-	}
+		}
 #endif
 	} else {
 		LOG_DBG("Wakeup from external HALL sensor");
@@ -817,7 +870,7 @@ static void on_sub_state_active(struct app_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_events(struct app_msg_data *msg)
 {
-	if ((IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED) 
+	if ((IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY) 
 	    && !IS_ENABLED(CONFIG_DEBUG_MODULE)) ||
 	    IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE)) {
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)

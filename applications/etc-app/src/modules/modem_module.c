@@ -5,7 +5,8 @@
 #include <math.h>
 #include <zephyr/devicetree.h>
 #include <modem_api.h>
-#include "etc_device.h"
+#include <zephyr/device.h>
+#include <zephyr/drivers/gnss.h>
 #define MODULE modem_module
 
 #include "modules_common.h"
@@ -16,6 +17,9 @@
 #include "events/util_event.h"
 #include "events/sensor_event.h"
 #include "events/lora_event.h"
+
+#include "etc_util.h"
+#include "etc_device.h"
 
 #if defined(CONFIG_MEMFAULT)
 #include <memfault/core/trace_event.h>
@@ -58,12 +62,22 @@ static enum state_type {
 	STATE_SHUTDOWN,
 } state;
 
-/* Cloud module sub states. */
-static enum sub_state_lte_connected {
+/* Modem disconnected sub states. */
+static enum sub_state_lte_disconnected {
+	/* Modem turned off by itself */
 	SUB_STATE_MODEM_OFF,
+	/* Modem turned off through PSM */
 	SUB_STATE_MODEM_PSM,
+	/* Modem was turned off manually through PM */
 	SUB_STATE_MODEM_SLEEP
-} sub_state;
+} lte_disconnected_sub_state;
+
+static enum sub_state_lte_connected {
+	/* Modem busy (i.e. through GNSS) */
+	SUB_STATE_MODEM_BUSY,
+	/* Modem ready. Other modules can make connections and exchange data. */
+	SUB_STATE_MODEM_READY
+} lte_connected_sub_state;
 
 /* Enumerator that specifies the data type that is sampled. */
 enum sample_type {
@@ -80,7 +94,10 @@ const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
 static void modem_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(modem_work, modem_work_fn);
 
-int64_t modem_wakeup_time_ms = -1;
+static void modem_gnss_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(modem_gnss_work, modem_gnss_work_fn);
+
+static int64_t modem_wakeup_time_ms = -1;
 
 /* Modem module message queue. */
 #define MODEM_QUEUE_ENTRY_COUNT		20
@@ -96,6 +113,33 @@ static struct module_data self = {
 };
 
 static int static_modem_data_get(void);
+
+static void gnss_data_cb(const struct device *dev, const struct gnss_data *data)
+{
+	static uint8_t fix_count = 0;
+
+	if (data->info.fix_status == GNSS_FIX_STATUS_GNSS_FIX) {
+		fix_count++;
+	}
+	LOG_INF("Fix status: %u, count: %u", data->info.fix_status, fix_count);
+	if (data->info.fix_status > GNSS_FIX_STATUS_NO_FIX) {
+		LOG_INF("Location lat: %.6f, long: %.6f",
+			NANODEGREE_TO_DEGREE(data->nav_data.latitude),
+			NANODEGREE_TO_DEGREE(data->nav_data.longitude));
+	}
+
+	if (fix_count >= CONFIG_MODEM_MODULE_DESIRED_FIX_COUNT) {
+		fix_count = 0;
+		struct modem_event *evt = new_modem_event();
+		evt->data.gnss_data.latitude = data->nav_data.latitude;
+		evt->data.gnss_data.longitude = data->nav_data.longitude;
+		evt->type = MODEM_EVT_GNSS_ACQUIRED;
+		APP_EVENT_SUBMIT(evt);
+		k_work_reschedule(&modem_gnss_work, K_NO_WAIT);
+	}
+}
+
+GNSS_DATA_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(quectel_bg95_gnss)), gnss_data_cb);
 
 /* Convenience functions used in internal state handling. */
 static char *state2str(enum state_type state)
@@ -117,7 +161,7 @@ static char *state2str(enum state_type state)
 }
 
 /* Convenience functions used in internal state handling. */
-static char *sub_state2str(enum state_type state)
+static char *lte_disconnected_sub_state2str(enum sub_state_lte_disconnected state)
 {
 	switch (state)
 	{
@@ -127,6 +171,19 @@ static char *sub_state2str(enum state_type state)
 		return "SUB_STATE_MODEM_PSM";
 	case SUB_STATE_MODEM_SLEEP:
 		return "SUB_STATE_MODEM_SLEEP";
+	default:
+		return "Unknown";
+	}
+}
+
+static char *lte_connected_sub_state2str(enum sub_state_lte_connected state)
+{
+	switch (state)
+	{
+	case SUB_STATE_MODEM_BUSY:
+		return "SUB_STATE_MODEM_BUSY";
+	case SUB_STATE_MODEM_READY:
+		return "SUB_STATE_MODEM_READY";
 	default:
 		return "Unknown";
 	}
@@ -146,19 +203,32 @@ static void state_set(enum state_type new_state)
 	state = new_state;
 }
 
-static void sub_state_lte_connected_set(enum sub_state_lte_connected new_state)
+static void sub_state_lte_disconnected_set(enum sub_state_lte_disconnected new_state)
 {
-	if (new_state == sub_state)
-	{
-		LOG_DBG("Sub state: %s", sub_state2str(sub_state));
+	if (new_state == lte_disconnected_sub_state) {
+		LOG_DBG("Sub state: %s", lte_disconnected_sub_state2str(lte_disconnected_sub_state));
 		return;
 	}
 
 	LOG_DBG("Sub state transition %s --> %s",
-		sub_state2str(sub_state),
-		sub_state2str(new_state));
+		lte_disconnected_sub_state2str(lte_disconnected_sub_state),
+		lte_disconnected_sub_state2str(new_state));
 
-	sub_state = new_state;
+	lte_disconnected_sub_state = new_state;
+}
+
+static void sub_state_lte_connected_set(enum sub_state_lte_connected new_state)
+{
+	if (new_state == lte_connected_sub_state) {
+		LOG_DBG("Sub state: %s", lte_connected_sub_state2str(lte_connected_sub_state));
+		return;
+	}
+
+	LOG_DBG("Sub state transition %s --> %s",
+		lte_connected_sub_state2str(lte_connected_sub_state),
+		lte_connected_sub_state2str(new_state));
+
+	lte_connected_sub_state = new_state;
 }
 
 /* Handlers */
@@ -242,7 +312,7 @@ static int modem_enter_sleep(void)
 	__ASSERT_NO_MSG((rc == 0) || (rc == -EALREADY));
 	if ((rc == 0) || (rc == -EALREADY)) {
 		state_set(STATE_DISCONNECTED);
-		sub_state_lte_connected_set(SUB_STATE_MODEM_SLEEP);
+		sub_state_lte_disconnected_set(SUB_STATE_MODEM_SLEEP);
 		k_work_cancel_delayable(&modem_work);
 
 		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
@@ -284,20 +354,66 @@ static void modem_work_fn(struct k_work *work)
 	}
 }
 
+static void modem_gnss_work_fn(struct k_work *work)
+{
+	int ret;
+
+	ret = modem_cmd(modem_dev, MODEM_API_CMD_STOP_GNSS, NULL);
+	if (ret == 0) {
+		LOG_INF("GNSS stopped");
+	}
+
+	if (state == STATE_CONNECTED) {
+		struct modem_event *module_event = new_modem_event();
+		module_event->data.time_to_connect_ms = -1;
+		module_event->type = MODEM_EVT_LTE_CONNECTED_READY;
+
+		sub_state_lte_connected_set(SUB_STATE_MODEM_READY);
+		APP_EVENT_SUBMIT(module_event);
+	}
+}
+
+static void modem_start_gnss(void) 
+{
+	int ret;
+
+	etc_device_set_location_request(ETC_GNSS_LOCATION_NO_REQUEST);
+
+	ret = modem_cmd(modem_dev, MODEM_API_CMD_START_GNSS, NULL);
+	if (ret == 0) {
+		LOG_INF("GNSS started");
+		sub_state_lte_connected_set(SUB_STATE_MODEM_BUSY);
+	}
+
+	k_work_reschedule(&modem_gnss_work, K_SECONDS(etc_get_gnss_timeout_secs()));
+}
+
 static void modem_set_connected(void)
 {
 	struct modem_event *module_event = new_modem_event();
+	int ret;
 
 	// Do not retrieve static modem data when waking up from PSM.
-	if (!(state == STATE_DISCONNECTED && sub_state == SUB_STATE_MODEM_PSM)) {
+	if (!(state == STATE_DISCONNECTED && lte_disconnected_sub_state == SUB_STATE_MODEM_PSM)) {
 		static_modem_data_get();
 	}
 	k_work_cancel_delayable(&modem_work);
 	state_set(STATE_CONNECTED);
 	
-	module_event->data.time_to_connect_ms = modem_wakeup_time_ms != -1 ?
-				k_uptime_get() - modem_wakeup_time_ms : -1;
-	module_event->type = MODEM_EVT_LTE_CONNECTED;
+	if (etc_device_is_location_requested()) {
+		modem_start_gnss();
+	} else {
+		sub_state_lte_connected_set(SUB_STATE_MODEM_READY);
+	}
+
+	module_event->data.time_to_connect_ms =
+		modem_wakeup_time_ms != -1 ? k_uptime_get() - modem_wakeup_time_ms : -1;
+
+	if (lte_connected_sub_state != SUB_STATE_MODEM_BUSY) {
+		module_event->type = MODEM_EVT_LTE_CONNECTED_READY;
+	} else {
+		module_event->type = MODEM_EVT_LTE_CONNECTED_GNSS_BUSY;
+	}
 	APP_EVENT_SUBMIT(module_event);
 }
 
@@ -365,7 +481,7 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 
 		k_work_cancel_delayable(&modem_work);
 		state_set(STATE_DISCONNECTED);
-		sub_state_lte_connected_set(SUB_STATE_MODEM_PSM);
+		sub_state_lte_disconnected_set(SUB_STATE_MODEM_PSM);
 
 		module_event->data.on_time_ms = get_modem_on_time_ms(true);
 		module_event->type = MODEM_EVT_PSM_ENTERED;
@@ -377,7 +493,7 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 
 		k_work_cancel_delayable(&modem_work);
 		state_set(STATE_DISCONNECTED);
-		sub_state_lte_connected_set(SUB_STATE_MODEM_OFF);
+		sub_state_lte_disconnected_set(SUB_STATE_MODEM_OFF);
 
 		module_event->data.on_time_ms = get_modem_on_time_ms(true);
 		module_event->type = MODEM_EVT_PSM_ENTERED;
@@ -518,9 +634,9 @@ static int setup(void)
 
 		if (modem_data.power_state == MODEM_POWER_PSM_PENDING ||
 		    modem_data.power_state == MODEM_POWER_PSM) {
-			sub_state_lte_connected_set(SUB_STATE_MODEM_PSM);
+			sub_state_lte_disconnected_set(SUB_STATE_MODEM_PSM);
 		} else {
-			sub_state_lte_connected_set(SUB_STATE_MODEM_OFF);
+			sub_state_lte_disconnected_set(SUB_STATE_MODEM_OFF);
 		}
 	}
 
@@ -604,7 +720,7 @@ static void on_state_connecting(struct modem_msg_data *msg)
 		state_set(STATE_DISCONNECTED);
 	}
 
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED)) {
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY)) {
 		state_set(STATE_CONNECTED);
 	}
 
@@ -675,7 +791,7 @@ void modem_module_thread_fn(void)
 		case STATE_INIT:
 			break;
 		case STATE_DISCONNECTED:
-			switch (sub_state)
+			switch (lte_disconnected_sub_state)
 			{
 			case SUB_STATE_MODEM_OFF:
 				on_sub_state_modem_off(&msg);
@@ -713,3 +829,29 @@ APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, lora_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, util_event);
+
+#ifdef CONFIG_MODEM_QUECTEL_BG95_M3_GNSS_SHELL
+
+#include <zephyr/shell/shell.h>
+
+static int cmd_request_location(const struct shell *shell, size_t argc, char **argv)
+{
+	etc_device_set_location_request(ETC_GNSS_LOCATION_REQUESTED);
+	return 0;
+}
+
+static int cmd_get_location_request_status(const struct shell *shell, size_t argc, char **argv)
+{
+	shell_print(shell, "Status: %u", etc_device_is_location_requested());
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_modem_module,
+	SHELL_CMD(rq_location, NULL, "Request location", cmd_request_location),
+	SHELL_CMD(get_location_request, NULL, "Get status of location request", 
+		  cmd_get_location_request_status),
+	SHELL_SUBCMD_SET_END);
+/* Creating root (level 0) command "demo" */
+SHELL_CMD_REGISTER(modem_module, &sub_modem_module, "ETC Modem Module", NULL);
+#endif

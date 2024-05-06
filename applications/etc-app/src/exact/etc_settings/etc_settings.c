@@ -361,6 +361,18 @@ int etc_settings_init(void)
 		saved_rr_value = 0;
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_GNSS_INTERVAL_SEC_ID, &etc_cfg.gnss_interval_secs,
+				      sizeof(etc_cfg.gnss_interval_secs));
+	if (ret) {
+		etc_set_gnss_interval_secs(ETC_SETTING_GNSS_INTERVAL_SECS_DEFAULT);
+	}
+	
+	ret = etc_device_read_setting(ETC_SETTING_GNSS_TIMEOUT_SEC_ID, &etc_cfg.gnss_interval_secs,
+				      sizeof(etc_cfg.gnss_interval_secs));
+	if (ret) {
+		etc_set_gnss_timeout_secs(CONFIG_MODEM_MODULE_GNSS_TIMEOUT_S);
+	}
+
 	LOG_DBG("Load settings successfully");
 	return 0;
 }
@@ -404,10 +416,10 @@ void etc_settings_update(const struct etc_config *new_config)
 	}
 	if (etc_cfg.wake_early_secs != new_config->wake_early_secs) {
 		rc = etc_set_wake_early_secs(new_config->wake_early_secs);
-	} 
+	}
 	if (etc_cfg.tx_delay_msec != new_config->tx_delay_msec) {
 		rc = etc_set_tx_delay_msec(new_config->tx_delay_msec);
-	} 
+	}
 	if (etc_cfg.rx_duration_secs != new_config->rx_duration_secs) {
 		rc = etc_set_rx_duration_secs(new_config->rx_duration_secs);
 	} 
@@ -417,6 +429,13 @@ void etc_settings_update(const struct etc_config *new_config)
 	if (etc_cfg.lte_probe_offset_secs != new_config->lte_probe_offset_secs) {
 		rc = etc_set_lte_probe_offset_secs(new_config->lte_probe_offset_secs);
 	}
+	if (etc_cfg.gnss_interval_secs != new_config->gnss_interval_secs) {
+		rc = etc_set_gnss_interval_secs(new_config->gnss_interval_secs);
+	}
+	if (etc_cfg.gnss_timeout_secs != new_config->gnss_timeout_secs) {
+		rc = etc_set_gnss_timeout_secs(new_config->gnss_timeout_secs);
+	}
+
 done:
 	if (rc == 1) {
 		LOG_DBG("No value changed");
@@ -806,6 +825,42 @@ int etc_set_rr_value(int value)
 	return rc;
 }
 
+int etc_set_gnss_interval_secs(uint32_t interval_secs)
+{
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.gnss_interval_secs == interval_secs) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	etc_cfg.gnss_interval_secs = interval_secs;
+	rc = etc_device_write_setting(ETC_SETTING_GNSS_INTERVAL_SEC_ID, &etc_cfg.gnss_interval_secs,
+				      sizeof(etc_cfg.gnss_interval_secs));
+	if (rc == 0) {
+		LOG_DBG("set %d: %u", ETC_SETTING_GNSS_INTERVAL_SEC_ID, interval_secs);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
+int etc_set_gnss_timeout_secs(uint16_t timeout_secs)
+{
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.gnss_timeout_secs == timeout_secs) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	etc_cfg.gnss_timeout_secs = timeout_secs;
+	rc = etc_device_write_setting(ETC_SETTING_GNSS_TIMEOUT_SEC_ID, &etc_cfg.gnss_timeout_secs,
+				      sizeof(etc_cfg.gnss_timeout_secs));
+	if (rc == 0) {
+		LOG_DBG("set %d: %u", ETC_SETTING_GNSS_TIMEOUT_SEC_ID, timeout_secs);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 enum etc_device_mode etc_get_device_mode(void)
 {
 	enum etc_device_mode mode;
@@ -950,6 +1005,24 @@ int etc_get_rr_value(void)
 	rr_value = saved_rr_value;
 	k_mutex_unlock(&setting_mutex);
 	return rr_value;
+}
+
+uint32_t etc_get_gnss_interval_secs(void)
+{
+	uint32_t gnss_interval_secs = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	gnss_interval_secs = etc_cfg.gnss_interval_secs;
+	k_mutex_unlock(&setting_mutex);
+	return gnss_interval_secs;
+}
+
+uint16_t etc_get_gnss_timeout_secs(void)
+{
+	uint16_t gnss_timeout_secs = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	gnss_timeout_secs = etc_cfg.gnss_timeout_secs;
+	k_mutex_unlock(&setting_mutex);
+	return gnss_timeout_secs;
 }
 
 #ifdef CONFIG_SHELL
@@ -1258,6 +1331,30 @@ static int cmd_set_alarm_threshold(const struct shell *shell, size_t argc, char 
 	return 0;
 }
 
+static int cmd_set_gnss_interval(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		if (etc_set_gnss_interval_secs((uint32_t)atol(argv[1])) == 0) {
+			shell_print(shell, "OK");
+			return 0;
+		}
+	}
+	shell_error(shell, "Invalid parameter for setting gnss interval");
+	return 0;
+}
+
+static int cmd_set_gnss_timeout(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		if (etc_set_gnss_timeout_secs((uint32_t)atol(argv[1])) == 0) {
+			shell_print(shell, "OK");
+			return 0;
+		}
+	}
+	shell_error(shell, "Invalid parameter for setting gnss timeout");
+	return 0;
+}
+
 static int cmd_get_device(const struct shell *shell, size_t argc, char **argv)
 {
 	enum etc_device_mode mode = etc_get_device_mode();
@@ -1342,6 +1439,20 @@ static int cmd_get_alarm_threshold(const struct shell *shell, size_t argc, char 
 	return 0;
 }
 
+static int cmd_get_gnss_interval(const struct shell *shell, size_t argc, char **argv)
+{
+	uint32_t gnss_interval = etc_get_gnss_interval_secs();
+	shell_print(shell, "GNSS interval %u", gnss_interval);
+	return 0;
+}
+
+static int cmd_get_gnss_timeout(const struct shell *shell, size_t argc, char **argv)
+{
+	uint16_t gnss_timeout = etc_get_gnss_timeout_secs();
+	shell_print(shell, "GNSS timeout %u", gnss_timeout);
+	return 0;
+}
+
 static int cmd_factory_reset(const struct shell *shell, size_t argc, char **argv)
 {
 	int rc = etc_device_erase_cfg();
@@ -1381,6 +1492,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(set_tx_delay, NULL, "Set tx delay in milisecond", cmd_set_tx_delay),
 	SHELL_CMD(set_rx_duration, NULL, "Set rx duration in second", cmd_set_rx_duration),
 	SHELL_CMD(set_alarm_threshold, NULL, "Set alarm threshold", cmd_set_alarm_threshold),
+	SHELL_CMD(set_gnss_interval, NULL, "Set GNSS interval in seconds", cmd_set_gnss_interval),
+	SHELL_CMD(set_gnss_timeout, NULL, "Set GNSS timeout in seconds", cmd_set_gnss_timeout),
 	SHELL_CMD(get_device, NULL, "Get device mode", cmd_get_device),
 	SHELL_CMD(get_power, NULL, "Get power mode", cmd_get_power),
 	SHELL_CMD(get_alarm_direction, NULL, "Get alarm direction", cmd_get_alarm_direction),
@@ -1396,6 +1509,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(get_tx_delay, NULL, "Get tx delay in milisecond", cmd_get_tx_delay),
 	SHELL_CMD(get_rx_duration, NULL, "Get rx duration in second", cmd_get_rx_duration),
 	SHELL_CMD(get_alarm_threshold, NULL, "Get alarm threshold", cmd_get_alarm_threshold),
+	SHELL_CMD(get_gnss_interval, NULL, "Get GNSS interval in seconds", cmd_get_gnss_interval),
+	SHELL_CMD(get_gnss_timeout, NULL, "Get GNSS timeout in seconds", cmd_get_gnss_timeout),
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
 SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);

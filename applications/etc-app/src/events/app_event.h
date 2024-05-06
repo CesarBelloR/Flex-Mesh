@@ -35,6 +35,9 @@ enum app_event_type {
 	/** Request to sync with cloud in desired event (Lora Sync, Magnet, T.B.D in future) */
 	APP_EVT_DATA_SYNC_CLOUD,
 
+	/** Request a GNSS location update based on time and configured GNSS interval */
+	APP_EVT_REQUEST_LOCATION,
+
 	/** Request receive from logger to relay */
 	APP_EVT_DATA_RECEIVE,
 	
