@@ -1,0 +1,48 @@
+From 2919c98b8f8563fdd901bac1866463664a47b2cc Mon Sep 17 00:00:00 2001
+From: Andi Gerl <andi.gerl@exacttechnology.com>
+Date: Thu, 9 May 2024 13:31:10 -0400
+Subject: [PATCH] GNSS: Add UART transmit buffer and increase receive buffer
+ size
+
+---
+ drivers/gnss/gnss_nmea_generic.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gnss/gnss_nmea_generic.c b/drivers/gnss/gnss_nmea_generic.c
+index 2f23f4d7353..415fee34502 100644
+--- a/drivers/gnss/gnss_nmea_generic.c
++++ b/drivers/gnss/gnss_nmea_generic.c
+@@ -23,10 +23,12 @@ LOG_MODULE_REGISTER(gnss_nmea_generic, CONFIG_GNSS_LOG_LEVEL);
+ 
+ #define DT_DRV_COMPAT gnss_nmea_generic
+ 
+-#define UART_RECV_BUF_SZ 128
++#define UART_RECV_BUF_SZ 256
+ #define CHAT_RECV_BUF_SZ 256
+ #define CHAT_ARGV_SZ 32
+ 
++#define UART_TX_BUF_SZ 32
++
+ struct gnss_nmea_generic_config {
+ 	const struct device *uart;
+ };
+@@ -41,6 +43,7 @@ struct gnss_nmea_generic_data {
+ 	struct modem_pipe *uart_pipe;
+ 	struct modem_backend_uart uart_backend;
+ 	uint8_t uart_backend_receive_buf[UART_RECV_BUF_SZ];
++	uint8_t uart_backend_transmit_buf[UART_TX_BUF_SZ];
+ 
+ 	/* Modem chat */
+ 	struct modem_chat chat;
+@@ -104,6 +107,8 @@ static void gnss_nmea_generic_init_pipe(const struct device *dev)
+ 		.uart = cfg->uart,
+ 		.receive_buf = data->uart_backend_receive_buf,
+ 		.receive_buf_size = sizeof(data->uart_backend_receive_buf),
++		.transmit_buf = data->uart_backend_transmit_buf,
++		.transmit_buf_size = sizeof(data->uart_backend_transmit_buf)
+ 	};
+ 
+ 	data->uart_pipe = modem_backend_uart_init(&data->uart_backend, &uart_backend_config);
+-- 
+2.43.2
+
