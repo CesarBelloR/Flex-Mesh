@@ -197,6 +197,18 @@ static void last_sub_state_set(enum sub_state_type state) {
 		return;
 	}
 
+	LOG_DBG("Last sub state transition %s --> %s",
+		sub_state2str(last_sub_state),
+		sub_state2str(state));
+
+	if (state == SUB_STATE_NORMAL_BAT_FULL ||
+		state == SUB_STATE_NORMAL_BAT_LOW ||
+		state == SUB_STATE_NORMAL_BAT_MED || 
+		state == SUB_STATE_CHARGE_BAT_IN_PROCESS ||
+		state == SUB_STATE_CHARGE_BAT_COMPLETE) {
+		last_battery_state = state;
+	}
+
 	last_sub_state = state;
 }
 
@@ -574,7 +586,7 @@ static void on_state_running(struct ui_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_BATTERY_CHARGE_COMPLETE)) {
 		if (is_sub_state_higher_priority()) {
-			last_sub_state_set(SUB_STATE_NORMAL_BAT_FULL);
+			last_sub_state_set(SUB_STATE_CHARGE_BAT_COMPLETE);
 		} else {
 			transition_list_append(LED_STATE_CHARGE_BATTERY_FULL, HOLD_FOREVER);
 			k_work_reschedule(&led_pattern_update_work, UI_LED_WAIT_TIME);
