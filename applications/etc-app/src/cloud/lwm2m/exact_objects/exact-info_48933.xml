@@ -4,9 +4,9 @@
 		<Name>EXACT Info</Name>
 		<Description1><![CDATA[EXACT device-specific information object]]></Description1>
 		<ObjectID>48933</ObjectID>
-		<ObjectURN>urn:oma:lwm2m:x:48933:1.0</ObjectURN>
+		<ObjectURN>urn:oma:lwm2m:x:48933:1.2</ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.1</ObjectVersion>
+		<ObjectVersion>1.2</ObjectVersion>
 		<MultipleInstances>Single</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -61,7 +61,16 @@ BG95M3LAR02A03_01.012.01.012]]></Description>
 				<Description><![CDATA[Public Key ID of the currently used image.
 The public key ID is the first 4 bytes of the public key hash that is part of the image TLV.]]></Description>
 			</Item>
-			
+			<Item ID="6">
+				<Name>Next Tx Wakeup</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Unsigned Integer</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Next transmit wakeup interval (UTC)]]></Description>
+			</Item>
 		</Resources>
 		<Description2 />
 	</Object>

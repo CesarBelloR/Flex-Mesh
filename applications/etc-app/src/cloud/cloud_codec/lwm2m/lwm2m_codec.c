@@ -110,6 +110,7 @@ int data_codec_prepare_update_packet(struct cloud_codec_data *cloud_data)
 		LWM2M_OBJ(ETC_CFG_OBJECT_ID),
 		LWM2M_OBJ(ETC_TEMP_OBJECT_ID),
 		LWM2M_OBJ(ETC_HUMID_OBJECT_ID),
+		LWM2M_OBJ(ETC_INFO_OBJECT_ID),
 	};
 	int err;
 
@@ -347,6 +348,35 @@ int data_codec_prepare_ble_packet(struct cloud_codec_data *cloud_data,
 		}
 	}
 	
+	return err;
+}
+
+int data_codec_prepare_next_tx_transmit_info(struct cloud_codec_data *cloud_data) 
+{
+	int err = 0;
+
+	if (cloud_data == NULL) {
+		LOG_ERR("Null cloud data");
+		return -ENOMEM;
+	}
+
+	uint32_t next_transmit_s = (uint32_t)etc_device_get_next_transmit();
+	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_NEXT_TX_WAKEUP), 
+			    next_transmit_s);
+	if (err == 0) {
+		static const struct lwm2m_obj_path path_list[] = {
+			LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0),
+		};
+
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
+							       path_list,
+							       ARRAY_SIZE(path_list));
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			return err;
+		}
+	}
+
 	return err;
 }
 

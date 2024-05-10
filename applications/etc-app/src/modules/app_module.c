@@ -593,6 +593,9 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 		LOG_DBG("Next wakeup for transmitting at: %02d:%02d:%02d", tm_transmit_time.tm_hour,
 			tm_transmit_time.tm_min, tm_transmit_time.tm_sec);
 
+		/* Sync the next transmit data */
+		etc_device_set_next_transmit(next_transmit);
+
 		if ((wakeup == 0) || (wakeup > next_transmit)) {
 			wakeup = next_transmit;
 		}

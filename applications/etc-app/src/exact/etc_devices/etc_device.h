@@ -382,4 +382,25 @@ uint16_t etc_device_get_tx_no_probe_offset_mins(void);
  * @return Number of bytes written to pubkey_id 
 */
 int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len);
+
+/**
+ * @brief Set the next transmit time for the device.
+ *
+ * This function sets the next transmit time for the device. 
+ * The time is specified in seconds until the next transmission.
+ *
+ * @param next_transmit_s The number of seconds for the next transmission.
+ */
+void etc_device_set_next_transmit(int next_transmit_s);
+
+/**
+ * @brief Get the next transmit time for the device.
+ *
+ * Retrieves the next transmit time that has been set for the device. 
+ * The time is returned in seconds until the next transmission.
+ *
+ * @return Returns the number of seconds until the next transmission.
+ */
+int etc_device_get_next_transmit(void);
+
 #endif /* ETC_DEVICE_H_ */

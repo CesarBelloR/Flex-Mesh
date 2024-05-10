@@ -73,6 +73,7 @@ static struct data_modem_static modem_stat;
 static struct data_modem_dynamic modem_dynamic;
 
 static bool first_send = true;
+static bool need_interval_tx_send = true;
 
 /* Size of the static modem (modem_stat) data structure.
  * Used to provide an array size when encoding batch data.
@@ -416,6 +417,11 @@ static void data_encode_for_cloud(bool split)
 		first_send = false;
 	}
 
+	if (need_interval_tx_send) {
+		data_codec_prepare_next_tx_transmit_info(&codec);
+		need_interval_tx_send = false;
+	}
+
 	if (functional_test_get_state() == FUNC_TEST_STATE_SENDING_DATA) {
 		struct functional_test_data test_data;
 		LOG_DBG("Sending functional test data");
@@ -593,6 +599,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && 
 	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER)
 	{
+		need_interval_tx_send = true;
 		data_encode_for_cloud(false);
 		return;
 	}
@@ -602,6 +609,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA)) || 
 		(etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
 		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET)))) {
+		need_interval_tx_send = true;
 		data_encode_for_cloud(false);
 		return;
 	}

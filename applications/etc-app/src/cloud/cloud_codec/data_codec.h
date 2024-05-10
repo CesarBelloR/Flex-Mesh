@@ -195,6 +195,8 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 int data_codec_prepare_ble_packet(struct cloud_codec_data *cloud_data,
 				    union etc_device_record *record);
 
+int data_codec_prepare_next_tx_transmit_info(struct cloud_codec_data *cloud_data);
+
 int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_static *modem_data);
 
