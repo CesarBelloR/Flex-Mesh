@@ -362,9 +362,21 @@ static time_t app_backoff_interval_no_probe(time_t now)
 
 static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transmit_interval_s, 
 	enum etc_sensor_status sensor_status) {
-	LOG_DBG("%d %d", sensor_status, etc_get_power_mode());
+	static enum etc_sensor_status last_sensor_status = SENSOR_NA;
+	enum etc_power_mode_e current_power = etc_get_power_mode();
+	LOG_DBG("%d %d", sensor_status, current_power);
 	/* If device is not Relay, check sensor and probe mode */
 	if (etc_get_device_mode() != ETC_DEVICE_MODE_RELAY) {
+		if (last_sensor_status != sensor_status) {
+			if ((last_sensor_status == SENSOR_CONNECTED && 
+			     sensor_status == SENSOR_NO_CONNECTION) && 
+			     (current_power == ETC_POWER_MODE_PROBE)) {
+				last_sensor_status = sensor_status;
+				return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
+			}
+			last_sensor_status = sensor_status;
+		}
+		
 		if ((sensor_status == SENSOR_NO_CONNECTION) && 
 			(etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
 			return -1;
