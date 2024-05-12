@@ -150,6 +150,14 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 		rc = util_validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_LTE_PROBE_OFFSET_MIN_VAL,
 			    ETC_CFG_OBJ_R_LTE_PROBE_OFFSET_MAX_VAL);
 		break;
+	case ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL:
+		rc = util_validate_u32(*(uint16_t *)data, ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL_MIN_VAL,
+				       ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_GNSS_TIMEOUT:
+		rc = util_validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_GNSS_TIMEOUT_MIN_VAL,
+				       ETC_CFG_OBJ_R_GNSS_TIMEOUT_MAX_VAL);
+		break;
 	}
 	return rc;
 }
@@ -333,6 +341,32 @@ static int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_d
 		return err;
 	}
 
+	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 
+						 0, ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL),
+						 callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 
+					       0, ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL),
+					       lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_register_post_write_callback(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 
+						 0, ETC_CFG_OBJ_R_GNSS_TIMEOUT),
+						 callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 
+					       0, ETC_CFG_OBJ_R_GNSS_TIMEOUT),
+					       lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
+
 	return 0;
 }
 
@@ -426,7 +460,7 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 	if (err) {
 		return err;
 	}
-		
+
 	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, LOG_INTERVAL_ALARM_RID),
 			    cfg->log_interval_alarm_secs);
 	if (err) {
@@ -438,7 +472,7 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 	if (err) {
 		return err;
 	}
-		
+
 	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, TX_INTERVAL_ALARM_RID),
 			    cfg->tx_interval_alarm_secs);
 	if (err) {
@@ -477,6 +511,18 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LTE_PROBE_OFFSET),
 			    cfg->lte_probe_offset_secs);
+	if (err) {
+		return err;
+	}
+	
+	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL),
+			    cfg->gnss_interval_secs);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_GNSS_TIMEOUT),
+			    cfg->gnss_timeout_secs);
 	if (err) {
 		return err;
 	}
@@ -722,6 +768,52 @@ int lwm2m_codec_helpers_set_device_data(void)
 	return 0;
 }
 
+int lwm2m_codec_helpers_update_location(struct cloud_codec_data *cloud_data,
+					struct etc_gnss_data *data)
+{
+	int err;
+
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_LOCATION_OBJ_ID, 0, ETC_LOCATION_OBJ_R_LATITUDE),
+			    NANODEGREE_TO_DEGREE(data->latitude));
+	if (err) {
+		return err;
+	}
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_LOCATION_OBJ_ID, 0, ETC_LOCATION_OBJ_R_LONGITUDE),
+			    NANODEGREE_TO_DEGREE(data->longitude));
+	if (err) {
+		return err;
+	}
+	err = lwm2m_set_time(&LWM2M_OBJ(ETC_LOCATION_OBJ_ID, 0, TIMESTAMP_RID),
+			     data->timestamp);
+	if (err) {
+		return err;
+	}
+
+	if (cloud_data != NULL) {
+		err = lwm2m_codec_helpers_object_path_list_add(
+			cloud_data, &LWM2M_OBJ(ETC_LOCATION_OBJ_ID, 0), 1);
+	}
+
+	return 0;
+}
+
+int lwm2m_codec_helpers_update_location_dummy(struct cloud_codec_data *cloud_data)
+{
+	struct etc_gnss_data dummy_location = {
+		.latitude = 43670059200,
+		.longitude = -79434526100
+	};
+	int err;
+	int64_t time_now;
+
+	date_time_now(&time_now);
+	/* Convert time from ms to s */
+	time_now /= 1000;
+	dummy_location.timestamp = time_now;
+
+	return lwm2m_codec_helpers_update_location(cloud_data, &dummy_location);
+}
+
 int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_static)
 {
 	int err;
@@ -806,7 +898,7 @@ static int invalidate_temp_sensor_value(struct cloud_codec_data *cloud_data,
 		if (err) {
 			return err;
 		}
-					
+		
 		err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, TIMESTAMP_RID),
 				     timestamp);
 		if (err) {

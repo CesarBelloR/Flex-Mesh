@@ -94,6 +94,11 @@ uint16_t ceil_int(uint16_t value, uint16_t divisor);
 */
 uint16_t round_int(uint16_t value, uint16_t divisor);
 
+/**
+ * Same as @ref round_int just with 32 bit integer values.
+*/
+uint32_t round_int32(uint32_t value, uint32_t divisor);
+
 #ifdef CONFIG_ETC_BLE_ENCRYPTION
 /**
  * @brief Encrypts the given data using the provided pre-shared key (PSK).

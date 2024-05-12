@@ -141,6 +141,29 @@ How long Relay stays in RX mode.  Only valid for DEVICE_MODE = 0.]]></Descriptio
 				<Units>s</Units>
 				<Description><![CDATA[The probe mode offsets in second for LTE Logger (0 to 3540)]]></Description>
 			</Item>
+			<Item ID="13">
+				<Name>LOCATION_REQUEST_INTERVAL</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0..604800</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Interval for requesting a GNSS location.
+				If set to 0, periodic GNSS location retrieval is disabled.
+				Valid range is from 15 minutes to 1 week.]]></Description>
+			</Item>
+			<Item ID="14">
+				<Name>GNSS_TIMEOUT</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>60..600</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Timeout after GNSS shuts off if
+				no location could be determined.]]></Description>
+			</Item>
 		</Resources>
 		<Description2 />
 	</Object>

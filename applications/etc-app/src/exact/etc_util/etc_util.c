@@ -15,16 +15,20 @@ int util_validate_u32(uint32_t data, uint32_t lower_limit, uint32_t upper_limit)
 	return 0;
 }
 
-
-uint16_t round_int(uint16_t value, uint16_t divisor) 
+uint32_t round_int32(uint32_t value, uint32_t divisor)
 {
-	uint16_t remainder = value % divisor;
-	uint16_t quotient = value / divisor;
+	uint32_t remainder = value % divisor;
+	uint32_t quotient = value / divisor;
 
 	if (remainder >= divisor / 2U) {
 		quotient++;
 	}
 	return quotient * divisor;
+}
+
+uint16_t round_int(uint16_t value, uint16_t divisor) 
+{
+	return (uint16_t)round_int32(value, divisor);
 }
 
 uint16_t ceil_int(uint16_t value, uint16_t divisor) 

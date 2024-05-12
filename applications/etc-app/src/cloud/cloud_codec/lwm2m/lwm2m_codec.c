@@ -455,3 +455,14 @@ int data_codec_update_reclaim_state(struct cloud_codec_data *cloud_data,
 
 	return ret;
 }
+
+int data_codec_update_location(struct cloud_codec_data *cloud_data,
+			       struct etc_gnss_data *data)
+{
+	return lwm2m_codec_helpers_update_location(cloud_data, data);
+}
+
+int data_codec_update_location_dummy(struct cloud_codec_data *cloud_data)
+{
+	return lwm2m_codec_helpers_update_location_dummy(cloud_data);
+}

@@ -396,6 +396,12 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		APP_EVENT_SUBMIT(cloud_evt);
 		break;
 	}
+	case CLOUD_WRAP_EVT_LOCATION_REQUEST:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_LOCATION_REQUEST");
+		SEND_EVENT(cloud, CLOUD_EVT_LOCATION_REQUEST);
+		break;
+	}
 	default:
 		LOG_DBG("Unknown Cloud Wrap event type: %d", evt->type);
 		break;

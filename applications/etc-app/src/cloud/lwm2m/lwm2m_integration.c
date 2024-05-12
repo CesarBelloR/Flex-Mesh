@@ -20,6 +20,7 @@
 #include "lwm2m_firmware.h"
 #include "lwm2m/lwm2m_codec_helpers.h"
 #include "etc_reclaim_obj_48934.h"
+#include "etc_location_obj_48938.h"
 
 #include "cloud/cloud_wrapper.h"
 
@@ -276,6 +277,24 @@ static int reclaim_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_le
 	return 0;
 }
 
+/* Callback handler triggered when lwm2m object resource 48938/0/3 
+ * (EXACT Location/request) is executed. */
+static int location_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_len)
+{
+	ARG_UNUSED(args);
+	ARG_UNUSED(args_len);
+	ARG_UNUSED(obj_inst_id);
+	int err;
+
+	struct cloud_wrap_event cloud_wrap_evt = {
+		.type = CLOUD_WRAP_EVT_LOCATION_REQUEST
+	};
+
+	cloud_wrapper_notify_event(&cloud_wrap_evt);
+
+	return 0;
+}
+
 static void send_cb(enum lwm2m_send_status status)
 {
 	struct cloud_wrap_event cloud_wrap_evt = { 0 };
@@ -411,6 +430,14 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 					   reclaim_exec_cb);
 	if (err) {
 		LOG_ERR("register reclaim exec callback, error: %d", err);
+		return err;
+	}
+
+	err = lwm2m_register_exec_callback(&LWM2M_OBJ(ETC_LOCATION_OBJ_ID,
+						      0, ETC_LOCATION_OBJ_R_REQUEST),
+					   location_exec_cb);
+	if (err) {
+		LOG_ERR("register location exec callback, error: %d", err);
 		return err;
 	}
 

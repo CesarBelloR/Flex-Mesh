@@ -207,6 +207,32 @@ void lwm2m_codec_helpers_path_list_log(const struct lwm2m_obj_path path_list[],
 bool lwm2m_codec_helpers_update_reclaim_state(struct cloud_codec_data *cloud_data,
 					      enum data_reclaim_state new_state);
 
+/**
+ * Initialize the EXACT Location object.
+*/
+int lwm2m_codec_helpers_init_location(void);
+
+/**
+ * Update the EXACT location object with the GNSS location data provided.
+ * 
+ * @param cloud_data
+ * @param data
+ * 
+ * @retval 0 success
+ * @retval <0 error
+*/
+int lwm2m_codec_helpers_update_location(struct cloud_codec_data *cloud_data,
+					struct etc_gnss_data *data);
+
+/**
+ * Update the EXACT Location object and set it to a dummy location with the current
+ * timestamp.
+ * 
+ * @retval 0 success
+ * @retval !=0 error
+*/
+int lwm2m_codec_helpers_update_location_dummy(struct cloud_codec_data *cloud_data);					      
+
 #ifdef __cplusplus
 }
 #endif

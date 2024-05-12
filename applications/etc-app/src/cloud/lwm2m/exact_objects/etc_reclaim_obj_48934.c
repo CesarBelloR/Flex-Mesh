@@ -82,7 +82,7 @@ static int object_init(void)
 
 	ret = lwm2m_create_obj_inst(OBJECT_ID, 0, &obj_inst);
 	if (ret < 0) {
-		LOG_ERR("Create EXACT Info object error: %d", ret);
+		LOG_ERR("Create EXACT Reclaim object error: %d", ret);
 		return ret;
 	}
 

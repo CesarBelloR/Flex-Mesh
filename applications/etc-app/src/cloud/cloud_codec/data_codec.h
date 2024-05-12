@@ -309,4 +309,21 @@ int data_codec_contains_measurement_data(struct cloud_codec_data *cloud_data);
 int data_codec_update_reclaim_state(struct cloud_codec_data *cloud_data,
 				    enum data_reclaim_state new_state);
 
+/**
+ * Update the location with the provided GNSS data.
+ *
+ * @retval 0 success
+ * @retval !=0 error
+*/
+int data_codec_update_location(struct cloud_codec_data *cloud_data,
+			       struct etc_gnss_data *data);
+
+/**
+ * Update the location with a dummy value.
+ *
+ * @retval 0 success
+ * @retval !=0 error
+*/
+int data_codec_update_location_dummy(struct cloud_codec_data *cloud_data);
+
 #endif /* DATA_CODEC_H__ */

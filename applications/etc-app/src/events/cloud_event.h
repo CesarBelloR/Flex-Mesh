@@ -60,6 +60,9 @@ enum cloud_event_type {
 	/** Reclaim request received from cloud */
 	CLOUD_EVT_RECLAIM_REQUEST,
 
+	/** Location request received from cloud */
+	CLOUD_EVT_LOCATION_REQUEST,
+
 	/** A new device configuration has been received from cloud.
 	 *  The payload associated with this event is of type @ref cloud_data_cfg (config).
 	 */
