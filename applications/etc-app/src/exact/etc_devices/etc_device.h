@@ -391,7 +391,7 @@ int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len);
  *
  * @param next_transmit_s The number of seconds for the next transmission.
  */
-void etc_device_set_next_transmit(int next_transmit_s);
+void etc_device_set_next_transmit(time_t next_transmit_s);
 
 /**
  * @brief Get the next transmit time for the device.
@@ -401,6 +401,6 @@ void etc_device_set_next_transmit(int next_transmit_s);
  *
  * @return Returns the number of seconds until the next transmission.
  */
-int etc_device_get_next_transmit(void);
+time_t etc_device_get_next_transmit(void);
 
 #endif /* ETC_DEVICE_H_ */

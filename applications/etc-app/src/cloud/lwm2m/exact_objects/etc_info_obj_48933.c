@@ -32,7 +32,7 @@ static char modem_rev[ETC_INFO_MODEM_REV_SIZE];
 static char imsi[ETC_INFO_IMSI_SIZE];
 static char iccid[ETC_INFO_ICCID_SIZE];
 static uint8_t img_pubkey_id[ETC_INFO_IMG_PUBKEY_ID_SIZE];
-static int next_tx_wakeup;
+static time_t next_tx_wakeup;
 
 static struct lwm2m_engine_obj object;
 static struct lwm2m_engine_obj_field fields[] = {
@@ -41,7 +41,7 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_IMSI, R, STRING),
 	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_ICCID, R, STRING),
 	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_IMG_PUBKEY_ID, R, OPAQUE),
-	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_NEXT_TX_WAKEUP, R, U32),
+	OBJ_FIELD_DATA(ETC_INFO_OBJ_R_NEXT_TX_WAKEUP, R, TIME),
 };
 
 static struct lwm2m_engine_obj_inst inst;

@@ -39,7 +39,7 @@ static enum etc_device_job logger_job = ETC_DEVICE_JOB_LOG;
 static enum etc_transmit_sub_job transmit_sub_job = ETC_TRANSMIT_NORMAL;
 static uint16_t tx_logger_lora_offset_mins = 0;
 static uint16_t tx_no_probe_offset_mins = 0;
-static int device_next_transmit_s = 0;
+static time_t device_next_transmit_s = 0;
 static struct etc_device_relay_record_stat relay_record_stat;
 static struct etc_device_relay_record_stat *p_relay_stat = &relay_record_stat;
 static uint8_t etc_relay_record_buf[ETC_DEVICE_RELAY_BUF_SIZE];
@@ -401,12 +401,12 @@ int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len)
 	return sizeof(img_pubkey_id);
 }
 
-void etc_device_set_next_transmit(int next_transmit_s)
+void etc_device_set_next_transmit(time_t next_transmit_s)
 {
 	device_next_transmit_s = next_transmit_s;
 }
 
-int etc_device_get_next_transmit(void)
+time_t etc_device_get_next_transmit(void)
 {
 	return device_next_transmit_s;
 }

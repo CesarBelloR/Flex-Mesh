@@ -360,12 +360,12 @@ int data_codec_prepare_next_tx_transmit_info(struct cloud_codec_data *cloud_data
 		return -ENOMEM;
 	}
 
-	uint32_t next_transmit_s = (uint32_t)etc_device_get_next_transmit();
-	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_NEXT_TX_WAKEUP), 
+	time_t next_transmit_s = etc_device_get_next_transmit();
+	err = lwm2m_set_time(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_NEXT_TX_WAKEUP), 
 			    next_transmit_s);
 	if (err == 0) {
 		static const struct lwm2m_obj_path path_list[] = {
-			LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0),
+			LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_NEXT_TX_WAKEUP),
 		};
 
 		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
