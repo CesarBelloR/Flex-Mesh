@@ -143,13 +143,14 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 			    ETC_CFG_OBJ_R_TX_PROBE_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_LORA_PROBE_OFFSET: {
-			uint16_t lora_probe_offset_sec = *(uint16_t*)data;
-			if (lora_probe_offset_sec == 0 || lora_probe_offset_sec == 900 ||
-			    lora_probe_offset_sec == 1800 || lora_probe_offset_sec == 2700) {
-				return 0;
-			} else {
-				return -EINVAL;
-			}
+		uint16_t lora_probe_offset_sec = *(uint16_t*)data;
+		if ((lora_probe_offset_sec % 900 == 0) && 
+		    (lora_probe_offset_sec >= 0) && 
+		    (lora_probe_offset_sec <= 2700)) {
+			rc = 0;
+		} else {
+			rc = -EINVAL;
+		}
 		break;
 	}
 	case ETC_CFG_OBJ_R_LTE_PROBE_OFFSET:
@@ -416,73 +417,73 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 	int err;
 
 	err = lwm2m_set_u8(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, DEVICE_MODE_RID),
-		     (uint8_t)cfg->device_mode);
+			   (uint8_t)cfg->device_mode);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u8(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, POWER_MODE_RID),
-		     (uint8_t)cfg->power_mode);
+			   (uint8_t)cfg->power_mode);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, LOG_INTERVAL_RID),
-		     cfg->log_interval_secs);
+			    cfg->log_interval_secs);
 	if (err) {
 		return err;
 	}
 		
 	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, LOG_INTERVAL_ALARM_RID),
-		     cfg->log_interval_alarm_secs);
+			    cfg->log_interval_alarm_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, TX_INTERVAL_RID),
-		     cfg->tx_interval_secs);
+			    cfg->tx_interval_secs);
 	if (err) {
 		return err;
 	}
 		
 	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, TX_INTERVAL_ALARM_RID),
-		     cfg->tx_interval_alarm_secs);
+			    cfg->tx_interval_alarm_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, WAKE_EARLY_RID),
-		     cfg->wake_early_secs);
+			    cfg->wake_early_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, TX_DELAY_RID),
-		     cfg->tx_delay_msec);
+			    cfg->tx_delay_msec);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, RX_DURATION_RID),
-		     cfg->rx_duration_secs);
+			    cfg->rx_duration_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_TX_PROBE),
-		     cfg->tx_probe_secs);
+			    cfg->tx_probe_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LORA_PROBE_OFFSET),
-		     cfg->lora_probe_offset_secs);
+			    cfg->lora_probe_offset_secs);
 	if (err) {
 		return err;
 	}
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LTE_PROBE_OFFSET),
-		     cfg->lte_probe_offset_secs);
+			    cfg->lte_probe_offset_secs);
 	if (err) {
 		return err;
 	}

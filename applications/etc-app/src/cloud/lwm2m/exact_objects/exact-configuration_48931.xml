@@ -139,7 +139,7 @@ How long Relay stays in RX mode.  Only valid for DEVICE_MODE = 0.]]></Descriptio
 				<Type>Integer</Type>
 				<RangeEnumeration>0..3540</RangeEnumeration>
 				<Units>s</Units>
-				<Description><![CDATA[The probe mode offsets in second for LTE Logger (0, 3540)]]></Description>
+				<Description><![CDATA[The probe mode offsets in second for LTE Logger (0 to 3540)]]></Description>
 			</Item>
 		</Resources>
 		<Description2 />

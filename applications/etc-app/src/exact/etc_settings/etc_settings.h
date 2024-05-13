@@ -92,7 +92,25 @@ int etc_set_rx_duration_secs(uint16_t second);
 int etc_set_alarm_threshold(uint16_t threshold);
 int etc_set_serial_number_type(enum etc_serial_number_types type);
 int etc_set_relay_iccid(const char *iccid);
+
+/**
+ * @brief Sets the LoRa probe offset seconds.
+ * This function updates the offset time used for LoRa probing operations.
+ *
+ * @param second The offset time in seconds for LoRa probes. The value must be
+ *               a multiple of 900 and less than or equal to 2700 seconds.
+ * @return 0 on success, <0 on error.
+ */
 int etc_set_lora_probe_offset_secs(uint16_t second);
+
+/**
+ * @brief Sets the LTE probe offset seconds.
+ * This function updates the offset time used for LTE probing operations.
+ *
+ * @param second The offset time in seconds for LTE probes. The value must be
+ *               a multiple of 900 and less than or equal to 2700 seconds.
+ * @return 0 on success, <0 on error.
+ */
 int etc_set_lte_probe_offset_secs(uint16_t second);
 /**
  * Set the Rr value for temperature compensation
@@ -138,7 +156,21 @@ uint16_t etc_get_tx_delay_msec(void);
 uint16_t etc_get_rx_duration_secs(void);
 uint16_t etc_get_alarm_threshold(void);
 int etc_get_relay_iccid(char *buf, int buf_len);
+
+/**
+ * @brief Retrieves the current LoRa probe offset seconds.
+ * This function returns the currently set offset time used for LoRa probing operations.
+ *
+ * @return uint16_t The current LoRa probe offset time in seconds.
+ */
 uint16_t etc_get_lora_probe_offset_secs(void);
+
+/**
+ * @brief Retrieves the current LTE probe offset seconds.
+ * This function returns the currently set offset time used for LTE probing operations.
+ *
+ * @return uint16_t The current LTE probe offset time in seconds.
+ */
 uint16_t etc_get_lte_probe_offset_secs(void);
 /**
  * Get the Rr value for temperature compensation

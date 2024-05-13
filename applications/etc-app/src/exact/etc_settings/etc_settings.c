@@ -301,7 +301,10 @@ int etc_settings_init(void)
 				      &etc_cfg.lora_probe_offset_secs,
 				      sizeof(etc_cfg.lora_probe_offset_secs));
 	if (ret) {
-		etc_set_lora_probe_offset_secs(ETC_SETTING_LORA_PROBE_OFFSET_SECS_DEFAULT);
+		uint8_t tx_lte_no_probe_offset_mins = (uint8_t)(sys_rand32_get() % 60);
+		uint8_t tx_lora_no_probe_offset_mins = (uint8_t)(sys_rand32_get() % 4);
+		etc_set_lte_probe_offset_secs((uint16_t)(tx_lte_no_probe_offset_mins * 60));
+		etc_set_lora_probe_offset_secs((uint16_t)(tx_lora_no_probe_offset_mins * 900));
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_LTE_PROBE_MODE_OFFSET_SEC_ID, 
@@ -742,7 +745,7 @@ int etc_set_relay_iccid(const char* iccid) {
 
 int etc_set_lora_probe_offset_secs(uint16_t second) 
 {
-	if (!((second == 0) || (second == 900) || (second == 1800) || (second == 2700))) {
+	if (!((second % 900 == 0) && (second >= 0) && (second <= 2700))) {
 		return -EINVAL;
 	}
 	int rc = 0;
