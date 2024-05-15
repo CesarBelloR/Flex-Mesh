@@ -15,7 +15,7 @@ static const struct setup_cmd gnss_setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("AT+QGPSCFG=\"gpsnmeatype\",3")
 };
 
-struct gnss_data {
+static struct gnss_data {
 	enum gnss_status status;
 } gnss_data;
 

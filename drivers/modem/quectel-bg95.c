@@ -3856,6 +3856,7 @@ static int cmd_gnss_on(const struct shell *shell, size_t argc, char **argv)
 	int ret;
 	ret = quectel_bg95_turn_on_gnss(&mctx, &mdata, &cfg);
 	shell_print(shell, "result %d", ret);
+	return 0;
 }
 
 static int cmd_gnss_off(const struct shell *shell, size_t argc, char **argv)
@@ -3863,6 +3864,7 @@ static int cmd_gnss_off(const struct shell *shell, size_t argc, char **argv)
 	int ret;
 	ret = quectel_bg95_turn_off_gnss(&mctx, &mdata);
 	shell_print(shell, "result %d", ret);
+	return 0;
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
