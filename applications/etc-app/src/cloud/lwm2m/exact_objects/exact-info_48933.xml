@@ -66,7 +66,7 @@ The public key ID is the first 4 bytes of the public key hash that is part of th
 				<Operations>R</Operations>
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
-				<Type>Unsigned Integer</Type>
+				<Type>Time</Type>
 				<RangeEnumeration></RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[Next transmit wakeup interval (UTC)]]></Description>
