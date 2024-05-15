@@ -14,6 +14,7 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
+#include "etc_util.h"
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 
@@ -301,9 +302,7 @@ int etc_settings_init(void)
 				      &etc_cfg.lora_probe_offset_secs,
 				      sizeof(etc_cfg.lora_probe_offset_secs));
 	if (ret) {
-		uint8_t tx_lte_no_probe_offset_mins = (uint8_t)(sys_rand32_get() % 60);
 		uint8_t tx_lora_no_probe_offset_mins = (uint8_t)(sys_rand32_get() % 4);
-		etc_set_lte_probe_offset_secs((uint16_t)(tx_lte_no_probe_offset_mins * 60));
 		etc_set_lora_probe_offset_secs((uint16_t)(tx_lora_no_probe_offset_mins * 900));
 	}
 
@@ -311,7 +310,8 @@ int etc_settings_init(void)
 				      &etc_cfg.lte_probe_offset_secs,
 				      sizeof(etc_cfg.lte_probe_offset_secs));
 	if (ret) {
-		etc_set_lte_probe_offset_secs(ETC_SETTING_LTE_PROBE_OFFSET_SECS_DEFAULT);
+		uint8_t tx_lte_no_probe_offset_mins = (uint8_t)(sys_rand32_get() % 60);
+		etc_set_lte_probe_offset_secs((uint16_t)(tx_lte_no_probe_offset_mins * 60));
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
@@ -745,10 +745,10 @@ int etc_set_relay_iccid(const char* iccid) {
 
 int etc_set_lora_probe_offset_secs(uint16_t second) 
 {
-	if (!((second % 900 == 0) && (second >= 0) && (second <= 2700))) {
-		return -EINVAL;
+	int rc = util_validate_in_lora_probe_offset(second);
+	if (rc) {
+		return rc;
 	}
-	int rc = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	if (etc_cfg.lora_probe_offset_secs == second) {
 		k_mutex_unlock(&setting_mutex);

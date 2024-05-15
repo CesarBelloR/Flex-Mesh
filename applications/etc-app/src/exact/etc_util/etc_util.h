@@ -117,4 +117,21 @@ int decrypt_data(const unsigned char *psk,
 	const unsigned char *encrypted_data, size_t encrypted_length, 
 	unsigned char *decrypted_data);
 #endif
+/**
+ * @brief Validate if the given value is a valid LoRa probe offset.
+ *
+ * This function checks if the provided `value` meets the LoRa probe offset
+ * criteria: it should be a multiple of 900 and in the range [0, 2700].
+ * 
+ * @param value The value to be validated as a LoRa probe offset.
+ * @return int Returns 0 if the value is valid, -EINVAL otherwise.
+ */
+inline static int util_validate_in_lora_probe_offset(uint16_t value) 
+{
+	if ((value % 900 == 0) && (value >= 0) && (value <= 2700)) {
+		return 0;
+	} 
+
+	return -EINVAL;
+}
 #endif

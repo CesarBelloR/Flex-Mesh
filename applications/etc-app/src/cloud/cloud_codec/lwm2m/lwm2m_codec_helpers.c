@@ -143,14 +143,7 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 			    ETC_CFG_OBJ_R_TX_PROBE_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_LORA_PROBE_OFFSET: {
-		uint16_t lora_probe_offset_sec = *(uint16_t*)data;
-		if ((lora_probe_offset_sec % 900 == 0) && 
-		    (lora_probe_offset_sec >= 0) && 
-		    (lora_probe_offset_sec <= 2700)) {
-			rc = 0;
-		} else {
-			rc = -EINVAL;
-		}
+		rc = util_validate_in_lora_probe_offset(*(uint16_t*)data);
 		break;
 	}
 	case ETC_CFG_OBJ_R_LTE_PROBE_OFFSET:
