@@ -142,8 +142,21 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_PROBE_MIN_VAL,
 			    ETC_CFG_OBJ_R_TX_PROBE_MAX_VAL);
 		break;
+	case ETC_CFG_OBJ_R_LORA_PROBE_OFFSET: {
+			uint16_t lora_probe_offset_sec = *(uint16_t*)data;
+			if (lora_probe_offset_sec == 0 || lora_probe_offset_sec == 900 ||
+			    lora_probe_offset_sec == 1800 || lora_probe_offset_sec == 2700) {
+				return 0;
+			} else {
+				return -EINVAL;
+			}
+		break;
 	}
-
+	case ETC_CFG_OBJ_R_LTE_PROBE_OFFSET:
+		rc = util_validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_LTE_PROBE_OFFSET_MIN_VAL,
+			    ETC_CFG_OBJ_R_LTE_PROBE_OFFSET_MAX_VAL);
+		break;
+	}
 	return rc;
 }
 
@@ -462,6 +475,18 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 		return err;
 	}
 
+	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LORA_PROBE_OFFSET),
+		     cfg->lora_probe_offset_secs);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LTE_PROBE_OFFSET),
+		     cfg->lte_probe_offset_secs);
+	if (err) {
+		return err;
+	}
+
 	err = lwm2m_codec_helpers_set_callback_for_config_object(callback);
 	if (err) {
 		return err;
@@ -537,6 +562,18 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 		return err;
 	}
 	
+	err = lwm2m_get_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LORA_PROBE_OFFSET),
+		     	    &cfg->lora_probe_offset_secs);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_get_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LTE_PROBE_OFFSET),
+		     	    &cfg->lte_probe_offset_secs);
+	if (err) {
+		return err;
+	}
+
 	return 0;
 }
 

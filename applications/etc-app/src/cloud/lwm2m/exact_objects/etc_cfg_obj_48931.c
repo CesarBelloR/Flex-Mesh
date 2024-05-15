@@ -21,9 +21,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define OBJECT_ID 48931
 #define OBJECT_VERSION_MAJOR 1
-#define OBJECT_VERSION_MINOR 1
+#define OBJECT_VERSION_MINOR 2
 
-#define RESOURCES_MAX_ID			10
+#define RESOURCES_MAX_ID			12
 #define RESOURCE_INSTANCE_COUNT			(RESOURCES_MAX_ID)
 
 /* Storage variables to hold configuration values. */
@@ -37,6 +37,8 @@ static uint16_t tx_delay;
 static uint16_t wake_early;
 static uint16_t rx_duration;
 static uint32_t tx_probe;
+static uint16_t lora_probe_offset;
+static uint16_t lte_probe_offset;
 
 static struct lwm2m_engine_obj object;
 static struct lwm2m_engine_obj_field fields[] = {
@@ -50,6 +52,8 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_RX_DURATION, RW, U16),
 	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_TX_INTERVAL_ALARM, RW, U32),
 	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_TX_PROBE, RW, U32),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_LORA_PROBE_OFFSET, RW, U16),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_LTE_PROBE_OFFSET, RW, U16),
 };
 
 static struct lwm2m_engine_obj_inst inst;
@@ -83,7 +87,11 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 			  &tx_interval_alarm, sizeof(tx_interval_alarm));
 	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_TX_PROBE, res, i, res_inst, j,
 			  &tx_probe, sizeof(tx_probe));
-
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_LORA_PROBE_OFFSET, res, i, res_inst, j,
+			  &lora_probe_offset, sizeof(lora_probe_offset));
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_LTE_PROBE_OFFSET, res, i, res_inst, j,
+			  &lte_probe_offset, sizeof(lte_probe_offset));
+			  
 	inst.resources = res;
 	inst.resource_count = i;
 

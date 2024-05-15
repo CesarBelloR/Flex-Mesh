@@ -11,7 +11,6 @@
 
 #include "etc_device_record.h"
 
-#define ETC_CONFIG_TYPE_SIZE   (32)
 #define ETC_DEVICE_RECORD_SIZE (36)
 /* Logger ID size */
 #define ETC_DEVICE_LORA_LOGGER_ID_SIZE	(sizeof("FFFFFFFFFFFFFFFF"))
@@ -96,6 +95,8 @@ enum etc_setting_id {
 	ETC_SETTING_ALARM_THRESHOLD_ID,
 	ETC_SETTING_DEVICE_NEXT_JOB_ID,
 	ETC_SETTING_TX_PROBE_SEC_ID,
+	ETC_SETTING_LORA_PROBE_MODE_OFFSET_SEC_ID,
+	ETC_SETTING_LTE_PROBE_MODE_OFFSET_SEC_ID,
 	ETC_CALIBRATION_OFFSET_ID = 0xFF0,
 	ETC_CALIBRATION_RAWHIGH_ID,
 	ETC_CALIBRATION_REF_ID,
@@ -116,6 +117,8 @@ struct etc_config {
 	uint16_t tx_delay_msec;
 	uint16_t rx_duration_secs;
 	uint16_t alarm_threshold;
+	uint16_t lora_probe_offset_secs;
+	uint16_t lte_probe_offset_secs;
 };
 
 union etc_device_record {

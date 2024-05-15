@@ -38,8 +38,8 @@ static uint16_t ram_nack_record_id;
 static enum etc_device_job logger_job = ETC_DEVICE_JOB_LOG;
 static enum etc_transmit_sub_job transmit_sub_job = ETC_TRANSMIT_NORMAL;
 static uint16_t tx_logger_lora_offset_mins = 0;
-static uint16_t tx_no_probe_offset_mins = 0;
 static time_t device_next_transmit_s = 0;
+
 static struct etc_device_relay_record_stat relay_record_stat;
 static struct etc_device_relay_record_stat *p_relay_stat = &relay_record_stat;
 static uint8_t etc_relay_record_buf[ETC_DEVICE_RELAY_BUF_SIZE];
@@ -158,7 +158,6 @@ void etc_device_init(void)
 	/* Logger Lora mode will sync with interval quarter hour */
 	tx_logger_lora_offset_mins = (uint16_t)((sys_rand32_get() % 4) *
 		ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE);
-	tx_no_probe_offset_mins = (uint16_t)(sys_rand32_get() % 60);
 	if (dev_mode == ETC_DEVICE_MODE_RELAY) {
 		dev_str = "Relay";
 	} else if (dev_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
@@ -389,7 +388,13 @@ uint16_t etc_device_get_tx_logger_lora_offset_mins(void)
 
 uint16_t etc_device_get_tx_no_probe_offset_mins(void) 
 {
-	return tx_no_probe_offset_mins;
+	uint16_t probe_offset = 0;
+	if (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
+		probe_offset = etc_get_lora_probe_offset_secs();
+	} else if (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
+		probe_offset = etc_get_lte_probe_offset_secs();
+	}
+	return (probe_offset / 60);
 }
 
 int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len)

@@ -25,6 +25,8 @@ enum etc_serial_number_types {
 #define ETC_SETTING_WAKEUP_EARLY_SECS_DEFAULT	    20
 #define ETC_SETTING_RX_DURATION_SECS_DEFAULT	    120
 #define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    0
+#define ETC_SETTING_LORA_PROBE_OFFSET_SECS_DEFAULT	900
+#define ETC_SETTING_LTE_PROBE_OFFSET_SECS_DEFAULT	900
 
 #define ETC_SETTING_POWER_MODE_MIN		ETC_POWER_MODE_INTERVAL
 #define ETC_SETTING_LOG_INTERVAL_SECS_MAX	86400
@@ -35,6 +37,7 @@ enum etc_serial_number_types {
 #define ETC_SETTING_TX_DELAY_MSEC_MAX		29500
 #define ETC_SETTING_RX_DURATION_SECS_MAX	120
 #define ETC_SETTING_ALARM_THRESHOLD_MAX		120
+#define ETC_SETTING_LTE_PROBE_OFFSET_SECS_MAX	3540
 
 #define ETC_SETTING_POWER_MODE_MAX		ETC_POWER_MODE_PROBE
 #define ETC_SETTING_LOG_INTERVAL_SECS_MIN	60
@@ -46,6 +49,7 @@ enum etc_serial_number_types {
 #define ETC_SETTING_TX_DELAY_MSEC_MIN_LTE	5000
 #define ETC_SETTING_RX_DURATION_SECS_MIN	30
 #define ETC_SETTING_ALARM_THRESHOLD_MIN		-20
+#define ETC_SETTING_LTE_PROBE_OFFSET_SECS_MIN	0
 
 #define ETC_SETTING_TX_PROBE_SECS 21600
 
@@ -88,7 +92,8 @@ int etc_set_rx_duration_secs(uint16_t second);
 int etc_set_alarm_threshold(uint16_t threshold);
 int etc_set_serial_number_type(enum etc_serial_number_types type);
 int etc_set_relay_iccid(const char *iccid);
-
+int etc_set_lora_probe_offset_secs(uint16_t second);
+int etc_set_lte_probe_offset_secs(uint16_t second);
 /**
  * Set the Rr value for temperature compensation
  *
@@ -133,7 +138,8 @@ uint16_t etc_get_tx_delay_msec(void);
 uint16_t etc_get_rx_duration_secs(void);
 uint16_t etc_get_alarm_threshold(void);
 int etc_get_relay_iccid(char *buf, int buf_len);
-
+uint16_t etc_get_lora_probe_offset_secs(void);
+uint16_t etc_get_lte_probe_offset_secs(void);
 /**
  * Get the Rr value for temperature compensation
  *

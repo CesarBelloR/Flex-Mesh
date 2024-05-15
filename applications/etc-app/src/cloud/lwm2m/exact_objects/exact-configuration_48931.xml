@@ -4,9 +4,9 @@
 		<Name>EXACT Configuration</Name>
 		<Description1 />
 		<ObjectID>48931</ObjectID>
-		<ObjectURN>urn:oma:lwm2m:x:48931:1.1</ObjectURN>
+		<ObjectURN>urn:oma:lwm2m:x:48931:1.2</ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.1</ObjectVersion>
+		<ObjectVersion>1.2</ObjectVersion>
 		<MultipleInstances>Single</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -120,6 +120,26 @@ How long Relay stays in RX mode.  Only valid for DEVICE_MODE = 0.]]></Descriptio
 				<RangeEnumeration>21600..86400</RangeEnumeration>
 				<Units>s</Units>
 				<Description><![CDATA[Frequency device wakes up, transmit stored NACK data to cloud via Cellular or Lora in Probe Mode]]></Description>
+			</Item>
+			<Item ID="11">
+				<Name>LORA_PROBE_OFFSET</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0..2700</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[The probe mode offsets in second for Lora Logger (0, 900, 1800, 2700)]]></Description>
+			</Item>
+			<Item ID="12">
+				<Name>LTE_PROBE_OFFSET</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0..3540</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[The probe mode offsets in second for LTE Logger (0, 3540)]]></Description>
 			</Item>
 		</Resources>
 		<Description2 />

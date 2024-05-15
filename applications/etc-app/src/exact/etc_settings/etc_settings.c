@@ -297,6 +297,20 @@ int etc_settings_init(void)
 		etc_set_rx_duration_secs(ETC_SETTING_RX_DURATION_SECS_DEFAULT);
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_LORA_PROBE_MODE_OFFSET_SEC_ID, 
+				      &etc_cfg.lora_probe_offset_secs,
+				      sizeof(etc_cfg.lora_probe_offset_secs));
+	if (ret) {
+		etc_set_lora_probe_offset_secs(ETC_SETTING_LORA_PROBE_OFFSET_SECS_DEFAULT);
+	}
+
+	ret = etc_device_read_setting(ETC_SETTING_LTE_PROBE_MODE_OFFSET_SEC_ID, 
+				      &etc_cfg.lte_probe_offset_secs,
+				      sizeof(etc_cfg.lte_probe_offset_secs));
+	if (ret) {
+		etc_set_lte_probe_offset_secs(ETC_SETTING_LTE_PROBE_OFFSET_SECS_DEFAULT);
+	}
+
 	ret = etc_device_read_setting(ETC_SETTING_WAKEUP_EARLY_SECS_ID, &etc_cfg.wake_early_secs,
 				      sizeof(etc_cfg.wake_early_secs));
 	if (ret) {
@@ -394,7 +408,12 @@ void etc_settings_update(const struct etc_config *new_config)
 	if (etc_cfg.rx_duration_secs != new_config->rx_duration_secs) {
 		rc = etc_set_rx_duration_secs(new_config->rx_duration_secs);
 	} 
-
+	if (etc_cfg.lora_probe_offset_secs != new_config->lora_probe_offset_secs) {
+		rc = etc_set_lora_probe_offset_secs(new_config->lora_probe_offset_secs);
+	}
+	if (etc_cfg.lte_probe_offset_secs != new_config->lte_probe_offset_secs) {
+		rc = etc_set_lte_probe_offset_secs(new_config->lte_probe_offset_secs);
+	}
 done:
 	if (rc == 1) {
 		LOG_DBG("No value changed");
@@ -721,6 +740,51 @@ int etc_set_relay_iccid(const char* iccid) {
 	return 0;
 }
 
+int etc_set_lora_probe_offset_secs(uint16_t second) 
+{
+	if (!((second == 0) || (second == 900) || (second == 1800) || (second == 2700))) {
+		return -EINVAL;
+	}
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.lora_probe_offset_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	etc_cfg.lora_probe_offset_secs = second;
+	rc = etc_device_write_setting(ETC_SETTING_LORA_PROBE_MODE_OFFSET_SEC_ID,
+				      &etc_cfg.lora_probe_offset_secs,
+				      sizeof(etc_cfg.lora_probe_offset_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
+int etc_set_lte_probe_offset_secs(uint16_t second) 
+{
+	if ((second > ETC_SETTING_LTE_PROBE_OFFSET_SECS_MAX) ||
+	    (second < ETC_SETTING_LTE_PROBE_OFFSET_SECS_MIN)) {
+		return -EINVAL;
+	}
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.lte_probe_offset_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	etc_cfg.lte_probe_offset_secs = second;
+	rc = etc_device_write_setting(ETC_SETTING_LTE_PROBE_MODE_OFFSET_SEC_ID,
+				      &etc_cfg.lte_probe_offset_secs,
+				      sizeof(etc_cfg.lte_probe_offset_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 int etc_set_rr_value(int value) 
 {
 	int rc = 0;
@@ -856,6 +920,24 @@ int etc_get_relay_iccid(char *buf, int buf_len)
 	memcpy(buf, saved_relay_iccid, copy_size);
 	k_mutex_unlock(&setting_mutex);
 	return copy_size;
+}
+
+uint16_t etc_get_lora_probe_offset_secs(void)
+{
+	uint16_t offset = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	offset = etc_cfg.lora_probe_offset_secs;
+	k_mutex_unlock(&setting_mutex);
+	return offset;
+}
+
+uint16_t etc_get_lte_probe_offset_secs(void)
+{
+	uint16_t offset = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	offset = etc_cfg.lte_probe_offset_secs;
+	k_mutex_unlock(&setting_mutex);
+	return offset;
 }
 
 int etc_get_rr_value(void)
