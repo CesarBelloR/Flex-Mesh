@@ -30,6 +30,8 @@
 #define IMG_PUBKEY_ID_LEN	4
 /* Max element in record for Relay */
 #define ETC_RELAY_RECORD_MAX_ELEMENT (CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY)
+/* Define a mask for relay data ready */
+#define ETC_DEVICE_RELAY_DATA_READY_MASK (0x80000000U)
 
 /* Define an enum to describe the job of logger currently */
 enum etc_device_job {
@@ -494,5 +496,26 @@ int etc_device_set_location(struct etc_gnss_data *data);
  * @retval <0 error
 */
 int etc_device_retrieve_location(struct etc_gnss_data *data);
+
+/**
+ * @brief Writes a sensor record to the relay.
+ * 
+ * This function writes the sensor data to RAM data for relay
+ * 
+ * @param sensor Pointer to the sensor_data that contains the sensor to be set
+ */
+void etc_device_relay_write_record_sensor(struct sensor_data *sensor);
+
+/**
+ * @brief Reads a sensor record from the relay device.
+ * 
+ * This function attempts to read latest sensor data for relay device.
+ * 
+ * @param record Pointer to a union etc_device_record where the read sensor data will be stored.
+ * 
+ * @retval 0 success
+ * @retval <0 error
+ */
+int etc_device_relay_read_record_sensor(union etc_device_record* record);
 
 #endif /* ETC_DEVICE_H_ */

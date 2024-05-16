@@ -564,9 +564,20 @@ static void relay_data_encode(void)
 			if (ret) {
 				LOG_WRN("Error populating data codec");
 				return;
-			} else {
-				data_send(DATA_EVT_DATA_SEND, &codec);
 			}
+
+			union etc_device_record record;
+			ret = etc_device_relay_read_record_sensor(&record);
+			if (ret == 0) {
+				modem_dynamic.rsrp = quectel_bg95_get_rsrp();
+				modem_dynamic.qual = quectel_bg95_get_rsrq();
+				modem_dynamic.queued = 1;
+				ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
+				if (ret != 0) {
+					LOG_WRN("Error populating data codec");
+				}
+			}	
+			data_send(DATA_EVT_DATA_SEND, &codec);
 		} else {
 			LOG_ERR("Can't prepare package for relay");
 		}
@@ -701,7 +712,7 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
 		if (etc_device_is_relay()) {
-			/* No action required */
+			etc_device_relay_write_record_sensor(msg->module.sensor.data.sensors);
 		} else {
 			etc_device_write_record_sensor(msg->module.sensor.data.sensors);
 			uint8_t bat_percent = 

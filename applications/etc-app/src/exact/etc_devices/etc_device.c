@@ -27,6 +27,7 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE (15)
 
 static enum etc_device_mode etc_device_current_mode;
+static union etc_device_record current_relay_data_sensor;
 extern struct etc_device_record_table *p_etc_device_record_table;
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len);
 static int etc_nvs_read(uint16_t element_id, void *data, size_t len);
@@ -90,6 +91,7 @@ void etc_device_nvs_init(void)
 
 	if (etc_device_current_mode == ETC_DEVICE_MODE_RELAY) {
 		etc_nvs_reset_relay_stat();
+		memset(&current_relay_data_sensor, 0, sizeof(current_relay_data_sensor));
 	}
 
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
@@ -506,6 +508,28 @@ int etc_device_retrieve_location(struct etc_gnss_data *data)
 
 	rc = etc_device_read_setting(ETC_GNSS_LAST_LOCATION, data, sizeof(*data));
 	return rc;
+}
+
+void etc_device_relay_write_record_sensor(struct sensor_data *sensor) 
+{
+	LOG_DBG("Write sensor data for relay");
+	int64_t time_start = k_uptime_get();
+	current_relay_data_sensor.battery = (float)sensor->battery_mV / 1000.0;
+	current_relay_data_sensor.flag = (uint32_t)(sensor->battery_status);
+	current_relay_data_sensor.flag |= (uint32_t)(ETC_DEVICE_RELAY_DATA_READY_MASK);
+	current_relay_data_sensor.timestamp = (uint32_t)sensor->timestamp;
+	for (uint8_t i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+		current_relay_data_sensor.sensor[i] = sensor->sensor[i];
+	}
+}
+
+int etc_device_relay_read_record_sensor(union etc_device_record* record) {
+	if (current_relay_data_sensor.flag & ETC_DEVICE_RELAY_DATA_READY_MASK) {
+		current_relay_data_sensor.flag &= ~ETC_DEVICE_RELAY_DATA_READY_MASK;
+		memcpy(record, &current_relay_data_sensor, sizeof(*record));
+		return 0;
+	}
+	return -EIO;
 }
 
 #ifdef CONFIG_SHELL
