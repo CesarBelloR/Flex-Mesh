@@ -608,6 +608,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 			   (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET) ||
 			   ((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
 			   (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))) {
+			need_interval_tx_send = true;
 			data_encode_for_cloud(false);
 		} else if (etc_device_is_relay()) {
 			reset_send_status(&send_status);
