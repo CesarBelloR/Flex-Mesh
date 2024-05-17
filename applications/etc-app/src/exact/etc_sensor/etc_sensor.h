@@ -21,7 +21,7 @@ enum etc_sensor_status {
 
 typedef void(*etc_sensor_evt_handler_t)(enum etc_sensor_status status);
 
-static inline bool etc_sensor_rr_value_is_valid(int rr_value) {
+static inline bool etc_sensor_rr_value_is_valid(uint16_t rr_value) {
 	if ((rr_value >= SENSOR_RR_VALID_MIN_VALUE) && 
 	    (rr_value <= SENSOR_RR_VALID_MAX_VALUE)) {
 		return true;

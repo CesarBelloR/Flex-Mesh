@@ -217,6 +217,6 @@ uint16_t etc_get_gnss_timeout_secs(void);
  *
  * @return The Rr value that stores in NVS @ref ETC_ADC_TEMPERATURE_REFERENCE
  */
-int etc_get_rr_value(void);
+uint16_t etc_get_rr_value(void);
 
 #endif /* ETC_SETTINGS_H__ */

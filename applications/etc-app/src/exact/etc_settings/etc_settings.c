@@ -31,7 +31,7 @@ static char tmp_saved_value[ETC_SETTINGS_DEVICE_ID_LEN];
 static uint8_t saved_psk[ETC_SETTING_PSK_LEN];
 static uint8_t saved_psk_len;
 static int flag_etc_config_load;
-static int saved_rr_value;
+static uint16_t saved_rr_value;
 static enum etc_serial_number_types saved_serial_number_type;
 struct etc_config etc_cfg;
 
@@ -998,9 +998,9 @@ uint16_t etc_get_lte_probe_offset_secs(void)
 	return offset;
 }
 
-int etc_get_rr_value(void)
+uint16_t etc_get_rr_value(void)
 {
-	int rr_value = 0;
+	uint16_t rr_value = 0;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	rr_value = saved_rr_value;
 	k_mutex_unlock(&setting_mutex);
@@ -1355,6 +1355,18 @@ static int cmd_set_gnss_timeout(const struct shell *shell, size_t argc, char **a
 	return 0;
 }
 
+static int cmd_set_rr_value(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		if (etc_set_rr_value((uint16_t)atol(argv[1])) == 0) {
+			shell_print(shell, "OK");
+			return 0;
+		}
+	}
+	shell_error(shell, "Invalid parameter for setting Rr value");
+	return 0;
+}
+
 static int cmd_get_device(const struct shell *shell, size_t argc, char **argv)
 {
 	enum etc_device_mode mode = etc_get_device_mode();
@@ -1453,6 +1465,13 @@ static int cmd_get_gnss_timeout(const struct shell *shell, size_t argc, char **a
 	return 0;
 }
 
+static int cmd_get_rr_value(const struct shell *shell, size_t argc, char **argv)
+{
+	uint16_t rr_value = etc_get_rr_value();
+	shell_print(shell, "Rr value: %u", rr_value);
+	return 0;
+}
+
 static int cmd_factory_reset(const struct shell *shell, size_t argc, char **argv)
 {
 	int rc = etc_device_erase_cfg();
@@ -1494,6 +1513,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(set_alarm_threshold, NULL, "Set alarm threshold", cmd_set_alarm_threshold),
 	SHELL_CMD(set_gnss_interval, NULL, "Set GNSS interval in seconds", cmd_set_gnss_interval),
 	SHELL_CMD(set_gnss_timeout, NULL, "Set GNSS timeout in seconds", cmd_set_gnss_timeout),
+	SHELL_CMD(set_adc_temp_ref, NULL, "Set the ADC temperature reference value (Rr)", cmd_set_rr_value),
 	SHELL_CMD(get_device, NULL, "Get device mode", cmd_get_device),
 	SHELL_CMD(get_power, NULL, "Get power mode", cmd_get_power),
 	SHELL_CMD(get_alarm_direction, NULL, "Get alarm direction", cmd_get_alarm_direction),
@@ -1511,6 +1531,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(get_alarm_threshold, NULL, "Get alarm threshold", cmd_get_alarm_threshold),
 	SHELL_CMD(get_gnss_interval, NULL, "Get GNSS interval in seconds", cmd_get_gnss_interval),
 	SHELL_CMD(get_gnss_timeout, NULL, "Get GNSS timeout in seconds", cmd_get_gnss_timeout),
+	SHELL_CMD(get_adc_temp_ref, NULL, "Get the ADC temperature reference value (Rr)", cmd_get_rr_value),
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
 SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);

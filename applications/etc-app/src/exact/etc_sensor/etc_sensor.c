@@ -67,7 +67,7 @@ static float sensor_digital_humid;
 static int8_t sensor_digital_humid_port_index;
 static int sensor_ambient_raw_adc = 0;
 static int sensor_battery_raw_adc = 0;
-static int sensor_r_hw_raw_adc = 0;
+static uint16_t sensor_r_hw_raw_adc = 0;
 static struct etc_sensor_adc_calibration_info etc_sensor_adc_calibration_info = {0x00};
 static etc_sensor_evt_handler_t sensor_evt_handler;
 static enum etc_sensor_status last_sensor_status = SENSOR_CONNECTED;
@@ -304,15 +304,36 @@ static void etc_sensor_run_digital_sample(void)
 	etc_sensor_gpios_one_wire_disable();
 }
 
+static uint16_t etc_sensor_temperature_compensation(uint16_t raw_adc) 
+{
+	uint16_t rr_value = etc_get_rr_value();
+	uint16_t compensated_adc = raw_adc;
+	if (!etc_sensor_rr_value_is_valid(rr_value)) {
+		LOG_DBG("No compensation applied. raw_adc: %u", compensated_adc);
+		return compensated_adc;
+	}
+
+	if (etc_sensor_rr_value_is_valid(sensor_r_hw_raw_adc)) {
+		compensated_adc = raw_adc + 0.6 * (rr_value - sensor_r_hw_raw_adc) * raw_adc /
+				  sensor_r_hw_raw_adc;
+		LOG_DBG("Applying compensation. raw: %u, Rr: %u, R: %u, result: %u",
+			raw_adc, rr_value, sensor_r_hw_raw_adc, compensated_adc);
+	}
+	return compensated_adc;
+}
+
 static int etc_sensor_get_calibrated_adc(int raw_adc)
 {
 	int calibrated_adc = raw_adc;
+	
 	if (etc_sensor_adc_calibration_info.loaded) {
 		calibrated_adc = (int)(((float)(raw_adc)-etc_sensor_adc_calibration_info.offset) /
 				       (etc_sensor_adc_calibration_info.high -
 					etc_sensor_adc_calibration_info.offset) *
 				       etc_sensor_adc_calibration_info.ref);
 	}
+	calibrated_adc = etc_sensor_temperature_compensation(calibrated_adc);
+
 	return calibrated_adc;
 }
 
@@ -393,20 +414,6 @@ static void etc_sensor_load_calibration(void)
 	etc_sensor_adc_calibration_info.loaded = true;
 }
 
-static float etc_sensor_temperature_compensation(float temp) 
-{
-	int rr_value = etc_get_rr_value();
-	if (!etc_sensor_rr_value_is_valid(rr_value)) {
-		return temp;
-	}
-
-	if (etc_sensor_rr_value_is_valid(sensor_r_hw_raw_adc)) {
-		temp = temp + 0.6 * (float)(rr_value - sensor_r_hw_raw_adc) * temp /
-				      (float)sensor_r_hw_raw_adc;
-	}
-	return temp;
-}
-
 void etc_sensor_init(etc_sensor_evt_handler_t handler)
 {
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
@@ -472,7 +479,7 @@ float etc_sensor_get_probe_temp(enum sensor_input input)
 							1000.0f,
 						adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
 #endif
-		return etc_sensor_temperature_compensation(temp);
+		return temp;
 	} else if (list_sensor_type[input] == SENSOR_TYPE_DIGITAL) {
 		return list_sensor_digital_temp[input];
 	} else {
@@ -504,6 +511,8 @@ void etc_sensor_run_acquisition(void)
 	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	/* Enable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_enable();
+	/* Retrieve HW_INF (R) value used for ADC temperature compensation */
+	sensor_r_hw_raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_HW_VER);
 	/* Run detection sensor */
 	etc_sensor_run_detection();
 	/* Run sample for ambient ADC */
@@ -511,7 +520,6 @@ void etc_sensor_run_acquisition(void)
 	/* Run sample for battery */
 	sensor_battery_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_BATTERY));
 	/* Run sample for HW sensor */
-	sensor_r_hw_raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
 	/* Run sample sensor for all ports - analog part*/
 	etc_sensor_run_analog_sample();
 	/* Run sample sensor for all ports - digital part */
@@ -524,9 +532,10 @@ void etc_sensor_run_acquisition(void)
 	etc_sensor_probe_check();
 	/* Populate Rr value if needed */
 	if (!etc_sensor_rr_value_is_valid(etc_get_rr_value())) {
+		LOG_DBG("rr val: %u", sensor_r_hw_raw_adc);
 		if (etc_sensor_temp_ambient_for_rr_is_valid(etc_sensor_get_ambient_temp()) && 
-		    (etc_sensor_rr_value_is_valid(sensor_ambient_raw_adc))) {
-			etc_set_rr_value(sensor_ambient_raw_adc);
+		    (etc_sensor_rr_value_is_valid(sensor_r_hw_raw_adc))) {
+			etc_set_rr_value(sensor_r_hw_raw_adc);
 		}
 	}
 }
