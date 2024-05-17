@@ -404,6 +404,13 @@ static void data_send_buf(enum data_event_type event, uint8_t* buf, uint8_t buf_
 }
 #endif
 
+static void data_encode_prepare_modem_info(struct data_modem_dynamic *modem_info) 
+{
+	modem_info->rsrp = quectel_bg95_get_rsrp();
+	modem_info->qual = quectel_bg95_get_rsrq();
+	modem_info->queued = 1;
+}
+
 /**
  * Encode the current LwM2M data to be sent in a message.
  * 
@@ -448,9 +455,7 @@ static void data_encode_for_cloud(bool split)
 		data_codec_recover_data(&codec, &codec_backup);
 	} else {
 		bool reclaim_status;
-		modem_dynamic.rsrp = quectel_bg95_get_rsrp();
-		modem_dynamic.qual = quectel_bg95_get_rsrq();
-		modem_dynamic.queued = 1;
+		data_encode_prepare_modem_info(&modem_dynamic);
 
 		send_status.record_id = etc_device_read_record(&record, 
 							       &reclaim_status);
@@ -566,13 +571,11 @@ static void relay_data_encode(void)
 				return;
 			}
 
-			union etc_device_record record;
-			ret = etc_device_relay_read_record_sensor(&record);
+			union etc_device_record record_sensor;
+			ret = etc_device_relay_read_record_sensor(&record_sensor);
 			if (ret == 0) {
-				modem_dynamic.rsrp = quectel_bg95_get_rsrp();
-				modem_dynamic.qual = quectel_bg95_get_rsrq();
-				modem_dynamic.queued = 1;
-				ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
+				data_encode_prepare_modem_info(&modem_dynamic);
+				ret = data_codec_prepare_cloud_packet(&codec, &record_sensor, &modem_dynamic);
 				if (ret != 0) {
 					LOG_WRN("Error populating data codec");
 				}

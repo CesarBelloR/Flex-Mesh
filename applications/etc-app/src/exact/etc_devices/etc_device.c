@@ -51,6 +51,8 @@ static enum gnss_location_request_status gnss_request;
 K_MUTEX_DEFINE(gnss_request_mutex);
 static time_t time_last_gnss_request;
 
+K_MUTEX_DEFINE(relay_data_sensor_mtx);
+
 /* The public key ID of the current (signed) image. The public key ID 
  * is the first 4 bytes of the public key hash. 
  */
@@ -513,7 +515,7 @@ int etc_device_retrieve_location(struct etc_gnss_data *data)
 void etc_device_relay_write_record_sensor(struct sensor_data *sensor) 
 {
 	LOG_DBG("Write sensor data for relay");
-	int64_t time_start = k_uptime_get();
+	k_mutex_lock(&relay_data_sensor_mtx, K_FOREVER);
 	current_relay_data_sensor.battery = (float)sensor->battery_mV / 1000.0;
 	current_relay_data_sensor.flag = (uint32_t)(sensor->battery_status);
 	current_relay_data_sensor.flag |= (uint32_t)(ETC_DEVICE_RELAY_DATA_READY_MASK);
@@ -521,15 +523,19 @@ void etc_device_relay_write_record_sensor(struct sensor_data *sensor)
 	for (uint8_t i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		current_relay_data_sensor.sensor[i] = sensor->sensor[i];
 	}
+	k_mutex_unlock(&relay_data_sensor_mtx);
 }
 
 int etc_device_relay_read_record_sensor(union etc_device_record* record) {
+	int rc = -EIO;
+	k_mutex_lock(&relay_data_sensor_mtx, K_FOREVER);
 	if (current_relay_data_sensor.flag & ETC_DEVICE_RELAY_DATA_READY_MASK) {
 		current_relay_data_sensor.flag &= ~ETC_DEVICE_RELAY_DATA_READY_MASK;
 		memcpy(record, &current_relay_data_sensor, sizeof(*record));
-		return 0;
+		rc = 0;
 	}
-	return -EIO;
+	k_mutex_unlock(&relay_data_sensor_mtx);
+	return rc;
 }
 
 #ifdef CONFIG_SHELL
