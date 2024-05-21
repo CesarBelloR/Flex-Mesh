@@ -265,6 +265,11 @@ int etc_device_write_relay_data(struct etc_device_relay_record *record);
  */
 int etc_device_read_relay_data(struct etc_device_relay_record *record);
 
+/**
+ * @brief Sync the relay read index from queue buffer.
+ */
+void etc_device_sync_relay_data(void);
+
 /** 
  * @brief the next-in-line (unack'd) measurement record. If a reclaim is active,
  * previously ack'd records that are part of the reclaim period will be returned

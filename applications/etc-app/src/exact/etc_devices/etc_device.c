@@ -305,12 +305,17 @@ int etc_device_read_relay_data(struct etc_device_relay_record *record)
 	}
 	memcpy(record, &relay_record_list[p_relay_stat->read_index], 
 		sizeof(*record));
+	k_mutex_unlock(&etc_relay_record_mutex);
+	return 0;
+}
+
+void etc_device_sync_relay_data(void) {
+	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
 	if (++p_relay_stat->read_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
 		p_relay_stat->read_index = 0;
 	}
 	p_relay_stat->number_record -= 1;
 	k_mutex_unlock(&etc_relay_record_mutex);
-	return 0;
 }
 
 int etc_device_set_ack_record(int record_id)

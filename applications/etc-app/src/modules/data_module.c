@@ -741,6 +741,7 @@ static void on_all_states(struct data_msg_data *msg)
 			reset_send_status(&send_status);
 			data_codec_clear_data(&codec);
 			if (state == STATE_CLOUD_CONNECTED) {
+				etc_device_sync_relay_data();
 				relay_data_encode();
 			}
 		} else {
