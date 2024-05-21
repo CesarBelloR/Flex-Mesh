@@ -456,11 +456,15 @@ retry_recv:
 				message.record.sensor[1], message.record.sensor[2], message.record.sensor[3],
 				message.record.sensor[4], message.record.sensor[5]);
 			if (etc_common_is_packet_from_parent(relay_iccid, message.record.relay_id)) {
-				/* Send ACK message */
-				module_lora_prepare_packet(message.record.logger_id, relay_iccid);
-			}
-			etc_device_write_relay_data(&message.record);
-			lora_data_send();
+				ret = etc_device_write_relay_data(&message.record);
+				if (ret == 0) {
+					/* Send ACK message */
+					module_lora_prepare_packet(message.record.logger_id, relay_iccid);
+					lora_data_send();
+				}
+			} else {
+				LOG_WRN("Unknow packet from parent");
+			}	
 		} else {
 			LOG_WRN("Unknown start message");
 		}

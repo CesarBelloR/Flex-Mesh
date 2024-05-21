@@ -283,7 +283,10 @@ int etc_device_write_relay_data(struct etc_device_relay_record *record)
 		etc_mflt_metrics_relay_buffer_entries(p_relay_stat->number_record);
 	} else {
 		p_relay_stat->flag_over_flow = true;
-		LOG_WRN("relay buffer overflow");
+		k_mutex_unlock(&etc_relay_record_mutex);
+		LOG_WRN("Relay buffer overflow %d %d %d", p_relay_stat->number_record, 
+			p_relay_stat->write_index, p_relay_stat->read_index);
+		return -ENOMEM;
 	}
 	if (++p_relay_stat->write_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
 		p_relay_stat->write_index = 0;
