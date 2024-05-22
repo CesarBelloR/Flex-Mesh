@@ -45,4 +45,24 @@ int quectel_bg95_turn_on_gnss(struct modem_context *mctx, struct modem_data *mda
 */
 int quectel_bg95_turn_off_gnss(struct modem_context *mctx, struct modem_data *mdata);
 
+/**
+ * Suspend GNSS. This runs a suspend on the gnss_generic_nmea device that uses
+ * the modem's GNSS UART.
+ * 
+ * @retval 0 success
+ * @retval -ENOTSUP PM not enabled
+ * @retval <0 error
+*/
+int pm_suspend_gnss(void);
+
+/**
+ * Resume GNSS. This runs a resume on the gnss_generic_nmea device that uses
+ * the modem's GNSS UART.
+ * 
+ * @retval 0 success
+ * @retval -ENOTSUP PM not enabled
+ * @retval <0 error
+*/
+int pm_resume_gnss(void);
+
 #endif

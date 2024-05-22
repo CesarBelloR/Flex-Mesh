@@ -1,0 +1,44 @@
+From 465a6a0ec5f2611b226b34a6588786cc5f6585b0 Mon Sep 17 00:00:00 2001
+From: Andi Gerl <andi.gerl@exacttechnology.com>
+Date: Fri, 24 May 2024 18:18:49 -0400
+Subject: [PATCH] UART: NRF: Power cycle UART0 after suspending to fix issue
+ with increased sleep current
+
+Also fully re-initialize UART0 on resume. Peripheral needs to be re-initialized after
+power cycling.
+---
+ drivers/serial/uart_nrfx_uarte.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/serial/uart_nrfx_uarte.c b/drivers/serial/uart_nrfx_uarte.c
+index 6e1ecfadfd8..0a56b06e67c 100644
+--- a/drivers/serial/uart_nrfx_uarte.c
++++ b/drivers/serial/uart_nrfx_uarte.c
+@@ -1856,6 +1856,11 @@ static int uarte_nrfx_pm_action(const struct device *dev,
+ 
+ 	switch (action) {
+ 	case PM_DEVICE_ACTION_RESUME:
++		if (cfg->uarte_regs == NRF_UARTE0) {
++			return uarte_instance_init(dev,
++						   IS_ENABLED(CONFIG_UART_0_INTERRUPT_DRIVEN));
++		}
++
+ 		if (cfg->flags & UARTE_CFG_FLAG_GPIO_MGMT) {
+ 			ret = pinctrl_apply_state(cfg->pcfg,
+ 						  PINCTRL_STATE_DEFAULT);
+@@ -1937,6 +1942,12 @@ static int uarte_nrfx_pm_action(const struct device *dev,
+ 			}
+ 		}
+ 
++		/* Work around for issue with increased sleep current on UART0 */
++		if (cfg->uarte_regs == NRF_UARTE0) {
++			*(volatile uint32_t *)0x40002FFC = 0;
++			*(volatile uint32_t *)0x40002FFC;
++			*(volatile uint32_t *)0x40002FFC = 1;
++		}
+ 		break;
+ 	default:
+ 		return -ENOTSUP;
+-- 
+2.45.1
+

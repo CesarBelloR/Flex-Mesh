@@ -12,7 +12,7 @@ LOG_MODULE_REGISTER(board, LOG_LEVEL_INF);
 #include <nrfx_twim.h>
 #include <hal/nrf_gpio.h>
 
-static void uart_disconnet_pins(NRF_UARTE_Type *p_reg)
+static void uart_disconnect_pins(NRF_UARTE_Type *p_reg)
 {
 	/* Reset pins to default states */
 	uint32_t txd;
@@ -76,7 +76,6 @@ static void uninit_i2c(NRF_TWIM_Type *p_twim)
 
 static int peripheral_reset(void)
 {
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), disabled)
 	/* Disable UART0 when application starts, if disabled in device tree.
 	 * This fixes an issue with an older bootloader version where UART0
 	 * is initialized and enabled.
@@ -86,8 +85,7 @@ static int peripheral_reset(void)
 	nrf_uarte_event_clear(p_reg, NRF_UARTE_EVENT_TXSTOPPED);
 	nrf_uarte_task_trigger(p_reg, NRF_UARTE_TASK_STOPTX);
 	nrf_uarte_disable(p_reg);
-	uart_disconnet_pins(p_reg);
-#endif
+	uart_disconnect_pins(p_reg);
 
 	/* Disable potentially previously initialized I2C interfaces */
 	uninit_i2c(NRF_TWIM0);

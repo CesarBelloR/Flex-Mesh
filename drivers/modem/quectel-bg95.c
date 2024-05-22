@@ -837,6 +837,11 @@ static int pm_suspend_uart(void)
 	}
 
 	LOG_DBG("UART suspended");
+
+#ifdef CONFIG_MODEM_QUECTEL_BG95_M3_GNSS
+	/* Suspend GNSS if enabled */
+	pm_suspend_gnss();
+#endif
 	
 	return 0;
 }

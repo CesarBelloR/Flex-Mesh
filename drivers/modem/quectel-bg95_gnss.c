@@ -2,8 +2,17 @@
 
 #include "quectel-bg95_gnss.h"
 
+#ifdef CONFIG_PM_DEVICE
+#include <zephyr/kernel.h>
+
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device.h>
+#endif
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(modem_quectel_bg95_gnss, CONFIG_MODEM_LOG_LEVEL);
+
+static const struct device *modem_gnss_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95_gnss));
 
 /* Commands sent to the modem to set it up at boot time. */
 static const struct setup_cmd gnss_setup_cmds[] = {
@@ -49,6 +58,7 @@ int quectel_bg95_turn_on_gnss(struct modem_context *mctx, struct modem_data *mda
 	if (ret < 0) {
 		LOG_ERR("%s err %d", send_cmd, ret);
 	} else {
+		pm_resume_gnss();
 		gnss_data.status = GNSS_ON;
 	}
 	
@@ -70,4 +80,48 @@ int quectel_bg95_turn_off_gnss(struct modem_context *mctx, struct modem_data *md
 	}
 	
 	return ret;
+}
+
+int pm_resume_gnss(void)
+{
+#ifdef CONFIG_PM_DEVICE
+	int ret;
+
+	ret = pm_device_action_run(modem_gnss_dev, PM_DEVICE_ACTION_RESUME);
+	if (ret)
+	{
+		if (ret == -EALREADY) {
+			LOG_WRN("GNSS already resumed");
+			return 0;
+		}
+		LOG_ERR("Can't resume GNSS device: %d", ret);
+		return ret;
+	}
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}
+
+int pm_suspend_gnss(void)
+{
+#ifdef CONFIG_PM_DEVICE
+	int ret;
+
+	ret = pm_device_action_run(modem_gnss_dev, PM_DEVICE_ACTION_SUSPEND);
+	if (ret)
+	{
+		if (ret == -EALREADY) {
+			LOG_WRN("GNSS already suspended");
+			return 0;
+		}
+		LOG_ERR("Can't suspend GNSS device: %d", ret);
+		return ret;
+	}
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
 }
