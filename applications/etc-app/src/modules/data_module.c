@@ -403,7 +403,6 @@ static void data_send_buf(enum data_event_type event, uint8_t* buf, uint8_t buf_
 	APP_EVENT_SUBMIT(module_event);
 }
 #endif
-
 static void data_encode_prepare_modem_info(struct data_modem_dynamic *modem_info) 
 {
 	modem_info->rsrp = quectel_bg95_get_rsrp();
@@ -411,15 +410,78 @@ static void data_encode_prepare_modem_info(struct data_modem_dynamic *modem_info
 	modem_info->queued = 1;
 }
 
+static int data_encode_for_relay() {
+	struct etc_device_relay_record record = {0x00};
+	int ret = etc_device_read_relay_data(&record);
+	if (!ret) {
+		int data_len = sizeof(data_relay_buf);
+		ret = etc_common_prepare_relay_legacy_data(&record, data_relay_buf, &data_len);
+		if (!ret) {
+			LOG_DBG("Relay message %s", data_relay_buf);
+			ret = data_codec_prepare_relay_packet(&codec, data_relay_buf, data_len,
+							      true);
+			if (ret) {
+				LOG_WRN("Error populating data codec");
+				return ret;
+			}
+
+			union etc_device_record record_sensor;
+			ret = etc_device_relay_read_record_sensor(&record_sensor);
+			if (ret == 0) {
+				data_encode_prepare_modem_info(&modem_dynamic);
+				ret = data_codec_prepare_cloud_packet(&codec, &record_sensor, &modem_dynamic);
+				if (ret != 0) {
+					LOG_WRN("Error populating data codec");
+					return ret;
+				}
+			}	
+		} else {
+			LOG_ERR("Can't prepare package for relay");
+			return ret;
+		}
+		return -EINPROGRESS;
+	}
+	return 0;
+}
+
+static int data_encode_for_not_relay() {
+	int ret = 0;
+	union etc_device_record record;
+	bool reclaim_status;	
+	data_encode_prepare_modem_info(&modem_dynamic);
+	send_status.record_id = etc_device_read_record(&record, &reclaim_status);
+	/* Only add a record if it is valid. */
+	if (send_status.record_id != 0) {
+		ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
+		if (ret != 0) {
+			LOG_WRN("Error populating data codec");
+		}
+	}
+
+	/* Update reclaim status */
+	if (reclaim_status != reclaim_active) {
+		if (reclaim_status) {
+			data_codec_update_reclaim_state(&codec, RECLAIM_IN_PROGRESS);
+			reclaim_active = true;
+		} else {
+			data_codec_update_reclaim_state(&codec, RECLAIM_SUCCESS);
+			reclaim_active = false;
+		}
+	} else if (send_status.record_id == 0) {
+		return 0;
+	}
+	return -EINPROGRESS;
+}
+
 /**
  * Encode the current LwM2M data to be sent in a message.
  * 
  * @param split If true, split new record for transmission, as it might
  * 		be too large to fit into one message.
+ * @param is_relay If true, the device is relay and sending relay msg. 
 */
-static void data_encode_for_cloud(bool split) 
+static void data_encode_for_cloud(bool split, bool is_relay) 
 {
-	union etc_device_record record;
 	int ret;
 
 	if (send_status.active_send) {
@@ -454,36 +516,13 @@ static void data_encode_for_cloud(bool split)
 		LOG_DBG("Recovering previously backed up data.");
 		data_codec_recover_data(&codec, &codec_backup);
 	} else {
-		bool reclaim_status;
-		data_encode_prepare_modem_info(&modem_dynamic);
-
-		send_status.record_id = etc_device_read_record(&record, 
-							       &reclaim_status);
-		/* Only add a record if it is valid. */
-		if (send_status.record_id != 0) {
-			ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
-			if (ret != 0) {
-				LOG_WRN("Error populating data codec");
-			}
+		if (is_relay) {
+			ret = data_encode_for_relay();
+		} else {
+			ret = data_encode_for_not_relay();
 		}
-
-		/* Update reclaim status */							   
-		if (reclaim_status != reclaim_active) {
-			if (reclaim_status) {
-				data_codec_update_reclaim_state(&codec,
-								RECLAIM_IN_PROGRESS);
-				reclaim_active = true;
-			} else {
-				data_codec_update_reclaim_state(&codec,
-								RECLAIM_SUCCESS);
-				reclaim_active = false;
-			}
-		} else if (send_status.record_id == 0) {
+		if (ret == 0) {
 			LOG_INF("No record found");
-			/* Return early and report data send complete if we don't
-			 * have any new data to send, so other modules can start
-			 * sending data.
-			 */
 			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
 			/* Trigger the OTA pending job */
 			lwm2m_firmware_start_pending_job();
@@ -549,49 +588,6 @@ static void data_encode_for_ble()
 #endif
 }
 
-static void relay_data_encode(void)
-{
-	if (send_status.active_send) {
-		LOG_WRN("Not sending new record."
-			"Record ID %u is already being sent.", send_status.record_id);
-		return;
-	}
-
-	struct etc_device_relay_record record = {0x00};
-	int ret = etc_device_read_relay_data(&record);
-	if (!ret) {
-		int data_len = sizeof(data_relay_buf);
-		ret = etc_common_prepare_relay_legacy_data(&record, data_relay_buf, &data_len);
-		if (!ret) {
-			LOG_DBG("Relay message %s", data_relay_buf);
-			ret = data_codec_prepare_relay_packet(&codec, data_relay_buf, 
-							     data_len, true);
-			if (ret) {
-				LOG_WRN("Error populating data codec");
-				return;
-			}
-
-			union etc_device_record record_sensor;
-			ret = etc_device_relay_read_record_sensor(&record_sensor);
-			if (ret == 0) {
-				data_encode_prepare_modem_info(&modem_dynamic);
-				ret = data_codec_prepare_cloud_packet(&codec, &record_sensor, &modem_dynamic);
-				if (ret != 0) {
-					LOG_WRN("Error populating data codec");
-				}
-			}	
-			data_send(DATA_EVT_DATA_SEND, &codec);
-		} else {
-			LOG_ERR("Can't prepare package for relay");
-		}
-	} else {
-		LOG_INF("No record found");
-		SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
-		/* Trigger the OTA pending job */
-		lwm2m_firmware_start_pending_job();
-	}
-}
-
 static void data_send_work_fn(struct k_work *work)
 {
 	k_work_reschedule(&data_send_work, data_publish_timeout);
@@ -609,10 +605,10 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 			   ((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
 			   (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))) {
 			need_interval_tx_send = true;
-			data_encode_for_cloud(false);
+			data_encode_for_cloud(false, false);
 		} else if (etc_device_is_relay()) {
 			reset_send_status(&send_status);
-			relay_data_encode();
+			data_encode_for_cloud(false, true);
 		}
 	}
 }
@@ -624,7 +620,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER)
 	{
 		need_interval_tx_send = true;
-		data_encode_for_cloud(false);
+		data_encode_for_cloud(false, false);
 		return;
 	}
 
@@ -634,7 +630,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		(etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
 		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET)))) {
 		need_interval_tx_send = true;
-		data_encode_for_cloud(false);
+		data_encode_for_cloud(false, false);
 		return;
 	}
 
@@ -656,7 +652,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		int rsrp = quectel_bg95_get_rsrp();
 		track_functional_test(DATA_TYPE_MODEM, &rsrp);
 		functional_test_set_state(FUNC_TEST_STATE_SENDING_DATA);
-		data_encode_for_cloud(false);
+		data_encode_for_cloud(false, false);
 	}
 }
 
@@ -737,28 +733,19 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
-		if (etc_device_is_relay()) {
-			reset_send_status(&send_status);
-			data_codec_clear_data(&codec);
-			if (state == STATE_CLOUD_CONNECTED) {
-				etc_device_sync_relay_data();
-				relay_data_encode();
-			}
-		} else {
-			if (functional_test_get_state() == FUNC_TEST_STATE_WAITING_FOR_ACK) {
-				bool ack = true;
-				track_functional_test(DATA_TYPE_ACK, (void *)&ack);
-				stop_functional_test();
-			}
-			if (send_status.record_id > 0) {
-				/* Acknowledge record and encode more data, if connected to cloud */
-				etc_device_set_ack_record(send_status.record_id);
-			}
-			reset_send_status(&send_status);
-			data_codec_clear_data(&codec);
-			if (state == STATE_CLOUD_CONNECTED) {
-				data_encode_for_cloud(false);
-			}
+		if (functional_test_get_state() == FUNC_TEST_STATE_WAITING_FOR_ACK) {
+			bool ack = true;
+			track_functional_test(DATA_TYPE_ACK, (void *)&ack);
+			stop_functional_test();
+		}
+		if (send_status.record_id > 0) {
+			/* Acknowledge record and encode more data, if connected to cloud */
+			etc_device_set_ack_record(send_status.record_id);
+		}
+		reset_send_status(&send_status);
+		data_codec_clear_data(&codec);
+		if (state == STATE_CLOUD_CONNECTED) {
+			data_encode_for_cloud(false, etc_device_is_relay());
 		}
 	}
 
@@ -792,7 +779,7 @@ static void on_all_states(struct data_msg_data *msg)
 		/* Reset send status on fail */
 		reset_send_status(&send_status);
 		if (state == STATE_CLOUD_CONNECTED) {
-			data_encode_for_cloud(split);
+			data_encode_for_cloud(split, etc_device_is_relay());
 		}
 	}
 
@@ -802,7 +789,7 @@ static void on_all_states(struct data_msg_data *msg)
 	
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
 		if (state == STATE_CLOUD_CONNECTED) {
-			relay_data_encode();
+			data_encode_for_cloud(false, true);
 		}
 		return;
 	}
@@ -823,7 +810,7 @@ static void on_all_states(struct data_msg_data *msg)
 			data_codec_update_reclaim_state(&codec,
 							RECLAIM_IN_PROGRESS);
 			reclaim_active = true;
-			data_encode_for_cloud(false);
+			data_encode_for_cloud(false, false);
 		} else {
 			data_codec_update_reclaim_state(&codec,
 							RECLAIM_ERROR);
