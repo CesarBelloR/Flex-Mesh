@@ -138,6 +138,9 @@ static struct data_module_data_buffers data_encoded_buffers;
 /* Define a payload buffer with legacy format */
 static char data_payload_buf[DEVICE_PAYLOAD_LEGACY_LEN] = {0x00};
 
+/* Flag to know if relay data is sending or not */
+static bool is_relay_data_sending;
+
 /* Data module message queue. */
 #define DATA_QUEUE_ENTRY_COUNT		20
 #define DATA_QUEUE_BYTE_ALIGNMENT	4
@@ -411,6 +414,8 @@ static void data_encode_prepare_modem_info(struct data_modem_dynamic *modem_info
 }
 
 static int data_encode_for_relay() {
+	/* By default, relay data is not sending */
+	is_relay_data_sending = false;
 	struct etc_device_relay_record record = {0x00};
 	int ret = etc_device_read_relay_data(&record);
 	if (!ret) {
@@ -425,6 +430,7 @@ static int data_encode_for_relay() {
 				return ret;
 			}
 
+			is_relay_data_sending = true;
 			union etc_device_record record_sensor;
 			ret = etc_device_relay_read_record_sensor(&record_sensor);
 			if (ret == 0) {
@@ -745,7 +751,8 @@ static void on_all_states(struct data_msg_data *msg)
 		reset_send_status(&send_status);
 		data_codec_clear_data(&codec);
 		if (state == STATE_CLOUD_CONNECTED) {
-			if (etc_device_is_relay()) {
+			if (is_relay_data_sending && etc_device_is_relay()) {
+				is_relay_data_sending = false;
 				etc_device_sync_relay_data();
 			}
 			data_encode_for_cloud(false, etc_device_is_relay());
