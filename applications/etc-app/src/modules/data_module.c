@@ -745,6 +745,9 @@ static void on_all_states(struct data_msg_data *msg)
 		reset_send_status(&send_status);
 		data_codec_clear_data(&codec);
 		if (state == STATE_CLOUD_CONNECTED) {
+			if (etc_device_is_relay()) {
+				etc_device_sync_relay_data();
+			}
 			data_encode_for_cloud(false, etc_device_is_relay());
 		}
 	}
@@ -754,6 +757,7 @@ static void on_all_states(struct data_msg_data *msg)
 		LOG_DBG("Record ID %d", send_status.record_id);
 		if (send_status.record_id > 0) {
 			/* Acknowledge record and encode more data, if connected to cloud */
+			etc_device_sync_relay_data();
 			etc_device_set_ack_record(send_status.record_id);
 		}
 		reset_send_status(&send_status);
