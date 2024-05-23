@@ -69,6 +69,13 @@ static enum state_type {
 	STATE_SHUTDOWN
 } state;
 
+/* Relay send type */
+static enum state_relay_send_type {
+	STATE_RELAY_SEND_META_MODEL,
+	STATE_RELAY_SEND_SENSOR,
+	STATE_RELAY_SEND_RECORD
+} state_relay_send = STATE_RELAY_SEND_SENSOR;
+
 static struct etc_gnss_data gnss_data = { 0 };
 
 static struct data_modem_static modem_stat;
@@ -101,31 +108,6 @@ static k_timeout_t data_publish_timeout = K_FOREVER;
 static K_SEM_DEFINE(config_load_sem, 0, 1);
 
 static struct k_work_delayable data_send_work;
-
-/* List used to keep track of responses from other modules with data that is
- * requested to be sampled/published.
- */
-static enum app_data_type req_type_list[APP_DATA_COUNT];
-
-/* Total number of data types requested for a particular sample/publish
- * cycle.
- */
-static int recv_req_data_count;
-
-/* Counter of data types received from other modules. When this number
- * matches the affirmed_data_type variable all requested data has been
- * received by the Data module.
- */
-static int req_data_count;
-
-/* List of data types that are supported to be sent based on LTE connection evaluation. */
-enum coneval_supported_data_type {
-	UNUSED,
-	GENERIC,
-	BATCH,
-	NEIGHBOR_CELLS,
-	COUNT,
-};
 
 /* Save the current/previous reclaim state, so we can change the LwM2M reclaim
  * status accordingly.
@@ -413,11 +395,33 @@ static void data_encode_prepare_modem_info(struct data_modem_dynamic *modem_info
 	modem_info->queued = 1;
 }
 
+/* Need to send heart-beat/meta-data first. Then, send relay data*/
 static int data_encode_for_relay() {
+	int ret = 0;
+	if (state_relay_send == STATE_RELAY_SEND_META_MODEL || 
+	    state_relay_send == STATE_RELAY_SEND_SENSOR) {
+		LOG_DBG("Sending meta data for Relay");
+		union etc_device_record record_sensor;
+		ret = etc_device_relay_read_record_sensor(&record_sensor);
+		if (ret == 0) {
+			data_encode_prepare_modem_info(&modem_dynamic);
+			ret = data_codec_prepare_cloud_packet(&codec, &record_sensor,
+							      &modem_dynamic);
+			if (ret != 0) {
+				LOG_WRN("Error populating data codec");
+				return ret;
+			}
+			return -EINPROGRESS;
+		}
+		if (state_relay_send == STATE_RELAY_SEND_META_MODEL) {
+			return -EINPROGRESS;
+		} 
+	} 
+	LOG_DBG("Sending relay data for Relay");
 	/* By default, relay data is not sending */
 	is_relay_data_sending = false;
 	struct etc_device_relay_record record = {0x00};
-	int ret = etc_device_read_relay_data(&record);
+	ret = etc_device_read_relay_data(&record);
 	if (!ret) {
 		int data_len = sizeof(data_relay_buf);
 		ret = etc_common_prepare_relay_legacy_data(&record, data_relay_buf, &data_len);
@@ -431,22 +435,16 @@ static int data_encode_for_relay() {
 			}
 
 			is_relay_data_sending = true;
-			union etc_device_record record_sensor;
-			ret = etc_device_relay_read_record_sensor(&record_sensor);
-			if (ret == 0) {
-				data_encode_prepare_modem_info(&modem_dynamic);
-				ret = data_codec_prepare_cloud_packet(&codec, &record_sensor, &modem_dynamic);
-				if (ret != 0) {
-					LOG_WRN("Error populating data codec");
-					return ret;
-				}
-			}	
 		} else {
 			LOG_ERR("Can't prepare package for relay");
 			return ret;
 		}
 		return -EINPROGRESS;
 	}
+
+	/* Reset the send meta for next interval */
+	LOG_DBG("Finished sending");
+	state_relay_send = STATE_RELAY_SEND_SENSOR;
 	return 0;
 }
 
@@ -497,6 +495,7 @@ static void data_encode_for_cloud(bool split, bool is_relay)
 	}
 
 	if (first_send) {
+		state_relay_send = STATE_RELAY_SEND_META_MODEL;
 		data_codec_prepare_update_packet(&codec);
 		first_send = false;
 	}
@@ -751,9 +750,16 @@ static void on_all_states(struct data_msg_data *msg)
 		reset_send_status(&send_status);
 		data_codec_clear_data(&codec);
 		if (state == STATE_CLOUD_CONNECTED) {
-			if (is_relay_data_sending && etc_device_is_relay()) {
-				is_relay_data_sending = false;
-				etc_device_sync_relay_data();
+			if (etc_device_is_relay()) {
+				if (is_relay_data_sending) {
+					is_relay_data_sending = false;
+					etc_device_sync_relay_data();
+				} 
+				if (state_relay_send == STATE_RELAY_SEND_META_MODEL || 
+				    state_relay_send == STATE_RELAY_SEND_SENSOR) 
+				{
+					state_relay_send = STATE_RELAY_SEND_RECORD;
+				}
 			}
 			data_encode_for_cloud(false, etc_device_is_relay());
 		}
