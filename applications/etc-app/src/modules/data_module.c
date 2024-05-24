@@ -73,8 +73,15 @@ static enum state_type {
 static enum state_relay_send_type {
 	STATE_RELAY_SEND_META_MODEL,
 	STATE_RELAY_SEND_SENSOR,
-	STATE_RELAY_SEND_RECORD
+	STATE_RELAY_SEND_RECORD_READY,
+	STATE_RELAY_SEND_RECORD_DONE
 } state_relay_send = STATE_RELAY_SEND_SENSOR;
+
+/* Data cloud encode status */
+enum status_data_cloud_process {
+	STATUS_DONE,
+	STATUS_IN_PROCESS
+};
 
 static struct etc_gnss_data gnss_data = { 0 };
 
@@ -119,9 +126,6 @@ static struct data_module_data_buffers data_encoded_buffers;
 
 /* Define a payload buffer with legacy format */
 static char data_payload_buf[DEVICE_PAYLOAD_LEGACY_LEN] = {0x00};
-
-/* Flag to know if relay data is sending or not */
-static bool is_relay_data_sending;
 
 /* Data module message queue. */
 #define DATA_QUEUE_ENTRY_COUNT		20
@@ -411,15 +415,13 @@ static int data_encode_for_relay() {
 				LOG_WRN("Error populating data codec");
 				return ret;
 			}
-			return -EINPROGRESS;
+			return STATUS_IN_PROCESS;
 		}
 		if (state_relay_send == STATE_RELAY_SEND_META_MODEL) {
-			return -EINPROGRESS;
+			return STATUS_IN_PROCESS;
 		} 
-	} 
+	} else 
 	LOG_DBG("Sending relay data for Relay");
-	/* By default, relay data is not sending */
-	is_relay_data_sending = false;
 	struct etc_device_relay_record record = {0x00};
 	ret = etc_device_read_relay_data(&record);
 	if (!ret) {
@@ -433,22 +435,21 @@ static int data_encode_for_relay() {
 				LOG_WRN("Error populating data codec");
 				return ret;
 			}
-
-			is_relay_data_sending = true;
+			state_relay_send = STATE_RELAY_SEND_RECORD_DONE;
 		} else {
 			LOG_ERR("Can't prepare package for relay");
 			return ret;
 		}
-		return -EINPROGRESS;
+		return STATUS_IN_PROCESS;
 	}
 
 	/* Reset the send meta for next interval */
 	LOG_DBG("Finished sending");
 	state_relay_send = STATE_RELAY_SEND_SENSOR;
-	return 0;
+	return STATUS_DONE;
 }
 
-static int data_encode_for_not_relay() {
+static int data_encode_for_logger() {
 	int ret = 0;
 	union etc_device_record record;
 	bool reclaim_status;	
@@ -472,9 +473,9 @@ static int data_encode_for_not_relay() {
 			reclaim_active = false;
 		}
 	} else if (send_status.record_id == 0) {
-		return 0;
+		return STATUS_DONE;
 	}
-	return -EINPROGRESS;
+	return STATUS_IN_PROCESS;
 }
 
 /**
@@ -524,13 +525,18 @@ static void data_encode_for_cloud(bool split, bool is_relay)
 		if (is_relay) {
 			ret = data_encode_for_relay();
 		} else {
-			ret = data_encode_for_not_relay();
+			ret = data_encode_for_logger();
 		}
-		if (ret == 0) {
+		if (ret == STATUS_DONE) {
 			LOG_INF("No record found");
 			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
 			/* Trigger the OTA pending job */
 			lwm2m_firmware_start_pending_job();
+			return;
+		} else if (ret == STATUS_IN_PROCESS) {
+			/* No action required */
+		} else {
+			LOG_ERR("Error in encoding data (err %d)", ret);
 			return;
 		}
 	}
@@ -751,15 +757,13 @@ static void on_all_states(struct data_msg_data *msg)
 		data_codec_clear_data(&codec);
 		if (state == STATE_CLOUD_CONNECTED) {
 			if (etc_device_is_relay()) {
-				if (is_relay_data_sending) {
-					is_relay_data_sending = false;
-					etc_device_sync_relay_data();
-				} 
 				if (state_relay_send == STATE_RELAY_SEND_META_MODEL || 
-				    state_relay_send == STATE_RELAY_SEND_SENSOR) 
-				{
-					state_relay_send = STATE_RELAY_SEND_RECORD;
-				}
+				    state_relay_send == STATE_RELAY_SEND_SENSOR) {
+					state_relay_send = STATE_RELAY_SEND_RECORD_READY;
+				} else if (state_relay_send == STATE_RELAY_SEND_RECORD_DONE) {
+					etc_device_sync_relay_data();
+					state_relay_send = STATE_RELAY_SEND_RECORD_READY;
+				} 
 			}
 			data_encode_for_cloud(false, etc_device_is_relay());
 		}
@@ -770,7 +774,6 @@ static void on_all_states(struct data_msg_data *msg)
 		LOG_DBG("Record ID %d", send_status.record_id);
 		if (send_status.record_id > 0) {
 			/* Acknowledge record and encode more data, if connected to cloud */
-			etc_device_sync_relay_data();
 			etc_device_set_ack_record(send_status.record_id);
 		}
 		reset_send_status(&send_status);
