@@ -399,7 +399,10 @@ static void data_encode_prepare_modem_info(struct data_modem_dynamic *modem_info
 	modem_info->queued = 1;
 }
 
-/* Need to send heart-beat/meta-data first. Then, send relay data*/
+/*
+ * @brief To send heart-beat/meta-data first. 
+ * If no meta-data, send relay data or next state is RECORD_READY
+ */
 static int data_encode_for_relay() {
 	int ret = 0;
 	if (state_relay_send == STATE_RELAY_SEND_META_MODEL || 
@@ -421,6 +424,7 @@ static int data_encode_for_relay() {
 			return STATUS_IN_PROCESS;
 		} 
 	}
+	/* If no meta-data or record sensor, send Relay queued data */
 	LOG_DBG("Sending relay data for Relay");
 	struct etc_device_relay_record record = {0x00};
 	ret = etc_device_read_relay_data(&record);
