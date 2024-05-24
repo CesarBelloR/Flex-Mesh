@@ -420,7 +420,7 @@ static int data_encode_for_relay() {
 		if (state_relay_send == STATE_RELAY_SEND_META_MODEL) {
 			return STATUS_IN_PROCESS;
 		} 
-	} else 
+	}
 	LOG_DBG("Sending relay data for Relay");
 	struct etc_device_relay_record record = {0x00};
 	ret = etc_device_read_relay_data(&record);
