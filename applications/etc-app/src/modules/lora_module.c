@@ -34,6 +34,7 @@ struct lora_msg_data {
 	union {
 		struct app_event app;
 		struct util_event util;
+		struct cloud_event cloud;
 	} module;
 };
 
@@ -125,6 +126,13 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		struct util_event *event = cast_util_event(aeh);
 
 		msg.module.util = *event;
+		enqueue_msg = true;
+	}
+
+	if (is_cloud_event(aeh)) {
+		struct cloud_event *event = cast_cloud_event(aeh);
+
+		msg.module.cloud = *event;
 		enqueue_msg = true;
 	}
 
@@ -600,7 +608,7 @@ static void on_all_states(struct lora_msg_data *msg)
 	}
 
 	if (etc_device_is_relay()) {
-		if (IS_EVENT(msg, app, APP_EVT_DATA_RECEIVE)) {
+		if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 			lora_request = LORA_REQUEST_IN_RUN_RELAY;
 			k_sem_give(&lora_request_sem);
 		}
@@ -697,3 +705,4 @@ void lora_module_thread_fn(void)
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
+APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
