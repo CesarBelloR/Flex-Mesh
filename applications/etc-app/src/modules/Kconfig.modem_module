@@ -35,7 +35,7 @@ config MODEM_MODULE_SHELL
 
 config MODEM_MODULE_GNSS_TIMEOUT_S
 	int "Timeout to turn off GNSS if no location was found"
-	default 180
+	default 60
 
 config MODEM_MODULE_DESIRED_FIX_COUNT
 	int "GNSS is turned off and location accepted when this fix count is reached"
