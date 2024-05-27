@@ -367,8 +367,8 @@ int etc_settings_init(void)
 		etc_set_gnss_interval_secs(ETC_SETTING_GNSS_INTERVAL_SECS_DEFAULT);
 	}
 	
-	ret = etc_device_read_setting(ETC_SETTING_GNSS_TIMEOUT_SEC_ID, &etc_cfg.gnss_interval_secs,
-				      sizeof(etc_cfg.gnss_interval_secs));
+	ret = etc_device_read_setting(ETC_SETTING_GNSS_TIMEOUT_SEC_ID, &etc_cfg.gnss_timeout_secs,
+				      sizeof(etc_cfg.gnss_timeout_secs));
 	if (ret) {
 		etc_set_gnss_timeout_secs(CONFIG_MODEM_MODULE_GNSS_TIMEOUT_S);
 	}
