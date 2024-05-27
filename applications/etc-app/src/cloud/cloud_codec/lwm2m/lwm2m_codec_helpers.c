@@ -151,7 +151,7 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 			    ETC_CFG_OBJ_R_LTE_PROBE_OFFSET_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL:
-		rc = util_validate_u32(*(uint16_t *)data, ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL_MIN_VAL,
+		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL_MIN_VAL,
 				       ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL_MAX_VAL);
 		break;
 	case ETC_CFG_OBJ_R_GNSS_TIMEOUT:
@@ -610,6 +610,18 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 
 	err = lwm2m_get_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LTE_PROBE_OFFSET),
 		     	    &cfg->lte_probe_offset_secs);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_get_u32(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL),
+		     	    &cfg->gnss_interval_secs);
+	if (err) {
+		return err;
+	}
+	
+	err = lwm2m_get_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_GNSS_TIMEOUT),
+		     	    &cfg->gnss_timeout_secs);
 	if (err) {
 		return err;
 	}
