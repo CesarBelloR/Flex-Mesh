@@ -91,7 +91,7 @@ static struct module_data self = {
 /* Store the next wakup */
 static int next_wakeup = 0;
 static int app_backoff_multiple = 1;
-static int app_backoff_last_multiple = 1;
+static int app_backoff_last_multiple = -1;
 static enum app_wakeup_tx_work_type wakeup_tx_type = APP_WAKEUP_TX_INTERVAL_WORK;
 
 K_MUTEX_DEFINE(app_module_lock);
@@ -381,20 +381,34 @@ static void set_gnss_request(time_t now)
 static void app_backoff_check_multiple_value(void)
 {
 	enum etc_sensor_status sensor_status = etc_sensor_get_status();
+	enum etc_power_mode_e power_mode = etc_get_power_mode();
+	LOG_DBG("Sensor %d - Power %d", sensor_status, power_mode);
 	if ((sensor_status == SENSOR_NO_CONNECTION) &&
-	    (etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
-		if ((app_backoff_last_multiple * 2) != app_backoff_multiple) {
-			app_backoff_multiple = app_backoff_last_multiple;
-		} else {
-			int tx_interval_s = etc_device_get_tx_interval_second();
-			int tx_max_offset_probe_s = etc_device_get_tx_probe_second();
-			if ((tx_interval_s * app_backoff_multiple) <= tx_max_offset_probe_s) {
-				app_backoff_last_multiple = app_backoff_multiple;
-				app_backoff_multiple = app_backoff_multiple * 2;
+	    (power_mode == ETC_POWER_MODE_PROBE)) {
+		if (app_backoff_last_multiple != -1) {
+			int backoff_expect = app_backoff_last_multiple * 2;
+			if ((backoff_expect) != app_backoff_multiple) {
+				if (app_backoff_multiple == 1 && app_backoff_last_multiple == 1) {
+					app_backoff_multiple = app_backoff_multiple * 2;
+				} else {
+					app_backoff_multiple = app_backoff_last_multiple;
+				}
+			} else {
+				int tx_interval_s = etc_device_get_tx_interval_second();
+				int tx_max_offset_probe_s = etc_device_get_tx_probe_second();
+				if ((tx_interval_s * app_backoff_multiple) <= tx_max_offset_probe_s) {
+					app_backoff_last_multiple = app_backoff_multiple;
+					app_backoff_multiple = app_backoff_multiple * 2;
+				}
 			}
+		} else {
+			app_backoff_last_multiple = 1;
+			app_backoff_multiple = 1;
 		}
+		LOG_DBG("%d %d", app_backoff_multiple, app_backoff_last_multiple); 
 		return;
 	}
+	LOG_DBG("Reset the backoff");
 	/* Reset the backoff */
 	app_backoff_multiple = 1;
 	app_backoff_last_multiple = 1;
@@ -408,6 +422,7 @@ static time_t app_backoff_interval_no_probe(time_t now)
 	if (transmit_interval_s > tx_max_offset_probe_s) {
 		transmit_interval_s = tx_max_offset_probe_s;
 	}
+	LOG_DBG("Backoff interval no problem %d", transmit_interval_s);
 	return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
 }
 
@@ -429,7 +444,7 @@ static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transm
 		}
 		
 		if ((sensor_status == SENSOR_NO_CONNECTION) && 
-			(etc_get_power_mode() == ETC_POWER_MODE_PROBE)) {
+			(current_power == ETC_POWER_MODE_PROBE)) {
 			return -1;
 		}
 	}
@@ -452,10 +467,12 @@ static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mi
 
 	/* If NACK is more than zero */
 	if (etc_device_nack_count() > 0) {
+		LOG_DBG("Update next transmit for NACK probe mode");
 		time_t next_transmit = app_backoff_interval_no_probe(now);
 		return next_transmit;
 	}
 	
+	LOG_DBG("Update next transmit for normal probe mode");
 	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
 	struct tm tm_time = {0};
 	/* Otherwise, proceed as normal */
