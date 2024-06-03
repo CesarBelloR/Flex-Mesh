@@ -222,8 +222,8 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 	return response;
 }
 
-static int lora_module_relay_get_message(char* package, int16_t rssi, 
-	struct relay_lora_message* message) 
+static int lora_module_relay_get_message(char *package, int16_t rssi,
+					 struct relay_lora_message *message)
 {
 	__ASSERT(package != NULL, "Empty input package");
 	__ASSERT(message != NULL, "Empty message");
@@ -244,67 +244,70 @@ static int lora_module_relay_get_message(char* package, int16_t rssi,
 			return -EINVAL;
 		}
 		switch (i) {
-			case 0:
-				if (pt[0] != 'S') {
-					message->is_okay = false;
-					return -EINVAL;
-				}
-				break;
-			case 1:
-				snprintf(message->record.relay_id, sizeof(message->record.relay_id), "%s", pt);
-				break;
-			case 2:
-				snprintf(message->record.logger_ver, sizeof(message->record.logger_ver), "%s", pt);
-				break;
-			case 3:
-				snprintf(message->record.logger_id, sizeof(message->record.logger_id), "%s", pt);
-				message->is_okay = true;
-				message->record.logger_rssi = rssi;
-				break;
-			case 4:
-				message->record.battery = atof(pt);
-				break;
-			case 5:
-				message->record.packet_number = atoi(pt);
-				break;
-			case 6:
-				if (strstr(pt, "*") == NULL) {
-					message->record.timestamp = atoi(pt);
-					message->record.is_reclaim = true;
-				} else {
-					/* If timestamp is *, use relay time */
-					message->record.timestamp = date_time_now_second();
-					message->record.is_reclaim = false;
-				}
-				break;
-			case 7:
-			case 8:
-			case 9:
-			case 10:
-			case 11:
-				if (strstr(pt, "*") == NULL) {
-					message->record.sensor[i - 7] = atof(pt);
-				} else {
-					message->record.sensor[i - 7] = SENSOR_TEMP_NO_CONNECTED;
-				}
-				break;
-			case 12:
-				if (strstr(pt, "*") == NULL) {
-					message->record.sensor[SENSOR_INPUT_HUMID] = atof(pt);
-				} else {
-					message->record.sensor[SENSOR_INPUT_HUMID] = SENSOR_HUMID_NO_CONNECTED;
-				}
-				break;
-			default: {
-				if ((i >= 13) && i <= (13 + ETC_DEVICE_NUM_EXTRA_ELEMENT)) {
-					if (strstr(pt, "*") == NULL) {
-						message->record.data[i - 13] = atoi(pt);
-					} else {
-						message->record.data[i - 13] = -1;
-					}
-				}
-				break;
+		case 0:
+			if (pt[0] != 'S') {
+				message->is_okay = false;
+				return -EINVAL;
 			}
+			break;
+		case 1:
+			snprintf(message->record.relay_id, sizeof(message->record.relay_id), "%s",
+				 pt);
+			break;
+		case 2:
+			snprintf(message->record.logger_ver, sizeof(message->record.logger_ver),
+				 "%s", pt);
+			break;
+		case 3:
+			snprintf(message->record.logger_id, sizeof(message->record.logger_id), "%s",
+				 pt);
+			message->is_okay = true;
+			message->record.logger_rssi = rssi;
+			break;
+		case 4:
+			message->record.battery = atof(pt);
+			break;
+		case 5:
+			message->record.packet_number = atoi(pt);
+			break;
+		case 6:
+			if (strstr(pt, "*") == NULL) {
+				message->record.timestamp = atoi(pt);
+				message->record.is_reclaim = true;
+			} else {
+				/* If timestamp is *, use relay time */
+				message->record.timestamp = date_time_now_second();
+				message->record.is_reclaim = false;
+			}
+			break;
+		case 7:
+		case 8:
+		case 9:
+		case 10:
+		case 11:
+			if ((strstr(pt, "*") != NULL) ||
+			    (parse_for_float(pt, &message->record.sensor[i - 7]) != 0)) {
+				message->record.sensor[i - 7] = SENSOR_TEMP_NO_CONNECTED;
+			}
+			break;
+		case 12:
+			if (strstr(pt, "*") == NULL) {
+				message->record.sensor[SENSOR_INPUT_HUMID] = atof(pt);
+			} else {
+				message->record.sensor[SENSOR_INPUT_HUMID] =
+					SENSOR_HUMID_NO_CONNECTED;
+			}
+			break;
+		default: {
+			if ((i >= 13) && i <= (13 + ETC_DEVICE_NUM_EXTRA_ELEMENT)) {
+				if (strstr(pt, "*") == NULL) {
+					message->record.data[i - 13] = atoi(pt);
+				} else {
+					message->record.data[i - 13] = -1;
+				}
+			}
+			break;
+		}
 		}
 		pt = strtok(NULL, ",");
 		i += 1;

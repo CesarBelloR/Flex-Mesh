@@ -151,4 +151,17 @@ inline static int util_validate_in_lora_probe_offset(uint16_t value)
 
 	return -EINVAL;
 }
+
+/**
+ * Parse null-terminated buffer for a float value. Non-digit characters at the
+ * beginning of the input string are skipped.
+ * 
+ * @param float_field Null-terminated string buffer that contains a float value.
+ * @param float_value Pointer that the resulting float value will be saved to.
+ * 
+ * @retval 0 success
+ * @retval -EINVAL Input arguments are invalid or value could not be parsed.
+*/
+int parse_for_float(const char *float_field, float *float_value);
+
 #endif

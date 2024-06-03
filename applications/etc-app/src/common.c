@@ -40,7 +40,7 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
 		if (data_codec_compare_temperature_is_valid(record->sensor[i])) {
 			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-				sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
+				sizeof(decoded_buf) - decoded_buf_len, "%.1f,",
 				record->sensor[i]);
 		} else {
 			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
@@ -50,7 +50,7 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 	
 	if (data_codec_compare_humidity_is_valid(record->sensor[SENSOR_INPUT_HUMID])) {
 		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-			sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
+			sizeof(decoded_buf) - decoded_buf_len, "%.1f,",
 			record->sensor[SENSOR_INPUT_HUMID]);
 	} else {
 		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,

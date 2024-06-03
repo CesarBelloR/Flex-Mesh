@@ -2,8 +2,14 @@
  * Copyright (c) 2023 EXACT Technology
 */
 #include <zephyr/kernel.h>
+
+#include <stdlib.h>
+#include <ctype.h>
+
+#ifdef CONFIG_ETC_BLE_ENCRYPTION
 #include <mbedtls/aes.h>
 #include <mbedtls/cipher.h>
+#endif
 
 #include "etc_util.h"
 
@@ -41,6 +47,26 @@ uint16_t ceil_int(uint16_t value, uint16_t divisor)
 	}
 	
 	return quotient * divisor;
+}
+
+int parse_for_float(const char *float_field, float *float_value)
+{
+	const char *buf = float_field;
+	char *end;
+
+	if ((float_field == NULL) || (float_value == NULL)) {
+		return -EINVAL;
+	}
+
+	while (!isdigit(*buf) && *buf != '\0') {
+		buf++;
+	}
+	*float_value = strtof(buf, &end);
+
+	if (buf == end) {
+		return -EINVAL;
+	}
+	return 0;
 }
 
 #ifdef CONFIG_ETC_BLE_ENCRYPTION

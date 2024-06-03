@@ -1,0 +1,8 @@
+tests:
+  # section.subsection
+  tests.applications.etc-app.util:
+    build_only: false
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim

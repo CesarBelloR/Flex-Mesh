@@ -1,33 +1,23 @@
-name: Build etc-test
+name: Run tests with twister
 
 on:
   push:
-    branches: 
-      - main
-      - v*
-      - RC/*
+    branches:
       - dev
-    tags:
       - v*
+      - RC/v*
   pull_request:
     branches:
-      - main
-      - v*
-      - RC/*
       - dev
-    paths:
-      - 'applications/etc-test/**'
-      - 'boards/**'
-      - 'lib/**'
-      - '.github/workflows/build_test.yml'
-
+      - v*
+      - RC/v*
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -42,18 +32,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: etc-firmware
-      
+          fetch-depth: 0
+
       - name: Configure Git
         working-directory: etc-firmware
         run: |
             git config --global user.email "actions@exacttechnology.com"
             git config --global user.name "Github Actions"
-
-      - name: Set variables
-        working-directory: etc-firmware
-        id: vars
-        run: |
-          echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
       - name: Cache West dependencies
         uses: actions/cache@v3
@@ -80,20 +65,15 @@ jobs:
           toolchains: arm-zephyr-eabi
           sdk-version: 0.16.5-1
 
-      - name: Apply patches
-        working-directory: etc-firmware
+      - name: Run all tests in the etc-firmware project
         run: |
-          ./scripts/apply_patches.sh
+            ./zephyr/scripts/twister -T ./etc-firmware/tests
 
-      - name: Build etc-test
-        working-directory: etc-firmware
-        run: |
-          west build -b etc@0.3.0 -s applications/etc-test -p
-          mkdir out
-          cp build/zephyr/merged.hex out/etc_test_${sha_short}.hex
-      
-      - name: Upload output files
+      - name: Upload test results
         uses: actions/upload-artifact@v4
         with:
-          name: etc_test_${{ env.sha_short }}
-          path: etc-firmware/out/
+          name: Unit Test Results
+          path: |
+            twister-out/twister.xml
+            twister-out/twister_report.xml
+            twister-out/twister.json
