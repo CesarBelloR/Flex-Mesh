@@ -19,6 +19,8 @@ enum date_time_evt_type {
 	DATE_TIME_NOT_OBTAINED,
 	/** Date time library triggers a event to reload system time */
 	DATE_TIME_SYSTEM_RELOAD,
+	/** Date time library no change */
+	DATE_TIME_PREVIOUS,
 };
 
 /** @brief Struct with data received from the Date time library. */

@@ -184,6 +184,7 @@ static void new_date_time_get(void)
 		err = current_time_check();
 		if (err == 0) {
 			LOG_DBG("Time successfully obtained");
+			evt.type = DATE_TIME_PREVIOUS;
 			date_time_notify_event(&evt);
 			continue;
 		}

@@ -833,6 +833,7 @@ void date_time_handler(const struct date_time_evt *evt)
 		break;
 	}
 	case DATE_TIME_NOT_OBTAINED: 
+	case DATE_TIME_PREVIOUS:
 		break;
 	}
 }
