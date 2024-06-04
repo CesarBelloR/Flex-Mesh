@@ -13,6 +13,7 @@
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #include "etc_device.h"
+#include "etc_device_record.h"
 #include "etc_ble.h"
 #include "etc_battery.h"
 #include "cloud/lwm2m/lwm2m_firmware.h"
@@ -621,7 +622,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 			   ((etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) && 
 			   (etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_CLOUD_LORA))) {
 			need_interval_tx_send = true;
-			data_encode_for_cloud(false, false);
+			data_encode_for_cloud(false, etc_device_is_relay());
 		} else if (etc_device_is_relay()) {
 			reset_send_status(&send_status);
 			data_encode_for_cloud(false, true);
@@ -646,7 +647,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		(etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
 		(etc_device_get_transmit_sub_job() == ETC_TRANSMIT_SYNC_MAGNET)))) {
 		need_interval_tx_send = true;
-		data_encode_for_cloud(false, false);
+		data_encode_for_cloud(false, etc_device_is_relay());
 		return;
 	}
 
