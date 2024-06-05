@@ -332,6 +332,12 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		SEND_EVENT(cloud, CLOUD_EVT_FOTA_START);
 		break;
 	}
+	case CLOUD_WRAP_EVT_FOTA_DOWNLOADED:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_FOTA_DOWNLOADED");
+		SEND_EVENT(cloud, CLOUD_EVT_FOTA_DOWNLOADED);
+		break;
+	}
 	case CLOUD_WRAP_EVT_FOTA_DONE:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_FOTA_DONE");
@@ -586,6 +592,10 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 
 			return;
 		}
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DOWNLOADED)) {
+		lwm2m_rd_client_update();
 	}
 }
 

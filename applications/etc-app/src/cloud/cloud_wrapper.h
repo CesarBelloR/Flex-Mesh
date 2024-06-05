@@ -78,6 +78,8 @@ enum cloud_wrap_event_type {
 	CLOUD_WRAP_EVT_FOTA_DONE,
 	/** The cloud integration layer has started a FOTA update. */
 	CLOUD_WRAP_EVT_FOTA_START,
+	/** The FOTA binary has been downloaded and written to flash */
+	CLOUD_WRAP_EVT_FOTA_DOWNLOADED,
 	/** An image erase is pending. */
 	CLOUD_WRAP_EVT_FOTA_ERASE_PENDING,
 	/** Image erase done. */

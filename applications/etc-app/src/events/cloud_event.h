@@ -75,6 +75,9 @@ enum cloud_event_type {
 	CLOUD_EVT_FOTA_START,
 
 	/** FOTA has been performed, a reboot of the application is needed. */
+	CLOUD_EVT_FOTA_DOWNLOADED,
+
+	/** FOTA has been performed, a reboot of the application is needed. */
 	CLOUD_EVT_FOTA_DONE,
 
 	/** An error occurred during a FOTA update. */
