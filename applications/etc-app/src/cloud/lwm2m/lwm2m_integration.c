@@ -193,6 +193,7 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 	case LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR:
 		LOG_ERR("LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR");
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
+		state = DISCONNECTED;
 		notify = true;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED:

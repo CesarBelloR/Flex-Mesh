@@ -50,11 +50,17 @@ static enum state_type {
 } state;
 
 /* Cloud module sub states. */
-static enum sub_state_lte_connected {
+static enum sub_state_cloud_running {
 	SUB_STATE_CLOUD_DISCONNECTED,
 	SUB_STATE_CLOUD_CONNECTED,
-	SUB_STATE_CLOUD_PAUSED
-} sub_state_lte_connected = SUB_STATE_CLOUD_DISCONNECTED;
+	SUB_STATE_CLOUD_CONNECTING
+} sub_state_cloud_running = SUB_STATE_CLOUD_DISCONNECTED;
+
+/* Cloud module sub states. */
+static enum sub_state_lte_connected {
+	SUB_STATE_CLOUD_PAUSED,
+	SUB_STATE_CLOUD_RUNNING
+} sub_state_lte_connected = SUB_STATE_CLOUD_RUNNING;
 
 /* Cloud module sub states. */
 static enum sub_state_lte_disconnected {
@@ -62,25 +68,7 @@ static enum sub_state_lte_disconnected {
 	SUB_STATE_LTE_PSM
 } sub_state_lte_disconnected;
 
-struct cloud_backoff_delay_lookup
-{
-	int delay;
-};
-
-/* Lookup table for backoff reconnection to cloud. Binary scaling. */
-static struct cloud_backoff_delay_lookup backoff_delay[] = {
-    {32}, {64}, {128}, {256}, {512}, {2048}, {4096}, {8192}, {16384}, {32768}, {65536}, {131072}, {262144}, {524288}, {1048576}};
-
-static struct k_work_delayable connect_check_work;
 const k_tid_t cloud_module_thread;
-
-static void shadow_work_fn(struct k_work *work);
-static K_WORK_DELAYABLE_DEFINE(shadow_work, shadow_work_fn);
-
-/* Variable that keeps track of how many times a reconnection to cloud
- * has been tried without success.
- */
-static int connect_retries;
 
 /* Last publish message id */
 static uint16_t last_message_id = 0;
@@ -117,14 +105,26 @@ static char *state2str(enum state_type state)
 
 static char *sub_state_lte_connected2str(enum sub_state_lte_connected new_state)
 {
+	switch (new_state) {
+	case SUB_STATE_CLOUD_RUNNING:
+		return "SUB_STATE_CLOUD_RUNNING";
+	case SUB_STATE_CLOUD_PAUSED:
+		return "SUB_STATE_CLOUD_PAUSED";
+	default:
+		return "Unknown";
+	}
+}
+
+static char *sub_state_cloud_running2str(enum sub_state_cloud_running new_state)
+{
 	switch (new_state)
 	{
 	case SUB_STATE_CLOUD_DISCONNECTED:
 		return "SUB_STATE_CLOUD_DISCONNECTED";
 	case SUB_STATE_CLOUD_CONNECTED:
 		return "SUB_STATE_CLOUD_CONNECTED";
-	case SUB_STATE_CLOUD_PAUSED:
-		return "SUB_STATE_CLOUD_PAUSED";
+	case SUB_STATE_CLOUD_CONNECTING:
+		return "SUB_STATE_CLOUD_CONNECTING";
 	default:
 		return "Unknown";
 	}
@@ -156,6 +156,20 @@ static void state_set(enum state_type new_state)
 		state2str(new_state));
 
 	state = new_state;
+}
+
+static void sub_state_cloud_running_set(enum sub_state_cloud_running new_state)
+{
+	if (new_state == sub_state_cloud_running) {
+		LOG_DBG("Sub state: %s", sub_state_cloud_running2str(sub_state_cloud_running));
+		return;
+	}
+
+	LOG_DBG("Sub state transition %s --> %s",
+		sub_state_cloud_running2str(sub_state_cloud_running),
+		sub_state_cloud_running2str(new_state));
+
+	sub_state_cloud_running = new_state;
 }
 
 static void sub_state_lte_connected_set(enum sub_state_lte_connected new_state)
@@ -259,23 +273,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return consume;
 }
 
-static void connect_check_work_fn(struct k_work *work)
-{
-	if ((state == STATE_LTE_CONNECTED && sub_state_lte_connected == SUB_STATE_CLOUD_CONNECTED))
-	{
-		return;
-	}
-
-	LOG_DBG("Cloud connection timeout occurred");
-
-	SEND_EVENT(cloud, CLOUD_EVT_CONNECTION_TIMEOUT);
-}
-
-static void cloud_module_on_subscribed(const char *buf, const char *topic,
-				       size_t topic_len)
-{
-}
-
 void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 {
 	switch (evt->type)
@@ -295,7 +292,6 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	case CLOUD_WRAP_EVT_READY:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_READY");
-		k_work_schedule(&shadow_work, K_NO_WAIT);
 		break;
 	}
 
@@ -322,8 +318,6 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	case CLOUD_WRAP_EVT_DATA_RECEIVED:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_DATA_RECEIVED");
-		cloud_module_on_subscribed(evt->data.buf, NULL,
-					   0);
 		break;
 	}
 	case CLOUD_WRAP_EVT_FOTA_START:
@@ -348,6 +342,7 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	case CLOUD_WRAP_EVT_ERROR:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_ERROR, %d", evt->err);
+		SEND_EVENT(cloud, CLOUD_EVT_CONNECTION_TIMEOUT);
 		break;
 	}
 	case CLOUD_WRAP_EVT_FOTA_ERROR:
@@ -422,94 +417,50 @@ static int setup(void)
 
 static void connect_cloud(void)
 {
-	int backoff_sec = backoff_delay[connect_retries].delay;
-	int err = 0;
 	LOG_DBG("Connecting to cloud");
 
-	if (connect_retries > MODULE_CLOUD_CONNECT_RETRIES)
-	{
-		LOG_WRN("Too many failed cloud connection attempts");
-		SEND_ERROR(cloud, CLOUD_EVT_ERROR, -ENETUNREACH);
-		return;
-	}
+	/* If starting the cloud connect fails, there is a logic error in firmware. Trigger assert.
+	 */
+	__ASSERT_NO_MSG(cloud_wrap_connect() == 0);
 
-	if (cloud_wrap_connect() < 0) {
-		LOG_WRN("Connecting failed.");
-	}
-
-	connect_retries++;
-
-	LOG_WRN("Cloud connection establishment in progress");
-	LOG_WRN("New connection attempt in %d seconds if not successful",
-		backoff_sec);
-
-	/* Start timer to check connection status after backoff */
-	k_work_reschedule(&connect_check_work, K_SECONDS(backoff_sec));
+	LOG_INF("Cloud connection establishment in progress");
 }
 
 static void disconnect_cloud(void)
 {
-	connect_retries = 0;
-	
 	cloud_wrap_disconnect();
-
-	k_work_cancel_delayable(&connect_check_work);
 }
 
 static void pause_cloud(void)
 {
-	connect_retries = 0;
-	
 	cloud_wrap_pause();
 }
 
 static void resume_cloud(void)
 {
-	if (cloud_wrap_resume() != 0) {
-		LOG_WRN("resuming failed.");
-	}
-
-	sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
-
-	int backoff_sec = backoff_delay[connect_retries].delay;
-	connect_retries++;
-
-	/* Start timer to check connection status after backoff */
-	k_work_reschedule(&connect_check_work, K_SECONDS(backoff_sec));
+	__ASSERT_NO_MSG(cloud_wrap_resume() == 0);
 }
 
 /* Message handler for STATE_LTE_INIT. */
 static void on_state_init(struct cloud_msg_data *msg)
 {
-	if ((IS_EVENT(msg, modem, MODEM_EVT_INITIALIZED)))
-	{
+	if ((IS_EVENT(msg, modem, MODEM_EVT_INITIALIZED))) {
 		int err;
 
 		state_set(STATE_LTE_DISCONNECTED);
-		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
 		err = setup();
-		__ASSERT(err == 0, "setp() failed");
+		__ASSERT(err == 0, "setup() failed");
 	}
 }
 
 /* Message handler for STATE_LTE_CONNECTED. */
 static void on_state_lte_connected(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED))
-	{
-		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
-		state_set(STATE_LTE_DISCONNECTED);
-
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED)) {
 		pause_cloud();
-	}
 
-	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE)) {
-		if (sub_state_lte_connected == SUB_STATE_CLOUD_PAUSED) {
-			resume_cloud();
-		} else {
-			/* LTE is now connected, cloud connection can be attempted */
-			connect_cloud();
-		}
+		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
+		state_set(STATE_LTE_DISCONNECTED);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
@@ -521,19 +472,8 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 /* Message handler for STATE_LTE_DISCONNECTED. */
 static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY))
-	{
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY)) {
 		state_set(STATE_LTE_CONNECTED);
-		 /* If we are using the debug module, delay connecting to cloud
-		  * until debug module has completed work. */
-		if (!IS_ENABLED(CONFIG_DEBUG_MODULE)) {
-			if (sub_state_lte_connected == SUB_STATE_CLOUD_PAUSED) {
-				resume_cloud();
-			} else {
-				/* LTE is now connected, cloud connection can be attempted */
-				connect_cloud();
-			}
-		}
 	}
 
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
@@ -548,16 +488,17 @@ static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 /* Message handler for SUB_STATE_CLOUD_CONNECTED. */
 static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_ACK)) {
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
+		/* Reset the cloud running state to connecting
+		 * (LwM2M will attempt connection after resume).
+		 * Cloud will be paused in on_sub_state_cloud_running() on event
+		 * MODEM_EVT_PSM_ENTERED */
+		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
 	}
 
-	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
-		pause_cloud();
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING) ||
-	    IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
-		sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
+		sub_state_cloud_running_set(SUB_STATE_CLOUD_DISCONNECTED);
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) {
@@ -602,36 +543,50 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 /* Message handler for SUB_STATE_CLOUD_DISCONNECTED. */
 static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED))
-	{
-		sub_state_lte_connected_set(SUB_STATE_CLOUD_CONNECTED);
-		connect_retries = 0;
-		k_work_cancel_delayable(&connect_check_work);
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTED);
 	}
 
-	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
-		pause_cloud();
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT))
-	{
+	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
+	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
+		/* Start cloud connection process */
 		connect_cloud();
+	}
+}
+
+static void on_sub_state_cloud_connecting(struct cloud_msg_data *msg)
+{
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTED);
 	}
 }
 
 /* Message handler for SUB_STATE_CLOUD_PAUSED. */
 static void on_sub_state_cloud_paused(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED))
-	{
-		sub_state_lte_connected_set(SUB_STATE_CLOUD_CONNECTED);
-		connect_retries = 0;
-		k_work_cancel_delayable(&connect_check_work);
+	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
+	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
+		resume_cloud();
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_RUNNING);
+		if (sub_state_cloud_running == SUB_STATE_CLOUD_DISCONNECTED) {
+			/* Attempt cloud connection if cloud is not actively trying to connect. */
+			connect_cloud();
+		}
+	}
+}
+
+static void on_sub_state_cloud_running(struct cloud_msg_data *msg)
+{
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+		pause_cloud();
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT))
-	{
-		resume_cloud();
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
+		/* Cloud is fully disconnected now and won't re-attempt a connection */
+		sub_state_cloud_running_set(SUB_STATE_CLOUD_DISCONNECTED);
+		pause_cloud();
+		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
 	}
 }
 
@@ -661,9 +616,6 @@ static void on_all_states(struct cloud_msg_data *msg)
 	}
 }
 
-static void shadow_work_fn(struct k_work *work) {
-}
-
 void cloud_module_thread_fn(void)
 {
 	int err;
@@ -679,9 +631,8 @@ void cloud_module_thread_fn(void)
 	}
 
 	state_set(STATE_LTE_INIT);
-	sub_state_lte_connected_set(SUB_STATE_CLOUD_DISCONNECTED);
-
-	k_work_init_delayable(&connect_check_work, connect_check_work_fn);
+	sub_state_lte_connected_set(SUB_STATE_CLOUD_RUNNING);
+	sub_state_cloud_running_set(SUB_STATE_CLOUD_DISCONNECTED);
 
 	while (true)
 	{
@@ -694,18 +645,28 @@ void cloud_module_thread_fn(void)
 			break;
 		case STATE_LTE_CONNECTED:
 			switch (sub_state_lte_connected) {
-			case SUB_STATE_CLOUD_CONNECTED:
-				on_sub_state_cloud_connected(&msg);
-				break;
-			case SUB_STATE_CLOUD_DISCONNECTED:
-				on_sub_state_cloud_disconnected(&msg);
+			case SUB_STATE_CLOUD_RUNNING:
+				switch (sub_state_cloud_running) {
+				case SUB_STATE_CLOUD_CONNECTED:
+					on_sub_state_cloud_connected(&msg);
+					break;
+				case SUB_STATE_CLOUD_DISCONNECTED:
+					on_sub_state_cloud_disconnected(&msg);
+					break;
+				case SUB_STATE_CLOUD_CONNECTING:
+					on_sub_state_cloud_connecting(&msg);
+					break;
+				default:
+					LOG_ERR("Unknown Cloud module sub state");
+					break;
+				}
+				on_sub_state_cloud_running(&msg);
 				break;
 			case SUB_STATE_CLOUD_PAUSED:
 				on_sub_state_cloud_paused(&msg);
 				break;
 			default:
-				LOG_ERR("Unknown Cloud module sub state");
-				break;
+				LOG_ERR("Unknown LTE connected sub state");
 			}
 
 			on_state_lte_connected(&msg);
