@@ -1111,7 +1111,6 @@ static ssize_t get_data_size(struct modem_socket *sock)
 	// mdata.sock_fd	   = sock->id;
 	/* Tell the modem to give us the available data's length */
 	/* (AT+QIRD=sock_fd,0). */
-	k_sem_reset(&mdata.sem_response);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     cmd, ARRAY_SIZE(cmd), sendbuf, &mdata.sem_response,
 			     MDM_RECV_TIMEOUT);
@@ -1270,7 +1269,6 @@ static int get_tcp_error(struct modem_socket *sock)
 		MODEM_CMD("+QIGETERROR: ", on_cmd_tcp_geterror, 2U, ","),
 	};
 
-	k_sem_reset(&mdata.sem_response);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     cmd, ARRAY_SIZE(cmd), sendbuf, &mdata.sem_response,
 			     MDM_RECV_TIMEOUT);
