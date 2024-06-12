@@ -415,15 +415,17 @@ static int setup(void)
 	return 0;
 }
 
-static void connect_cloud(void)
+static int connect_cloud(void)
 {
+	int ret;
 	LOG_DBG("Connecting to cloud");
 
 	/* If starting the cloud connect fails, there is a logic error in firmware. Trigger assert.
 	 */
-	__ASSERT_NO_MSG(cloud_wrap_connect() == 0);
-
-	LOG_INF("Cloud connection establishment in progress");
+	ret = cloud_wrap_connect();
+	__ASSERT_NO_MSG(ret == 0);
+	
+	return ret;
 }
 
 static void disconnect_cloud(void)
@@ -550,7 +552,9 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
 	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
 		/* Start cloud connection process */
-		connect_cloud();
+		if (connect_cloud() == 0) {
+			sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
+		}
 	}
 }
 
@@ -570,7 +574,9 @@ static void on_sub_state_cloud_paused(struct cloud_msg_data *msg)
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_RUNNING);
 		if (sub_state_cloud_running == SUB_STATE_CLOUD_DISCONNECTED) {
 			/* Attempt cloud connection if cloud is not actively trying to connect. */
-			connect_cloud();
+			if (connect_cloud() == 0) {
+				sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
+			}
 		}
 	}
 }
