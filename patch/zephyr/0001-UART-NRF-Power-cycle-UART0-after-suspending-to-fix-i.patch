@@ -1,4 +1,4 @@
-From 465a6a0ec5f2611b226b34a6588786cc5f6585b0 Mon Sep 17 00:00:00 2001
+From 93456fae30eb13e6418f13c91e2116405bb77fba Mon Sep 17 00:00:00 2001
 From: Andi Gerl <andi.gerl@exacttechnology.com>
 Date: Fri, 24 May 2024 18:18:49 -0400
 Subject: [PATCH] UART: NRF: Power cycle UART0 after suspending to fix issue
@@ -7,14 +7,28 @@ Subject: [PATCH] UART: NRF: Power cycle UART0 after suspending to fix issue
 Also fully re-initialize UART0 on resume. Peripheral needs to be re-initialized after
 power cycling.
 ---
- drivers/serial/uart_nrfx_uarte.c | 11 +++++++++++
- 1 file changed, 11 insertions(+)
+ drivers/serial/uart_nrfx_uarte.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
 
 diff --git a/drivers/serial/uart_nrfx_uarte.c b/drivers/serial/uart_nrfx_uarte.c
-index 6e1ecfadfd8..0a56b06e67c 100644
+index 6e1ecfadfd8..8de899ebe37 100644
 --- a/drivers/serial/uart_nrfx_uarte.c
 +++ b/drivers/serial/uart_nrfx_uarte.c
-@@ -1856,6 +1856,11 @@ static int uarte_nrfx_pm_action(const struct device *dev,
+@@ -29,11 +29,13 @@ LOG_MODULE_REGISTER(uart_nrfx_uarte, CONFIG_UART_LOG_LEVEL);
+ #include <nrfx_ppi.h>
+ #define gppi_channel_t nrf_ppi_channel_t
+ #define gppi_channel_alloc nrfx_ppi_channel_alloc
++#define gppi_channel_free nrfx_ppi_channel_free
+ #define gppi_channel_enable nrfx_ppi_channel_enable
+ #elif defined(CONFIG_HAS_HW_NRF_DPPIC)
+ #include <nrfx_dppi.h>
+ #define gppi_channel_t uint8_t
+ #define gppi_channel_alloc nrfx_dppi_channel_alloc
++#define gppi_channel_free nrfx_dppi_channel_free
+ #define gppi_channel_enable nrfx_dppi_channel_enable
+ #else
+ #error "No PPI or DPPI"
+@@ -1856,6 +1858,11 @@ static int uarte_nrfx_pm_action(const struct device *dev,
  
  	switch (action) {
  	case PM_DEVICE_ACTION_RESUME:
@@ -26,7 +40,7 @@ index 6e1ecfadfd8..0a56b06e67c 100644
  		if (cfg->flags & UARTE_CFG_FLAG_GPIO_MGMT) {
  			ret = pinctrl_apply_state(cfg->pcfg,
  						  PINCTRL_STATE_DEFAULT);
-@@ -1937,6 +1942,12 @@ static int uarte_nrfx_pm_action(const struct device *dev,
+@@ -1937,6 +1944,13 @@ static int uarte_nrfx_pm_action(const struct device *dev,
  			}
  		}
  
@@ -35,10 +49,11 @@ index 6e1ecfadfd8..0a56b06e67c 100644
 +			*(volatile uint32_t *)0x40002FFC = 0;
 +			*(volatile uint32_t *)0x40002FFC;
 +			*(volatile uint32_t *)0x40002FFC = 1;
++			gppi_channel_free(data->ppi_ch_endtx);
 +		}
  		break;
  	default:
  		return -ENOTSUP;
 -- 
-2.45.1
+2.45.2
 
