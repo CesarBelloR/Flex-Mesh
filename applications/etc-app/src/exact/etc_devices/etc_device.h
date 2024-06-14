@@ -150,8 +150,6 @@ union etc_device_record {
 	};
 };
 
-#pragma pack(push, 1)
-
 struct etc_device_relay_record {
 	bool is_reclaim;
 	int16_t logger_rssi;
@@ -164,6 +162,8 @@ struct etc_device_relay_record {
 	float sensor[ETC_DEVICE_NUM_SENSOR];
 	int data[ETC_DEVICE_NUM_EXTRA_ELEMENT];
 };
+
+#pragma pack(push, 1)
 
 struct etc_device_relay_record_stat {
 	uint16_t read_index;

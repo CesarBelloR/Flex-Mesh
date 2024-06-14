@@ -11,6 +11,7 @@
 #include "data/etc_cape.h"
 #include "cloud/cloud_codec/data_codec.h"
 #include "common.h"
+#include "etc_util.h"
 #define MODULE lora_module
 
 #include "modules_common.h"
