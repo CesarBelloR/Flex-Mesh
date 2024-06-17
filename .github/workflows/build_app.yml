@@ -151,6 +151,7 @@ jobs:
 
       - name: Copy output files
         working-directory: etc-firmware
+        if: ${{ matrix.type == 'memfault' }}
         run: |
           mkdir -p out/update
           cp build/zephyr/merged.hex out/flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.hex
