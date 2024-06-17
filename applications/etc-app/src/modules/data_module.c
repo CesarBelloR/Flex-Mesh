@@ -90,6 +90,7 @@ static struct data_modem_dynamic modem_dynamic;
 
 static bool first_send = true;
 static bool need_interval_tx_send = true;
+static bool ota_running = false;
 
 /* Size of the static modem (modem_stat) data structure.
  * Used to provide an array size when encoding batch data.
@@ -729,7 +730,7 @@ static void on_all_states(struct data_msg_data *msg)
 		if (etc_device_is_relay()) {
 			etc_device_relay_write_record_sensor(msg->module.sensor.data.sensors);
 		} else {
-			etc_device_write_record_sensor(msg->module.sensor.data.sensors);
+			etc_device_write_record_sensor(msg->module.sensor.data.sensors, ota_running);
 			uint8_t bat_percent = 
 				etc_battery_percentage_from_voltage(msg->module.sensor.data.sensors->battery_mV);
 			etc_ble_notify_battery(bat_percent);
@@ -739,7 +740,7 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY)) {
-		etc_device_write_record_sensor(msg->module.sensor.data.sensors);
+		etc_device_write_record_sensor(msg->module.sensor.data.sensors, ota_running);
 		SEND_EVENT(data, DATA_EVT_TEST_DATA_READY);
 	}
 
@@ -923,6 +924,20 @@ static void on_all_states(struct data_msg_data *msg)
 		if (ret) {
 			LOG_WRN("Could not save location");
 		}
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START)) {
+		ota_running = true;
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
+		ota_running = false;
+		etc_device_sync_record_on_ram();
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
+		ota_running = false;
+		etc_device_sync_record_on_ram();
 	}
 }
 

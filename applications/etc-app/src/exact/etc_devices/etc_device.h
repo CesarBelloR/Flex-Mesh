@@ -239,7 +239,7 @@ int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int set
  * @param sensor	A pointer to the sensor data structure.
  * @return	0 on success, an error code otherwise.
  */
-int etc_device_write_record_sensor(struct sensor_data *sensor);
+int etc_device_write_record_sensor(struct sensor_data *sensor, bool ota_running);
 
 /**
  * @brief Write a generic record to the ETC device.
@@ -523,4 +523,11 @@ void etc_device_relay_write_record_sensor(struct sensor_data *sensor);
  */
 int etc_device_relay_read_record_sensor(union etc_device_record* record);
 
+/**
+ * @brief Re-sync record on RAM 
+ * 
+ * This function will sync all record on RAM to external flash.
+ * It should call after OTA done.
+ */
+void etc_device_sync_record_on_ram(void);
 #endif /* ETC_DEVICE_H_ */

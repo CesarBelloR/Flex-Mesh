@@ -25,6 +25,7 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
 #define ETC_RECORD_DEFAULT_TX_PROBE_SECONDS (21600)
 #define ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE (15)
+#define ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT (8)
 
 static enum etc_device_mode etc_device_current_mode;
 static union etc_device_record current_relay_data_sensor;
@@ -57,6 +58,9 @@ K_MUTEX_DEFINE(relay_data_sensor_mtx);
  * is the first 4 bytes of the public key hash. 
  */
 static uint8_t img_pubkey_id[IMG_PUBKEY_ID_LEN];
+
+static uint8_t etc_device_backup_record_cnt;
+static union etc_device_record etc_device_backup_record[ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT];
 
 void etc_device_nvs_init(void)
 {
@@ -95,7 +99,7 @@ void etc_device_nvs_init(void)
 		etc_nvs_reset_relay_stat();
 		memset(&current_relay_data_sensor, 0, sizeof(current_relay_data_sensor));
 	}
-
+	etc_device_backup_record_cnt = 0;
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
 		FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL), info.size, etc_fs.sector_count);
 	LOG_DBG("Initialised etc setting successfully");
@@ -225,7 +229,7 @@ int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int set
 	return etc_nvs_read_with_len(setting_id, setting, setting_size);
 }
 
-int etc_device_write_record_sensor(struct sensor_data *sensor)
+int etc_device_write_record_sensor(struct sensor_data *sensor, bool ota_running)
 {
 	int ret;
 	int64_t time_start = k_uptime_get();
@@ -237,9 +241,18 @@ int etc_device_write_record_sensor(struct sensor_data *sensor)
 		record.sensor[i] = sensor->sensor[i];
 	}
 	LOG_HEXDUMP_DBG((uint8_t *)&record, sizeof(record), "SAVE");
-
-	ret = etc_device_write_record(&record);
-
+	if (ota_running) {
+		if (etc_device_backup_record_cnt < ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT) {
+			memcpy(&etc_device_backup_record[etc_device_backup_record_cnt], 
+			       &record, sizeof(record));
+			etc_device_backup_record_cnt += 1;
+		}
+		LOG_DBG("Saved to backup RAM %d", etc_device_backup_record_cnt);
+		return 0;
+	} else {
+		ret = etc_device_write_record(&record);
+	}
+	
 	LOG_DBG("NVS time record: %lld", k_uptime_get() - time_start);
 	return ret;
 }
@@ -544,6 +557,15 @@ int etc_device_relay_read_record_sensor(union etc_device_record* record) {
 	}
 	k_mutex_unlock(&relay_data_sensor_mtx);
 	return rc;
+}
+
+void etc_device_sync_record_on_ram(void) {
+	union etc_device_record record;
+	for (int i = 0; i < etc_device_backup_record_cnt; i++) {
+		memcpy(&record, &etc_device_backup_record[i], sizeof(record));
+		etc_device_write_record(&record);
+	}
+	etc_device_backup_record_cnt = 0;
 }
 
 #ifdef CONFIG_SHELL
