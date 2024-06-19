@@ -1,6 +1,8 @@
 #ifndef ETC_DEVICE_RECORD_H_
 #define ETC_DEVICE_RECORD_H_
 
+#include "etc_device.h"
+
 #define ETC_DEVICE_RECORD_BUF_SIZE (1088)
 #define ETC_DEVICE_RECORD_FLAG (0xCAFEBEEF)
 
@@ -41,6 +43,9 @@
 #define MAX_RECORD_NO_OFFSET_ID ( ETC_RECORD_MAX_SECTOR * ETC_RECORD_MAX_PER_SECTOR - 1)
 #define MIN_RECORD_NO_OFFSET_ID ( 0 )
 
+#define ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT (8)
+#define ETC_RECORD_BACKUP_OFFSET_IN_RAM (2048)
+
 #pragma pack(push, 1)
 
 struct etc_device_record_index { // Constant in flash until the index is override (exflash)
@@ -59,6 +64,13 @@ struct etc_device_record_data {
 	struct etc_device_record_table record_stat;
 	/* Record bits array to store ACK/NACK data */
 	uint8_t record_bits[ETC_DEVICE_RECORD_BUF_SIZE];
+	/* Flag to determine data is synced */
+	uint32_t record_sync_flag;
+};
+
+struct etc_device_record_backup_data {
+	uint8_t num_records;
+	union etc_device_record records[ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT];
 	/* Flag to determine data is synced */
 	uint32_t record_sync_flag;
 };
@@ -331,4 +343,17 @@ size_t etc_device_record_get_element_size(void);
  * @return Number of records
  */
 int etc_device_record_num_reclaim_records(void);
+
+/**
+ * @brief This API will return the RAM backup object. So, etc-device can use it without  
+ * allocate another RAM memory.
+ * 
+ * @return Object of etc_device_record_backup on retained RAM.
+ */
+struct etc_device_record_backup_data* etc_device_record_backup_get_object(void);
+
+/**
+ * @brief This API will sync data to retained RAM 
+ */
+void etc_device_record_backup_sync(void);
 #endif /* ETC_DEVICE_RECORD_H_ */

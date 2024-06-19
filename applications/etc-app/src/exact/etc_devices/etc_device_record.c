@@ -39,9 +39,12 @@ struct etc_device_record_data etc_device_record;
 struct etc_device_record_data *pRecord = &etc_device_record;
 struct etc_device_record_table *p_etc_device_record_table = &etc_device_record.record_stat;
 
-#define RECORD_ARRAY_OFFSET(x) (offsetof(struct etc_device_record_data, record_bits) + x)
-#define RECORD_FLAG_OFFSET     offsetof(struct etc_device_record_data, record_sync_flag)
-#define RECORD_STAT_OFFSET     offsetof(struct etc_device_record_data, record_stat)
+static struct etc_device_record_backup_data etc_device_record_backup;
+
+#define RECORD_ARRAY_OFFSET(x)	(offsetof(struct etc_device_record_data, record_bits) + x)
+#define RECORD_FLAG_OFFSET	(offsetof(struct etc_device_record_data, record_sync_flag))
+#define RECORD_STAT_OFFSET	(offsetof(struct etc_device_record_data, record_stat))
+#define RECORD_BACKUP_OFFSET	(ETC_RECORD_BACKUP_OFFSET_IN_RAM)
 
 static int etc_device_record_get_ack_status(int record_id)
 {
@@ -254,6 +257,23 @@ void etc_device_record_init(void)
 		}
 	} else {
 		LOG_DBG("Record is ready");
+	}
+
+	rc = retained_mem_read(retained_ram_dev, ETC_RECORD_BACKUP_OFFSET_IN_RAM, 
+			       (uint8_t *)&etc_device_record_backup,
+			       sizeof(etc_device_record_backup));
+	if ((rc) || (etc_device_record_backup.record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
+		/* Clean up the record in app RAM */
+		memset(&etc_device_record_backup, 0, sizeof(etc_device_record_backup));
+		etc_device_record_backup.record_sync_flag = ETC_DEVICE_RECORD_FLAG;
+		rc = retained_mem_write(retained_ram_dev, ETC_RECORD_BACKUP_OFFSET_IN_RAM,
+					(uint8_t *)&etc_device_record_backup,
+					sizeof(etc_device_record_backup));
+		if (rc) {
+			LOG_ERR("Failed to write data - err %d", rc);
+		}
+	} else {
+		LOG_DBG("Record back-up is available space");
 	}
 
 	rc = etc_device_read_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
@@ -1030,6 +1050,19 @@ int etc_device_record_num_reclaim_records(void)
 		return etc_device_record_get_num_reclaim_records();
 	}
 	return 0;
+}
+
+struct etc_device_record_backup_data* etc_device_record_backup_get_object(void){
+	return &etc_device_record_backup;
+}
+
+void etc_device_record_backup_sync(void) {
+	int rc = retained_mem_write(retained_ram_dev, ETC_RECORD_BACKUP_OFFSET_IN_RAM,
+				(uint8_t *)&etc_device_record_backup,
+				sizeof(etc_device_record_backup));
+	if (rc) {
+		LOG_ERR("Failed to write data - err %d", rc);
+	}
 }
 
 #ifdef CONFIG_SHELL

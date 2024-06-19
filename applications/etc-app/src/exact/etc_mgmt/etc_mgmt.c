@@ -12,6 +12,7 @@ LOG_MODULE_REGISTER(etc_mgmt, CONFIG_ETC_INTERFACE_LOG_LEVEL);
 #include <zcbor_encode.h>
 #include <zephyr/drivers/flash.h>
 #include "etc_device.h"
+#include "etc_device_record.h"
 #include "etc_mgmt.h"
 
 #define ETC_MGMT_RECORD_BUF_SIZE (256)

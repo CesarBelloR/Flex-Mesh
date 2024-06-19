@@ -25,7 +25,6 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
 #define ETC_RECORD_DEFAULT_TX_PROBE_SECONDS (21600)
 #define ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE (15)
-#define ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT (8)
 
 static enum etc_device_mode etc_device_current_mode;
 static union etc_device_record current_relay_data_sensor;
@@ -54,13 +53,12 @@ static time_t time_last_gnss_request;
 
 K_MUTEX_DEFINE(relay_data_sensor_mtx);
 
+static struct etc_device_record_backup_data* p_record_backup = NULL;
+
 /* The public key ID of the current (signed) image. The public key ID 
  * is the first 4 bytes of the public key hash. 
  */
 static uint8_t img_pubkey_id[IMG_PUBKEY_ID_LEN];
-
-static uint8_t etc_device_backup_record_cnt;
-static union etc_device_record etc_device_backup_record[ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT];
 
 void etc_device_nvs_init(void)
 {
@@ -99,11 +97,14 @@ void etc_device_nvs_init(void)
 		etc_nvs_reset_relay_stat();
 		memset(&current_relay_data_sensor, 0, sizeof(current_relay_data_sensor));
 	}
-	etc_device_backup_record_cnt = 0;
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
 		FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL), info.size, etc_fs.sector_count);
 	LOG_DBG("Initialised etc setting successfully");
 	etc_device_record_init();
+	/* Load the record backup */
+	p_record_backup = etc_device_record_backup_get_object();
+	/* Sync last record backup */
+	etc_device_sync_record_on_ram();
 }
 
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len)
@@ -242,12 +243,13 @@ int etc_device_write_record_sensor(struct sensor_data *sensor, bool ota_running)
 	}
 	LOG_HEXDUMP_DBG((uint8_t *)&record, sizeof(record), "SAVE");
 	if (ota_running) {
-		if (etc_device_backup_record_cnt < ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT) {
-			memcpy(&etc_device_backup_record[etc_device_backup_record_cnt], 
+		if (p_record_backup->num_records < ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT) {
+			memcpy(&p_record_backup->records[p_record_backup->num_records], 
 			       &record, sizeof(record));
-			etc_device_backup_record_cnt += 1;
+			p_record_backup->num_records += 1;
 		}
-		LOG_DBG("Saved to backup RAM %d", etc_device_backup_record_cnt);
+		LOG_DBG("Saved to backup RAM %d", p_record_backup->num_records);
+		etc_device_record_backup_sync();
 		return 0;
 	} else {
 		ret = etc_device_write_record(&record);
@@ -561,11 +563,12 @@ int etc_device_relay_read_record_sensor(union etc_device_record* record) {
 
 void etc_device_sync_record_on_ram(void) {
 	union etc_device_record record;
-	for (int i = 0; i < etc_device_backup_record_cnt; i++) {
-		memcpy(&record, &etc_device_backup_record[i], sizeof(record));
+	for (int i = 0; i < p_record_backup->num_records; i++) {
+		memcpy(&record, &p_record_backup->records[i], sizeof(record));
 		etc_device_write_record(&record);
 	}
-	etc_device_backup_record_cnt = 0;
+	p_record_backup->num_records = 0;
+	etc_device_record_backup_sync();
 }
 
 #ifdef CONFIG_SHELL

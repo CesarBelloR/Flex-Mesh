@@ -9,8 +9,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "etc_device_record.h"
-
 #define ETC_DEVICE_RECORD_SIZE (36)
 /* Logger ID size */
 #define ETC_DEVICE_LORA_LOGGER_ID_SIZE	(sizeof("FFFFFFFFFFFFFFFF"))
