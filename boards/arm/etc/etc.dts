@@ -217,7 +217,7 @@
 	pinctrl-0 = <&spi2_default>;
 	pinctrl-1 = <&spi2_sleep>;
 	pinctrl-names = "default", "sleep";
-	cs-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
+	cs-gpios = <&gpio1 14 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 
 	lora: sx1276@0 {
 		compatible = "semtech,sx1276";
