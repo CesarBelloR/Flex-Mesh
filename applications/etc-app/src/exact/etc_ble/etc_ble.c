@@ -641,9 +641,9 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler)
 
 void etc_ble_start_adv(void)
 {
-	if (current_conn != NULL) {
-		return;
-	}
+	/* Force to cancel this work. Since BLE mode always advertise */
+	k_work_cancel_delayable(&flex_ble_adv_magnet_work);
+	flex_ble_is_magnet_trigger = false;
 	flex_ble_is_adversting = true;
 	k_work_submit(&advertise_work);
 }
