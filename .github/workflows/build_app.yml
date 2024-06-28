@@ -119,10 +119,10 @@ jobs:
         run: |
           echo "overlays=" >> "$GITHUB_ENV"
           
-      - name: Build etc-app ${{ matrix.sample }}
+      - name: Build etc-app ${{ matrix.type }}_${{ matrix.key }}
         working-directory: etc-firmware
         run: |
-          west build -b etc@0.3.0 -s applications/etc-app -p -- \
+          west build -b etc@0.3.0 -s applications/etc-app -d build_${{ matrix.type }}_${{ matrix.key }} -p -- \
             $overlays \
             -Dmcuboot_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$mcuboot_key_path\"
 
@@ -141,27 +141,71 @@ jobs:
             --org-token $MEMFAULT_ORG_TOKEN \
             --org $MEMFAULT_ORG \
             --project $MEMFAULT_PROJECT \
-            upload-mcu-symbols build/zephyr/zephyr.elf
+            upload-mcu-symbols build_${{ matrix.type }}_${{ matrix.key }}/zephyr/zephyr.elf
 
-      - name: Extract pubkey ID
-        working-directory: etc-firmware
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build_${{ matrix.type }}_${{ matrix.key }}
+          path: |
+            etc-firmware/build_${{ matrix.type }}_${{ matrix.key }}/zephyr/merged.hex
+            etc-firmware/build_${{ matrix.type }}_${{ matrix.key }}/zephyr/app_update.bin
+            etc-firmware/build_${{ matrix.type }}_${{ matrix.key }}/zephyr/app_signed.hex
+            etc-firmware/build_${{ matrix.type }}_${{ matrix.key }}/zephyr/zephyr.elf
+          retention-days: 1
+
+  release_package:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: etc-firmware
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: etc-firmware/build_memfault_dev
+          name: build_memfault_dev
+          
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: etc-firmware/build_memfault_production
+          name: build_memfault_production
+
+      - name: Install python dependencies
         run: |
-          echo "pubkey_id=$(python scripts/imgtools/etc_imgtool.py pubkeyid build/zephyr/app_update.bin)" \
-            >> "$GITHUB_ENV"
+          pip3 install memfault-cli
+          pip3 install imgtool==2.0.0
 
       - name: Copy output files
         working-directory: etc-firmware
-        if: ${{ matrix.type == 'memfault' }}
         run: |
           mkdir -p out/update
-          cp build/zephyr/merged.hex out/flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.hex
-          cp build/zephyr/app_update.bin "out/update/update_flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.bin"
-          mkdir out/misc
-          cp build/zephyr/app_signed.hex "out/misc/update_test_flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.hex"
-          cp build/zephyr/zephyr.elf "out/misc/flex_${{ matrix.type }}_${sha_short}_pubkey-${pubkey_id}.elf"
+          mkdir -p out/misc
+          ref_name=$(echo "${{ github.ref }}" | sed 's|refs/heads/||' | sed 's|refs/tags/||' | sed 's|^RC/||')
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            version="${ref_name}"
+          else
+            commit_id=$(git rev-parse --short HEAD)
+            version="${ref_name}_${commit_id}"
+          fi
+          for type in memfault; do
+            for key in dev production; do
+              build_dir=build_${type}_${key}
+              pubkey_id=$(python scripts/imgtools/etc_imgtool.py pubkeyid $build_dir/app_update.bin)
+              cp $build_dir/merged.hex "out/flex_${version}_pubkey-${pubkey_id}.hex"
+              cp $build_dir/app_update.bin "out/update/update_flex_${version}_pubkey-${pubkey_id}.bin"
+              cp $build_dir/app_signed.hex "out/misc/update_test_flex_${version}_pubkey-${pubkey_id}.hex"
+              cp $build_dir/zephyr.elf "out/misc/flex_memfault_${version}_pubkey-${pubkey_id}.elf"
+            done
+          done
 
       - name: Upload output files
         uses: actions/upload-artifact@v4
         with:
-          name: flex_${{ env.sha_short }}_${{ matrix.type }}_${{ env.pubkey_id }}
+          name: flex_${{ github.sha }}_memfault
           path: etc-firmware/out/
+
