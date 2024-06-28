@@ -185,12 +185,15 @@ jobs:
         run: |
           mkdir -p out/update
           mkdir -p out/misc
-          ref_name=$(echo "${{ github.ref }}" | sed 's|refs/heads/||' | sed 's|refs/tags/||' | sed 's|^RC/||')
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            version="${ref_name}"
+            version=$(echo "${{ github.ref }}" | sed 's|refs/tags/||')
+          elif [[ "${{ github.event_name }}" == 'pull_request' ]]; then
+            base_branch=$(echo "${{ github.base_ref }}" | sed 's|^RC/||')
+            version="${base_branch}"
           else
+            head_branch=$(echo "${{ github.head_ref }}" | sed 's|^RC/||')
             commit_id=$(git rev-parse --short HEAD)
-            version="${ref_name}_${commit_id}"
+            version="${head_branch}_${commit_id}"
           fi
           for type in memfault; do
             for key in dev production; do
@@ -202,6 +205,7 @@ jobs:
               cp $build_dir/zephyr.elf "out/misc/flex_memfault_${version}_pubkey-${pubkey_id}.elf"
             done
           done
+
 
       - name: Upload output files
         uses: actions/upload-artifact@v4
