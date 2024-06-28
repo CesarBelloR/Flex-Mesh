@@ -625,6 +625,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 			data_encode_for_cloud(false, etc_device_is_relay());
 		} else if (etc_device_is_relay()) {
 			reset_send_status(&send_status);
+			need_interval_tx_send = true;
 			data_encode_for_cloud(false, true);
 		}
 	}
@@ -814,6 +815,7 @@ static void on_all_states(struct data_msg_data *msg)
 	
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
 		if (state == STATE_CLOUD_CONNECTED) {
+			need_interval_tx_send = true;
 			data_encode_for_cloud(false, true);
 		}
 		return;
