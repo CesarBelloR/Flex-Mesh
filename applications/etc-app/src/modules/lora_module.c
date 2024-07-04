@@ -452,8 +452,8 @@ static int module_lora_relay_wait_packet(void)
 retry_recv:
 	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), 
 			K_MSEC(LORA_LOGGER_ON_RECV_MODE_MSEC), &rssi, &snr);
-	if (ret < 0) {
-		LOG_DBG("No message");
+	if (ret <= 0 || ret > sizeof(decoded_buf)) {
+		LOG_DBG("No message %d", ret);
 	} else {
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
 		LOG_HEXDUMP_DBG(decoded_buf, ret, "Decrypted data");
