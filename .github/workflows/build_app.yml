@@ -191,7 +191,7 @@ jobs:
             base_branch=$(echo "${{ github.base_ref }}" | sed 's|^RC/||')
             version="${base_branch}"
           else
-            head_branch=$(echo "${{ github.head_ref }}" | sed 's|^RC/||')
+            head_branch=$(echo "${{ github.ref }}" | sed 's|^RC/||')
             commit_id=$(git rev-parse --short HEAD)
             version="${head_branch}_${commit_id}"
           fi
