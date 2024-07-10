@@ -1,6 +1,7 @@
 #define DT_DRV_COMPAT quectel_bg95
 
 #include <fcntl.h>
+#include <string.h>
 #include <zephyr/net/dns_resolve.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(modem_quectel_bg95, CONFIG_MODEM_LOG_LEVEL);
@@ -1199,7 +1200,9 @@ MODEM_CMD_DEFINE(on_cmd_unsol_rdy)
 
 static int on_dns_parser_ip_count(uint8_t* dns_buffer, int length) {
 	(void)length;
-	char* token = strtok(dns_buffer, ",");
+	char *saveptr;
+
+	char* token = strtok_r(dns_buffer, ",", &saveptr);
 	if (NULL == token) {
 		LOG_ERR("Can't get error code");
 		return -1;
@@ -1208,7 +1211,7 @@ static int on_dns_parser_ip_count(uint8_t* dns_buffer, int length) {
 	int error_code = atoi(token);
 	LOG_DBG("Error DNS code %d", error_code);
 
-	token = strtok(NULL, ",");
+	token = strtok_r(NULL, ",", &saveptr);
 	if (NULL == token) {
 		LOG_ERR("Can't get number of IP return");
 		return -1;

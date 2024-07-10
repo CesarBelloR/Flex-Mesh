@@ -27,6 +27,9 @@ set(PM_STATIC_YML_FILE
   ${CMAKE_CURRENT_LIST_DIR}/boards/pm_static.yml
 )
 
+# Include POSIX functions in C libary (specifically strtok_r())
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_POSIX_C_SOURCE=200809")
+
 configure_file(app_version.h.in ${CMAKE_BINARY_DIR}/app/include/app_version.h)
 configure_file(version.h.in ${CMAKE_BINARY_DIR}/app/config/mcu_version.conf)
 list(APPEND OVERLAY_CONFIG ${CMAKE_BINARY_DIR}/app/config/mcu_version.conf)

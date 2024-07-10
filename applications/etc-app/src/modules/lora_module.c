@@ -4,6 +4,7 @@
 #include <zephyr/drivers/lora.h>
 #include <zephyr/kernel.h>
 #include <zephyr/random/random.h>
+#include <string.h>
 #include "etc_date_time.h"
 #include "etc_device.h"
 #include "etc_settings.h"
@@ -187,8 +188,9 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 	uint8_t i;
 	char *pt;
 	char *ptr;
+	char *saveptr;
 	response.is_okay = false;
-	pt = strtok(package, ",");
+	pt = strtok_r(package, ",", &saveptr);
 	if (pt != NULL) { // break down ACK string into parts.
 		for (i = 0; i < 6; i++) {
 			if (pt == NULL) {
@@ -217,7 +219,7 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 					break;
 				default: break;
 			}
-			pt = strtok(NULL, ",");
+			pt = strtok_r(NULL, ",", &saveptr);
 		}
 	}
 	return response;
@@ -231,6 +233,7 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 	uint8_t i = 0;
 	char *pt;
 	char *ptr;
+	char *saveptr;
 	message->is_okay = false;
 
 	/* Set extra element with -1 as initialization value */
@@ -238,7 +241,7 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 		message->record.data[i] = ETC_DEVICE_INVALID_VALUE_ELEMENT;
 	}
 
-	pt = strtok(package, ",");
+	pt = strtok_r(package, ",", &saveptr);
 	do {
 		if (pt == NULL) {
 			message->is_okay = false;
@@ -310,7 +313,7 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 			break;
 		}
 		}
-		pt = strtok(NULL, ",");
+		pt = strtok_r(NULL, ",", &saveptr);
 		i += 1;
 	} while (pt != NULL);
 	return 0;
