@@ -177,7 +177,6 @@ jobs:
 
       - name: Install python dependencies
         run: |
-          pip3 install memfault-cli
           pip3 install imgtool==2.0.0
 
       - name: Copy output files
@@ -185,14 +184,17 @@ jobs:
         run: |
           mkdir -p out/update
           mkdir -p out/misc
+          commit_id=$(git rev-parse --short HEAD)
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             version=$(echo "${{ github.ref }}" | sed 's|refs/tags/||')
+          elif [[ "${{ github.ref }}" == refs/heads/RC/* ]]; then
+            version=$(echo "${{ github.ref }}" | sed 's|refs/heads/RC/||')
           elif [[ "${{ github.event_name }}" == 'pull_request' ]]; then
-            base_branch=$(echo "${{ github.base_ref }}" | sed 's|^RC/||')
-            version="${base_branch}"
+            commit_id=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c 1-8)
+            pr_branch=$(echo "${{ github.head_ref }}" | sed 's:.*/::')
+            version="${pr_branch}_${commit_id}"
           else
-            head_branch=$(echo "${{ github.ref }}" | sed 's|^RC/||')
-            commit_id=$(git rev-parse --short HEAD)
+            head_branch=$(echo "${{ github.ref }}" | sed 's:.*/::')
             version="${head_branch}_${commit_id}"
           fi
           for type in memfault; do
@@ -202,14 +204,15 @@ jobs:
               cp $build_dir/merged.hex "out/flex_${version}_pubkey-${pubkey_id}.hex"
               cp $build_dir/app_update.bin "out/update/update_flex_${version}_pubkey-${pubkey_id}.bin"
               cp $build_dir/app_signed.hex "out/misc/update_test_flex_${version}_pubkey-${pubkey_id}.hex"
-              cp $build_dir/zephyr.elf "out/misc/flex_memfault_${version}_pubkey-${pubkey_id}.elf"
+              cp $build_dir/zephyr.elf "out/misc/flex_${version}_pubkey-${pubkey_id}.elf"
             done
           done
+          echo "APP_VERSION=${version}" >> $GITHUB_ENV
 
 
       - name: Upload output files
         uses: actions/upload-artifact@v4
         with:
-          name: flex_${{ github.sha }}_memfault
+          name: flex_${{ env.APP_VERSION }}
           path: etc-firmware/out/
 
