@@ -61,6 +61,23 @@ enum lora_request_type {
 	LORA_REQUEST_IN_RUN_LOGGER,	
 };
 
+enum logger_msg_pos {
+	MSG_POS_S = 0,
+	MSG_POS_PARENT,
+	MSG_POS_VERSION,
+	MSG_POS_ID,
+	MSG_POS_BAT,
+	MSG_POS_PKT_NUM,
+	MSG_POS_TIMESTAMP,
+	MSG_POS_TEMP1,
+	MSG_POS_TEMP2,
+	MSG_POS_TEMP3,
+	MSG_POS_TEMP4,
+	MSG_POS_TEMP_AMBIENT,
+	MSG_POS_HUMIDITY,
+	MSG_POS_EXTRA_ELEMENT
+};
+
 /* Lora module message queue. */
 #define LORA_QUEUE_ENTRY_COUNT	  36
 #define LORA_QUEUE_BYTE_ALIGNMENT 4
@@ -225,12 +242,20 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 	return response;
 }
 
+static void populate_logger_sensor_value(const char *val_buf, float *sensor_val)
+{
+	if ((strstr(val_buf, "*") != NULL) ||
+	    (parse_for_float(val_buf, sensor_val) != 0)) {
+		*sensor_val = SENSOR_TEMP_NO_CONNECTED;
+	}
+}
+
 static int lora_module_relay_get_message(char *package, int16_t rssi,
 					 struct relay_lora_message *message)
 {
 	__ASSERT(package != NULL, "Empty input package");
 	__ASSERT(message != NULL, "Empty message");
-	uint8_t i = 0;
+	enum logger_msg_pos msg_pos = 0;
 	char *pt;
 	char *ptr;
 	char *saveptr;
@@ -241,42 +266,52 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 		message->record.data[i] = ETC_DEVICE_INVALID_VALUE_ELEMENT;
 	}
 
+	/* Set sensor values as invalid. */
+	for (int i = 0; i < SENSOR_INPUT_MAX; i++) {
+		message->record.sensor[i] = SENSOR_TEMP_NO_CONNECTED;
+	}
+
+	message->record.logger_rssi = rssi;
+
 	pt = strtok_r(package, ",", &saveptr);
 	do {
 		if (pt == NULL) {
 			message->is_okay = false;
 			return -EINVAL;
 		}
-		switch (i) {
-		case 0:
+		switch (msg_pos) {
+		case MSG_POS_S:
 			if (pt[0] != 'S') {
 				message->is_okay = false;
 				return -EINVAL;
 			}
 			break;
-		case 1:
+		case MSG_POS_PARENT:
 			snprintf(message->record.relay_id, sizeof(message->record.relay_id), "%s",
 				 pt);
 			break;
-		case 2:
+		case MSG_POS_VERSION:
 			snprintf(message->record.logger_ver, sizeof(message->record.logger_ver),
 				 "%s", pt);
 			break;
-		case 3:
+		case MSG_POS_ID:
 			snprintf(message->record.logger_id, sizeof(message->record.logger_id), "%s",
 				 pt);
-			message->is_okay = true;
-			message->record.logger_rssi = rssi;
 			break;
-		case 4:
+		case MSG_POS_BAT:
 			message->record.battery = atof(pt);
 			break;
-		case 5:
+		case MSG_POS_PKT_NUM:
 			message->record.packet_number = atoi(pt);
 			break;
-		case 6:
+		case MSG_POS_TIMESTAMP:
 			if (strstr(pt, "*") == NULL) {
-				message->record.timestamp = atoi(pt);
+				char *end;
+				message->record.timestamp = strtoul(pt, &end, 10);
+				/* Exit early with error if timestamp is corrupted. */
+				if (end == pt) {
+					return -ENOMSG;
+				}
 				message->record.is_reclaim = true;
 			} else {
 				/* If timestamp is *, use relay time */
@@ -284,37 +319,41 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 				message->record.is_reclaim = false;
 			}
 			break;
-		case 7:
-		case 8:
-		case 9:
-		case 10:
-		case 11:
-			if ((strstr(pt, "*") != NULL) ||
-			    (parse_for_float(pt, &message->record.sensor[i - 7]) != 0)) {
-				message->record.sensor[i - 7] = SENSOR_TEMP_NO_CONNECTED;
-			}
+		case MSG_POS_TEMP1:
+		case MSG_POS_TEMP2:
+		case MSG_POS_TEMP3:
+		case MSG_POS_TEMP4:
+			populate_logger_sensor_value(pt,
+						     &message->record.sensor[msg_pos - MSG_POS_TEMP1]);
 			break;
-		case 12:
-			if (strstr(pt, "*") == NULL) {
-				message->record.sensor[SENSOR_INPUT_HUMID] = atof(pt);
-			} else {
-				message->record.sensor[SENSOR_INPUT_HUMID] =
-					SENSOR_HUMID_NO_CONNECTED;
-			}
+		case MSG_POS_TEMP_AMBIENT:
+			populate_logger_sensor_value(pt,
+						     &message->record.sensor[msg_pos - MSG_POS_TEMP1]);
+			/* Mark message as valid when all values up to ambient temperature
+			 * have been received.
+			 */
+			message->is_okay = true;
+			break;
+		case MSG_POS_HUMIDITY:
+			populate_logger_sensor_value(pt,
+						     &message->record.sensor[SENSOR_INPUT_HUMID]);
 			break;
 		default: {
-			if ((i >= 13) && i <= (13 + ETC_DEVICE_NUM_EXTRA_ELEMENT)) {
-				if (strstr(pt, "*") == NULL) {
-					message->record.data[i - 13] = atoi(pt);
-				} else {
-					message->record.data[i - 13] = -1;
+			if ((msg_pos >= MSG_POS_EXTRA_ELEMENT) &&
+			    msg_pos <= (MSG_POS_EXTRA_ELEMENT + ETC_DEVICE_NUM_EXTRA_ELEMENT)) {
+				if ((strstr(pt, "*") != NULL) ||
+				    (parse_for_int(
+					     pt,
+					     &message->record.data[msg_pos - MSG_POS_EXTRA_ELEMENT]) !=
+				     0)) {
+					message->record.data[msg_pos - MSG_POS_EXTRA_ELEMENT] = -1;
 				}
 			}
 			break;
 		}
 		}
 		pt = strtok_r(NULL, ",", &saveptr);
-		i += 1;
+		msg_pos += 1;
 	} while (pt != NULL);
 	return 0;
 }
@@ -458,6 +497,7 @@ retry_recv:
 	if (ret <= 0 || ret > sizeof(decoded_buf)) {
 		LOG_DBG("No message %d", ret);
 	} else {
+		memset(decoded_buf, 0, sizeof(decoded_buf));
 		etc_cape_decrypt((char *)lora_rx_buf, decoded_buf, ret);
 		LOG_HEXDUMP_DBG(decoded_buf, ret, "Decrypted data");
 		struct relay_lora_message message;
@@ -478,8 +518,8 @@ retry_recv:
 					lora_data_send();
 				}
 			} else {
-				LOG_WRN("Unknow packet from parent");
-			}	
+				LOG_WRN("Unknown packet from parent");
+			}
 		} else {
 			LOG_WRN("Unknown start message");
 		}

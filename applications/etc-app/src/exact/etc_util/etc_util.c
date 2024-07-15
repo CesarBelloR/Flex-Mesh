@@ -13,6 +13,15 @@
 
 #include "etc_util.h"
 
+static const char *skip_to_value_start(const char *buf)
+{
+	const char *ret = buf;
+	while (!(isdigit(*ret) || *ret == '+' || *ret == '-') && *ret != '\0') {
+		ret++;
+	}
+	return ret;
+}
+
 int util_validate_u32(uint32_t data, uint32_t lower_limit, uint32_t upper_limit) 
 {
 	if ((data < lower_limit) || (data > upper_limit)) {
@@ -58,10 +67,26 @@ int parse_for_float(const char *float_field, float *float_value)
 		return -EINVAL;
 	}
 
-	while (!isdigit(*buf) && *buf != '\0') {
-		buf++;
-	}
+	buf = skip_to_value_start(buf);
 	*float_value = strtof(buf, &end);
+
+	if (buf == end) {
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int parse_for_int(const char *int_field, int *int_value)
+{
+	const char *buf = int_field;
+	char *end;
+
+	if ((int_field == NULL) || (int_value == NULL)) {
+		return -EINVAL;
+	}
+
+	buf = skip_to_value_start(buf);
+	*int_value = strtol(buf, &end, 0);
 
 	if (buf == end) {
 		return -EINVAL;

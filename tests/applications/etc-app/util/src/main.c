@@ -35,11 +35,43 @@ ZTEST(etc_util_test, test_parse_for_float_invalid)
 
 ZTEST(etc_util_test, test_parse_for_float_non_digit_prefix)
 {
-	const char *float_str = "JY9.2451";
+	const char *float_str = "JY-9.2451";
 	float result;
 	int ret;
 
 	ret = parse_for_float(float_str, &result);
 	zassert_ok(ret, "parse_for_float result invalid");
-	zassert_within(result, 9.2451, 0.0001);
+	zassert_within(result, -9.2451, 0.0001);
+}
+
+ZTEST(etc_util_test, test_parse_for_int_ok)
+{
+	const char *valid_int = "153";
+	int result;
+	int ret;
+
+	ret = parse_for_int(valid_int, &result);
+	zassert_ok(ret, "parse_for_int was not ok");
+	zassert_equal(result, 153);
+}
+
+ZTEST(etc_util_test, test_parse_for_int_invalid)
+{	
+	const char *int_str = "abcd\4\5";
+	int result;
+	int ret;
+
+	ret = parse_for_int(int_str, &result);
+	zassert_not_ok(ret, "parse_for_int result invalid");
+}
+
+ZTEST(etc_util_test, test_parse_for_int_non_digit_prefix)
+{
+	const char *int_str = "us#-915";
+	int result;
+	int ret;
+
+	ret = parse_for_int(int_str, &result);
+	zassert_ok(ret, "parse_for_int result invalid");
+	zassert_equal(result, -915);
 }

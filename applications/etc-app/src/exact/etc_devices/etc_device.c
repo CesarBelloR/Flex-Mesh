@@ -326,6 +326,10 @@ int etc_device_read_relay_data(struct etc_device_relay_record *record)
 
 void etc_device_sync_relay_data(void) {
 	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
+	if (p_relay_stat->number_record == 0) {
+		k_mutex_unlock(&etc_relay_record_mutex);
+		return;
+	}
 	if (++p_relay_stat->read_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
 		p_relay_stat->read_index = 0;
 	}
