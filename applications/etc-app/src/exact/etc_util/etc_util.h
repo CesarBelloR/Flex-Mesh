@@ -153,27 +153,45 @@ inline static int util_validate_in_lora_probe_offset(uint16_t value)
 }
 
 /**
- * Parse null-terminated buffer for a float value. Non-digit (except for +/-)
- * characters at the beginning of the input string are skipped.
+ * Parse null-terminated buffer for a float value. If there are any invalid
+ * characters in `float_field` that are not part of a float value, return an error.
  * 
  * @param float_field Null-terminated string buffer that contains a float value.
  * @param float_value Pointer that the resulting float value will be saved to.
  * 
  * @retval 0 success
- * @retval -EINVAL Input arguments are invalid or value could not be parsed.
+ * @retval 1 `float_field` is encryption IV
+ * @retval -EINVAL Input arguments are invalid.
+ * @retval -ENOMSG Invalid characters found in `float_field`
 */
 int parse_for_float(const char *float_field, float *float_value);
 
 /**
- * Parse null-terminated buffer for an integer value. Non-digit (except for +/-)
- * characters at the beginning of the input string are skipped.
+ * Parse null-terminated buffer for an integer value. If there are any invalid
+ * characters in `float_field` that are not part of an int value, return an error.
  * 
  * @param int_field Null-terminated string buffer that contains an int value.
  * @param int_value Pointer that the resulting int value will be saved to.
  * 
  * @retval 0 success
+ * @retval 1 `int_field` is encryption IV
  * @retval -EINVAL Input arguments are invalid or value could not be parsed.
+ * @retval -ENOMSG Invalid characters found in `int_field`
 */
 int parse_for_int(const char *int_field, int *int_value);
+
+/**
+ * Parse null-terminated buffer for an unsigned integer value. If there are any invalid
+ * characters in `float_field` that are not part of an int value, return an error.
+ * 
+ * @param int_field Null-terminated string buffer that contains an int value.
+ * @param int_value Pointer that the resulting int value will be saved to.
+ * 
+ * @retval 0 success
+ * @retval 1 `int_field` is encryption IV
+ * @retval -EINVAL Input arguments are invalid or value could not be parsed.
+ * @retval -ENOMSG Invalid characters found in `int_field`
+*/
+int parse_for_uint(const char *int_field, uint32_t *int_value);
 
 #endif

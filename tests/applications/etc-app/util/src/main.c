@@ -40,8 +40,27 @@ ZTEST(etc_util_test, test_parse_for_float_non_digit_prefix)
 	int ret;
 
 	ret = parse_for_float(float_str, &result);
-	zassert_ok(ret, "parse_for_float result invalid");
-	zassert_within(result, -9.2451, 0.0001);
+	zassert_not_ok(ret, "parse_for_float result invalid");
+}
+
+ZTEST(etc_util_test, test_parse_for_float_non_digit_suffix)
+{
+	const char *float_str = "+9.2451\1\10";
+	float result;
+	int ret;
+
+	ret = parse_for_float(float_str, &result);
+	zassert_not_ok(ret, "parse_for_float result invalid");
+}
+
+ZTEST(etc_util_test, test_parse_for_float_iv)
+{
+	const char *float_str = "\x15";
+	float result;
+	int ret;
+
+	ret = parse_for_float(float_str, &result);
+	zassert_equal(ret, 1);
 }
 
 ZTEST(etc_util_test, test_parse_for_int_ok)
@@ -72,6 +91,25 @@ ZTEST(etc_util_test, test_parse_for_int_non_digit_prefix)
 	int ret;
 
 	ret = parse_for_int(int_str, &result);
-	zassert_ok(ret, "parse_for_int result invalid");
-	zassert_equal(result, -915);
+	zassert_not_ok(ret, "parse_for_float result invalid");
+}
+
+ZTEST(etc_util_test, test_parse_for_int_non_digit_suffix)
+{
+	const char *int_str = "+754\25t";
+	int result;
+	int ret;
+
+	ret = parse_for_int(int_str, &result);
+	zassert_not_ok(ret, "parse_for_float result invalid");
+}
+
+ZTEST(etc_util_test, test_parse_for_int_iv)
+{
+	const char *int_str = "\x15";
+	int result;
+	int ret;
+
+	ret = parse_for_int(int_str, &result);
+	zassert_equal(ret, 1);
 }

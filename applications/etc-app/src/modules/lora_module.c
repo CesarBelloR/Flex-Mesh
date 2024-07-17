@@ -242,12 +242,24 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 	return response;
 }
 
-static void populate_logger_sensor_value(const char *val_buf, float *sensor_val)
+static inline bool is_empty_value(const char *val_buf)
 {
-	if ((strstr(val_buf, "*") != NULL) ||
-	    (parse_for_float(val_buf, sensor_val) != 0)) {
-		*sensor_val = SENSOR_TEMP_NO_CONNECTED;
+	if (*val_buf == '*' && strlen(val_buf) == 1) {
+		return true;
 	}
+	return false;
+}
+
+static int populate_logger_sensor_value(const char *val_buf, float *sensor_val)
+{
+	if (is_empty_value(val_buf)) {
+		*sensor_val = SENSOR_TEMP_NO_CONNECTED;
+	} else {
+		if(parse_for_float(val_buf, sensor_val) != 0) {
+			return -ENOMSG;
+		}
+	}
+	return 0;
 }
 
 static int lora_module_relay_get_message(char *package, int16_t rssi,
@@ -256,6 +268,7 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 	__ASSERT(package != NULL, "Empty input package");
 	__ASSERT(message != NULL, "Empty message");
 	enum logger_msg_pos msg_pos = 0;
+	int ret;
 	char *pt;
 	char *ptr;
 	char *saveptr;
@@ -299,18 +312,23 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 				 pt);
 			break;
 		case MSG_POS_BAT:
-			message->record.battery = atof(pt);
+			ret = parse_for_float(pt, &message->record.battery);
+			if (ret != 0) {
+				goto exit_error;
+			}
 			break;
 		case MSG_POS_PKT_NUM:
-			message->record.packet_number = atoi(pt);
+			ret = parse_for_int(pt, (int *)&message->record.packet_number);
+			if (ret != 0) {
+				goto exit_error;
+			}
 			break;
 		case MSG_POS_TIMESTAMP:
-			if (strstr(pt, "*") == NULL) {
-				char *end;
-				message->record.timestamp = strtoul(pt, &end, 10);
+			if (!is_empty_value(pt)) {
+				ret = parse_for_uint(pt, &message->record.timestamp);
 				/* Exit early with error if timestamp is corrupted. */
-				if (end == pt) {
-					return -ENOMSG;
+				if (ret != 0) {
+					goto exit_error;
 				}
 				message->record.is_reclaim = true;
 			} else {
@@ -323,30 +341,43 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 		case MSG_POS_TEMP2:
 		case MSG_POS_TEMP3:
 		case MSG_POS_TEMP4:
-			populate_logger_sensor_value(pt,
-						     &message->record.sensor[msg_pos - MSG_POS_TEMP1]);
+			ret = populate_logger_sensor_value(
+				pt, &message->record.sensor[msg_pos - MSG_POS_TEMP1]);
+			if (ret != 0) {
+				goto exit_error;
+			}
 			break;
 		case MSG_POS_TEMP_AMBIENT:
-			populate_logger_sensor_value(pt,
-						     &message->record.sensor[msg_pos - MSG_POS_TEMP1]);
+			ret = populate_logger_sensor_value(
+				pt, &message->record.sensor[msg_pos - MSG_POS_TEMP1]);
+			if (ret != 0) {
+				goto exit_error;
+			}
 			/* Mark message as valid when all values up to ambient temperature
 			 * have been received.
 			 */
 			message->is_okay = true;
 			break;
 		case MSG_POS_HUMIDITY:
-			populate_logger_sensor_value(pt,
-						     &message->record.sensor[SENSOR_INPUT_HUMID]);
+			ret = populate_logger_sensor_value(
+				pt, &message->record.sensor[SENSOR_INPUT_HUMID]);
+			if (ret != 0) {
+				goto exit_error;
+			}
 			break;
 		default: {
 			if ((msg_pos >= MSG_POS_EXTRA_ELEMENT) &&
 			    msg_pos <= (MSG_POS_EXTRA_ELEMENT + ETC_DEVICE_NUM_EXTRA_ELEMENT)) {
-				if ((strstr(pt, "*") != NULL) ||
-				    (parse_for_int(
-					     pt,
-					     &message->record.data[msg_pos - MSG_POS_EXTRA_ELEMENT]) !=
-				     0)) {
+				if (is_empty_value(pt)) {
 					message->record.data[msg_pos - MSG_POS_EXTRA_ELEMENT] = -1;
+				} else {
+					ret = parse_for_int(
+						pt,
+						&message->record
+							 .data[msg_pos - MSG_POS_EXTRA_ELEMENT]);
+					if (ret != 0) {
+						goto exit_error;
+					}
 				}
 			}
 			break;
@@ -356,6 +387,14 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 		msg_pos += 1;
 	} while (pt != NULL);
 	return 0;
+
+exit_error:
+	/* Do not mark message as invalid if IV was found. */
+	if (ret == 1) {
+		return 0;
+	}
+	message->is_okay = false;
+	return ret;
 }
 
 static int module_lora_wait_packet(void)
@@ -521,7 +560,7 @@ retry_recv:
 				LOG_WRN("Unknown packet from parent");
 			}
 		} else {
-			LOG_WRN("Unknown start message");
+			LOG_WRN("Bad message received");
 		}
 	}
 

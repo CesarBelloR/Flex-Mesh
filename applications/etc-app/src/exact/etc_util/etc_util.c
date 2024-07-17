@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <ctype.h>
+#include <string.h>
 
 #ifdef CONFIG_ETC_BLE_ENCRYPTION
 #include <mbedtls/aes.h>
@@ -13,14 +14,7 @@
 
 #include "etc_util.h"
 
-static const char *skip_to_value_start(const char *buf)
-{
-	const char *ret = buf;
-	while (!(isdigit(*ret) || *ret == '+' || *ret == '-') && *ret != '\0') {
-		ret++;
-	}
-	return ret;
-}
+#define ETC_CAPE_IV 21
 
 int util_validate_u32(uint32_t data, uint32_t lower_limit, uint32_t upper_limit) 
 {
@@ -58,6 +52,14 @@ uint16_t ceil_int(uint16_t value, uint16_t divisor)
 	return quotient * divisor;
 }
 
+bool is_field_iv(const char *field)
+{
+	if (strlen(field) == 1 && *field == ETC_CAPE_IV) {
+		return true;
+	}
+	return false;
+}
+
 int parse_for_float(const char *float_field, float *float_value)
 {
 	const char *buf = float_field;
@@ -67,11 +69,16 @@ int parse_for_float(const char *float_field, float *float_value)
 		return -EINVAL;
 	}
 
-	buf = skip_to_value_start(buf);
+	/* Allow a field that only contains the encryption IV */
+	if (is_field_iv(float_field)) {
+		return 1;
+	}
+
 	*float_value = strtof(buf, &end);
 
-	if (buf == end) {
-		return -EINVAL;
+	if ((buf == end) ||
+	    (*end != '\0')) {
+		return -ENOMSG;
 	}
 	return 0;
 }
@@ -83,13 +90,41 @@ int parse_for_int(const char *int_field, int *int_value)
 
 	if ((int_field == NULL) || (int_value == NULL)) {
 		return -EINVAL;
+	}	
+	
+	/* Allow a field that only contains the encryption IV */
+	if (is_field_iv(int_field)) {
+		return 1;
 	}
 
-	buf = skip_to_value_start(buf);
 	*int_value = strtol(buf, &end, 0);
 
-	if (buf == end) {
+	if ((buf == end) ||
+	    (*end != '\0')) {
+		return -ENOMSG;
+	}
+	return 0;
+}
+
+int parse_for_uint(const char *int_field, uint32_t *int_value)
+{
+	const char *buf = int_field;
+	char *end;
+
+	if ((int_field == NULL) || (int_value == NULL)) {
 		return -EINVAL;
+	}
+
+	/* Allow a field that only contains the encryption IV */
+	if (is_field_iv(int_field)) {
+		return 1;
+	}
+
+	*int_value = strtoul(buf, &end, 0);
+
+	if ((buf == end) ||
+	    (*end != '\0')) {
+		return -ENOMSG;
 	}
 	return 0;
 }
