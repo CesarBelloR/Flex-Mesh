@@ -6,6 +6,8 @@
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/random/random.h>
 #include <zephyr/mgmt/mcumgr/transport/smp_bt.h>
+#include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt.h>
+#include <zephyr/mgmt/mcumgr/mgmt/callbacks.h>
 #define LOG_LEVEL LOG_LEVEL_DBG
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_ble);
@@ -585,6 +587,28 @@ static void etc_ble_set_serial(void)
 #endif
 }
 
+enum mgmt_cb_return mgmt_on_evt(uint32_t event, enum mgmt_cb_return prev_status,
+		 int32_t *rc, uint16_t *group, bool *abort_more, void *data,
+		 size_t data_size)
+{
+	switch (event) {
+		case MGMT_EVT_OP_IMG_MGMT_DFU_STARTED:
+			etc_ble_notify_evt(ETC_BLE_EVT_FOTA_START);
+			break;
+		case MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED:
+			etc_ble_notify_evt(ETC_BLE_EVT_FOTA_DONE);
+			break;
+		default:
+			break;
+	}
+	return MGMT_CB_OK;
+}
+
+static struct mgmt_callback ble_img_mgmt_callback = {
+	.callback = mgmt_on_evt,
+	.event_id = MGMT_EVT_OP_IMG_MGMT_DFU_STARTED | MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED,
+};
+
 int etc_ble_init(etc_ble_evt_handler_t evt_handler)
 {
 	int rc = 0;
@@ -627,6 +651,9 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler)
 
 	/* Initialize the Bluetooth mcumgr transport. */
 	smp_bt_register();
+
+	/* Register callback for mcumgr img */
+	mgmt_callback_register(&ble_img_mgmt_callback);
 
 	/* Set BLE device name */
 	etc_ble_set_bt_name();

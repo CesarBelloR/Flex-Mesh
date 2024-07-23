@@ -50,24 +50,13 @@ static K_KERNEL_STACK_DEFINE(lora_stack, MODULE_LORA_THREAD_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(modem_stack, MODULE_MODEM_THREAD_STACK_SIZE);
 static K_KERNEL_STACK_DEFINE(sensor_stack, MODULE_SENSOR_THREAD_STACK_SIZE);
 
-#ifdef CONFIG_MCUMGR_CMD_FS_MGMT
-#include <zephyr/device.h>
-#endif
-#ifdef CONFIG_MCUMGR_CMD_OS_MGMT
-#include <zephyr/mgmt/mcumgr/grp/os_mgmt/os_mgmt.h>
-#endif
-#ifdef CONFIG_MCUMGR_CMD_IMG_MGMT
-#include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt.h>
-#endif
-#ifdef CONFIG_MCUMGR_CMD_STAT_MGMT
+#ifdef CONFIG_MCUMGR_GRP_STAT
 #include <zephyr/mgmt/mcumgr/grp/stat_mgmt/stat_mgmt.h>
-#endif
-#ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
-#include <zephyr/mgmt/mcumgr/grp/shell_mgmt/shell_mgmt.h>
 #endif
 #ifdef CONFIG_MCUMGR_CMD_ETC_MGMT
 #include "etc_mgmt.h"
 #endif
+
 /* Define an example stats group; approximates seconds since boot. */
 STATS_SECT_START(smp_svr_stats)
 STATS_SECT_ENTRY(ticks)
@@ -102,7 +91,6 @@ int main(void)
 #ifdef CONFIG_MCUMGR_CMD_ETC_MGMT
 	etc_mgmt_register_group();
 #endif
-
 
 	struct mcuboot_img_header img_hdr;
 	etc_cape_init(key, 10, 0);

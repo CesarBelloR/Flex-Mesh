@@ -205,6 +205,22 @@ static void ble_module_evt_handler(const struct etc_ble_evt *evt)
 			APP_EVENT_SUBMIT(ble_evt);
 			break;
 		}
+		case ETC_BLE_EVT_FOTA_START: {
+			SEND_EVENT(ble, BLE_EVT_FOTA_START);
+			break;
+		}
+		case ETC_BLE_EVT_FOTA_DOWNLOADED: {
+			SEND_EVENT(ble, BLE_EVT_FOTA_DOWNLOADED);
+			break;
+		}
+		case ETC_BLE_EVT_FOTA_DONE: {
+			SEND_EVENT(ble, BLE_EVT_FOTA_DONE);
+			break;
+		}
+		case ETC_BLE_EVT_FOTA_ERR: {
+			SEND_EVENT(ble, BLE_EVT_FOTA_ERROR);
+			break;
+		}
 		case ETC_BLE_EVT_ERR: {
 			SEND_EVENT(ble, BLE_EVT_ERROR);
 			break;
@@ -364,4 +380,3 @@ APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
 #if IS_ENABLED(CONFIG_DEBUG_MODULE)
 APP_EVENT_SUBSCRIBE(MODULE, debug_event);
 #endif
-

@@ -47,6 +47,17 @@ enum ble_event_type {
 	/** Query record for reclaiming data */
 	BLE_EVT_QUERY_RECLAIM,
 	
+	/** A FOTA update has started. */
+	BLE_EVT_FOTA_START,
+
+	/** FOTA has been performed, a reboot of the application is needed. */
+	BLE_EVT_FOTA_DOWNLOADED,
+
+	/** FOTA has been performed, a reboot of the application is needed. */
+	BLE_EVT_FOTA_DONE,
+
+	/** An error occurred during a FOTA update. */
+	BLE_EVT_FOTA_ERROR,
 	/** The cloud module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
 	 */

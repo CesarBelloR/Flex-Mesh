@@ -932,12 +932,16 @@ static void on_all_states(struct data_msg_data *msg)
 		ota_running = true;
 	}
 
+	if (IS_EVENT(msg, ble, BLE_EVT_FOTA_START)) {
+		ota_running = true;
+	}
+
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
 		ota_running = false;
 		etc_device_sync_record_on_ram();
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR)) {
+	if (IS_EVENT(msg, ble, BLE_EVT_FOTA_ERROR)) {
 		ota_running = false;
 		etc_device_sync_record_on_ram();
 	}

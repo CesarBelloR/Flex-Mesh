@@ -27,6 +27,10 @@ enum etc_ble_evt_type {
 	ETC_BLE_EVT_CCC_MEASURE_READY,
 	ETC_BLE_EVT_CCC_RECLAIM_READY,
 	ETC_BLE_EVT_CCC_QUERY_RECLAIM,
+	ETC_BLE_EVT_FOTA_START,
+	ETC_BLE_EVT_FOTA_DOWNLOADED,
+	ETC_BLE_EVT_FOTA_DONE,
+	ETC_BLE_EVT_FOTA_ERR,
 	ETC_BLE_EVT_ERR
 };
 
@@ -152,4 +156,5 @@ int etc_ble_notify_error(int type, int error);
  * @return Return 0 on success 
  */
 int etc_ble_notify_status(int type, int status);
+
 #endif /* ETC_BLE_H_ */
