@@ -1,0 +1,264 @@
+From 4d0924b43b3f3d23f2f6211ff50d22ecaf01a489 Mon Sep 17 00:00:00 2001
+From: Bui Trung Kien <kien.bui@exacttechnology.com>
+Date: Tue, 23 Jul 2024 16:02:00 +0700
+Subject: [PATCH] HW-1710: Handle general stream flash to support write verify
+ check
+
+---
+ subsys/storage/stream/stream_flash.c | 217 +++++++++++++++++++++++++--
+ 1 file changed, 203 insertions(+), 14 deletions(-)
+
+diff --git a/subsys/storage/stream/stream_flash.c b/subsys/storage/stream/stream_flash.c
+index 282b58f1eb..9f2ae87085 100644
+--- a/subsys/storage/stream/stream_flash.c
++++ b/subsys/storage/stream/stream_flash.c
+@@ -9,7 +9,7 @@
+ #define LOG_LEVEL CONFIG_STREAM_FLASH_LOG_LEVEL
+ #include <zephyr/logging/log.h>
+ LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_STREAM_FLASH_LOG_LEVEL);
+-
++#include <zephyr/kernel.h>
+ #include <zephyr/types.h>
+ #include <string.h>
+ #include <zephyr/drivers/flash.h>
+@@ -104,6 +104,184 @@ int stream_flash_erase_page(struct stream_flash_ctx *ctx, off_t off)
+ 
+ #endif /* CONFIG_STREAM_FLASH_ERASE */
+ 
++#define FLASH_IMG_MAX_RETRY (5)
++
++static uint8_t stream_verify_buf[2 * CONFIG_IMG_BLOCK_BUF_SIZE];
++static size_t stream_verify_write_len;
++static size_t stream_verify_offset;
++
++
++static int flash_img_recover_data(struct stream_flash_ctx *ctx,
++				  uint8_t *buf, size_t len, size_t offset)
++{
++	int rc = 0;
++	uint8_t retry = 0;
++	struct flash_pages_info info;
++	rc = flash_get_page_info_by_offs(ctx->fdev, offset, &info);
++	LOG_DBG("Page info %d", info.size);
++
++	off_t offset_sector = offset - (offset % info.size);
++	uint32_t remain_data_size = offset - offset_sector;
++	if (remain_data_size == 0) {
++		rc = flash_erase(ctx->fdev, offset_sector, info.size);
++		if (rc) {
++			LOG_ERR("[Recover] Can't erase the offset data");
++			return -EINVAL;
++		}
++		k_sleep(K_MSEC(1));
++		rc = flash_write(ctx->fdev, offset, buf, len);
++		if (rc != 0) {
++			LOG_ERR("[Recover] Error in writing flash err %d", rc);
++			return rc;
++		}
++
++		return 0;
++	}
++
++	uint8_t *tmp_buf = NULL;
++	uint8_t *tmp_verify_buf = NULL;
++
++	tmp_buf = (uint8_t *)k_malloc(remain_data_size);
++	if (tmp_buf == NULL) {
++		LOG_ERR("[Recover] Can't allocate memory for recover data");
++		rc = -ENOMEM;
++		goto clean;
++	}
++
++	tmp_verify_buf = (uint8_t *)k_malloc(len);
++	if (tmp_verify_buf == NULL) {
++		LOG_ERR("[Recover] Can't allocate memory for recover data");
++		rc = -ENOMEM;
++		goto clean;
++	}
++	rc = flash_read(ctx->fdev, offset_sector, tmp_buf, remain_data_size);
++	if (rc) {
++		LOG_ERR("[Recover] Can't read the offset data");
++		rc = -EINVAL;
++		goto clean;
++	}
++
++retry_again:
++	rc = flash_erase(ctx->fdev, offset_sector, info.size);
++	if (rc) {
++		LOG_ERR("[Recover] Can't erase the offset data");
++		rc = -EINVAL;
++		goto clean;
++	}
++	k_sleep(K_MSEC(10));
++	uint32_t written = 0;
++	while (written < remain_data_size) {
++		rc = flash_write(ctx->fdev, offset_sector + written, tmp_buf + written, len);
++		if (rc) {
++			LOG_ERR("[Recover] Can't write the recover data back");
++			rc = -EINVAL;
++			goto clean;
++		}
++
++		rc = flash_read(ctx->fdev, offset_sector + written, tmp_verify_buf, len);
++		if (rc) {
++			LOG_ERR("[Recover] Can't read the recover data back");
++			rc = -EINVAL;
++			goto clean;
++		}
++
++		if (memcmp(&tmp_buf[written], tmp_verify_buf, len) != 0) {
++			if (retry++ > FLASH_IMG_MAX_RETRY) {
++				LOG_ERR("[Recover] Still invalid data %d", retry);
++				return -EINVAL;
++			} else {
++				LOG_ERR("[Recover] Need retry %d", retry);
++				k_sleep(K_MSEC(10));
++				goto retry_again;
++			}
++		} else {
++			LOG_DBG("[Recover] Verified the recover data success 0x%08x",
++				(uint32_t)(offset_sector + written));
++		}
++
++		k_sleep(K_MSEC(10));
++		written += len;
++	}
++
++	rc = flash_write(ctx->fdev, offset, buf, len);
++	if (rc != 0) {
++		LOG_ERR("[Recover] Error in writing flash err %d", rc);
++		return rc;
++	}
++
++clean:
++	if (tmp_buf) {
++		k_free(tmp_buf);
++	}
++
++	if (tmp_verify_buf) {
++		k_free(tmp_verify_buf);
++	}
++
++	return rc;
++}
++
++static int flash_img_verify(struct stream_flash_ctx *ctx,
++			    off_t write_addr, uint8_t *read_buf, size_t read_len,
++			    const uint8_t *verify_buf, size_t verify_len)
++{
++	for (int i = 0; i < read_len; i++) {
++		read_buf[i] = ~read_buf[i];
++	}
++
++	int rc = flash_read(ctx->fdev, write_addr, read_buf, read_len);
++	if (rc != 0) {
++		LOG_ERR("flash read failed: %d", rc);
++		return rc;
++	}
++	LOG_HEXDUMP_DBG(read_buf, 32, "READ");
++	LOG_HEXDUMP_DBG(verify_buf, 32, "VERIFY");
++	if (memcmp(read_buf, verify_buf, read_len) != 0) {
++		LOG_ERR("[Recover] Still invalid data");
++		return -EINVAL;
++	}
++	return 0;
++}
++
++static int flash_img_callback_sync(struct stream_flash_ctx *ctx, uint8_t *buf,
++				   size_t len, size_t offset)
++{
++	if (len != stream_verify_write_len) {
++		return -EINVAL;
++	}
++
++	if (memcmp(buf, stream_verify_buf, len) == 0) {
++		return 0;
++	}
++
++	uint8_t retry = 0;
++	LOG_WRN("[Recover] Invalid data - Need to recover 0x%08x - %d", offset, len);
++	uint8_t *recover_buf = &stream_verify_buf[stream_verify_offset];
++	size_t recover_len = len;
++	LOG_HEXDUMP_DBG(buf, 32, "READ");
++	LOG_HEXDUMP_DBG(recover_buf, 32, "VERIFY");
++retry_again:
++	int rc = flash_img_recover_data(ctx, recover_buf, recover_len, offset);
++	if (rc) {
++		LOG_ERR("[Recover] Can't recover current status %d", rc);
++		return rc;
++	}
++
++	rc = flash_img_verify(ctx, offset, buf, len, recover_buf, recover_len);
++	if (rc) {
++		if (retry++ > FLASH_IMG_MAX_RETRY) {
++			LOG_ERR("[Recover] Still invalid data %d", retry);
++			return -EINVAL;
++		}
++
++		LOG_ERR("[Recover] Need retry %d", retry);
++		k_sleep(K_MSEC(100));
++		goto retry_again;
++	}
++	LOG_WRN("[Recover] Recovered data successfully");
++	return 0;
++}
++
+ static int flash_sync(struct stream_flash_ctx *ctx)
+ {
+ 	int rc = 0;
+@@ -139,6 +317,11 @@ static int flash_sync(struct stream_flash_ctx *ctx)
+ 	}
+ 
+ 	buf_bytes_aligned = ctx->buf_bytes + fill_length;
++	/* Copy the writting buffer to verify buffer */
++	memcpy(stream_verify_buf, ctx->buf, buf_bytes_aligned);
++	/* Set the writting len */
++	stream_verify_write_len = buf_bytes_aligned;
++
+ 	rc = flash_write(ctx->fdev, write_addr, ctx->buf, buf_bytes_aligned);
+ 
+ 	if (rc != 0) {
+@@ -147,21 +330,27 @@ static int flash_sync(struct stream_flash_ctx *ctx)
+ 		return rc;
+ 	}
+ 
+-	if (ctx->callback) {
+-		/* Invert to ensure that caller is able to discover a faulty
+-		 * flash_read() even if no error code is returned.
+-		 */
+-		for (int i = 0; i < ctx->buf_bytes; i++) {
+-			ctx->buf[i] = ~ctx->buf[i];
+-		}
++	/* Always read and verify from now */
++	/* Invert to ensure that caller is able to discover a faulty
++	 * flash_read() even if no error code is returned.
++	 */
++	for (int i = 0; i < ctx->buf_bytes; i++) {
++		ctx->buf[i] = ~ctx->buf[i];
++	}
+ 
+-		rc = flash_read(ctx->fdev, write_addr, ctx->buf,
+-				ctx->buf_bytes);
+-		if (rc != 0) {
+-			LOG_ERR("flash read failed: %d", rc);
+-			return rc;
+-		}
++	rc = flash_read(ctx->fdev, write_addr, ctx->buf, ctx->buf_bytes);
++	if (rc != 0) {
++		LOG_ERR("flash read failed: %d", rc);
++		return rc;
++	}
+ 
++	rc = flash_img_callback_sync(ctx, ctx->buf, ctx->buf_bytes, write_addr);
++	if (rc != 0) {
++		LOG_ERR("callback failed: %d", rc);
++		return rc;
++	}
++
++	if (ctx->callback) {
+ 		rc = ctx->callback(ctx->buf, ctx->buf_bytes, write_addr);
+ 		if (rc != 0) {
+ 			LOG_ERR("callback failed: %d", rc);
+-- 
+2.42.0.windows.1
+
