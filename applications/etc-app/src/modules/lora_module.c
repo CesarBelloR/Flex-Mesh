@@ -7,6 +7,7 @@
 #include <string.h>
 #include "etc_date_time.h"
 #include "etc_device.h"
+#include "etc_device_record.h"
 #include "etc_settings.h"
 #include "app_version.h"
 #include "data/etc_cape.h"
@@ -471,17 +472,26 @@ char decr_buf[LORA_ACKUNCRYPT_LEN + 1];
 static int module_lora_prepare_packet(const char* logger_id, const char* relay_iccid)
 {
 	int decoded_buf_len = 0;
-	int tx_delay_min = etc_get_tx_interval_secs() / 60;
+	struct etc_device_reclaim_request reclaim_request;
+	int tx_interval_mins = etc_get_tx_interval_secs() / 60;
 	int now = date_time_now_second();
-	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "%s,%d,%s,%d,0,0", logger_id, 
-				   tx_delay_min, relay_iccid, now);
+	int rc = etc_get_reclaim_request_for_relay_with_logger_id(logger_id, &reclaim_request);
+	if (rc == 0) {
+		decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "%s,%d,%s,%d,%d,%d", logger_id, 
+					tx_interval_mins, relay_iccid, now, 
+					reclaim_request.start_time, reclaim_request.stop_time);
+	} else {
+		decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "%s,%d,%s,%d,0,0", logger_id, 
+					tx_interval_mins, relay_iccid, now);
+	}
+
 	__ASSERT(decoded_buf_len + 1 <= sizeof(decoded_buf), "Out of buffer memory");
 	LOG_DBG("Decoded length %d", decoded_buf_len);
 	LOG_DBG("Msg %s", decoded_buf);
 	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, decoded_buf_len + 1, 21);
 	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
 
-	int rc = lora_config(lora_dev, &etc_lora_tx_config);
+	rc = lora_config(lora_dev, &etc_lora_tx_config);
 	if (rc < 0) {
 		LOG_ERR("Lora_config failed error %d", rc);
 		return -EINVAL;

@@ -56,4 +56,13 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 	char* out_buf, uint8_t* out_len) ;
 #endif
 
+/**
+ * @brief Export the relay command from lwM2M to Flex action
+ * 
+ * @param buf The input command from LwM2M
+ * @param len The length of input command.
+ * 
+ * @return 0 on success
+ */
+int etc_common_export_relay_command(const char* buf, const size_t len);
 #endif /* COMMON_H_ */

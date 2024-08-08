@@ -9,7 +9,7 @@
 #include <cJSON_os.h>
 #include "data/etc_json.h"
 #include "cloud/cloud_wrapper.h"
-
+#include "common.h"
 #define MODULE cloud
 #define MODULE_CLOUD_CONNECT_RETRIES 3
 
@@ -409,6 +409,12 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_LOCATION_REQUEST");
 		SEND_EVENT(cloud, CLOUD_EVT_LOCATION_REQUEST);
+		break;
+	}
+	case CLOUD_WRAP_EVT_COMMAND_RELAY_REQUEST:
+	{
+		LOG_DBG("CLOUD_WRAP_EVT_COMMAND_RELAY_REQUEST");
+		etc_common_export_relay_command(evt->data.buf, evt->data.len);
 		break;
 	}
 	default:

@@ -4,7 +4,11 @@
 #include "etc_battery.h"
 #include "app_version.h"
 #include "common.h"
+#include "etc_util.h"
 #include "cloud/cloud_codec/data_codec.h"
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(common, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define PAYLOAD_LEGACY_LEN	CONFIG_LWM2M_ETC_RELAY_OBJ_DATA_SIZE
 
@@ -154,3 +158,21 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 	return 0;
 }
 #endif
+
+/* TODO: Define relay command.
+ * 
+ * The execute parameter from LwM2M is defined as below
+ * 0='<command>:parameter1,parameter2, etc...
+ * 
+ * Ex: 0='RECLAIM:1111,1722234338,1722236338'
+ */
+int etc_common_export_relay_command(const char* buf, const size_t len) {
+	struct relay_reclaim_request request = {0};
+	int rc = etc_common_parser_reclaim_replay_command(buf, len, &request);
+	if (rc == 0) {
+		rc = etc_set_reclaim_request_for_relay(request.logger_id, 
+						       request.start_time, 
+						       request.stop_time);
+	}
+	return rc;
+}

@@ -35,7 +35,7 @@ static struct lwm2m_engine_obj object;
 static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(ETC_RELAY_OBJ_R_DATA, R, OPAQUE),
 	OBJ_FIELD_DATA(ETC_RELAY_OBJ_R_LEGACY_DATA, R, STRING),
-	OBJ_FIELD_DATA(ETC_RELAY_OBJ_R_COMMAND, W, OPAQUE),
+	OBJ_FIELD_EXECUTE(ETC_RELAY_OBJ_R_COMMAND),
 };
 
 static struct lwm2m_engine_obj_inst inst;
@@ -53,8 +53,7 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 			  data, sizeof(data));
 	INIT_OBJ_RES_DATA(ETC_RELAY_OBJ_R_LEGACY_DATA, res, i, res_inst, j,
 			  legacy_data, sizeof(legacy_data));
-	INIT_OBJ_RES_DATA(ETC_RELAY_OBJ_R_COMMAND, res, i, res_inst, j,
-			  command, sizeof(command));
+	INIT_OBJ_RES_EXECUTE(ETC_RELAY_OBJ_R_COMMAND, res, i, NULL);
 
 	inst.resources = res;
 	inst.resource_count = i;

@@ -22,6 +22,15 @@
 */
 #define TM_MON_TO_MONTH(x) (x + 1)
 
+#define UTIL_LOGGER_ID_SIZE (sizeof("FFFFFFFFFFFFFFFF"))
+
+/* Structure for request reclaim */
+struct relay_reclaim_request {
+	char logger_id[UTIL_LOGGER_ID_SIZE];
+	int start_time;
+	int stop_time;
+};
+
 /**
  * @brief Validate given data against given lower and upper limits.
  * The limits are inclusive.
@@ -194,4 +203,18 @@ int parse_for_int(const char *int_field, int *int_value);
 */
 int parse_for_uint(const char *int_field, uint32_t *int_value);
 
+/**
+ * @brief Parses a reclaim replay command from a buffer.
+ *
+ * This function processes the raw input buffer to extract the reclaim replay 
+ * command information and populates the given request structure.
+ *
+ * @param buf A pointer to the input buffer containing the command data.
+ * @param len The length of the input buffer.
+ * @param request A pointer to the structure to be filled with parsed command data.
+ * 
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int etc_common_parser_reclaim_replay_command(const char* buf, const size_t len, 
+	struct relay_reclaim_request* request);
 #endif

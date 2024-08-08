@@ -61,6 +61,8 @@ static struct etc_device_record_backup_data* p_record_backup = NULL;
  */
 static uint8_t img_pubkey_id[IMG_PUBKEY_ID_LEN];
 
+static struct etc_device_reclaim_request list_reclaim_request[ETC_RECLAIM_RELAY_MAX_ELEMENT];
+
 void etc_device_nvs_init(void)
 {
 	int rc = 0;
@@ -106,6 +108,14 @@ void etc_device_nvs_init(void)
 	p_record_backup = etc_device_record_backup_get_object();
 	/* Sync last record backup */
 	etc_device_sync_record_on_ram();
+	/* Initialize the reclaim request for Relay */
+	for (int i = 0; i < ETC_RECLAIM_RELAY_MAX_ELEMENT; i++) {
+		struct etc_device_reclaim_request* request = &list_reclaim_request[i];
+		atomic_set(&request->flag_set, false);
+		request->start_time = 0;
+		request->stop_time = 0;
+		request->logger_id[0] = '\0';
+	}
 }
 
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len)
@@ -588,6 +598,55 @@ void etc_device_sync_record_on_ram(void) {
 	}
 	p_record_backup->num_records = 0;
 	etc_device_record_backup_sync();
+}
+
+int etc_set_reclaim_request_for_relay(char *logger_id, 
+	int start_time, int stop_time) 
+{
+	if (!etc_device_is_relay()) {
+		return -EINVAL;
+	}
+
+	if (start_time > stop_time) {
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < ETC_RECLAIM_RELAY_MAX_ELEMENT; i++) {
+		struct etc_device_reclaim_request* request = &list_reclaim_request[i];
+		if (atomic_get(&request->flag_set)) {
+			continue;
+		}
+
+		strncpy(request->logger_id, logger_id, strlen(logger_id));
+		request->start_time = start_time;
+		request->stop_time = stop_time;
+		atomic_set(&request->flag_set, true);
+		LOG_DBG("Added reclaim request for %s [%d - %d]", logger_id, start_time, stop_time);
+		return 0;
+	}
+	return -ENOMEM;
+}
+
+int etc_get_reclaim_request_for_relay_with_logger_id(const char* logger_id,
+	struct etc_device_reclaim_request *reclaim_request) 
+{
+	if (logger_id == NULL) {
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < ETC_RECLAIM_RELAY_MAX_ELEMENT; i++) {
+		struct etc_device_reclaim_request *request = &list_reclaim_request[i];
+		if (atomic_get(&request->flag_set)) {
+			if (strncmp(logger_id, request->logger_id, strlen(logger_id)) == 0) {
+				memcpy(reclaim_request, request, sizeof(*reclaim_request));
+				/* Reset the flag */
+				atomic_set(&request->flag_set, false);
+				return 0;
+			}
+			return -EINVAL;
+		}
+	}
+	return -ENOENT;
 }
 
 #ifdef CONFIG_SHELL

@@ -163,3 +163,110 @@ int decrypt_data(const unsigned char *psk, const unsigned char *encrypted_data, 
     return output_length;
 }
 #endif
+
+/**
+ * @brief Extracts the command from the buffer, 
+ * assumes the command is between quotes and ends with a colon.
+ */
+int extract_command(const char *buf, char *command, size_t max_len)
+{
+	const char *start = strchr(buf, '\'');
+	if (!start) {
+		return -EINVAL;
+	}
+	start++;
+	const char *end = strchr(start, ':');
+	if (!end) {
+		return -EINVAL;
+	}
+	size_t length = end - start;
+	if (length >= max_len) {
+		return -EINVAL;
+	}
+	strncpy(command, start, length);
+	command[length] = '\0';
+	return 0;
+}
+
+/**
+ * @brief Extracts a field from the buffer until the delimiter, 
+ * updating the buffer pointer
+ */
+static int extract_field(const char **buf, char delimiter, char *output, 
+			 size_t max_len) 
+{
+	const char *start = *buf;
+	const char *end = strchr(start, delimiter);
+
+	if (!end) {
+		if (delimiter != '\0') {
+			return -EINVAL;
+		}
+		end = start + strlen(start);
+	}
+
+	size_t length = end - start;
+	if (length >= max_len) {
+		return -EINVAL;
+	}
+	strncpy(output, start, length);
+	output[length] = '\0';
+
+	if (delimiter != '\0') {
+		*buf = end + 1;
+	}
+
+	return 0;
+}
+
+int etc_common_parser_reclaim_replay_command(const char* buf, const size_t len, 
+	struct relay_reclaim_request* request) 
+{
+	if (request == NULL) {
+		return -EINVAL;
+	}
+
+	char command[10];
+
+	// Extract command
+	if (extract_command(buf, command, sizeof(command)) != 0) {
+		return -EINVAL;
+	}
+
+	if ((strcmp(command, "RECLAIM") != 0) || 
+	    (strlen(command) != strlen("RECLAIM"))) {
+		return -EINVAL;
+	}
+	
+	// Move the pointer to after the command and delimiter
+	const char *current_position = strchr(buf, ':') + 1;
+
+	// Extract logger id
+	if (extract_field(&current_position, ',', request->logger_id, 
+	    UTIL_LOGGER_ID_SIZE) != 0) {
+		return -EINVAL;
+	}
+
+	// Extract start time
+	char time_str[16];
+	if (extract_field(&current_position, ',', time_str, 
+	    sizeof(time_str)) != 0) {
+		return -EINVAL;
+	}
+	
+	if (parse_for_int(time_str, &request->start_time) != 0) {
+		return -EINVAL;
+	}
+
+	// Extract stop time
+	if (extract_field(&current_position, '\'', time_str, 
+	    sizeof(time_str)) != 0) {
+		return -EINVAL;
+	}
+
+	if (parse_for_int(time_str, &request->stop_time) != 0) {
+		return -EINVAL;
+	}
+	
+	return 0;
+}

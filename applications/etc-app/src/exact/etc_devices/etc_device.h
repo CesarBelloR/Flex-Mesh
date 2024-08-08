@@ -27,11 +27,13 @@
 /* Define a invalid for element in Logger data */
 #define ETC_DEVICE_INVALID_VALUE_ELEMENT (0xCAFEBEEF)
 /* Define a pubkey ID length */
-#define IMG_PUBKEY_ID_LEN	4
+#define IMG_PUBKEY_ID_LEN	(4)
 /* Max element in record for Relay */
 #define ETC_RELAY_RECORD_MAX_ELEMENT (CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY)
 /* Define a mask for relay data ready */
 #define ETC_DEVICE_RELAY_DATA_READY_MASK (0x80000000U)
+/* Maximum reclaim relay supports */
+#define ETC_RECLAIM_RELAY_MAX_ELEMENT (20)
 
 /* Define an enum to describe the job of logger currently */
 enum etc_device_job {
@@ -151,6 +153,9 @@ union etc_device_record {
 	};
 };
 
+/* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
+BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
+
 struct etc_device_relay_record {
 	bool is_reclaim;
 	int16_t logger_rssi;
@@ -181,8 +186,13 @@ struct etc_gnss_data {
 
 #pragma pack(pop)
 
-/* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
-BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
+/* Structure for request reclaim over cloud or BLE */
+struct etc_device_reclaim_request {
+	char logger_id[ETC_DEVICE_LORA_LOGGER_ID_SIZE];
+	int start_time;
+	int stop_time;
+	atomic_t flag_set;
+};
 
 /**
  * @brief Initialize the Non-Volatile Storage (NVS) for the ETC device.
@@ -540,4 +550,25 @@ int etc_device_relay_read_record_sensor(union etc_device_record* record);
  * It should call after OTA done.
  */
 void etc_device_sync_record_on_ram(void);
+
+/**
+ * Set the reclaim request for Relay over cloud
+ *
+ * @param logger_id 	The logger id that relay want to reclaim
+ * @param start_time	The start time of the reclaim range.
+ * @param stop_time	The stop time of the reclaim range.
+ * @return 0 on success, <0 on error.
+ */
+int etc_set_reclaim_request_for_relay(char *logger_id, 
+	int start_time, int stop_time);
+
+/**
+ * Retrieve the reclaim request for a specific logger ID
+ *
+ * @param logger_id 	The logger id to check if any reclaim request
+ * @param request 	The output to store the reclaim request
+ * @return 0 on success, <0 on error.
+ */
+int etc_get_reclaim_request_for_relay_with_logger_id(const char* logger_id, 
+	struct etc_device_reclaim_request *request);
 #endif /* ETC_DEVICE_H_ */

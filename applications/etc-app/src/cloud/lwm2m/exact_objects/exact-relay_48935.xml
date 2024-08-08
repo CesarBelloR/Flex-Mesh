@@ -4,9 +4,9 @@
 		<Name>EXACT Relay</Name>
 		<Description1 />
 		<ObjectID>48935</ObjectID>
-		<ObjectURN>urn:oma:lwm2m:x:48935:1.0</ObjectURN>
+		<ObjectURN>urn:oma:lwm2m:x:48935:1.1</ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.0</ObjectVersion>
+		<ObjectVersion>1.1</ObjectVersion>
 		<MultipleInstances>Multiple</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -32,10 +32,10 @@
 			</Item>
 			<Item ID="3">
 				<Name>Command</Name>
-				<Operations>W</Operations>
+				<Operations>E</Operations>
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
-				<Type>Opaque</Type>
+				<Type></Type>
 				<RangeEnumeration></RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[Command(s) that need to be sent to individual loggers connected through LoRa.]]></Description>

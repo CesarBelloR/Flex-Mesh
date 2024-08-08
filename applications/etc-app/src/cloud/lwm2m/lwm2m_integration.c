@@ -21,7 +21,7 @@
 #include "lwm2m/lwm2m_codec_helpers.h"
 #include "etc_reclaim_obj_48934.h"
 #include "etc_location_obj_48938.h"
-
+#include "etc_relay_obj_48935.h"
 #include "cloud/cloud_wrapper.h"
 
 #define MODULE lwm2m_integration
@@ -267,6 +267,23 @@ static int location_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_l
 	return 0;
 }
 
+/* Callback handler triggered when lwm2m object resource 48935/0/4
+ * (EXACT Relay/Command) is executed. */
+static int relay_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_len)
+{
+	ARG_UNUSED(obj_inst_id);
+	int err;
+
+	struct cloud_wrap_event cloud_wrap_evt = {
+		.type = CLOUD_WRAP_EVT_COMMAND_RELAY_REQUEST,
+		.data.buf = args,
+		.data.len = args_len
+	};
+
+	cloud_wrapper_notify_event(&cloud_wrap_evt);
+	return 0;
+}
+
 static void send_cb(enum lwm2m_send_status status)
 {
 	struct cloud_wrap_event cloud_wrap_evt = { 0 };
@@ -411,6 +428,14 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 					   location_exec_cb);
 	if (err) {
 		LOG_ERR("register location exec callback, error: %d", err);
+		return err;
+	}
+
+	err = lwm2m_register_exec_callback(&LWM2M_OBJ(ETC_RELAY_OBJECT_ID,
+						      0, ETC_RELAY_OBJ_R_COMMAND),
+					   relay_exec_cb);
+	if (err) {
+		LOG_ERR("register reclaim exec callback, error: %d", err);
 		return err;
 	}
 

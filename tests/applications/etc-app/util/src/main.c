@@ -113,3 +113,57 @@ ZTEST(etc_util_test, test_parse_for_int_iv)
 	ret = parse_for_int(int_str, &result);
 	zassert_equal(ret, 1);
 }
+
+ZTEST(etc_util_test, test_parse_reclaim_ok)
+{
+	int ret;
+	ret = 0;
+	const char* command = "0=\'RECLAIM:1111,1722234338,1722236338\'";
+	struct relay_reclaim_request request = {0};
+	ret = etc_common_parser_reclaim_replay_command(command, strlen(command), &request);
+	zassert_ok(ret, "parse reclaim relay command was not ok");
+	ret = strcmp(request.logger_id, "1111");
+	zassert_ok(ret, "logger id was not match");
+	zassert_equal(request.start_time, 1722234338);
+	zassert_equal(request.stop_time, 1722236338);
+}
+
+ZTEST(etc_util_test, test_parse_reclaim_nok_1)
+{
+	int ret;
+	ret = 0;
+	const char* command = "0=\'TEST:1111,1722234338,1722236338\'";
+	struct relay_reclaim_request request = {0};
+	ret = etc_common_parser_reclaim_replay_command(command, strlen(command), &request);
+	zassert_equal(ret, -EINVAL);
+}
+
+ZTEST(etc_util_test, test_parse_reclaim_nok_2)
+{
+	int ret;
+	ret = 0;
+	const char* command = "0=\'RECLAIM:1111,,1722236338\'";
+	struct relay_reclaim_request request = {0};
+	ret = etc_common_parser_reclaim_replay_command(command, strlen(command), &request);
+	zassert_equal(ret, -EINVAL);
+}
+
+ZTEST(etc_util_test, test_parse_reclaim_nok_3)
+{
+	int ret;
+	ret = 0;
+	const char* command = "0=\'RECLAIM:1111,,\'";
+	struct relay_reclaim_request request = {0};
+	ret = etc_common_parser_reclaim_replay_command(command, strlen(command), &request);
+	zassert_equal(ret, -EINVAL);
+}
+
+ZTEST(etc_util_test, test_parse_reclaim_nok_4)
+{
+	int ret;
+	ret = 0;
+	const char* command = "0=\'RECLAIM:,,\'";
+	struct relay_reclaim_request request = {0};
+	ret = etc_common_parser_reclaim_replay_command(command, strlen(command), &request);
+	zassert_equal(ret, -EINVAL);
+}
