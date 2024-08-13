@@ -28,6 +28,8 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "app_version.h"
 #include "etc_settings.h"
 #include "etc_device.h"
+#include "etc_memfault.h"
+
 struct cloud_msg_data
 {
 	union
@@ -499,10 +501,6 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED)) {
-		sub_state_cloud_running_set(SUB_STATE_CLOUD_DISCONNECTED);
-	}
-
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) {
 		if (IS_ENABLED(CONFIG_LWM2M_INTEGRATION)) {
 			int err;
@@ -589,8 +587,6 @@ static void on_sub_state_cloud_running(struct cloud_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
-		/* Cloud is fully disconnected now and won't re-attempt a connection */
-		sub_state_cloud_running_set(SUB_STATE_CLOUD_DISCONNECTED);
 		pause_cloud();
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
 	}
@@ -619,6 +615,20 @@ static void on_all_states(struct cloud_msg_data *msg)
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_ERROR)) {
 		SEND_EVENT(cloud, CLOUD_EVT_REBOOT_REQUEST);
+	}
+
+	/* Set cloud to disconnected on all states if disconnected or timeout
+	 * event is emitted. 
+	 */
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
+		if ((sub_state_lte_connected != SUB_STATE_CLOUD_RUNNING) &&
+		    (state == STATE_LTE_CONNECTED)) {
+			ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(white_led_issue, 1);
+		} else if (state != STATE_LTE_CONNECTED) {
+			ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(white_led_issue, 2);
+		}
+		sub_state_cloud_running_set(SUB_STATE_CLOUD_DISCONNECTED);
 	}
 }
 
