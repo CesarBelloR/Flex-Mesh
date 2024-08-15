@@ -30,6 +30,8 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "etc_device.h"
 #include "etc_memfault.h"
 
+#define CLOUD_RESUME_CONNECTION_TIMEOUT_S 60
+
 struct cloud_msg_data
 {
 	union
@@ -81,6 +83,9 @@ static uint16_t last_message_id = 0;
 
 K_MSGQ_DEFINE(msgq_cloud, sizeof(struct cloud_msg_data),
 	      CLOUD_QUEUE_ENTRY_COUNT, CLOUD_QUEUE_BYTE_ALIGNMENT);
+
+static void connection_timeout_work_handler(struct k_work *work);
+K_WORK_DELAYABLE_DEFINE(connection_timeout_work, connection_timeout_work_handler);
 
 static struct module_data self = {
     .name = "cloud",
@@ -411,6 +416,7 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 	}
 }
 
+
 static int setup(void)
 {
 	cloud_wrap_init(cloud_wrap_event_handler);
@@ -425,9 +431,18 @@ static int connect_cloud(void)
 	/* If starting the cloud connect fails, there is a logic error in firmware. Trigger assert.
 	 */
 	ret = cloud_wrap_connect();
-	__ASSERT_NO_MSG(ret == 0);
+	__ASSERT_NO_MSG((ret == 0) || (ret == -EINPROGRESS));
+	if (ret == -EINPROGRESS) {
+		ETC_MEMFAULT_TRACE_EVENT(cloud_connection_in_progress);
+	}
 	
 	return ret;
+}
+
+static void connection_timeout_work_handler(struct k_work *work)
+{
+	ETC_MEMFAULT_TRACE_EVENT(cloud_connection_timeout);
+	connect_cloud();
 }
 
 static void disconnect_cloud(void)
@@ -438,11 +453,19 @@ static void disconnect_cloud(void)
 static void pause_cloud(void)
 {
 	cloud_wrap_pause();
+	k_work_cancel_delayable(&connection_timeout_work);
 }
 
 static void resume_cloud(void)
 {
 	__ASSERT_NO_MSG(cloud_wrap_resume() == 0);
+	k_work_reschedule(&connection_timeout_work, K_SECONDS(CLOUD_RESUME_CONNECTION_TIMEOUT_S));
+}
+
+static void set_cloud_connected(void)
+{
+	sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTED);
+	k_work_cancel_delayable(&connection_timeout_work);
 }
 
 /* Message handler for STATE_LTE_INIT. */
@@ -544,7 +567,7 @@ static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
-		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTED);
+		set_cloud_connected();
 	}
 
 	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
@@ -559,7 +582,7 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 static void on_sub_state_cloud_connecting(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
-		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTED);
+		set_cloud_connected();
 	}
 }
 

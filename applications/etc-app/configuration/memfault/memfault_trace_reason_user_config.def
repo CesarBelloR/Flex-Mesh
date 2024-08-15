@@ -4,3 +4,5 @@
 MEMFAULT_TRACE_REASON_DEFINE(lengths_dont_match)
 MEMFAULT_TRACE_REASON_DEFINE(soft_watchdog_reset)
 MEMFAULT_TRACE_REASON_DEFINE(white_led_issue)
+MEMFAULT_TRACE_REASON_DEFINE(cloud_connection_timeout)
+MEMFAULT_TRACE_REASON_DEFINE(cloud_connection_in_progress)
