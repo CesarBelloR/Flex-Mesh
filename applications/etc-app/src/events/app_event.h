@@ -49,6 +49,9 @@ enum app_event_type {
 	/** Request latest configuration from the cloud. */
 	APP_EVT_CONFIG_GET,
 
+	/** The force request shutdown when LTE units miss check-in over cellular */
+	APP_EVT_REQUEST_SHUTDOWN,
+	
 	/** The application module has performed all procedures to prepare for
 	 *  a shutdown of the system.
 	 */

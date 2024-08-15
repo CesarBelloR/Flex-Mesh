@@ -445,7 +445,7 @@ uint16_t etc_device_get_tx_no_probe_offset_mins(void)
 	uint16_t probe_offset = 0;
 	if (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
 		probe_offset = etc_get_lora_probe_offset_secs();
-	} else if (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
+	} else if (etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		probe_offset = etc_get_lte_probe_offset_secs();
 	}
 	return (probe_offset / 60);

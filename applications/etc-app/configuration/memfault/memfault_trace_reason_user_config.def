@@ -2,3 +2,4 @@
  * Please refer to https://docs.memfault.com/docs/embedded/trace-events for more details.
  */
 MEMFAULT_TRACE_REASON_DEFINE(lengths_dont_match)
+MEMFAULT_TRACE_REASON_DEFINE(soft_watchdog_reset)

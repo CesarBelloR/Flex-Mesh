@@ -54,6 +54,7 @@ enum etc_serial_number_types {
 #define ETC_SETTING_GNSS_INTERVAL_SECS_MIN	(60 * 60) /* 1 hour */
 
 #define ETC_SETTING_TX_PROBE_SECS 21600
+#define ETC_SETTING_SOFT_WATCHDOG_OFFSET_SECS	900
 
 /* Buffer for calculation of allowable wakeup early max value during runtime */
 #define ETC_SETTING_WAKEUP_EARLY_SECS_BUFFER    10
@@ -218,5 +219,12 @@ uint16_t etc_get_gnss_timeout_secs(void);
  * @return The Rr value that stores in NVS @ref ETC_ADC_TEMPERATURE_REFERENCE
  */
 uint16_t etc_get_rr_value(void);
+
+/**
+ * Get the soft watchdog timeout in seconds to support ticket HW-1724.
+ *
+ * @return The timeout in seconds or -1 when invalid mode.
+ */
+int etc_get_soft_watchdog_timeout_secs(void);
 
 #endif /* ETC_SETTINGS_H__ */

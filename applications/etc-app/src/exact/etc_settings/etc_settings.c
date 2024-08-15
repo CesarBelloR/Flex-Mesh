@@ -1025,6 +1025,27 @@ uint16_t etc_get_gnss_timeout_secs(void)
 	return gnss_timeout_secs;
 }
 
+int etc_get_soft_watchdog_timeout_secs(void)
+{
+	/* Offset is 15 minutes */
+	int timeout_secs = -1;
+	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
+	enum etc_device_mode device_mode = etc_device_get_mode();
+	if (device_mode == ETC_DEVICE_MODE_LTE_LOGGER) {
+		timeout_secs = etc_get_tx_probe_secs() + tx_delay_sec +
+			       ETC_SETTING_SOFT_WATCHDOG_OFFSET_SECS;
+	} else if (device_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
+		timeout_secs = etc_get_tx_probe_secs() + tx_delay_sec +
+			       ETC_SETTING_SOFT_WATCHDOG_OFFSET_SECS;
+	} else if (device_mode == ETC_DEVICE_MODE_RELAY) {
+		timeout_secs =
+			etc_get_tx_interval_secs() + CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S + 10;
+	} else {
+		/* No support BLE mode */
+	}
+	return timeout_secs;
+}
+
 #ifdef CONFIG_SHELL
 #include <zephyr/shell/shell.h>
 

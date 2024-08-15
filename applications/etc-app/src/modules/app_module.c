@@ -8,6 +8,7 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/policy.h>
 #include <zephyr/drivers/gpio.h>
+#include "etc_memfault.h"
 #include "pcf85263a.h"
 #include "etc_settings.h"
 #include "etc_interface.h"
@@ -93,8 +94,10 @@ static int next_wakeup = 0;
 static int app_backoff_multiple = 1;
 static int app_backoff_last_multiple = -1;
 static enum app_wakeup_tx_work_type wakeup_tx_type = APP_WAKEUP_TX_INTERVAL_WORK;
+static void app_soft_watchdog_work_handler(struct k_work* work);
 
 K_MUTEX_DEFINE(app_module_lock);
+K_WORK_DELAYABLE_DEFINE(app_soft_watchdog_work, app_soft_watchdog_work_handler);
 
 /* Defind functions for set/get next wake up */
 static void app_set_next_wakekup(int wakeup, enum app_wakeup_tx_work_type work_type) {
@@ -122,6 +125,12 @@ static enum app_wakeup_tx_work_type app_get_wakeup_tx_work_type(void) {
 	type = wakeup_tx_type;
 	k_mutex_unlock(&app_module_lock);
 	return type;
+}
+
+static void app_soft_watchdog_work_handler(struct k_work* work) 
+{
+	ETC_MEMFAULT_TRACE_EVENT(soft_watchdog_reset);
+	SEND_EVENT(app, APP_EVT_REQUEST_SHUTDOWN);
 }
 
 /* Convenience functions used in internal state handling. */
@@ -861,6 +870,10 @@ static int setup(void)
 		}
 	}
 
+	int soft_watchdog_timeout_secs = etc_get_soft_watchdog_timeout_secs();
+	if (soft_watchdog_timeout_secs != -1) {
+		k_work_schedule(&app_soft_watchdog_work, K_SECONDS(soft_watchdog_timeout_secs));
+	}
 	return 0;
 }
 
@@ -950,6 +963,15 @@ static void on_all_events(struct app_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_CONNECTED)) {
 		app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_BOTH);
+		return;
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		int soft_watchdog_timeout_secs = etc_get_soft_watchdog_timeout_secs();
+		if (soft_watchdog_timeout_secs != -1) {
+			k_work_reschedule(&app_soft_watchdog_work, 
+					  K_SECONDS(soft_watchdog_timeout_secs));	
+		}
 		return;
 	}
 }

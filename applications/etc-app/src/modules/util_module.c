@@ -335,6 +335,11 @@ static void on_state_init(struct util_msg_data *msg)
 		send_reboot_request(REASON_GENERIC);
 		return;
 	}
+
+	if (IS_EVENT(msg, app, APP_EVT_REQUEST_SHUTDOWN)) {
+		send_reboot_request(REASON_GENERIC);
+		return;
+	}
 }
 
 /* Message handler for STATE_REBOOT_PENDING. */
