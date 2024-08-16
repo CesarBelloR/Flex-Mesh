@@ -1034,9 +1034,6 @@ int etc_get_soft_watchdog_timeout_secs(void)
 	if (device_mode == ETC_DEVICE_MODE_LTE_LOGGER) {
 		timeout_secs = etc_get_tx_probe_secs() + tx_delay_sec +
 			       ETC_SETTING_SOFT_WATCHDOG_OFFSET_SECS;
-	} else if (device_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
-		timeout_secs = etc_get_tx_probe_secs() + tx_delay_sec +
-			       ETC_SETTING_SOFT_WATCHDOG_OFFSET_SECS;
 	} else if (device_mode == ETC_DEVICE_MODE_RELAY) {
 		timeout_secs =
 			etc_get_tx_interval_secs() + CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S + 10;
