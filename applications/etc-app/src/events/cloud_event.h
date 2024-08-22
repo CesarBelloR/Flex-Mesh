@@ -26,27 +26,12 @@ enum cloud_event_type {
 
 	CLOUD_EVT_RX_OFF,
 
+	/* Cloud is requesting to reconnect. Cloud will only reconnect if LTE
+	 * connected. */
+	CLOUD_EVT_RECONNECT_REQUEST,
+
 	/** Connection has timed out. */
 	CLOUD_EVT_CONNECTION_TIMEOUT,
-
-	/** Connect to LTE.
-	 *  This event is sent out when the modem should connect to LTE (put into normal mode) post
-	 *  provisioning of server credentials.
-	 *
-	 *  Only used when building for LwM2M.
-	 */
-	CLOUD_EVT_LTE_CONNECT,
-
-	/** Disconnect from LTE.
-	 *  This event is sent out when the modem should be put into offline mode prior to
-	 *  provisioning of server credentials.
-	 *
-	 *  Only used when building for LwM2M.
-	 */
-	CLOUD_EVT_LTE_DISCONNECT,
-
-	/** User association request received from cloud. */
-	CLOUD_EVT_USER_ASSOCIATION_REQUEST,
 
 	/** Acknowledgement for last send was received. */
 	CLOUD_EVT_DATA_SEND_ACK,

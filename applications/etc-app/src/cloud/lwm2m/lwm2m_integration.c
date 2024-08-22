@@ -48,13 +48,6 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_CLOUD_INTEGRATION_LOG_LEVEL);
 #define DEVICE_OBJECT_REBOOT_RID 4
 #define MAX_RESOURCE_LEN 20
 
-/* Internal states. */
-static enum lwm2m_integration_state_type {
-	DISCONNECTED,
-	CONNECTING,
-	CONNECTED,
-	PAUSED,
-} state;
 
 static cloud_wrap_evt_handler_t wrapper_evt_handler;
 
@@ -137,11 +130,6 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 
 		/* Trigger update of session lifetime after bootstrap. */
 		update_session_lifetime = true;
-
-		/* Bootstrap registration complete. Lwm2m engine will proceed to connect to
-		 * the management server.
-		 */
-		state = CONNECTING;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_BOOTSTRAP_TRANSFER_COMPLETE:
 		LOG_DBG("LWM2M_RD_CLIENT_EVENT_BOOTSTRAP_TRANSFER_COMPLETE");
@@ -161,21 +149,16 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_CONNECTED;
 		notify = true;
-		state = CONNECTED;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_REG_TIMEOUT:
 		LOG_WRN("LWM2M_RD_CLIENT_EVENT_REG_TIMEOUT");
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_CONNECTING;
-		state = CONNECTING;
 		notify = true;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE_COMPLETE:
 		LOG_DBG("LWM2M_RD_CLIENT_EVENT_REG_UPDATE_COMPLETE");
-		if (state == CONNECTING) {
-			cloud_wrap_evt.type = CLOUD_WRAP_EVT_CONNECTED;
-			notify = true;
-			state = CONNECTED;
-		}
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_CONNECTED;
+		notify = true;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_DEREGISTER_FAILURE:
 		LOG_WRN("LWM2M_RD_CLIENT_EVENT_DEREGISTER_FAILURE");
@@ -184,6 +167,8 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 		break;
 	case LWM2M_RD_CLIENT_EVENT_DISCONNECT:
 		LOG_DBG("LWM2M_RD_CLIENT_EVENT_DISCONNECT");
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_DISCONNECTED;
+		notify = true;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF:
 		LOG_DBG("LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF");
@@ -193,7 +178,6 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 	case LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR:
 		LOG_ERR("LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR");
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
-		state = DISCONNECTED;
 		notify = true;
 		break;
 	case LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED:
@@ -202,19 +186,6 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 	default:
 		LOG_ERR("Unknown event: %d", client_event);
 		break;
-	}
-
-	/* If a LwM2M failure has occurred, we explicitly stop the engine before the cloud module
-	 * is notified with the CLOUD_WRAP_EVT_DISCONNECTED event. This is to clear up any
-	 * LwM2M engine state to ensure that we are able to perform a clean restart of the engine.
-	 */
-	if (notify && cloud_wrap_evt.type == CLOUD_WRAP_EVT_DISCONNECTED) {
-		int err = cloud_wrap_disconnect();
-
-		if (err) {
-			LOG_ERR("cloud_wrap_disconnect, error: %d", err);
-			cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
-		}
 	}
 
 	if (notify) {
@@ -446,7 +417,6 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 	lwm2m_firmware_set_update_state_cb(firmware_update_state_cb);
 
 	wrapper_evt_handler = event_handler;
-	state = DISCONNECTED;
 	return 0;
 }
 
@@ -455,10 +425,6 @@ int cloud_wrap_connect(void)
 	int err;
 	int flags = IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP) ?
 			LWM2M_RD_CLIENT_FLAG_BOOTSTRAP : 0;
-
-	if (state != DISCONNECTED) {
-		return -EINPROGRESS;
-	}
 
 	err = lwm2m_rd_client_start(
 			&client, endpoint_name,
@@ -469,7 +435,6 @@ int cloud_wrap_connect(void)
 		return err;
 	}
 
-	state = CONNECTING;
 	return 0;
 }
 
@@ -478,20 +443,12 @@ int cloud_wrap_disconnect(void)
 	int err;
 	struct cloud_wrap_event event = { 0 };
 
-	if ((state != CONNECTED) || (state != CONNECTING)) {
-		return -ENOTSUP;
-	}
-
 	err = lwm2m_rd_client_stop(&client, rd_client_event, false);
 	if (err) {
 		LOG_ERR("lwm2m_rd_client_stop, error: %d", err);
 		return err;
 	}
 
-	event.type = CLOUD_WRAP_EVT_DISCONNECTED;
-	cloud_wrapper_notify_event(&event);
-	
-	state = DISCONNECTED;
 	return 0;
 }
 
@@ -508,8 +465,7 @@ int cloud_wrap_pause(void)
 
 	event.type = CLOUD_WRAP_EVT_PAUSED;
 	cloud_wrapper_notify_event(&event);
-	
-	state = PAUSED;
+
 	return 0;
 }
 
@@ -517,17 +473,12 @@ int cloud_wrap_resume(void)
 {
 	int err;
 
-	if (state != PAUSED) {
-		return -ENOTSUP;
-	}
-
 	err = lwm2m_engine_resume();
 	if (err) {
 		LOG_ERR("lwm2m_engine_resume, error: %d", err);
 		return err;
 	}	
 
-	state = CONNECTING;
 	return 0;
 }
 

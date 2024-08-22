@@ -10,18 +10,14 @@ static char *get_evt_type_str(enum cloud_event_type type)
 		return "CLOUD_EVT_DISCONNECTED";
 	case CLOUD_EVT_CONNECTING:
 		return "CLOUD_EVT_CONNECTING";
-	case CLOUD_EVT_CONNECTION_TIMEOUT:
-		return "CLOUD_EVT_CONNECTION_TIMEOUT";
-	case CLOUD_EVT_LTE_CONNECT:
-		return "CLOUD_EVT_LTE_CONNECT";
-	case CLOUD_EVT_LTE_DISCONNECT:
-		return "CLOUD_EVT_LTE_DISCONNECT";
 	case CLOUD_EVT_PAUSED:
 		return "CLOUD_EVT_PAUSED";
 	case CLOUD_EVT_RX_OFF:
 		return "CLOUD_EVT_RX_OFF";
-	case CLOUD_EVT_USER_ASSOCIATION_REQUEST:
-		return "CLOUD_EVT_USER_ASSOCIATION_REQUEST";
+	case CLOUD_EVT_RECONNECT_REQUEST:
+		return "CLOUD_EVT_RECONNECT_REQUEST";
+	case CLOUD_EVT_CONNECTION_TIMEOUT:
+		return "CLOUD_EVT_CONNECTION_TIMEOUT";
 	case CLOUD_EVT_DATA_SEND_ACK:
 		return "CLOUD_EVT_DATA_SEND_ACK";
 	case CLOUD_EVT_DATA_SEND_FAIL:
@@ -36,8 +32,6 @@ static char *get_evt_type_str(enum cloud_event_type type)
 		return "CLOUD_EVT_CONFIG_RECEIVED";
 	case CLOUD_EVT_CONFIG_EMPTY:
 		return "CLOUD_EVT_CONFIG_EMPTY";
-	case CLOUD_EVT_SHUTDOWN_READY:
-		return "CLOUD_EVT_SHUTDOWN_READY";
 	case CLOUD_EVT_FOTA_START:
 		return "CLOUD_EVT_FOTA_START";
 	case CLOUD_EVT_FOTA_DONE:
@@ -46,6 +40,8 @@ static char *get_evt_type_str(enum cloud_event_type type)
 		return "CLOUD_EVT_FOTA_DOWNLOADED";
 	case CLOUD_EVT_FOTA_ERROR:
 		return "CLOUD_EVT_FOTA_ERROR";
+	case CLOUD_EVT_SHUTDOWN_READY:
+		return "CLOUD_EVT_SHUTDOWN_READY";
 	case CLOUD_EVT_ERROR:
 		return "CLOUD_EVT_ERROR";
 	default:

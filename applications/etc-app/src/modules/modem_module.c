@@ -714,8 +714,7 @@ static void on_sub_state_modem_sleep(struct modem_msg_data *msg)
 /* Message handler for STATE_CONNECTING. */
 static void on_state_connecting(struct modem_msg_data *msg)
 {
-	if ((IS_EVENT(msg, app, APP_EVT_LTE_DISCONNECT)) ||
-	    (IS_EVENT(msg, cloud, CLOUD_EVT_LTE_DISCONNECT))) {
+	if ((IS_EVENT(msg, app, APP_EVT_LTE_DISCONNECT))) {
 		int err;
 		state_set(STATE_DISCONNECTED);
 	}

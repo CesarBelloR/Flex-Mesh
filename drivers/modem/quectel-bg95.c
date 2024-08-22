@@ -1709,6 +1709,7 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 #if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
 	enable_psm_ind_interrupt();
 #endif
+	k_work_cancel_delayable(&soft_psm_work);
 	MODEM_SUBMIT_EVT(MODEM_API_PSM_ENTERED_EVT);
 
 	return 0;
@@ -3227,6 +3228,7 @@ static int offload_getaddrinfo(const char *node, const char *service,
 	reset_soft_psm_timer();
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	if (ret < 0) {
+		LOG_INF("DNS error: %d", ret);
 		return ret;
 	}
 

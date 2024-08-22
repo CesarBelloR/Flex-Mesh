@@ -31,6 +31,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "etc_memfault.h"
 
 #define CLOUD_RESUME_CONNECTION_TIMEOUT_S 60
+#define DISCONNECT_RECONNECTION_TIMEOUT_S CLOUD_RESUME_CONNECTION_TIMEOUT_S
 
 struct cloud_msg_data
 {
@@ -442,7 +443,7 @@ static int connect_cloud(void)
 static void connection_timeout_work_handler(struct k_work *work)
 {
 	ETC_MEMFAULT_TRACE_EVENT(cloud_connection_timeout);
-	connect_cloud();
+	SEND_EVENT(cloud, CLOUD_EVT_RECONNECT_REQUEST);
 }
 
 static void disconnect_cloud(void)
@@ -484,9 +485,6 @@ static void on_state_init(struct cloud_msg_data *msg)
 static void on_state_lte_connected(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED)) {
-		pause_cloud();
-
-		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
 		state_set(STATE_LTE_DISCONNECTED);
 	}
 
@@ -516,11 +514,12 @@ static void on_state_lte_disconnected(struct cloud_msg_data *msg)
 static void on_sub_state_cloud_connected(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED) ||
+	    IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED) ||
 	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
 		/* Reset the cloud running state to connecting
 		 * (LwM2M will attempt connection after resume).
-		 * Cloud will be paused in on_sub_state_cloud_running() on event
-		 * MODEM_EVT_PSM_ENTERED */
+		 * Cloud will be paused in on_sub_state_cloud_running() on events
+		 * MODEM_EVT_PSM_ENTERED and MODEM_EVT_LTE_DISCONNECTED */
 		sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
 	}
 
@@ -571,7 +570,8 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
-	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
+	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_RECONNECT_REQUEST)) {
 		/* Start cloud connection process */
 		if (connect_cloud() == 0) {
 			sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
@@ -584,13 +584,29 @@ static void on_sub_state_cloud_connecting(struct cloud_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		set_cloud_connected();
 	}
+
+	/* Schedule timeout work if cloud is trying to connect when a data transmit
+	 * request is received. This is a safety measure to ensure the LwM2M client
+	 * is restarted if it is not yet running.
+	 * Use _schedule instead of _reschedule here, as we could otherwise repeatedly
+	 * reschedule the work without the work ever being executed. */
+	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
+	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
+		k_work_schedule(&connection_timeout_work,
+				K_SECONDS(DISCONNECT_RECONNECTION_TIMEOUT_S));
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_RECONNECT_REQUEST)) {
+		connect_cloud();
+	}
 }
 
 /* Message handler for SUB_STATE_CLOUD_PAUSED. */
 static void on_sub_state_cloud_paused(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
-	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
+	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_RECONNECT_REQUEST)) {
 		resume_cloud();
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_RUNNING);
 		if (sub_state_cloud_running == SUB_STATE_CLOUD_DISCONNECTED) {
@@ -604,12 +620,15 @@ static void on_sub_state_cloud_paused(struct cloud_msg_data *msg)
 
 static void on_sub_state_cloud_running(struct cloud_msg_data *msg)
 {
-	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED)) {
+	if (IS_EVENT(msg, modem, MODEM_EVT_PSM_ENTERED) ||
+	    IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED)) {
 		pause_cloud();
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
+		disconnect_cloud();
 		pause_cloud();
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
 	}
@@ -632,26 +651,18 @@ static void on_all_states(struct cloud_msg_data *msg)
 		LOG_INF("Last data send message id %d", last_message_id);
 	}
 
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
-		sub_state_lte_connected_set(SUB_STATE_CLOUD_PAUSED);
-	}
-
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_ERROR)) {
 		SEND_EVENT(cloud, CLOUD_EVT_REBOOT_REQUEST);
 	}
 
 	/* Set cloud to disconnected on all states if disconnected or timeout
-	 * event is emitted. 
+	 * event is emitted.
 	 */
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) ||
 	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
-		if ((sub_state_lte_connected != SUB_STATE_CLOUD_RUNNING) &&
-		    (state == STATE_LTE_CONNECTED)) {
-			ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(white_led_issue, 1);
-		} else if (state != STATE_LTE_CONNECTED) {
-			ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(white_led_issue, 2);
-		}
 		sub_state_cloud_running_set(SUB_STATE_CLOUD_DISCONNECTED);
+		k_work_reschedule(&connection_timeout_work,
+				  K_SECONDS(DISCONNECT_RECONNECTION_TIMEOUT_S));
 	}
 }
 
