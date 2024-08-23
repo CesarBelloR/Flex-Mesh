@@ -3162,6 +3162,7 @@ static int offload_getaddrinfo(const char *node, const char *service,
 			       const struct zsock_addrinfo *hints,
 			       struct zsock_addrinfo **res)
 {
+	static int num_fails = 0;
 	uint32_t port = 0U;
 	int ret;
 	struct zsock_addrinfo *result;
@@ -3228,9 +3229,12 @@ static int offload_getaddrinfo(const char *node, const char *service,
 	reset_soft_psm_timer();
 	k_sem_give(&mdata.cmd_handler_data.sem_tx_lock);
 	if (ret < 0) {
+		num_fails++;
 		LOG_INF("DNS error: %d", ret);
+		__ASSERT(num_fails < 4, "DNS error: %d", ret);
 		return ret;
 	}
+	num_fails = 0;
 
 	LOG_DBG("DNS RESULT: %s",
 		net_addr_ntop(result->ai_family,
