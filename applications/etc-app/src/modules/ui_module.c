@@ -673,6 +673,7 @@ static void on_state_functional_test(struct ui_msg_data *msg)
 	    IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_UI_TEST_END)) {
 		transition_list_clear();
 		transition_list_append(LED_STATE_TURN_OFF, UI_LED_WAIT_SWITCH_STATE_MSEC);
+		sub_state_set(last_battery_state);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_RUNNING);
 	}

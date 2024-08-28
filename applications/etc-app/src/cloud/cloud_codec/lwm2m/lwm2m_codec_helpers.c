@@ -1131,14 +1131,25 @@ int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_da
 		lwm2m_codec_helpers_object_path_list_add(cloud_data,
 							 paths, ARRAY_SIZE(paths));
 	}
+
 	
 	const struct lwm2m_obj_path path_list[] = {
 		LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
 		LWM2M_OBJ(ETC_FUNCTIONAL_TEST_OBJECT_ID, 0, ETC_FUNCTIONAL_TEST_OBJ_R_STATUS),
-		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_SERIAL_NUMBER_ID)
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_SERIAL_NUMBER_ID),
+		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID)
 	};
-	ret = lwm2m_set_s8(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
-			   modem_rsrp);
+
+	/* Set battery voltage in mV (required by resource spec) */
+	ret = set_resource_if_changed_s32(cloud_data,
+					  &LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID),
+					  (int32_t)sensor_data->battery_mV);
+	if (ret) {
+		return ret;
+	}
+
+	ret = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+			    modem_rsrp);
 	if (ret) {
 		return ret;
 	}
