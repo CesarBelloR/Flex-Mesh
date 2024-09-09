@@ -17,7 +17,9 @@
 /* Number of sensor */
 #define ETC_DEVICE_NUM_SENSOR  (6)
 /* Lora mode sync with cloud offset */
-#define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_OFFSET_HOUR (16)
+#define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR (16)
+/* Maximum random hourly offset for LoRa cloud sync */
+#define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR_OFFSET_MAX (6)
 /* Equal the buffer for decoded buffer Lora */
 #define ETC_DEVICE_RELAY_BUF_SIZE (128) 
 /* Number of extra elements in logger data */
@@ -393,6 +395,15 @@ int etc_device_erase_cfg(void);
  * @return	The LoRa transmission offset in minutes.
  */
 uint16_t etc_device_get_tx_logger_lora_offset_mins(void);
+
+/** 
+ * @brief Get the hour of the day when the cloud sync should happen for LoRa loggers.
+ * 
+ * This hour is randomly generated and is 
+ * @ref ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR plus a random offset of maximum
+ * 5 hours.
+ */
+uint16_t etc_device_get_tx_lora_cloud_sync_hour(void);
 
 /**
  * @brief Get the offset in minutes for transmitting logs without probe.

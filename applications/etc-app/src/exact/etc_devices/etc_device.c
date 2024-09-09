@@ -39,6 +39,7 @@ static uint16_t ram_nack_record_id;
 static enum etc_device_job logger_job = ETC_DEVICE_JOB_LOG;
 static enum etc_transmit_sub_job transmit_sub_job = ETC_TRANSMIT_NORMAL;
 static uint16_t tx_logger_lora_offset_mins = 0;
+static uint16_t tx_lora_cloud_sync_hour;
 static time_t device_next_transmit_s = 0;
 
 static struct etc_device_relay_record_stat relay_record_stat;
@@ -186,8 +187,11 @@ void etc_device_init(void)
 
 	logger_job = ETC_DEVICE_JOB_TX_RX;
 	/* Logger Lora mode will sync with interval quarter hour */
-	tx_logger_lora_offset_mins = (uint16_t)((sys_rand32_get() % 4) *
-		ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE);
+	tx_logger_lora_offset_mins =
+		(uint16_t)((sys_rand32_get() % 4) * ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE);
+	tx_lora_cloud_sync_hour =
+		(uint16_t)((sys_rand32_get() % ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR_OFFSET_MAX) +
+			   ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR);
 	if (dev_mode == ETC_DEVICE_MODE_RELAY) {
 		dev_str = "Relay";
 	} else if (dev_mode == ETC_DEVICE_MODE_LORA_LOGGER) {
@@ -441,9 +445,14 @@ int etc_device_erase_cfg(void)
 	return 0;
 }
 
-uint16_t etc_device_get_tx_logger_lora_offset_mins(void) 
+uint16_t etc_device_get_tx_logger_lora_offset_mins(void)
 {
 	return tx_logger_lora_offset_mins;
+}
+
+uint16_t etc_device_get_tx_lora_cloud_sync_hour(void)
+{
+	return tx_lora_cloud_sync_hour;
 }
 
 uint16_t etc_device_get_tx_no_probe_offset_mins(void) 
