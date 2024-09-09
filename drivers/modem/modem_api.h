@@ -70,6 +70,10 @@ enum modem_api_evt_type {
 	MODEM_API_PSM_ENTERED_EVT,
 	/* Modem woken up from PSM and powered on */
 	MODEM_API_PSM_WAKEUP_EVT,
+	/* Modem unexpectedly turned on (without specific user or driver request
+	 * to turn on).
+	 */
+	MODEM_API_UNEXPECTED_WAKEUP_EVT,
 	/* Modem powered down manually, NOT in PSM*/
 	MODEM_API_POWER_DOWN_EVT,
 	/* Modem dynamic data changed (e.g. cellular network, PSM parameters) */
@@ -132,6 +136,7 @@ enum modem_api_data_request {
 
 enum modem_power_state {
 	MODEM_POWER_OFF,
+	MODEM_POWER_WAITING_FOR_APP_RDY,
 	MODEM_POWER_ON,
 	MODEM_POWER_PSM_PENDING,
 	MODEM_POWER_PSM

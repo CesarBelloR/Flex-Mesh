@@ -56,6 +56,8 @@ static K_KERNEL_STACK_DEFINE(modem_rx_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_STA
 static K_KERNEL_STACK_DEFINE(modem_workq_stack, CONFIG_MODEM_QUECTEL_BG95_M3_RX_WORKQ_STACK_SIZE);
 NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE, 0, NULL);
 
+static const struct device *modem_dev = DEVICE_DT_GET_ONE(DT_DRV_COMPAT);
+
 static const struct gpio_dt_spec power_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_power_gpios);
 #if DT_INST_NODE_HAS_PROP(0, mdm_on_off_gpios)
 static const struct gpio_dt_spec on_off_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_on_off_gpios);
@@ -479,26 +481,6 @@ MODEM_CMD_DEFINE(on_cmd_exterror)
 	return 0;
 }
 
-/* Handler: +CSQ: <signal_power>[0], <qual>[1] */
-MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
-{
-	int rssi = ATOI(argv[0], 0, "signal_power");
-	int qual = ATOI(argv[1], 0, "qual");
-
-	/* Check the RSSI value. */
-	if (rssi == 31) {
-		mdata.mdm_rssi = -51;
-	} else if (rssi >= 0 && rssi <= 31) {
-		mdata.mdm_rssi = -114 + ((rssi * 2) + 1);
-	} else {
-		mdata.mdm_rssi = MDM_RSSI_INVALID;
-	}
-
-	LOG_INF("RSSI: %d", mdata.mdm_rssi);
-
-	return 0;
-}
-
 /* Handler: +QCSQ: <sysmode>, <rssi>[1], <rsrp>[2], <sinr>[3], <rsrq>[4] */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_qcsq)
 {
@@ -882,7 +864,6 @@ static int pm_resume_uart(void)
 */
 static void psm_ind_handler(struct psm_ind *psm_ind_data, int edge)
 {
-	int ret;
 	int64_t uptime_now = k_uptime_get();
 
 	psm_ind_data->edge = edge;
@@ -1188,7 +1169,8 @@ MODEM_CMD_DEFINE(on_cmd_unsol_pdpdeact)
 /* Handler: Modem initialization ready. */
 MODEM_CMD_DEFINE(on_cmd_unsol_rdy)
 {
-	if (mdata.power != MODEM_POWER_PSM) {
+	LOG_INF("Modem ready");
+	if (mdata.power == MODEM_POWER_WAITING_FOR_APP_RDY) {
 		k_sem_give(&mdata.sem_ready);
 		return 0;
 	}
@@ -1718,6 +1700,9 @@ MODEM_CMD_DEFINE(on_cmd_psm_power_down)
 MODEM_CMD_DEFINE(on_cmd_power_down)
 {
 	k_sem_give(&mdata.sem_shutdown);
+#if IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM) || IS_ENABLED(CONFIG_MODEM_QUECTEL_BG95_PSM_AUTO)
+	enable_psm_ind_interrupt();
+#endif
 	mdata.power = MODEM_POWER_OFF;
 	MODEM_SUBMIT_EVT(MODEM_API_POWER_DOWN_EVT);
 	return 0;
@@ -2673,22 +2658,6 @@ static void modem_connect_work(void)
 	quectel_bg95_set_connected(true);
 }
 
-static int modem_csq(void) 
-{
-	struct modem_cmd cmd  = MODEM_CMD("+CSQ: ", on_cmd_atcmdinfo_rssi_csq, 2U, ",");
-	static char *send_cmd = "AT+CSQ";
-	int ret;
-
-	/* query modem RSSI */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     &cmd, 1U, send_cmd, &mdata.sem_response,
-			     MDM_CMD_TIMEOUT);
-	if (ret < 0) {
-		LOG_ERR("AT+CSQ ret:%d", ret);
-	}
-	return ret;
-}
-
 static int modem_qcsq(void) 
 {
 	struct modem_cmd cmd  = 
@@ -2817,9 +2786,17 @@ static void modem_psm_wakeup_work(struct k_work *work)
 {
 	int ret;
 
-	MODEM_SUBMIT_EVT(MODEM_API_PSM_WAKEUP_EVT);
+	if (mdata.power == MODEM_POWER_PSM) {
+		MODEM_SUBMIT_EVT(MODEM_API_PSM_WAKEUP_EVT);
+	} else {
+		MODEM_SUBMIT_EVT(MODEM_API_UNEXPECTED_WAKEUP_EVT);
+	}
 
 	disable_psm_ind_interrupt();
+
+	mdata.power = MODEM_POWER_ON;
+	/* Modem needs to resume itself to set correct power state. */
+	ret = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_RESUME);
 
 	/* Run setup commands on the modem. */
 	ret = modem_cmd_handler_setup_cmds(&mctx.iface, &mctx.cmd_handler,
@@ -2828,8 +2805,6 @@ static void modem_psm_wakeup_work(struct k_work *work)
 	if (ret < 0) {
 		LOG_ERR("wakeup commands fail: %u", ret);
 	}
-
-	mdata.power = MODEM_POWER_ON;
 
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    K_NO_WAIT);
@@ -3021,6 +2996,7 @@ static int modem_setup(void)
 	int counter = 0;
 
 retry:
+	mdata.power = MODEM_POWER_WAITING_FOR_APP_RDY;
 	/* Setup the pins to ensure that Modem is enabled. */
 	pin_init();
 
@@ -3064,7 +3040,9 @@ retry:
 	mdata.power = MODEM_POWER_ON;
 	k_work_reschedule_for_queue(&modem_workq, &mdata.rssi_query_work,
 				    MDM_WAIT_FOR_RSSI_TIMEOUT);
+	return 0;
 error:
+	mdata.power = MODEM_POWER_OFF;
 	return ret;
 }
 
@@ -3724,6 +3702,11 @@ static int quectel_bg95_pm_resume(void)
 {
 	int ret = 0;
 	LOG_INF("PM_DEVICE_ACTION_RESUME");
+
+	if (mdata.power == MODEM_POWER_ON) {
+		/* Modem is already on. Do not need to perform any action to resume. */
+		return 0;
+	}
 
 #if DT_INST_NODE_HAS_PROP(0, mdm_uart_oe_gpios)
 	gpio_pin_set_dt(&uart_oe_gpio, GPIO_OUTPUT_ACTIVE);

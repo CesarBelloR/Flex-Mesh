@@ -89,7 +89,7 @@ static int16_t rsrp_value_latest;
 
 const k_tid_t module_thread;
 
-const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
+static const struct device *modem_dev = DEVICE_DT_GET(DT_NODELABEL(quectel_bg95));
 
 static void modem_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(modem_work, modem_work_fn);
@@ -503,6 +503,10 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 	case MODEM_API_PSM_WAKEUP_EVT: {
 		break;
 	}
+	case MODEM_API_UNEXPECTED_WAKEUP_EVT: {
+		SEND_EVENT(modem, MODEM_EVT_UNEXPECTED_WAKEUP);
+		break;
+	}
 
 	/* Power down event is not sent on PSM power down, only on regular power down. */
 	case MODEM_API_POWER_DOWN_EVT: {
@@ -711,6 +715,15 @@ static void on_sub_state_modem_sleep(struct modem_msg_data *msg)
 	}
 }
 
+static void on_state_disconnected(struct modem_msg_data *msg)
+{
+	if (IS_EVENT(msg, modem, MODEM_EVT_UNEXPECTED_WAKEUP)) {
+		state_set(STATE_CONNECTING);
+		k_work_reschedule(&modem_work,
+				  K_SECONDS(CONFIG_MODEM_MODULE_UNEXPECTED_WAKEUP_TIMEOUT_S));
+	}
+}
+
 /* Message handler for STATE_CONNECTING. */
 static void on_state_connecting(struct modem_msg_data *msg)
 {
@@ -802,6 +815,7 @@ void modem_module_thread_fn(void)
 				on_sub_state_modem_sleep(&msg);
 				break;
 			}
+			on_state_disconnected(&msg);
 			break;
 		case STATE_CONNECTING:
 			on_state_connecting(&msg);

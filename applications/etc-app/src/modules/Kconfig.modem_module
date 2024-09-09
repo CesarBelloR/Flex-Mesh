@@ -18,6 +18,15 @@ config MODEM_MODULE_MAX_CONNECTION_TIME_S
 	  the modem is turned off manually until the next scheduled transmit or
 	  other wakeup event.
 
+config MODEM_MODULE_UNEXPECTED_WAKEUP_TIMEOUT_S
+	int "Timeout to shut down modem after unexpected wakeup"
+	default 15
+	help
+	  If the modem has not connected to an LTE network after this timeout
+	  after an unexpected wake up, the modem will be turned off.
+	  An unexpected wake up is defined as the modem waking up without any
+	  user interaction when the modem is not in PSM mode.
+
 config MODEM_MODULE_RELAY_PSM_RAT
 	string "Requested PSM active time in relay mode"
 	default "00100010"
