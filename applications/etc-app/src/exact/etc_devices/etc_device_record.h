@@ -204,10 +204,10 @@ uint16_t etc_device_record_get_total_record(void);
 /**
  * @brief Retrieves the address offset for a record based on its index.
  *
- * @param index The index of the record.
+ * @param index The pointer to store index of the record.
  * @return The address offset for the specified record index.
  */
-off_t etc_device_record_get_addr_offset_by_index(struct etc_device_record_index index);
+off_t etc_device_record_get_addr_offset_by_index(struct etc_device_record_index *index);
 
 /**
  * @brief Retrieves the address offset for a record based on its id.
@@ -220,10 +220,10 @@ off_t etc_device_record_get_addr_offset_by_id(uint16_t id);
 /**
  * @brief Retrieves the record ID for a record based on its index.
  *
- * @param index The index of the record.
+ * @param index The pointer to store index of the record.
  * @return The record ID for the specified record index.
  */
-uint16_t etc_device_record_get_id_by_index(struct etc_device_record_index index);
+uint16_t etc_device_record_get_id_by_index(struct etc_device_record_index *index);
 
 /**
  * @brief Retrieves the record index for a given record ID.
@@ -236,20 +236,20 @@ struct etc_device_record_index etc_device_get_index_by_id(uint16_t record_id);
 /**
  * @brief Get the next ID based on current record index
  *
- * @param record_id The record index.
+ * @param record_id The pointer to store record index.
  * @return The next ID
  */
-uint16_t etc_device_get_next_id_by_index(struct etc_device_record_index current_index);
+uint16_t etc_device_get_next_id_by_index(struct etc_device_record_index *current_index);
 /**
  * @brief Calculates the device record index based on the given address offset.
  *
  * This function reverses the calculation performed in etc_deviced_record_get_addr_offset_by_index
  * to retrieve the device record index corresponding to the given address offset.
  *
- * @param offset The address offset for which to calculate the device record index.
+ * @param offset The pointer to store address offset for which to calculate the device record index.
  * @return The device record index corresponding to the given address offset.
  */
-struct etc_device_record_index etc_device_get_index_by_addr_offset(off_t offset);
+struct etc_device_record_index etc_device_get_index_by_addr_offset(off_t *offset);
 
 /**
  * @brief Writes data to the specified address offset in the device's records.
@@ -394,6 +394,6 @@ void etc_device_record_erase_record_flash(void);
 /**
  * @brief Get the previous index based on offset
  */
-struct etc_device_record_index etc_device_get_previous_index_by_addr_offset(off_t offset);
+struct etc_device_record_index etc_device_get_previous_index_by_addr_offset(off_t *offset);
 
 #endif /* ETC_DEVICE_RECORD_H_ */

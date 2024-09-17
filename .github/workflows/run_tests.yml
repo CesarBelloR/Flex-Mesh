@@ -65,7 +65,13 @@ jobs:
           toolchains: arm-zephyr-eabi
           sdk-version: 0.16.5-1
 
+      - name: Apply patches
+        working-directory: etc-firmware
+        run: |
+              ./scripts/apply_patches.sh
+
       - name: Run all tests in the etc-firmware project
+        # continue-on-error: true
         run: |
             ./zephyr/scripts/twister -T ./etc-firmware/tests
 

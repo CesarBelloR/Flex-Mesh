@@ -38,15 +38,12 @@
 		compatible = "gpio-leds";
 		led0: led_0 {
 			gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
-			label = "Red LED";
 		};
 		led1: led_1 {
 			gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
-			label = "Green LED";
 		};
 		led2: led_2 {
 			gpios = <&gpio1 10 GPIO_ACTIVE_LOW>;
-			label = "Blue LED";
 		};
 	};
 
@@ -125,18 +122,15 @@
 
 &gpio0 {
 	status = "okay";
-	label = "GPIO_0";
 };
 
 &gpio1 {
 	status = "okay";
-	label = "GPIO_1";
 };
 
 &i2c0 {
 	compatible = "nordic,nrf-twim";
 	status = "okay"; 
-	label = "I2C_0";
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-1 = <&i2c0_sleep>;
 	pinctrl-names = "default", "sleep";
@@ -205,7 +199,6 @@
 
 &pwm0 {
 	status = "okay";
-	label = "PWM_0";
 	pinctrl-0 = <&pwm0_default>;
 	pinctrl-1 = <&pwm0_sleep>;
 	pinctrl-names = "default", "sleep";
@@ -222,7 +215,6 @@
 	lora: sx1276@0 {
 		compatible = "semtech,sx1276";
 		reg = <0>;
-		label = "sx1276";
 		reset-gpios = <&gpio1 11 GPIO_ACTIVE_LOW>;
 		dio-gpios = <&gpio1 15 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 		tcxo-power-startup-delay-ms = <5>;
@@ -243,7 +235,6 @@
 		compatible = "jedec,spi-nor";
 		reg = <0>;
 		spi-max-frequency = <8000000>;
-		label = "MX25R16";
 		jedec-id = [ C2 28 15 ];
 		size = <16777216>;
 		wp-gpios = < &gpio0 17 GPIO_ACTIVE_LOW >;
@@ -317,10 +308,8 @@ zephyr_udc0: &usbd {
 
 	cdc_acm_uart0: cdc_acm_uart0 {
 		compatible = "zephyr,cdc-acm-uart";
-		label = "CDC_ACM_0";
 	};
 	cdc_acm_uart1: cdc_acm_uart1 {
 		compatible = "zephyr,cdc-acm-uart";
-		label = "CDC_ACM_1";
 	};
 };

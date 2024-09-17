@@ -262,7 +262,7 @@ int etc_device_write_record_sensor(struct sensor_data *sensor, bool ota_running)
 int etc_device_write_record(union etc_device_record *record)
 {
 	struct etc_device_record_index record_index = etc_device_record_get_next_index();
-	off_t record_addr = etc_device_record_get_addr_offset_by_index(record_index);
+	off_t record_addr = etc_device_record_get_addr_offset_by_index(&record_index);
 	int rc = etc_device_record_write_data(record_addr, record->data, ETC_DEVICE_RECORD_SIZE);
 	if (rc) {
 		LOG_ERR("Can't write data to record err %d", rc);
