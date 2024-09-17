@@ -48,7 +48,7 @@ static struct etc_device_record_backup_data etc_device_record_backup;
 
 static int etc_device_record_get_ack_status(int record_id)
 {
-	uint8_t byte_pos = record_id / 8;
+	uint16_t byte_pos = record_id / 8;
 	uint8_t bit_pos = record_id % 8;
 	uint8_t byte_status = pRecord->record_bits[byte_pos];
 	return (byte_status >> bit_pos) & 0x01;
@@ -57,7 +57,7 @@ static int etc_device_record_get_ack_status(int record_id)
 static void etc_device_record_set_ack_status(int record_id, int status)
 {
 	etc_device_need_save = true;
-	uint8_t byte_pos = record_id / 8;
+	uint16_t byte_pos = record_id / 8;
 	uint8_t bit_pos = record_id % 8;
 	uint8_t *byte_status = &pRecord->record_bits[byte_pos];
 	if (status == 0) {
@@ -65,6 +65,18 @@ static void etc_device_record_set_ack_status(int record_id, int status)
 	} else {
 		*byte_status |= (1 << bit_pos);
 	}
+}
+
+static void etc_device_record_reset_ack(void) 
+{
+	uint16_t total = etc_device_record_get_total_record();
+	uint16_t oldest_id = etc_device_record_get_oldest_id();
+	uint16_t newest_id = etc_device_record_get_latest_id();
+	uint16_t id = (newest_id + 1) % (MAX_RECORD_NO_OFFSET_ID + 1);
+	do {
+		etc_device_record_set_nack(id);
+		id = (id + 1) % MAX_RECORD_NO_OFFSET_ID;
+	} while (id != oldest_id);
 }
 
 static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb read_cb, void *cb_arg)
@@ -79,23 +91,36 @@ static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb re
 	}
 
 	uint16_t len;
-	len = read_cb(cb_arg, &etc_device_record, sizeof(etc_device_record));
+	struct etc_device_record_data record_data = {0};
+	len = read_cb(cb_arg, &record_data, sizeof(record_data));
 	if (len <= 0) {
 		LOG_ERR("No data to read");
 		return -ENODATA;
 	}
 
-	if (len != sizeof(etc_device_record)) {
-		LOG_ERR("Invalid length for device record");
+	if ((len != sizeof(record_data)) && (len != sizeof(struct etc_device_record_data_old))) {
+		LOG_ERR("Invalid length for device record %d", len);
 		return -EINVAL;
 	}
 
+#if ETC_DEVICE_RECORD_BUF_SIZE == ETC_DEVICE_RECORD_BUF_SIZE_NEW
+	if (len == sizeof(struct etc_device_record_data_old)) {
+		LOG_WRN("Need to upgrade the record data");
+		pRecord->record_stat = record_data.record_stat;
+		memset(pRecord->record_bits, 0, sizeof(pRecord->record_bits));
+		memcpy(pRecord->record_bits, record_data.record_bits, ETC_DEVICE_RECORD_BUF_SIZE_OLD);
+	} else {
+		memcpy(pRecord, &record_data, sizeof(record_data));
+	}
+#else
+	memcpy(pRecord, &record_data, sizeof(record_data));
+#endif
 	LOG_DBG("\tNewest record (%d,%d)", p_etc_device_record_table->newest.sector_idx,
 		p_etc_device_record_table->newest.element_idx);
 	LOG_DBG("\tOldest record (%d,%d)", p_etc_device_record_table->oldest.sector_idx,
 		p_etc_device_record_table->oldest.element_idx);
 	LOG_DBG("\tTotal record %d", p_etc_device_record_table->total);
-
+	etc_device_record_reset_ack();
 	return 0;
 }
 
@@ -212,7 +237,7 @@ void etc_device_record_init(void)
 	}
 
 	rc = settings_register(&etc_device_record_settings);
-	if (rc) {
+	if (rc && rc != -EEXIST) {
 		LOG_ERR("Failed to register settings, %d", rc);
 		return;
 	}
@@ -223,19 +248,18 @@ void etc_device_record_init(void)
 		return;
 	}
 
-	record_fs.offset = FLASH_AREA_OFFSET(ETC_DEVICE_RECORD_NODE_LABEL);
+	record_fs.offset = FIXED_PARTITION_OFFSET(ETC_DEVICE_RECORD_NODE_LABEL);
 	rc = flash_get_page_info_by_offs(record_fs.flash_device, record_fs.offset, &info);
 	if (rc) {
 		LOG_DBG("Unable to get page info");
 	}
 	record_fs.sector_size = info.size;
-	record_fs.sector_count = (FLASH_AREA_SIZE(ETC_DEVICE_RECORD_NODE_LABEL) / info.size);
+	record_fs.sector_count = (FIXED_PARTITION_SIZE(ETC_DEVICE_RECORD_NODE_LABEL) / info.size);
 
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)record_fs.offset,
-		FLASH_AREA_SIZE(ETC_DEVICE_RECORD_NODE_LABEL), info.size, record_fs.sector_count);
+		FIXED_PARTITION_SIZE(ETC_DEVICE_RECORD_NODE_LABEL), info.size, record_fs.sector_count);
 	rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)pRecord,
 			       sizeof(struct etc_device_record_data));
-
 	if ((rc) || (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
 		/* Clean up the memory RAM in no-init region */
 		retained_mem_clear(retained_ram_dev);
@@ -303,6 +327,10 @@ void etc_device_record_init(void)
 	k_work_schedule(&etc_device_save_work, K_NO_WAIT);
 }
 
+void etc_device_record_erase_record_flash(void) {
+	flash_erase(record_fs.flash_device, record_fs.offset, FIXED_PARTITION_SIZE(ETC_DEVICE_RECORD_NODE_LABEL));
+}
+
 int etc_device_record_get_ack(int record_id)
 {
 	return etc_device_record_get_ack_status(record_id);
@@ -311,7 +339,7 @@ int etc_device_record_get_ack(int record_id)
 void etc_device_record_set_ack(int record_id)
 {
 	etc_device_record_set_ack_status(record_id, 1);
-	uint8_t byte_position = record_id / 8;
+	uint16_t byte_position = record_id / 8;
 	int rc = retained_mem_write(retained_ram_dev, RECORD_ARRAY_OFFSET(byte_position),
 				    (uint8_t *)&pRecord->record_bits[byte_position],
 				    sizeof(uint8_t));
@@ -323,7 +351,7 @@ void etc_device_record_set_ack(int record_id)
 void etc_device_record_set_nack(int record_id)
 {
 	etc_device_record_set_ack_status(record_id, 0);
-	uint8_t byte_position = record_id / 8;
+	uint16_t byte_position = record_id / 8;
 	int rc = retained_mem_write(retained_ram_dev, RECORD_ARRAY_OFFSET(byte_position),
 				    (uint8_t *)&pRecord->record_bits[byte_position],
 				    sizeof(uint8_t));
@@ -411,9 +439,21 @@ off_t etc_device_record_get_addr_offset_by_index(struct etc_device_record_index 
 	       index.element_idx * ETC_DEVICE_RECORD_SIZE;
 }
 
+off_t etc_device_record_get_addr_offset_by_id(uint16_t id) 
+{
+	struct etc_device_record_index record_index = etc_device_get_index_by_id(id);
+	return etc_device_record_get_addr_offset_by_index(record_index);
+}
+
 uint16_t etc_device_record_get_id_by_index(struct etc_device_record_index index)
 {
 	return index.sector_idx * ETC_RECORD_MAX_PER_SECTOR + index.element_idx;
+}
+
+uint16_t etc_device_record_get_id_by_addr(off_t *addr) 
+{
+	struct etc_device_record_index offset_index = etc_device_get_index_by_addr_offset(*addr);
+	return etc_device_record_get_id_by_index(offset_index);
 }
 
 struct etc_device_record_index etc_device_get_index_by_id(uint16_t record_id)
@@ -439,46 +479,47 @@ struct etc_device_record_index etc_device_get_index_by_addr_offset(off_t offset)
 struct etc_device_record_index etc_device_get_next_index_byte_addr_offset(off_t offset)
 {
 	struct etc_device_record_index offset_index = etc_device_get_index_by_addr_offset(offset);
-	if (offset_index.element_idx < ETC_RECORD_MAX_PER_SECTOR - 1) {
-		offset_index.element_idx += 1;
-	} else {
+
+	if (++offset_index.element_idx >= ETC_RECORD_MAX_PER_SECTOR) {
 		offset_index.element_idx = 0;
-		if (offset_index.sector_idx < ETC_RECORD_MAX_SECTOR - 1) {
-			offset_index.sector_idx += 1;
-		} else {
-			offset_index.sector_idx = 0;
-		}
+		offset_index.sector_idx = (offset_index.sector_idx + 1) % ETC_RECORD_MAX_SECTOR;
 	}
+
 	return offset_index;
 }
 
-struct etc_device_record_index etc_device_get_previous_index_byte_addr_offset(off_t offset)
+struct etc_device_record_index etc_device_get_previous_index_by_addr_offset(off_t offset)
 {
 	struct etc_device_record_index offset_index = etc_device_get_index_by_addr_offset(offset);
-	if (offset_index.element_idx > 0) {
-		offset_index.element_idx -= 1;
-	} else {
+
+	if (offset_index.element_idx-- == 0) {
 		offset_index.element_idx = ETC_RECORD_MAX_PER_SECTOR - 1;
-		if (offset_index.sector_idx > 0) {
-			offset_index.sector_idx -= 1;
-		} else {
-			offset_index.sector_idx = ETC_RECORD_MAX_SECTOR - 1;
-		}
+		offset_index.sector_idx = (offset_index.sector_idx == 0)
+						  ? (ETC_RECORD_MAX_SECTOR - 1)
+						  : (offset_index.sector_idx - 1);
 	}
+
 	return offset_index;
 }
 
-off_t etc_device_get_next_addr_byte_addr_offset(off_t offset)
+uint16_t etc_device_get_next_id_by_index(struct etc_device_record_index current_index)
+{
+	uint16_t current_id = etc_device_record_get_id_by_index(current_index);
+	uint16_t next_id = (current_id + 1) % MAX_RECORD_ID;
+	return next_id;
+}
+
+static off_t etc_device_get_next_addr_byte_addr_offset(off_t offset)
 {
 	struct etc_device_record_index next_index =
 		etc_device_get_next_index_byte_addr_offset(offset);
 	return etc_device_record_get_addr_offset_by_index(next_index);
 }
 
-off_t etc_device_get_previous_addr_byte_addr_offset(off_t offset)
+static off_t etc_device_get_previous_addr_byte_addr_offset(off_t offset)
 {
 	struct etc_device_record_index previous_index =
-		etc_device_get_previous_index_byte_addr_offset(offset);
+		etc_device_get_previous_index_by_addr_offset(offset);
 	return etc_device_record_get_addr_offset_by_index(previous_index);
 }
 
@@ -569,6 +610,77 @@ static int etc_device_record_recover_data(off_t *addr)
 	return -EINVAL;
 }
 
+static void etc_device_record_update_index(off_t *old_addr, off_t *new_addr) 
+{
+	uint16_t old_index = etc_device_record_get_id_by_addr(old_addr);
+	uint16_t new_index = etc_device_record_get_id_by_addr(new_addr);
+	uint16_t total = etc_device_record_get_total_record();
+	uint16_t off_index = (new_index >= old_index) ? 
+			     (new_index - old_index) : 
+			     (MAX_RECORD_NO_OFFSET_ID - old_index + new_index);
+	uint16_t oldest_index = etc_device_record_get_oldest_id();
+	uint16_t newest_index = (etc_device_record_get_latest_id() + off_index) % MAX_RECORD_NO_OFFSET_ID;
+
+	total += off_index;
+
+	if (total > ETC_RECORD_MAX_RECORD) {
+		total = ETC_RECORD_MAX_RECORD;
+	}
+	 
+	p_etc_device_record_table->total = total;
+	if (total == ETC_RECORD_MAX_RECORD) {
+		oldest_index = (oldest_index + off_index) % MAX_RECORD_NO_OFFSET_ID;
+	}
+	
+	p_etc_device_record_table->oldest = etc_device_get_index_by_id(oldest_index);
+	p_etc_device_record_table->newest = etc_device_get_index_by_id(newest_index);
+}
+
+/* 
+ * @brief This API will scan a suitable addr for new record
+ * @return 0 is found a good data
+ * @return 1 is no any freespace data.
+ * 
+ */
+static int etc_device_record_find_available_addr(off_t *addr) 
+{
+	union etc_device_record previous_record;
+	union etc_device_record check_record;
+	off_t offset_addr = *addr;
+	off_t previous_offset = 0;
+	off_t oldest_addr = etc_device_record_get_addr_offset_by_index(pRecord->record_stat.oldest);
+	if (offset_addr == oldest_addr) {
+		/* No free space */
+		*addr = offset_addr;
+		LOG_WRN("Reach oldest address 0x%08x", (unsigned int)offset_addr);
+		return 1;
+	}
+	int rc = 0;
+	do {
+		previous_offset = offset_addr;
+		offset_addr = etc_device_get_next_addr_byte_addr_offset(previous_offset);
+		if (offset_addr == oldest_addr) {
+			/* No free space */
+			*addr = offset_addr;
+			LOG_WRN("Reach oldest address 0x%08x", (unsigned int)offset_addr);
+			return 1;
+		}
+		rc = flash_read(record_fs.flash_device, offset_addr, check_record.data,
+				ETC_DEVICE_RECORD_SIZE);
+		if (rc != 0) {
+			LOG_ERR("Error in reading flash err %d", rc);
+			return rc;
+		}
+
+		if (etc_device_record_buffer_is_erased(check_record.data, ETC_DEVICE_RECORD_SIZE)) {
+			LOG_WRN("Found erased address 0x%08x", (unsigned int)offset_addr);
+			*addr = offset_addr;
+			return 0;
+		}
+	} while (1);
+	return -EINVAL;
+}
+
 int etc_device_record_write_data(off_t addr, void *data, int data_len)
 {
 	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
@@ -584,46 +696,26 @@ int etc_device_record_write_data(off_t addr, void *data, int data_len)
 		LOG_WRN("Data in address is not empty 0x%08x", (uint32_t)addr);
 		LOG_HEXDUMP_DBG(buf, ETC_DEVICE_RECORD_SIZE, "DUMP");
 		off_t new_addr = addr;
-		rc = etc_device_record_recover_data(&new_addr);
-		LOG_DBG("New Addr 0x%08x - rc %d", (uint32_t)new_addr, rc);
-		if (rc == 1) {
+		rc = etc_device_record_find_available_addr(&new_addr);
+		if (rc == 0) {
 			/* Found erased address */
-			struct etc_device_record_index new_index =
-				etc_device_get_index_by_addr_offset(new_addr);
-			LOG_DBG("Updated new record to new address 0x%08x (%d,%d)",
-				(uint32_t)new_addr, new_index.sector_idx, new_index.element_idx);
-			p_etc_device_record_table->newest = new_index;
-			addr = new_addr;
-		} else if (rc == 0) {
-			int offset_sector = new_addr - (new_addr % record_fs.sector_size);
-			uint32_t remain_data_size = new_addr - offset_sector;
-			if (remain_data_size == 0) {
-				rc = flash_erase(record_fs.flash_device, offset_sector,
-						 record_fs.sector_size);
-				__ASSERT_NO_MSG(rc == 0);
-			} else {
-				uint8_t *tmp_buf = (uint8_t *)k_malloc(remain_data_size);
-				__ASSERT_NO_MSG(tmp_buf != NULL);
-				rc = flash_read(record_fs.flash_device, offset_sector, tmp_buf,
-						remain_data_size);
-				__ASSERT_NO_MSG(rc == 0);
-				rc = flash_erase(record_fs.flash_device, offset_sector,
-						 record_fs.sector_size);
-				__ASSERT_NO_MSG(rc == 0);
-				rc = flash_write(record_fs.flash_device, offset_sector, tmp_buf,
-						 remain_data_size);
-				k_free(tmp_buf);
-			}
-
-			struct etc_device_record_index new_index =
-				etc_device_get_index_by_addr_offset(new_addr);
-			LOG_DBG("Updated new record to new address 0x%08x (%d,%d)",
-				(uint32_t)new_addr, new_index.sector_idx, new_index.element_idx);
-			p_etc_device_record_table->newest = new_index;
+			etc_device_record_update_index(&addr, &new_addr);
 			addr = new_addr;
 		} else {
-			/* Error in this case */
-			__ASSERT_NO_MSG(false);
+			off_t erase_addr = addr;
+			/* If start sector */
+			if ((erase_addr % record_fs.sector_size) == 0) {
+				erase_addr = addr;
+			} else {
+				erase_addr = (addr + record_fs.sector_size) & ~(record_fs.sector_size - 1);
+			}
+			LOG_WRN("Erasing address 0x%08x", (unsigned int)erase_addr);
+			rc = flash_erase(record_fs.flash_device, erase_addr, record_fs.sector_size);
+			__ASSERT_NO_MSG(rc == 0);
+			if (erase_addr != addr) {
+				etc_device_record_update_index(&addr, &erase_addr);
+			}
+			addr = erase_addr;
 		}
 	}
 
@@ -1021,7 +1113,7 @@ const struct device *etc_device_record_get(void)
 
 size_t etc_device_record_get_size(void)
 {
-	return FLASH_AREA_SIZE(ETC_DEVICE_RECORD_NODE_LABEL);
+	return FIXED_PARTITION_OFFSET(ETC_DEVICE_RECORD_NODE_LABEL);
 }
 
 off_t etc_device_record_get_offset(void)

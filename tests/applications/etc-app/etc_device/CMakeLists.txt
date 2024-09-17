@@ -11,6 +11,10 @@ target_sources(app PRIVATE ${app_sources})
 
 set(APP_SRC_DIR ../../../../applications/etc-app/src)
 
+set(PM_STATIC_YML_FILE
+  ${CMAKE_CURRENT_LIST_DIR}/boards/pm_static.yml
+)
+
 target_sources(app PRIVATE 
                 ${APP_SRC_DIR}/exact/etc_devices/etc_device.c
                 ${APP_SRC_DIR}/exact/etc_devices/etc_device_record.c
@@ -30,6 +34,6 @@ target_include_directories(app PRIVATE
                             ${APP_SRC_DIR})
 
 zephyr_compile_definitions(IMAGE_HASH_LEN=32)
-zephyr_compile_definitions(CONFIG_ETC_APP_LOG_LEVEL=4)
+zephyr_compile_definitions(CONFIG_ETC_APP_LOG_LEVEL=3)
 zephyr_compile_definitions(CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY=64)
 zephyr_compile_definitions(CONFIG_ETC_DEVICE_SAVE_RECORD_SEC=1)

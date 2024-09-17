@@ -3,7 +3,9 @@
 
 #include "etc_device.h"
 
-#define ETC_DEVICE_RECORD_BUF_SIZE (1088)
+#define ETC_DEVICE_RECORD_BUF_SIZE_NEW (1104)
+#define ETC_DEVICE_RECORD_BUF_SIZE_OLD (1088)
+#define ETC_DEVICE_RECORD_BUF_SIZE ETC_DEVICE_RECORD_BUF_SIZE_NEW
 #define ETC_DEVICE_RECORD_FLAG (0xCAFEBEEF)
 
 /**
@@ -30,7 +32,11 @@
  * ETC_RECORD_MAX_PER_SECTOR) + 1
  */
 #ifndef CONFIG_ETC_RECORD_MAX_SECTOR
+#if ETC_DEVICE_RECORD_BUF_SIZE == ETC_DEVICE_RECORD_BUF_SIZE_NEW
+#define ETC_RECORD_MAX_SECTOR	  ((int)((ETC_RECORD_MAX_RECORD) / (ETC_RECORD_MAX_PER_SECTOR)) + 2)
+#else 
 #define ETC_RECORD_MAX_SECTOR	  ((int)((ETC_RECORD_MAX_RECORD) / (ETC_RECORD_MAX_PER_SECTOR)) + 1)
+#endif
 #else
 #define ETC_RECORD_MAX_SECTOR CONFIG_ETC_RECORD_MAX_SECTOR
 #endif
@@ -64,6 +70,14 @@ struct etc_device_record_data {
 	struct etc_device_record_table record_stat;
 	/* Record bits array to store ACK/NACK data */
 	uint8_t record_bits[ETC_DEVICE_RECORD_BUF_SIZE];
+	/* Flag to determine data is synced */
+	uint32_t record_sync_flag;
+};
+
+struct etc_device_record_data_old {
+	struct etc_device_record_table record_stat;
+	/* Record bits array to store ACK/NACK data */
+	uint8_t record_bits[ETC_DEVICE_RECORD_BUF_SIZE_OLD];
 	/* Flag to determine data is synced */
 	uint32_t record_sync_flag;
 };
@@ -196,6 +210,14 @@ uint16_t etc_device_record_get_total_record(void);
 off_t etc_device_record_get_addr_offset_by_index(struct etc_device_record_index index);
 
 /**
+ * @brief Retrieves the address offset for a record based on its id.
+ *
+ * @param index The id of the record.
+ * @return The address offset for the specified record index.
+ */
+off_t etc_device_record_get_addr_offset_by_id(uint16_t id);
+
+/**
  * @brief Retrieves the record ID for a record based on its index.
  *
  * @param index The index of the record.
@@ -211,6 +233,13 @@ uint16_t etc_device_record_get_id_by_index(struct etc_device_record_index index)
  */
 struct etc_device_record_index etc_device_get_index_by_id(uint16_t record_id);
 
+/**
+ * @brief Get the next ID based on current record index
+ *
+ * @param record_id The record index.
+ * @return The next ID
+ */
+uint16_t etc_device_get_next_id_by_index(struct etc_device_record_index current_index);
 /**
  * @brief Calculates the device record index based on the given address offset.
  *
@@ -356,4 +385,15 @@ struct etc_device_record_backup_data* etc_device_record_backup_get_object(void);
  * @brief This API will sync data to retained RAM 
  */
 void etc_device_record_backup_sync(void);
+
+/**
+ * @brief Add the API to erase the record flash - ONLY FOR TESTING
+ */
+void etc_device_record_erase_record_flash(void);
+
+/**
+ * @brief Get the previous index based on offset
+ */
+struct etc_device_record_index etc_device_get_previous_index_by_addr_offset(off_t offset);
+
 #endif /* ETC_DEVICE_RECORD_H_ */

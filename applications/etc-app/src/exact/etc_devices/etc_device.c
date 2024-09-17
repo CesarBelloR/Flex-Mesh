@@ -70,14 +70,14 @@ void etc_device_nvs_init(void)
 		return;
 	}
 
-	etc_fs.offset = FLASH_AREA_OFFSET(ETC_SETTINGS_NODE_LABEL);
+	etc_fs.offset = FIXED_PARTITION_OFFSET(ETC_SETTINGS_NODE_LABEL);
 	rc = flash_get_page_info_by_offs(etc_fs.flash_device, etc_fs.offset, &info);
 	if (rc) {
 		LOG_DBG("Unable to get page info");
 	}
 
 	etc_fs.sector_size = info.size;
-	etc_fs.sector_count = (FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL) / info.size);
+	etc_fs.sector_count = (FIXED_PARTITION_SIZE(ETC_SETTINGS_NODE_LABEL) / info.size);
 	rc = nvs_mount(&etc_fs);
 	if (rc) {
 		LOG_ERR("Failed to mount the etc storage");
@@ -98,7 +98,7 @@ void etc_device_nvs_init(void)
 		memset(&current_relay_data_sensor, 0, sizeof(current_relay_data_sensor));
 	}
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)etc_fs.offset,
-		FLASH_AREA_SIZE(ETC_SETTINGS_NODE_LABEL), info.size, etc_fs.sector_count);
+		FIXED_PARTITION_SIZE(ETC_SETTINGS_NODE_LABEL), info.size, etc_fs.sector_count);
 	LOG_DBG("Initialised etc setting successfully");
 	etc_device_record_init();
 	/* Load the record backup */
@@ -123,7 +123,7 @@ static int etc_nvs_read(uint16_t element_id, void *data, size_t len)
 	ssize_t read_len = 0;
 	read_len = nvs_read(&etc_fs, element_id, data, len);
 	if (read_len < 0) {
-		LOG_ERR("Failed in reading NVS %d", read_len);
+		LOG_ERR("Failed in reading NVS %d %d", element_id, read_len);
 		return read_len;
 	}
 
@@ -145,7 +145,7 @@ static int etc_nvs_read_with_len(uint16_t element_id, void *data, size_t len)
 	ssize_t read_len = 0;
 	read_len = nvs_read(&etc_fs, element_id, data, len);
 	if (read_len < 0) {
-		LOG_ERR("Failed in reading NVS %d", read_len);
+		LOG_ERR("Failed in reading NVS %d %d", element_id, read_len);
 	}
 
 	return read_len;
@@ -263,14 +263,20 @@ int etc_device_write_record(union etc_device_record *record)
 {
 	struct etc_device_record_index record_index = etc_device_record_get_next_index();
 	off_t record_addr = etc_device_record_get_addr_offset_by_index(record_index);
-	uint16_t record_id = etc_device_record_get_id_by_index(record_index);
-	LOG_DBG("Record to write data %d (0x%08x) (%d,%d)", ETC_RECORD_ID_HEADER(record_id), (uint32_t)record_addr,
-		record_index.sector_idx, record_index.element_idx);
 	int rc = etc_device_record_write_data(record_addr, record->data, ETC_DEVICE_RECORD_SIZE);
 	if (rc) {
 		LOG_ERR("Can't write data to record err %d", rc);
 		return rc;
 	}
+	/* Sync data */
+	uint16_t record_id = etc_device_record_get_latest_id();
+	struct etc_device_record_index wrote_record_index = etc_device_get_index_by_id(record_id);
+	off_t recorded_addr = etc_device_record_get_addr_offset_by_id(record_id);
+	LOG_DBG("Record to write data %d (0x%08x / 0x%08x) (%d,%d) -> (%d,%d)", ETC_RECORD_ID_HEADER(record_id), 
+		(uint32_t)record_addr, (uint32_t)recorded_addr, 
+		record_index.sector_idx, record_index.element_idx, 
+		wrote_record_index.sector_idx, wrote_record_index.element_idx);
+		
 	etc_device_record_set_nack(record_id);
 	etc_device_record_save_stat();
 	return 0;
