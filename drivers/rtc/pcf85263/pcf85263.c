@@ -383,12 +383,14 @@ exit:
 
 int pcf85263a_init(const char *device)
 {
+	ARG_UNUSED(device);
 	struct pcf85263_data *data = &m_pcf85263_data;
 	struct pcf85263_config *cfg = &m_pcf85263_config;
 
-	cfg->i2c_dev = (struct device *)device_get_binding(device);
+	cfg->i2c_dev = (struct device *)DEVICE_DT_GET(DT_ALIAS(rtc));
+	__ASSERT_NO_MSG(cfg->i2c_dev != NULL);
 	if (cfg->i2c_dev == NULL) {
-		LOG_ERR("Failed to get device_get_binding %s", (device));
+		LOG_ERR("Failed to get RTC device");
 		return -EINVAL;
 	}
 
