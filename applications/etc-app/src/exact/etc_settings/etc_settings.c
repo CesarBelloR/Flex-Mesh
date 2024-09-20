@@ -772,6 +772,7 @@ int etc_set_relay_iccid(const char* iccid) {
 
 int etc_set_lora_probe_offset_secs(uint16_t second) 
 {
+	LOG_INF("Offset %d", second);
 	int rc = util_validate_in_lora_probe_offset(second);
 	if (rc) {
 		return rc;

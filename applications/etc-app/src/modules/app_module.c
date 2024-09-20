@@ -37,9 +37,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "events/debug_event.h"
 #include "events/ble_event.h"
 #include "modules_common.h"
-
-#define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
-#define MINIMUM_TIME_TO_WAKEUP_S   (3)
+#include "app_module_helper.h"
 
 enum app_wakeup_tx_work_type {
 	APP_WAKEUP_TX_INTERVAL_WORK,
@@ -310,54 +308,6 @@ static void app_peripheral_off(void)
 #endif
 }
 
-static inline bool is_aligned_interval(int interval_s)
-{
-	return (DEFAULT_PUBLISH_INTERVAL_S % interval_s) == 0 ||
-	       (interval_s % DEFAULT_PUBLISH_INTERVAL_S) == 0;
-}
-
-static time_t align_wakeup(time_t now, int interval_s, enum etc_device_job job)
-{
-	time_t wakeup_time;
-	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
-
-	wakeup_time = now + interval_s;
-
-	if (is_aligned_interval(interval_s)) {
-		int time_diff = wakeup_time % interval_s;
-		int time_to_wakeup = wakeup_time - time_diff - now;
-
-		if (job == ETC_DEVICE_JOB_TX_RX) {
-			if (!etc_device_is_relay()) {
-				time_to_wakeup += tx_delay_sec;
-			}
-		}
-
-		if (time_to_wakeup < MINIMUM_TIME_TO_WAKEUP_S) {
-			/* Next wake up is too close to current time. Move next
-			   wakeup to following interval. */
-			wakeup_time = wakeup_time + (interval_s - time_diff);
-		} else if (time_to_wakeup > (interval_s + MINIMUM_TIME_TO_WAKEUP_S)) {
-			/* Next wake up is further in the future than necessary.
-			   Move next wake up to current interval. */
-			wakeup_time = wakeup_time - time_diff - interval_s;
-		} else {
-			/* Align next wake up to be exactly at the absolute time
-			   specified through interval_s */
-			wakeup_time = wakeup_time - time_diff;
-		}
-	}
-
-	if (job == ETC_DEVICE_JOB_TX_RX) {
-		if (!etc_device_is_relay()) {
-			/* Add tx_delay for tx wake ups */
-			wakeup_time += tx_delay_sec;
-		}
-	}
-
-	return wakeup_time;
-}
-
 #define GNSS_TIME_INACCURACY_S 60
 
 /**
@@ -376,7 +326,7 @@ static bool is_gnss_request_interval(time_t now)
 	if (now >= next_interval) {
 		struct tm tm_time = {0};
 
-		if (is_aligned_interval(interval_s)) {
+		if (app_module_is_aligned_interval(interval_s)) {
 			/* Assign the aligned interval closest to the current time as last interval. */
 			time_last_aligned_gnss_request = round_int32(now, interval_s);
 		} else {
@@ -401,168 +351,6 @@ static void set_gnss_request(time_t now)
 	if (is_gnss_request_interval(now)) {
 		SEND_EVENT(app, APP_EVT_REQUEST_LOCATION);
 	}
-}
-
-static void app_backoff_check_multiple_value(void)
-{
-	enum etc_sensor_status sensor_status = etc_sensor_get_status();
-	enum etc_power_mode_e power_mode = etc_get_power_mode();
-	LOG_DBG("Sensor %d - Power %d", sensor_status, power_mode);
-	if ((sensor_status == SENSOR_NO_CONNECTION) &&
-	    (power_mode == ETC_POWER_MODE_PROBE)) {
-		if (app_backoff_last_multiple != -1) {
-			int backoff_expect = app_backoff_last_multiple * 2;
-			if ((backoff_expect) != app_backoff_multiple) {
-				if (app_backoff_multiple == 1 && app_backoff_last_multiple == 1) {
-					app_backoff_multiple = app_backoff_multiple * 2;
-				} else {
-					app_backoff_multiple = app_backoff_last_multiple;
-				}
-			} else {
-				int tx_interval_s = etc_device_get_tx_interval_second();
-				int tx_max_offset_probe_s = etc_device_get_tx_probe_second();
-				if ((tx_interval_s * app_backoff_multiple) <= tx_max_offset_probe_s) {
-					app_backoff_last_multiple = app_backoff_multiple;
-					app_backoff_multiple = app_backoff_multiple * 2;
-				}
-			}
-		} else {
-			app_backoff_last_multiple = 1;
-			app_backoff_multiple = 1;
-		}
-		LOG_DBG("%d %d", app_backoff_multiple, app_backoff_last_multiple); 
-		return;
-	}
-	LOG_DBG("Reset the backoff");
-	/* Reset the backoff */
-	app_backoff_multiple = 1;
-	app_backoff_last_multiple = 1;
-}
-
-static time_t app_backoff_interval_no_probe(time_t now) 
-{
-	int tx_interval_s = etc_device_get_tx_interval_second();
-	int tx_max_offset_probe_s = etc_device_get_tx_probe_second();
-	int transmit_interval_s = app_backoff_multiple * tx_interval_s;
-	if (transmit_interval_s > tx_max_offset_probe_s) {
-		/* If the transmit interval is larger than the probe mode interval,
-		 * use the regular method to calculate the next probe mode wake up. 
-		 */
-		return -1;
-	}
-	LOG_DBG("Backoff interval no problem %d", transmit_interval_s);
-	return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
-}
-
-static time_t app_get_next_transmit_for_interval_or_probe(time_t now, int transmit_interval_s, 
-	enum etc_sensor_status sensor_status) {
-	static enum etc_sensor_status last_sensor_status = SENSOR_NA;
-	enum etc_power_mode_e current_power = etc_get_power_mode();
-	LOG_DBG("%d %d", sensor_status, current_power);
-	/* If device is not Relay, check sensor and probe mode */
-	if (etc_get_device_mode() != ETC_DEVICE_MODE_RELAY) {
-		if (last_sensor_status != sensor_status) {
-			if ((last_sensor_status == SENSOR_CONNECTED && 
-			     sensor_status == SENSOR_NO_CONNECTION) && 
-			     (current_power == ETC_POWER_MODE_PROBE)) {
-				last_sensor_status = sensor_status;
-				return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
-			}
-			last_sensor_status = sensor_status;
-		}
-		
-		if ((sensor_status == SENSOR_NO_CONNECTION) && 
-			(current_power == ETC_POWER_MODE_PROBE)) {
-			return -1;
-		}
-	}
-	
-	return align_wakeup(now, transmit_interval_s, ETC_DEVICE_JOB_TX_RX);
-}
-
-static time_t app_get_next_transmit_no_probe(time_t now, uint16_t tx_no_probe_mins,
-					     enum etc_sensor_status sensor_status)
-{
-	/* Ignore this time in Relay Mode */
-	if (etc_get_device_mode() == ETC_DEVICE_MODE_RELAY) {
-		return -1;	
-	}
-
-	if ((sensor_status != SENSOR_NO_CONNECTION) ||
-	    (etc_get_power_mode() != ETC_POWER_MODE_PROBE)) {
-		return -1;
-	}
-
-	/* If NACK is more than zero */
-	if (etc_device_nack_count() > 0) {
-		LOG_DBG("Update next transmit for NACK probe mode");
-		time_t next_transmit = app_backoff_interval_no_probe(now);
-		if (next_transmit != -1) {
-			return next_transmit;
-		}
-	}
-	
-	LOG_DBG("Update next transmit for normal probe mode");
-	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
-	struct tm tm_time = {0};
-	/* Otherwise, proceed as normal */
-	gmtime_r(&now, &tm_time); 
-	int hour_offset = etc_device_get_tx_probe_second() / 3600;
-	int next_hour = ((tm_time.tm_hour / hour_offset) + 1) * hour_offset;
-	if (next_hour >= 24) {
-		next_hour = 24;
-	}
-
-	/* Update next transmit interval in seconds */
-	int transmit_interval_s = (next_hour - tm_time.tm_hour) * 3600 + 
-				  (tx_no_probe_mins - tm_time.tm_min) * 60 - tm_time.tm_sec;
-	if (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
-		transmit_interval_s = ((transmit_interval_s / DEFAULT_PUBLISH_INTERVAL_S) + 1) * 
-				       DEFAULT_PUBLISH_INTERVAL_S;
-	}
-	return (time_t)(now + transmit_interval_s + tx_delay_sec); 
-}
-
-static void print_time_debug(time_t time, const char *msg)
-{
-#if CONFIG_ETC_APP_LOG_LEVEL >= LOG_LEVEL_DBG
-	struct tm tm_time = {0};
-	gmtime_r(&time, &tm_time);
-	LOG_DBG("%s, time: %02d:%02d:%02d", msg, tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
-#endif
-}
-
-static time_t app_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logger_lora_mins,
-						    enum etc_sensor_status sensor_status) 
-{
-	if (etc_get_device_mode() != ETC_DEVICE_MODE_LORA_LOGGER) {
-		return -1;
-	}
-	uint16_t cloud_sync_hour = etc_device_get_tx_lora_cloud_sync_hour();
-	uint16_t tx_delay_sec = etc_get_tx_delay_msec() / 1000;
-	time_t wakeup_s;
-	struct tm tm_time = {0};
-	gmtime_r(&now, &tm_time);
-	int tx_logger_lora_diff_hours = 0;
-	if (tm_time.tm_hour <= cloud_sync_hour) {
-		tx_logger_lora_diff_hours = cloud_sync_hour - tm_time.tm_hour;
-	} else {
-		tx_logger_lora_diff_hours = (24 - tm_time.tm_hour) + cloud_sync_hour;
-	}
-
-	wakeup_s = (time_t)(now + tx_logger_lora_diff_hours * 3600 +
-			    (tx_logger_lora_mins - tm_time.tm_min) * 60 - tm_time.tm_sec +
-			    tx_delay_sec);
-
-	print_time_debug(wakeup_s, "lora sync cloud");
-
-	/* Return invalid time when new wakeup time is in the past or too close to current time. */
-	if (wakeup_s < (now + MINIMUM_TIME_TO_WAKEUP_S)) {
-		return -1;
-	}
-
-	/* Return the next transmit for logger lora mode to sync with cloud */
-	return wakeup_s;
 }
 
 static void app_set_next_wakeup_time_for_job(enum etc_device_job job) 
@@ -594,18 +382,18 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 	
 	switch (job) {
 		case ETC_DEVICE_JOB_LOG: {
-			next_log = align_wakeup(now, wakeup_for_log, ETC_DEVICE_JOB_LOG);
+			next_log = app_module_align_wakeup(now, wakeup_for_log, ETC_DEVICE_JOB_LOG);
 			break;
 		}
 		case ETC_DEVICE_JOB_TX_RX: {
 			/* Get next transmit in normal case */
-			next_transmit_normal = app_get_next_transmit_for_interval_or_probe(now, wakeup_for_transmit,
+			next_transmit_normal = app_module_get_next_transmit_for_interval_or_probe(now, wakeup_for_transmit,
 				sensor_status);
 			/* Get next transmit in logger lora case (-1 is no plan for next transmit) */
-			next_transmit_logger_lora_sync_cloud = app_get_next_transmit_lora_sync_cloud(now, 
+			next_transmit_logger_lora_sync_cloud = app_module_get_next_transmit_lora_sync_cloud(now, 
 				tx_offset_logger_lora_mins, sensor_status);
 			/* Get next transmit in no probe case (-1 is no plan for next transmit) */
-			next_transmit_no_probe = app_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
+			next_transmit_no_probe = app_module_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
 				sensor_status);
 			/* Cast all next transmit to highest integer value if -1 */
 			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
@@ -615,15 +403,15 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 		}
 		case ETC_DEVICE_JOB_BOTH: {
 			/* Get next log */
-			next_log = align_wakeup(now, wakeup_for_log, ETC_DEVICE_JOB_LOG);
+			next_log = app_module_align_wakeup(now, wakeup_for_log, ETC_DEVICE_JOB_LOG);
 			/* Get next transmit in normal case */
-			next_transmit_normal = app_get_next_transmit_for_interval_or_probe(now, wakeup_for_transmit,
+			next_transmit_normal = app_module_get_next_transmit_for_interval_or_probe(now, wakeup_for_transmit,
 				sensor_status);
 			/* Get next transmit in logger lora case (-1 is no plan for next transmit) */
-			next_transmit_logger_lora_sync_cloud = app_get_next_transmit_lora_sync_cloud(now, 
+			next_transmit_logger_lora_sync_cloud = app_module_get_next_transmit_lora_sync_cloud(now, 
 				tx_offset_logger_lora_mins, sensor_status);
 			/* Get next transmit in no probe case (-1 is no plan for next transmit) */
-			next_transmit_no_probe = app_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
+			next_transmit_no_probe = app_module_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
 				sensor_status);
 			/* Cast all next transmit to highest integer value if -1 */
 			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
@@ -802,7 +590,7 @@ static void app_peripheral_on(bool is_rtc)
 		}
 		case ETC_DEVICE_JOB_TX_RX: {
 			etc_device_set_job(ETC_DEVICE_JOB_TX_RX);
-			app_backoff_check_multiple_value();
+			app_module_backoff_check_multiple_value();
 			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
@@ -821,7 +609,7 @@ static void app_peripheral_on(bool is_rtc)
 		}
 		case ETC_DEVICE_JOB_BOTH: {
 			LOG_DBG("Doing both job");
-			app_backoff_check_multiple_value();
+			app_module_backoff_check_multiple_value();
 			etc_device_set_job(ETC_DEVICE_JOB_BOTH);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
 			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {

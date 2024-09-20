@@ -1,5 +1,6 @@
 target_sources(app PRIVATE
 	       ${CMAKE_CURRENT_SOURCE_DIR}/app_module.c
+	       ${CMAKE_CURRENT_SOURCE_DIR}/app_module_helper.c
 	       ${CMAKE_CURRENT_SOURCE_DIR}/cloud_module.c
 	       ${CMAKE_CURRENT_SOURCE_DIR}/data_module.c
 	       ${CMAKE_CURRENT_SOURCE_DIR}/sensor_module.c
