@@ -12,6 +12,10 @@
 			status = "okay";
 		};
 	};
+
+	aliases {
+		rtc = &i2c0;
+	};
 };
 
 zephyr_udc0: &usbd {
