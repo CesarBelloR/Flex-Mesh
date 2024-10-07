@@ -109,6 +109,7 @@ static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb re
 		pRecord->record_stat = record_data.record_stat;
 		memset(pRecord->record_bits, 0, sizeof(pRecord->record_bits));
 		memcpy(pRecord->record_bits, record_data.record_bits, ETC_DEVICE_RECORD_BUF_SIZE_OLD);
+		pRecord->record_sync_flag = ETC_DEVICE_RECORD_FLAG;
 	} else {
 		memcpy(pRecord, &record_data, sizeof(record_data));
 	}
@@ -168,13 +169,13 @@ static void etc_device_set_status(int total, int start, int end, int ack)
 	}
 }
 
-static void etc_device_export_old_structure(void)
+static int etc_device_export_old_structure(void)
 {
 	int rc = etc_device_read_setting(ETC_RECORD_STAT, &old_etc_device_record_table,
 					 sizeof(old_etc_device_record_table));
 	if (rc == -ENOENT) {
 		/* No old structure here */
-		return;
+		return -ENOENT;
 	}
 
 	LOG_DBG("Export from old structure");
@@ -208,6 +209,7 @@ static void etc_device_export_old_structure(void)
 	LOG_DBG("Export success");
 	/* Remove STAT */
 	etc_device_delete_setting(ETC_RECORD_STAT);
+	return 0;
 }
 
 static void etc_device_record_reset_stat(void)
@@ -224,6 +226,72 @@ static void etc_device_record_reset_reclaim(void) {
 	etc_reclaim_info.stop_index = -1;
 	etc_reclaim_info.current_index = 0;
 	etc_reclaim_info.flag_in_process = 0;
+}
+
+static void etc_device_helpers_sync_record_from_ram(void) {
+	int rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)pRecord,
+			       sizeof(struct etc_device_record_data));
+	if ((rc != 0) || (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
+		LOG_WRN("No retained RAM memory here");
+		/* Clean up the record in app RAM */
+		memset(pRecord, 0, sizeof(struct etc_device_record_data));
+		/* Reset stat record */
+		etc_device_record_reset_stat();
+		/* Reload from setting subsys - Don't need to check the return here */
+		etc_device_record_load();
+		/* Export old structure if it is available */
+		rc = etc_device_export_old_structure();
+		if ((rc != 0) && (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
+			struct etc_device_record_data_old tmp_record = {0x00};
+			rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)&tmp_record,
+					sizeof(tmp_record));
+			if ((rc == 0) && (tmp_record.record_sync_flag == ETC_DEVICE_RECORD_FLAG)) {
+				memset(pRecord, 0, sizeof(*pRecord));
+				LOG_WRN("Need to upgrade the record data");
+				pRecord->record_stat = tmp_record.record_stat;
+				memcpy(pRecord->record_bits, tmp_record.record_bits, ETC_DEVICE_RECORD_BUF_SIZE_OLD);
+				rc = retained_mem_write(retained_ram_dev, 0, (uint8_t *)pRecord,
+							sizeof(struct etc_device_record_data));
+				if (rc) {
+					LOG_ERR("Failed to write data - err %d", rc);
+				}
+			} else {
+				LOG_WRN("No retained RAM in old record_bits too");
+				retained_mem_clear(retained_ram_dev);
+			}
+		} else {
+			LOG_WRN("Reloaded old structure");
+			retained_mem_clear(retained_ram_dev);
+		}
+		/* Set sync flag */
+		pRecord->record_sync_flag = ETC_DEVICE_RECORD_FLAG;
+		/* Save it */
+		rc = retained_mem_write(retained_ram_dev, RECORD_FLAG_OFFSET,
+					(uint8_t *)&pRecord->record_sync_flag,
+					sizeof(pRecord->record_sync_flag));
+		if (rc) {
+			LOG_ERR("Failed to write data - err %d", rc);
+		}
+	} else {
+		LOG_DBG("Record is ready");
+	}
+
+	rc = retained_mem_read(retained_ram_dev, ETC_RECORD_BACKUP_OFFSET_IN_RAM, 
+			       (uint8_t *)&etc_device_record_backup,
+			       sizeof(etc_device_record_backup));
+	if ((rc) || (etc_device_record_backup.record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
+		/* Clean up the record in app RAM */
+		memset(&etc_device_record_backup, 0, sizeof(etc_device_record_backup));
+		etc_device_record_backup.record_sync_flag = ETC_DEVICE_RECORD_FLAG;
+		rc = retained_mem_write(retained_ram_dev, ETC_RECORD_BACKUP_OFFSET_IN_RAM,
+					(uint8_t *)&etc_device_record_backup,
+					sizeof(etc_device_record_backup));
+		if (rc) {
+			LOG_ERR("Failed to write data - err %d", rc);
+		}
+	} else {
+		LOG_DBG("Record back-up is available space");
+	}
 }
 
 void etc_device_record_init(void)
@@ -258,47 +326,8 @@ void etc_device_record_init(void)
 
 	LOG_DBG("Offset %d - Size %d - Sector Size %d - Sector Cnt %d", (int)record_fs.offset,
 		FIXED_PARTITION_SIZE(ETC_DEVICE_RECORD_NODE_LABEL), info.size, record_fs.sector_count);
-	rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)pRecord,
-			       sizeof(struct etc_device_record_data));
-	if ((rc) || (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
-		/* Clean up the memory RAM in no-init region */
-		retained_mem_clear(retained_ram_dev);
-		/* Clean up the record in app RAM */
-		memset(pRecord, 0, sizeof(struct etc_device_record_data));
-		/* Reset stat record */
-		etc_device_record_reset_stat();
-		/* Reload from setting subsys - Don't need to check the return here */
-		etc_device_record_load();
-		pRecord->record_sync_flag = ETC_DEVICE_RECORD_FLAG;
-		/* Export old structure if it is available */
-		etc_device_export_old_structure();
-		/* Save it */
-		rc = retained_mem_write(retained_ram_dev, RECORD_FLAG_OFFSET,
-					(uint8_t *)&pRecord->record_sync_flag,
-					sizeof(pRecord->record_sync_flag));
-		if (rc) {
-			LOG_ERR("Failed to write data - err %d", rc);
-		}
-	} else {
-		LOG_DBG("Record is ready");
-	}
-
-	rc = retained_mem_read(retained_ram_dev, ETC_RECORD_BACKUP_OFFSET_IN_RAM, 
-			       (uint8_t *)&etc_device_record_backup,
-			       sizeof(etc_device_record_backup));
-	if ((rc) || (etc_device_record_backup.record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
-		/* Clean up the record in app RAM */
-		memset(&etc_device_record_backup, 0, sizeof(etc_device_record_backup));
-		etc_device_record_backup.record_sync_flag = ETC_DEVICE_RECORD_FLAG;
-		rc = retained_mem_write(retained_ram_dev, ETC_RECORD_BACKUP_OFFSET_IN_RAM,
-					(uint8_t *)&etc_device_record_backup,
-					sizeof(etc_device_record_backup));
-		if (rc) {
-			LOG_ERR("Failed to write data - err %d", rc);
-		}
-	} else {
-		LOG_DBG("Record back-up is available space");
-	}
+	/* Sync record from RAM if available */
+	etc_device_helpers_sync_record_from_ram();
 
 	rc = etc_device_read_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
 				     sizeof(etc_reclaim_info));
