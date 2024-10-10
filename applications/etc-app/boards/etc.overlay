@@ -40,3 +40,23 @@
 &sram0 {
 	reg = <0x20000000 DT_SIZE_K(252)>;
 };
+
+&spi3 {
+	mx25r1635: mx25r1635@0 {
+		spi-max-frequency = <32000000>;
+	};
+};
+
+&gpio0 {
+	wp-hog {
+		gpio-hog;
+		gpios = <17 GPIO_ACTIVE_LOW>;
+		output-high;
+	};
+
+	hold-hog {
+		gpio-hog;
+		gpios = <19 GPIO_ACTIVE_LOW>;
+		output-high;
+	};
+};
