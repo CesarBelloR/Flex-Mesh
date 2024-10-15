@@ -33,6 +33,13 @@ config MEMFAULT_ETC_HW_VERSION_PREFIX
 	string "Prefix added onto device HW version"
 	default "flex-"
 
+config MEMFAULT_ETC_EVENT_NOINIT_SIZE
+	int "Memfault Event Storage NoInit RAM Buffer Size"
+	default 2048
+	help
+	 The no-init RAM area used to batch memfault events before they are flushed
+	 to the Memfault Cloud.
+	
 module-dep = LOG
 module-str = Memfault ETC module
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

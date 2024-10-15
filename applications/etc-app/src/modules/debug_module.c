@@ -12,6 +12,7 @@
 #include <memfault/ports/watchdog.h>
 #include <memfault/panics/coredump.h>
 #include "etc_memfault_metrics.h"
+#include "etc_memfault_event.h"
 #include "etc_memfault.h"
 #include <memfault_ncs.h>
 
@@ -205,6 +206,7 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_START)) {
 		set_device_id();
+		memfault_etc_event_init();
 		etc_mflt_metrics_init_img_pubkey_id();
 	}
 

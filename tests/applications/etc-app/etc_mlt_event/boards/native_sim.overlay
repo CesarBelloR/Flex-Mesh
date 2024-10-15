@@ -1,0 +1,53 @@
+/ {
+	sram@0 {
+		compatible = "zephyr,memory-region";
+		reg = <0x0 0x1000>;
+		status = "okay";
+		zephyr,memory-region = "Retention";
+
+		retainedmem0: retainedmem {
+			compatible = "zephyr,retained-ram";
+			status = "okay";
+		};
+	};
+	aliases {
+		record-header-ram = &retainedmem0;
+	};
+};
+
+&flashcontroller0 {
+	reg = <0x00000000 16777216>;
+};
+
+&flash0 {
+	reg = <0x00000000 16777216>;
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/delete-node/ boot_partition;
+		/delete-node/ slot0_partition;
+		/delete-node/ slot1_partition;
+		/delete-node/ scratch_partition;
+		/delete-node/ storage_partition;
+
+		empty_storage: partition@0 {
+			label = "empty";
+			reg = < 0x00 0xE8000 >;
+		};
+		settings_storage: partition@e8000 {
+			label = "settings";
+			reg = < 0x0B0000 0xD8000 >;
+		};
+		etc_settings_storage: partition@d8000 {
+			label = "etc_settings_storage";
+			reg = < 0x0D8000 0x100000 >;
+		};
+		etc_records_storage: partition@100000 {
+			label = "etc_records_storage";
+			reg = < 0x100000 0x160000 >;
+		};
+	};
+};

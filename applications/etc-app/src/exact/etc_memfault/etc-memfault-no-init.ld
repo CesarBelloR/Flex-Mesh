@@ -1,0 +1,1 @@
+KEEP(*(*.mflt_event_info));
