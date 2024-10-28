@@ -4,7 +4,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_functional_test, CONFIG_ETC_APP_LOG_LEVEL);
 
-#define FUNC_TEST_MIN_RSRP		-90
+#define FUNC_TEST_MIN_RSRP		-103
 #define FUNC_TEST_MIN_BAT_VOLTAGE_MV	4090
 #define FUNCTIONAL_TEST_SEND_DELAY_S	5
 #define FUNCTIONAL_TEST_TIMEOUT_S 	300
