@@ -69,14 +69,19 @@ static void etc_device_record_set_ack_status(int record_id, int status)
 
 static void etc_device_record_reset_ack(void) 
 {
-	uint16_t total = etc_device_record_get_total_record();
 	uint16_t oldest_id = etc_device_record_get_oldest_id();
 	uint16_t newest_id = etc_device_record_get_latest_id();
-	uint16_t id = (newest_id + 1) % (MAX_RECORD_NO_OFFSET_ID + 1);
+	/* Reset all recort_bits */
+	memset(pRecord->record_bits, 0, sizeof(pRecord->record_bits));
+	uint16_t index = oldest_id;
+	uint16_t total_id = 0;
 	do {
-		etc_device_record_set_nack(id);
-		id = (id + 1) % MAX_RECORD_NO_OFFSET_ID;
-	} while (id != oldest_id);
+		etc_device_record_set_ack(index);
+		total_id += 1;
+		// Wrap around using modulo
+		index = (index + 1) % (MAX_RECORD_NO_OFFSET_ID + 1); 
+	} while (index != (newest_id + 1) % (MAX_RECORD_NO_OFFSET_ID + 1)); // Stop after reaching newest+1
+	pRecord->record_stat.total = total_id;
 }
 
 static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb read_cb, void *cb_arg)
@@ -175,6 +180,7 @@ static int etc_device_export_old_structure(void)
 					 sizeof(old_etc_device_record_table));
 	if (rc == -ENOENT) {
 		/* No old structure here */
+		LOG_DBG("No need to export old structure");
 		return -ENOENT;
 	}
 
@@ -249,7 +255,7 @@ static void etc_device_helpers_sync_record_from_ram(void) {
 				memset(pRecord, 0, sizeof(*pRecord));
 				LOG_WRN("Need to upgrade the record data");
 				pRecord->record_stat = tmp_record.record_stat;
-				memcpy(pRecord->record_bits, tmp_record.record_bits, ETC_DEVICE_RECORD_BUF_SIZE_OLD);
+				etc_device_record_reset_ack();
 				rc = retained_mem_write(retained_ram_dev, 0, (uint8_t *)pRecord,
 							sizeof(struct etc_device_record_data));
 				if (rc) {
