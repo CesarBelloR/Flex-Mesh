@@ -52,7 +52,7 @@ enum etc_serial_number_types {
 #define ETC_SETTING_ALARM_THRESHOLD_MIN		-20
 #define ETC_SETTING_LTE_PROBE_OFFSET_SECS_MIN	0
 #define ETC_SETTING_GNSS_INTERVAL_SECS_MIN	(60 * 60) /* 1 hour */
-
+#define ETC_SETTING_FUNCTIONAL_TEST_RSRP_DEFAULT (-90)
 #define ETC_SETTING_TX_PROBE_SECS 21600
 #define ETC_SETTING_SOFT_WATCHDOG_OFFSET_SECS	900
 
@@ -145,6 +145,15 @@ int etc_set_gnss_timeout_secs(uint16_t timeout_secs);
  * @return 0 on success, <0 on error.
  */
 int etc_set_rr_value(int value);
+
+/**
+ * Set RSRP value used by functional test
+ *
+ * @param value: the functional test rsrp value
+ * @return 0 on success, <0 on error.
+ */
+int etc_set_functional_test_rsrp_value(int16_t value);
+
 int etc_get_hw_version(char *buf, int buf_len);
 int etc_get_fw_version(char *buf, int buf_len);
 int etc_get_hw_id(char *buf, int buf_len);
@@ -226,5 +235,12 @@ uint16_t etc_get_rr_value(void);
  * @return The timeout in seconds or -1 when invalid mode.
  */
 int etc_get_soft_watchdog_timeout_secs(void);
+
+/**
+ * Get RSRP value used by functional test
+ *
+ * @return the functional test rsrp value
+ */
+int16_t etc_get_functional_test_rsrp_value(void);
 
 #endif /* ETC_SETTINGS_H__ */

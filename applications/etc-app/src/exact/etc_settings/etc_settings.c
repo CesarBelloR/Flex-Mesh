@@ -32,6 +32,7 @@ static uint8_t saved_psk[ETC_SETTING_PSK_LEN];
 static uint8_t saved_psk_len;
 static int flag_etc_config_load;
 static uint16_t saved_rr_value;
+static int16_t saved_functional_test_rsrp;
 static enum etc_serial_number_types saved_serial_number_type;
 struct etc_config etc_cfg;
 
@@ -359,6 +360,13 @@ int etc_settings_init(void)
 				      sizeof(saved_rr_value));
 	if (ret != 0) {
 		saved_rr_value = 0;
+	}
+
+	/* Read RSRP for functional test */
+	ret = etc_device_read_setting(ETC_FUNCTIONAL_TEST_RSRP_ID, &saved_functional_test_rsrp,
+				      sizeof(saved_functional_test_rsrp));
+	if (ret != 0) {
+		saved_functional_test_rsrp = ETC_SETTING_FUNCTIONAL_TEST_RSRP_DEFAULT;
 	}
 
 	ret = etc_device_read_setting(ETC_SETTING_GNSS_INTERVAL_SEC_ID, &etc_cfg.gnss_interval_secs,
@@ -825,6 +833,23 @@ int etc_set_rr_value(int value)
 	return rc;
 }
 
+int etc_set_functional_test_rsrp_value(int16_t value) {
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (saved_functional_test_rsrp == value) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	saved_functional_test_rsrp = value;
+	rc = etc_device_write_setting(ETC_FUNCTIONAL_TEST_RSRP_ID, &saved_functional_test_rsrp,
+				      sizeof(saved_functional_test_rsrp));
+	if (rc == 0) {
+		LOG_DBG("set %d: %u", ETC_FUNCTIONAL_TEST_RSRP_ID, saved_functional_test_rsrp);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 int etc_set_gnss_interval_secs(uint32_t interval_secs)
 {
 	int rc = 0;
@@ -1005,6 +1030,15 @@ uint16_t etc_get_rr_value(void)
 	rr_value = saved_rr_value;
 	k_mutex_unlock(&setting_mutex);
 	return rr_value;
+}
+
+int16_t etc_get_functional_test_rsrp_value(void) 
+{
+	int16_t rsrp_value = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	rsrp_value = saved_functional_test_rsrp;
+	k_mutex_unlock(&setting_mutex);
+	return rsrp_value;
 }
 
 uint32_t etc_get_gnss_interval_secs(void)

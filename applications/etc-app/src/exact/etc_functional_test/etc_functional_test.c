@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include "etc_functional_test.h"
-
+#include "etc_settings.h"
+#include "data_codec.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_functional_test, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -79,7 +80,7 @@ static enum functional_test_result evaluate_functional_test_result(void)
 
 	if (!check_sensor_values(&test_data.sensor_data)) {
 		result = FUNC_TEST_FAIL_SENSOR;
-	} else if (test_data.lte_rsrp < FUNC_TEST_MIN_RSRP) {
+	} else if (test_data.lte_rsrp < etc_get_functional_test_rsrp_value()) {
 		result = FUNC_TEST_FAIL_MODEM;
 	} else if (test_data.sensor_data.battery_mV < FUNC_TEST_MIN_BAT_VOLTAGE_MV) {
 		result = FUNC_TEST_FAIL_BAT;
@@ -218,3 +219,43 @@ void functional_test_get_data(struct functional_test_data *data)
 	memcpy(data, &test_data, sizeof(test_data));
 	k_mutex_unlock(&functional_test_mutex);
 }
+
+#ifdef CONFIG_SHELL
+#include <zephyr/shell/shell.h>
+static int cmd_functional_test_set_rsrp(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc == 2) {
+		char *end;
+		int16_t rsrp = (int16_t)strtol(argv[1], &end, 10);
+		if (data_codec_rsrp_is_valid(rsrp)) {
+			int ret = etc_set_functional_test_rsrp_value(rsrp);
+			if (ret) {
+				shell_error(shell, "[Functional Test] Error writing RSRP %d", ret);
+				return -1;
+			} else {
+				shell_print(shell, "[Functional Test] Wrote RSRP %d success", rsrp);
+				return 0;
+			}
+		} else {
+			shell_error(shell, "[Functional Test] Invalid input value (out of range)");
+			return -1;
+		}
+	}
+
+	shell_print(shell, "Usage: %s <rsrp>\n"
+			   "  Write the RSRP used by functional test", argv[0]);
+	return -1;
+}
+
+static int cmd_functional_test_get_rsrp(const struct shell *shell, size_t argc, char **argv)
+{
+	shell_print(shell, "[Functional Test] Get RSRP: %d", etc_get_functional_test_rsrp_value());
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_functional_test, 
+	SHELL_CMD_ARG(set_rsrp, NULL, "Set the RSRP value used by the functional test", cmd_functional_test_set_rsrp, 1, 1),
+	SHELL_CMD(get_rsrp, NULL, "Get the RSRP value used by the functional test", cmd_functional_test_get_rsrp),
+	SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(functional_test, &sub_functional_test, "Add sub functional test", NULL);
+#endif

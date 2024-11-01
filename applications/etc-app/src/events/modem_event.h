@@ -21,6 +21,11 @@
 extern "C" {
 #endif
 
+/* RSRP network min range */
+#define RSRP_MIN_RANGE_VALUE (-140)
+/* RSRP network max range */
+#define RSRP_MAX_RANGE_VALUE (-40)
+
 /** @brief Modem event types submitted by Modem module. */
 enum modem_event_type {
 	/** Event signalling that the modem library and AT command library

@@ -11,7 +11,7 @@
 #include "events/lora_event.h"
 #include "events/sensor_event.h"
 #include "events/data_event.h"
-
+#include "events/modem_event.h"
 #include "etc_device.h"
 #include "etc_settings.h"
 #include "modem_api.h"
@@ -173,6 +173,14 @@ static inline bool data_codec_compare_humidity_is_valid(float humidity) {
 	}
 	return false;
 } 
+
+static inline bool data_codec_rsrp_is_valid(int16_t rsrp) 
+{
+	if ((rsrp >= RSRP_MIN_RANGE_VALUE) && (rsrp <= RSRP_MAX_RANGE_VALUE)) {
+		return true;
+	}
+	return false;
+}
 
 int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_handler);
 

@@ -69,5 +69,4 @@
 #define HUMID_MAX_RANGE_VALUE 100.0
 #define HUMID_UNIT "%"
 
-
 #endif /* LWM2M_CODEC_DEFINES_H */
