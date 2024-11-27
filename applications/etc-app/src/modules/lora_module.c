@@ -538,7 +538,10 @@ static int module_lora_relay_wait_packet(void)
 	relay_iccid[ETC_SETTING_RELAY_ICCID_LEN] = '\0';
 
 	start_waiting_time_ms = k_uptime_get();
-	max_waiting_time_ms = etc_device_get_rx_timeout() * 1000;
+	int16_t extra_waiting_time_ms = etc_get_rx_timeout_secs() * 1000;
+	int16_t rx_duration_time_ms = etc_device_get_rx_timeout() * 1000;
+	/* FW-125: Point 1 (Increase a RX Timeout by default ) */
+	max_waiting_time_ms = rx_duration_time_ms + extra_waiting_time_ms;
 	LOG_INF("Max waiting time %lld", max_waiting_time_ms);
 retry_recv:
 	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), 
@@ -560,6 +563,12 @@ retry_recv:
 				message.record.sensor[1], message.record.sensor[2], message.record.sensor[3],
 				message.record.sensor[4], message.record.sensor[5]);
 			if (etc_common_is_packet_from_parent(relay_iccid, message.record.relay_id)) {
+				/* FW-125: Point 2 (Valid message) */
+				int64_t current_delta = k_uptime_get() - start_waiting_time_ms;
+				if (current_delta > rx_duration_time_ms) {
+					/* It is running rx_timeout, reset timeout */
+					max_waiting_time_ms = current_delta + extra_waiting_time_ms;
+				}
 				ret = etc_device_write_relay_data(&message.record);
 				if (ret == 0) {
 					/* Send ACK message */

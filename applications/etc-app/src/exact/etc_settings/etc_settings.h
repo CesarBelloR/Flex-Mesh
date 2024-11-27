@@ -27,6 +27,7 @@ enum etc_serial_number_types {
 #define ETC_SETTING_ALARM_THRESHOLD_DEFAULT	    0
 #define ETC_SETTING_GNSS_INTERVAL_SECS_DEFAULT	    (60 * 60 * 24 * 2) /* 2 days */
 #define ETC_SETTING_GNSS_TIMEOUT_SECS_DEFAULT	    CONFIG_MODEM_MODULE_GNSS_TIMEOUT_S
+#define ETC_SETTING_RX_TIMEOUT_SECS_DEFAULT	    10
 
 #define ETC_SETTING_POWER_MODE_MIN		ETC_POWER_MODE_INTERVAL
 #define ETC_SETTING_LOG_INTERVAL_SECS_MAX	86400
@@ -139,6 +140,16 @@ int etc_set_gnss_interval_secs(uint32_t interval_secs);
 int etc_set_gnss_timeout_secs(uint16_t timeout_secs);
 
 /**
+ * Set the rx timeout value and save to non-volatile memory.
+ *
+ * @param timeout_secs rx timeout in seconds.
+ *
+ * @retval 0 success
+ * @retval <0 error
+*/
+int etc_set_rx_timeout_secs(uint8_t timeout_secs);
+
+/**
  * Set the Rr value for temperature compensation
  *
  * @param value: the input Rr that will store to @ref ETC_ADC_TEMPERATURE_REFERENCE 
@@ -221,6 +232,13 @@ uint32_t etc_get_gnss_interval_secs(void);
  * @return Current GNSS timoeut in seconds.
 */
 uint16_t etc_get_gnss_timeout_secs(void);
+
+/**
+ * Get the current tx timeout value.
+ *
+ * @return Current rx timoeut in seconds.
+*/
+uint8_t etc_get_rx_timeout_secs(void);
 
 /**
  * Get the Rr value for temperature compensation

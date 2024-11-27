@@ -142,10 +142,9 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 		rc = util_validate_u32(*(uint32_t *)data, ETC_CFG_OBJ_R_TX_PROBE_MIN_VAL,
 			    ETC_CFG_OBJ_R_TX_PROBE_MAX_VAL);
 		break;
-	case ETC_CFG_OBJ_R_LORA_PROBE_OFFSET: {
+	case ETC_CFG_OBJ_R_LORA_PROBE_OFFSET: 
 		rc = util_validate_in_lora_probe_offset(*(uint16_t*)data);
 		break;
-	}
 	case ETC_CFG_OBJ_R_LTE_PROBE_OFFSET:
 		rc = util_validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_LTE_PROBE_OFFSET_MIN_VAL,
 			    ETC_CFG_OBJ_R_LTE_PROBE_OFFSET_MAX_VAL);
@@ -157,6 +156,10 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
 	case ETC_CFG_OBJ_R_GNSS_TIMEOUT:
 		rc = util_validate_u16(*(uint16_t *)data, ETC_CFG_OBJ_R_GNSS_TIMEOUT_MIN_VAL,
 				       ETC_CFG_OBJ_R_GNSS_TIMEOUT_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_RX_TIMEOUT:
+		rc = util_validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_RX_TIMEOUT_MIN_VAL,
+				       ETC_CFG_OBJ_R_RX_TIMEOUT_MAX_VAL);
 		break;
 	}
 	return rc;
@@ -504,6 +507,12 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 
 	err = lwm2m_set_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_GNSS_TIMEOUT),
 			    cfg->gnss_timeout_secs);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_u8(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_RX_TIMEOUT),
+			    cfg->rx_timeout_secs);
 	if (err) {
 		return err;
 	}

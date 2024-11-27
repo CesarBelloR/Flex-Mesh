@@ -381,6 +381,12 @@ int etc_settings_init(void)
 		etc_set_gnss_timeout_secs(CONFIG_MODEM_MODULE_GNSS_TIMEOUT_S);
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_RX_TIMEOUT_SEC_ID, &etc_cfg.rx_timeout_secs,
+				      sizeof(etc_cfg.rx_timeout_secs));
+	if (ret) {
+		etc_set_rx_timeout_secs(ETC_SETTING_RX_TIMEOUT_SECS_DEFAULT);
+	}
+
 	LOG_DBG("Load settings successfully");
 	return 0;
 }
@@ -443,7 +449,9 @@ void etc_settings_update(const struct etc_config *new_config)
 	if (etc_cfg.gnss_timeout_secs != new_config->gnss_timeout_secs) {
 		rc = etc_set_gnss_timeout_secs(new_config->gnss_timeout_secs);
 	}
-
+	if (etc_cfg.rx_timeout_secs != new_config->rx_timeout_secs) {
+		rc = etc_set_rx_timeout_secs(new_config->rx_timeout_secs);
+	}
 done:
 	if (rc == 1) {
 		LOG_DBG("No value changed");
@@ -887,6 +895,24 @@ int etc_set_gnss_timeout_secs(uint16_t timeout_secs)
 	return rc;
 }
 
+int etc_set_rx_timeout_secs(uint8_t timeout_secs)
+{
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.rx_timeout_secs == timeout_secs) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	etc_cfg.rx_timeout_secs = timeout_secs;
+	rc = etc_device_write_setting(ETC_SETTING_RX_TIMEOUT_SEC_ID, &etc_cfg.rx_timeout_secs,
+				      sizeof(etc_cfg.rx_timeout_secs));
+	if (rc == 0) {
+		LOG_DBG("set %d: %u", ETC_SETTING_RX_TIMEOUT_SEC_ID, timeout_secs);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 enum etc_device_mode etc_get_device_mode(void)
 {
 	enum etc_device_mode mode;
@@ -1058,6 +1084,15 @@ uint16_t etc_get_gnss_timeout_secs(void)
 	gnss_timeout_secs = etc_cfg.gnss_timeout_secs;
 	k_mutex_unlock(&setting_mutex);
 	return gnss_timeout_secs;
+}
+
+uint8_t etc_get_rx_timeout_secs(void)
+{
+	uint8_t rx_timeout_secs = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	rx_timeout_secs = etc_cfg.rx_timeout_secs;
+	k_mutex_unlock(&setting_mutex);
+	return rx_timeout_secs;
 }
 
 int etc_get_soft_watchdog_timeout_secs(void)
@@ -1420,6 +1455,18 @@ static int cmd_set_rr_value(const struct shell *shell, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_set_rx_timeout(const struct shell *shell, size_t argc, char **argv)
+{
+	if ((argc == 2) && (strlen(argv[1]) != 0)) {
+		if (etc_set_rx_timeout_secs((uint32_t)atol(argv[1])) == 0) {
+			shell_print(shell, "OK");
+			return 0;
+		}
+	}
+	shell_error(shell, "Invalid parameter for setting rx timeout");
+	return 0;
+}
+
 static int cmd_get_device(const struct shell *shell, size_t argc, char **argv)
 {
 	enum etc_device_mode mode = etc_get_device_mode();
@@ -1525,6 +1572,13 @@ static int cmd_get_rr_value(const struct shell *shell, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_get_rx_timeout(const struct shell *shell, size_t argc, char **argv)
+{
+	uint8_t rx_timeout = etc_get_rx_timeout_secs();
+	shell_print(shell, "RX timeout %u", rx_timeout);
+	return 0;
+}
+
 static int cmd_factory_reset(const struct shell *shell, size_t argc, char **argv)
 {
 	int rc = etc_device_erase_cfg();
@@ -1567,6 +1621,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(set_gnss_interval, NULL, "Set GNSS interval in seconds", cmd_set_gnss_interval),
 	SHELL_CMD(set_gnss_timeout, NULL, "Set GNSS timeout in seconds", cmd_set_gnss_timeout),
 	SHELL_CMD(set_adc_temp_ref, NULL, "Set the ADC temperature reference value (Rr)", cmd_set_rr_value),
+	SHELL_CMD(set_rx_timeout, NULL, "Set RX timeout in seconds", cmd_set_rx_timeout),
 	SHELL_CMD(get_device, NULL, "Get device mode", cmd_get_device),
 	SHELL_CMD(get_power, NULL, "Get power mode", cmd_get_power),
 	SHELL_CMD(get_alarm_direction, NULL, "Get alarm direction", cmd_get_alarm_direction),
@@ -1585,6 +1640,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(get_gnss_interval, NULL, "Get GNSS interval in seconds", cmd_get_gnss_interval),
 	SHELL_CMD(get_gnss_timeout, NULL, "Get GNSS timeout in seconds", cmd_get_gnss_timeout),
 	SHELL_CMD(get_adc_temp_ref, NULL, "Get the ADC temperature reference value (Rr)", cmd_get_rr_value),
+	SHELL_CMD(get_rx_timeout, NULL, "Get RX timeout in seconds", cmd_get_rx_timeout),
 	SHELL_SUBCMD_SET_END);
 /* Creating root (level 0) command "demo" */
 SHELL_CMD_REGISTER(settings, &sub_settings, "ETC Settings", NULL);

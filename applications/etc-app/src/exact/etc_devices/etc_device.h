@@ -116,6 +116,7 @@ enum etc_setting_id {
 	ETC_SETTING_LTE_PROBE_MODE_OFFSET_SEC_ID,
 	ETC_SETTING_GNSS_INTERVAL_SEC_ID,
 	ETC_SETTING_GNSS_TIMEOUT_SEC_ID,
+	ETC_SETTING_RX_TIMEOUT_SEC_ID,
 	ETC_FUNCTIONAL_TEST_RSRP_ID = 0xE00,
 	ETC_CALIBRATION_OFFSET_ID = 0xFF0,
 	ETC_CALIBRATION_RAWHIGH_ID,
@@ -141,6 +142,7 @@ struct etc_config {
 	uint16_t lora_probe_offset_secs;
 	uint16_t lte_probe_offset_secs;
 	uint16_t gnss_timeout_secs;
+	uint8_t rx_timeout_secs;
 };
 
 union etc_device_record {
