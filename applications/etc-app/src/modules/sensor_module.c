@@ -59,9 +59,6 @@ int64_t last_poll_complete_time_ms = 0;
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
 
-/* Forward declarations */
-static bool sensor_is_processing = false;
-
 static struct module_data self = {
 	.name = "sensor",
 	.msg_q = &msgq_sensor,
@@ -166,18 +163,13 @@ static void sensor_module_enter_functional_test(struct sensor_data *sensor)
 
 static void sensor_module_exit_functional_test(void)
 {
-	int ret;
-	int64_t now_ms;
-
 	if (state != STATE_FUNCTIONAL_TEST) {
 		return;
 	}
 	struct sensor_event *sensor_event = new_sensor_event();
 
-	ret = date_time_now(&now_ms);
-	if (!ret) {
-		last_poll_complete_time_ms = now_ms;
-	}
+	last_poll_complete_time_ms = k_uptime_get();
+
 	etc_sensor_exit_functional_test();
 	state_set(STATE_RUNNING);
 
@@ -264,15 +256,8 @@ static bool is_enter_functional_test(void)
 }
 
 static int sensor_poll_handler(bool is_test) {
-	if (sensor_is_processing) {
-		return 0;
-	}
-	int64_t now_ms;
-	int ret;
-	
-	ret = date_time_now(&now_ms);
-	if (!is_test && !ret && 
-	    (now_ms - last_poll_complete_time_ms) < SENSOR_MIN_INTERVAL_MS) {
+	int64_t now_ms = k_uptime_get();
+	if (!is_test && (now_ms - last_poll_complete_time_ms) < SENSOR_MIN_INTERVAL_MS) {
 		/* Ignore sample request if last reading finished
 		 * < SENSOR_MIN_INTERVAL_MS ago. Re-enabling VCC_SENS within
 		 * quick succession causes issues with the linear regulator
@@ -287,7 +272,6 @@ static int sensor_poll_handler(bool is_test) {
 		return -EAGAIN;
 	}
 #endif
-	sensor_is_processing = true;
 	SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_AQUIRING);
 	etc_sensor_run_acquisition();
 
@@ -320,13 +304,9 @@ static int sensor_poll_handler(bool is_test) {
 	} else {
 		sensor_module_send_sensor(data, is_test);
 	}
-	sensor_is_processing = false;
 	etc_ble_set_current_sensor(data);
-	ret = date_time_now(&now_ms);
-	if (!ret) {
-		last_poll_complete_time_ms = now_ms;
-	}
-
+	last_poll_complete_time_ms = k_uptime_get();
+	LOG_DBG("Sample total time: %lld", (last_poll_complete_time_ms - now_ms));
 #if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	watchdog_sens_sel0_wdt_sem_give();
 #endif
