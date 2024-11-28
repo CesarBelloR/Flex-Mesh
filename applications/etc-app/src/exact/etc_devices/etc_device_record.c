@@ -92,6 +92,7 @@ static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb re
 
 	if (etc_device_record.record_sync_flag == ETC_DEVICE_RECORD_FLAG) {
 		/* Loaded */
+		LOG_WRN("Sync Flag is available");
 		return 0;
 	}
 
@@ -236,47 +237,43 @@ static void etc_device_record_reset_reclaim(void) {
 
 static void etc_device_helpers_sync_record_from_ram(void) {
 	int rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)pRecord,
-			       sizeof(struct etc_device_record_data));
+				   sizeof(struct etc_device_record_data));
 	if ((rc != 0) || (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
 		LOG_WRN("No retained RAM memory here");
 		/* Clean up the record in app RAM */
 		memset(pRecord, 0, sizeof(struct etc_device_record_data));
 		/* Reset stat record */
 		etc_device_record_reset_stat();
-		/* Reload from setting subsys - Don't need to check the return here */
-		etc_device_record_load();
-		/* Export old structure if it is available */
-		rc = etc_device_export_old_structure();
-		if ((rc != 0) && (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG)) {
-			struct etc_device_record_data_old tmp_record = {0x00};
-			rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)&tmp_record,
-					sizeof(tmp_record));
-			if ((rc == 0) && (tmp_record.record_sync_flag == ETC_DEVICE_RECORD_FLAG)) {
-				memset(pRecord, 0, sizeof(*pRecord));
-				LOG_WRN("Need to upgrade the record data");
-				pRecord->record_stat = tmp_record.record_stat;
-				etc_device_record_reset_ack();
-				rc = retained_mem_write(retained_ram_dev, 0, (uint8_t *)pRecord,
-							sizeof(struct etc_device_record_data));
-				if (rc) {
-					LOG_ERR("Failed to write data - err %d", rc);
-				}
-			} else {
-				LOG_WRN("No retained RAM in old record_bits too");
-				retained_mem_clear(retained_ram_dev);
-			}
+		/* Reload old RAM structure */
+		struct etc_device_record_data_old tmp_record = {0x00};
+		rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)&tmp_record,
+				       sizeof(tmp_record));
+		if ((rc == 0) && (tmp_record.record_sync_flag == ETC_DEVICE_RECORD_FLAG)) {
+			memset(pRecord, 0, sizeof(*pRecord));
+			LOG_WRN("Need to upgrade the record data");
+			pRecord->record_stat = tmp_record.record_stat;
+			etc_device_record_reset_ack();
 		} else {
-			LOG_WRN("Reloaded old structure");
 			retained_mem_clear(retained_ram_dev);
+			LOG_WRN("No retained RAM in old record_bits too");
+			/* Export old structure if it is available */
+			rc = etc_device_export_old_structure();
+			if (rc != 0) {
+				/* If no old-structure, reload the setting */
+				LOG_WRN("Reload record on saved setting");
+				etc_device_record_load();
+			}
 		}
+
 		/* Set sync flag */
 		pRecord->record_sync_flag = ETC_DEVICE_RECORD_FLAG;
 		/* Save it */
-		rc = retained_mem_write(retained_ram_dev, RECORD_FLAG_OFFSET,
-					(uint8_t *)&pRecord->record_sync_flag,
-					sizeof(pRecord->record_sync_flag));
+		rc = retained_mem_write(retained_ram_dev, 0, (uint8_t *)pRecord,
+					sizeof(struct etc_device_record_data));
 		if (rc) {
 			LOG_ERR("Failed to write data - err %d", rc);
+		} else {
+			LOG_DBG("Export record success");
 		}
 	} else {
 		LOG_DBG("Record is ready");
