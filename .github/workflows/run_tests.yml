@@ -2,15 +2,21 @@ name: Run tests with twister
 
 on:
   push:
-    branches:
-      - dev
-      - v*
-      - RC/v*
+    branches: 
+      - main
   pull_request:
     branches:
-      - dev
+      - main
       - v*
-      - RC/v*
+      - RC/*
+      - dev
+    paths:
+      - 'applications/etc-app/**'
+      - 'boards/**'
+      - 'lib/**'
+      - 'drivers/**'
+      - 'patch/**'
+      - '.github/workflows/run_tests.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
@@ -71,15 +77,18 @@ jobs:
               ./scripts/apply_patches.sh
 
       - name: Run all tests in the etc-firmware project
-        # continue-on-error: true
         run: |
-            ./zephyr/scripts/twister -T ./etc-firmware/tests
+            west twister -T etc-firmware/tests -v --inline-logs --integration
 
+      - name: Convert twister results to HTML
+        if: always()
+        run: |
+          junit2html twister-out/twister.xml twister-out/twister.html
+    
       - name: Upload test results
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Unit Test Results
           path: |
-            twister-out/twister.xml
-            twister-out/twister_report.xml
-            twister-out/twister.json
+            twister-out/twister.html
