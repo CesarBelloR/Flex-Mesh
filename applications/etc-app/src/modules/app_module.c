@@ -35,6 +35,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "events/util_event.h"
 #include "events/modem_event.h"
 #include "events/debug_event.h"
+#include "events/ble_event.h"
 #include "modules_common.h"
 
 #define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
@@ -58,6 +59,7 @@ struct app_msg_data {
 		struct modem_event modem;
 		struct lora_event lora;
 		struct debug_event debug;
+		struct ble_event ble;
 	} module;
 };
 
@@ -69,8 +71,8 @@ static enum state_type {
 } state;
 
 static enum sub_state_type {
-	SUB_STATE_ACTIVE_MODE,
-	SUB_STATE_PASSIVE_MODE,
+	SUB_STATE_NORMAL_STATE,
+	SUB_STATE_FOTA_STATE,
 } sub_state;
 
 /* Application module message queue. */
@@ -93,6 +95,7 @@ static struct module_data self = {
 static int next_wakeup = 0;
 static int app_backoff_multiple = 1;
 static int app_backoff_last_multiple = -1;
+
 static enum app_wakeup_tx_work_type wakeup_tx_type = APP_WAKEUP_TX_INTERVAL_WORK;
 static void app_soft_watchdog_work_handler(struct k_work* work);
 
@@ -151,10 +154,10 @@ static char *state2str(enum state_type new_state)
 static char *sub_state2str(enum sub_state_type new_state)
 {
 	switch (new_state) {
-	case SUB_STATE_ACTIVE_MODE:
-		return "SUB_STATE_ACTIVE_MODE";
-	case SUB_STATE_PASSIVE_MODE:
-		return "SUB_STATE_PASSIVE_MODE";
+	case SUB_STATE_NORMAL_STATE:
+		return "SUB_STATE_NORMAL_STATE";
+	case SUB_STATE_FOTA_STATE:
+		return "SUB_STATE_FOTA_STATE";
 	default:
 		return "Unknown";
 	}
@@ -254,6 +257,14 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
+	if (is_ble_event(aeh))
+	{
+		struct ble_event *evt = cast_ble_event(aeh);
+
+		msg.module.ble = *evt;
+		enqueue_msg = true;
+	}
+
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -267,11 +278,8 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static const struct device *pm_devs[] = {
-	DEVICE_DT_GET(DT_NODELABEL(spi2)),
-	DEVICE_DT_GET(DT_NODELABEL(spi3)),
-	DEVICE_DT_GET(DT_CHOSEN(zephyr_console))
-};
+static const struct device *pm_devs[] = {DEVICE_DT_GET(DT_NODELABEL(spi2)),
+					 DEVICE_DT_GET(DT_CHOSEN(zephyr_console))};
 
 static void app_peripheral_off(void)
 {
@@ -289,6 +297,14 @@ static void app_peripheral_off(void)
 		ret = pm_device_action_run(pm_devs[i], PM_DEVICE_ACTION_SUSPEND);
 		if (ret != 0) {
 			LOG_ERR("Could not suspend device %s", pm_devs[i]->name);
+		}
+	}
+
+	if (sub_state == SUB_STATE_NORMAL_STATE) {
+		const struct device *spi3_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
+		ret = pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_SUSPEND);
+		if (ret != 0) {
+			LOG_ERR("Could not suspend device %s", spi3_dev->name);
 		}
 	}
 #endif
@@ -747,6 +763,14 @@ static void app_peripheral_on(bool is_rtc)
 			LOG_ERR("Could not resume device %s", pm_devs[i]->name);
 		}
 	}
+
+	if (sub_state == SUB_STATE_NORMAL_STATE) {
+		const struct device *spi3_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
+		ret = pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_RESUME);
+		if (ret != 0) {
+			LOG_ERR("Could not suspend device %s", spi3_dev->name);
+		}
+	}
 #endif
 	if (is_rtc) {
 		LOG_DBG("Wakeup from sleep");
@@ -910,14 +934,22 @@ static void on_state_running(struct app_msg_data *msg)
 {
 }
 
-/* Message handler for SUB_STATE_PASSIVE_MODE. */
-static void on_sub_state_passive(struct app_msg_data *msg)
+/* Message handler for SUB_STATE_NORMAL_STATE. */
+static void on_sub_state_normal(struct app_msg_data *msg)
 {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START) || IS_EVENT(msg, ble, BLE_EVT_FOTA_START)) {
+		sub_state_set(SUB_STATE_FOTA_STATE);
+	}
 }
 
-/* Message handler for SUB_STATE_ACTIVE_MODE. */
-static void on_sub_state_active(struct app_msg_data *msg)
+/* Message handler for SUB_STATE_FOTA_STATE. */
+static void on_sub_state_fota(struct app_msg_data *msg)
 {
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DONE) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR) || IS_EVENT(msg, ble, BLE_EVT_FOTA_DONE) ||
+	    IS_EVENT(msg, ble, BLE_EVT_FOTA_ERROR)) {
+		sub_state_set(SUB_STATE_NORMAL_STATE);
+	}
 }
 
 
@@ -1012,7 +1044,7 @@ void app_module_thread_fn(void)
 	}
 
 	state_set(STATE_INIT);
-
+	sub_state_set(SUB_STATE_NORMAL_STATE);
 	err = setup();
 	if (err) {
 		LOG_ERR("setup, error: %d", err);
@@ -1028,11 +1060,11 @@ void app_module_thread_fn(void)
 			break;
 		case STATE_RUNNING:
 			switch (sub_state) {
-			case SUB_STATE_ACTIVE_MODE:
-				on_sub_state_active(&msg);
+			case SUB_STATE_NORMAL_STATE:
+				on_sub_state_normal(&msg);
 				break;
-			case SUB_STATE_PASSIVE_MODE:
-				on_sub_state_passive(&msg);
+			case SUB_STATE_FOTA_STATE:
+				on_sub_state_fota(&msg);
 				break;
 			default:
 				LOG_WRN("Unknown application sub state");
@@ -1065,3 +1097,4 @@ APP_EVENT_SUBSCRIBE_FINAL(MODULE, ui_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, sensor_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, lora_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, modem_event);
+APP_EVENT_SUBSCRIBE_FINAL(MODULE, ble_event);

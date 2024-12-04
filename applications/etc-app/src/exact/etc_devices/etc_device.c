@@ -244,7 +244,7 @@ int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int set
 	return etc_nvs_read_with_len(setting_id, setting, setting_size);
 }
 
-int etc_device_write_record_sensor(struct sensor_data *sensor, bool ota_running)
+int etc_device_write_record_sensor(struct sensor_data *sensor)
 {
 	int ret;
 	int64_t time_start = k_uptime_get();
@@ -256,20 +256,8 @@ int etc_device_write_record_sensor(struct sensor_data *sensor, bool ota_running)
 		record.sensor[i] = sensor->sensor[i];
 	}
 	LOG_HEXDUMP_DBG((uint8_t *)&record, sizeof(record), "SAVE");
-	if (ota_running) {
-		if (p_record_backup->num_records < ETC_DEVICE_BACKUP_RECORD_MAX_ELEMENT) {
-			memcpy(&p_record_backup->records[p_record_backup->num_records], 
-			       &record, sizeof(record));
-			p_record_backup->num_records += 1;
-		}
-		LOG_DBG("Saved to backup RAM %d", p_record_backup->num_records);
-		etc_device_record_backup_sync();
-		return 0;
-	} else {
-		ret = etc_device_write_record(&record);
-	}
-	
-	LOG_DBG("NVS time record: %lld", k_uptime_get() - time_start);
+	ret = etc_device_write_record(&record);
+	LOG_DBG("NVS time record %d: %lld", ret, k_uptime_get() - time_start);
 	return ret;
 }
 

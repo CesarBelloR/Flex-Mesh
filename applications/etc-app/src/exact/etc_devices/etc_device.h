@@ -250,7 +250,7 @@ int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int set
  * @param sensor	A pointer to the sensor data structure.
  * @return	0 on success, an error code otherwise.
  */
-int etc_device_write_record_sensor(struct sensor_data *sensor, bool ota_running);
+int etc_device_write_record_sensor(struct sensor_data *sensor);
 
 /**
  * @brief Write a generic record to the ETC device.
