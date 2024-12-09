@@ -16,7 +16,7 @@
 	status = "okay";
 
 	quectel_bg95: quectel_bg95 {
-		compatible = "quectel,bg95";
+		compatible = "etc,quectel-bg95";
 		label      = "quectel-bg95";
 		status     = "okay";
 		mdm-power-gpios = <&gpio0 25 0>;

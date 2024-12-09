@@ -276,7 +276,7 @@
 	pinctrl-names = "default", "sleep";
 
 	quectel_bg95: quectel_bg95 {
-		compatible = "quectel,bg95";
+		compatible = "etc,quectel-bg95";
 		label      = "quectel-bg95";
 		status     = "okay";
 		mdm-power-gpios = <&gpio1 1 0>;
