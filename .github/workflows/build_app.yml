@@ -43,6 +43,11 @@ jobs:
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
+      - name: Setup etc common SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ETC_COMMON_PRIV_SSH_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
