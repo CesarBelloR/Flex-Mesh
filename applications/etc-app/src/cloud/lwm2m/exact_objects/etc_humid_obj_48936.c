@@ -109,10 +109,10 @@ static struct lwm2m_engine_obj_inst *humid_sensor_create(uint16_t obj_inst_id)
 			  sizeof(*max_range_value));
 	INIT_OBJ_RES_DATA(ETC_HUMID_OBJ_R_TYPE, res[index], i, res_inst[index], j, 
 			  &type[index], sizeof(*type));
-	INIT_OBJ_RES_DATA(ETC_HUMID_OBJ_R_PORT, res[index], i, res_inst[index], j,
-			  &port[index], sizeof(*port));
-	INIT_OBJ_RES_DATA(ETC_HUMID_OBJ_R_UID, res[index], i, res_inst[index], j, 
-			  uid[index], UID_STR_MAX_SIZE);
+	INIT_OBJ_RES_DATA(ETC_HUMID_OBJ_R_PORT, res[index], i, res_inst[index], j, &port[index],
+			  sizeof(*port));
+	INIT_OBJ_RES_DATA_LEN(ETC_HUMID_OBJ_R_UID, res[index], i, res_inst[index], j, uid[index],
+			      UID_STR_MAX_SIZE, 0);
 	INIT_OBJ_RES_OPTDATA(TIMESTAMP_RID, res[index], i, res_inst[index], j);
 	INIT_OBJ_RES_OPTDATA(FRACTIONAL_TIMESTAMP_RID, res[index], i,
 			     res_inst[index], j);

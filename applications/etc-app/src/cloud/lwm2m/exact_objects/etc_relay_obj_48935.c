@@ -49,10 +49,9 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 	init_res_instance(res_inst, ARRAY_SIZE(res_inst));
 
 	/* Initialize object instance resource data */
-	INIT_OBJ_RES_DATA(ETC_RELAY_OBJ_R_DATA, res, i, res_inst, j,
-			  data, sizeof(data));
-	INIT_OBJ_RES_DATA(ETC_RELAY_OBJ_R_LEGACY_DATA, res, i, res_inst, j,
-			  legacy_data, sizeof(legacy_data));
+	INIT_OBJ_RES_DATA_LEN(ETC_RELAY_OBJ_R_DATA, res, i, res_inst, j, data, sizeof(data), 0);
+	INIT_OBJ_RES_DATA_LEN(ETC_RELAY_OBJ_R_LEGACY_DATA, res, i, res_inst, j, legacy_data,
+			      sizeof(legacy_data), 0);
 	INIT_OBJ_RES_EXECUTE(ETC_RELAY_OBJ_R_COMMAND, res, i, NULL);
 
 	inst.resources = res;
