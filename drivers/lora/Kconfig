@@ -1,6 +1,0 @@
-config LORA_SX1276
-	bool "Enable Lora SX1276"
-	select LORA_SX127X
-	help
-	  Choose this setting to enable semtech, sx1276
-

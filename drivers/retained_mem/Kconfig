@@ -1,6 +1,0 @@
-config RETAINED_MEM_MOCK_RAM
-	bool "Generic Zephyr RAM retained memory driver"
-	depends on DT_HAS_ZEPHYR_RETAINED_RAM_ENABLED
-	depends on RETAINED_MEM
-	help
-	  Enable driver for retained memory in mock RAM.

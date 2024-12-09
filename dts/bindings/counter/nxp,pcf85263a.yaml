@@ -1,8 +1,0 @@
-# Copyright (c) 2019, Foundries.io
-# SPDX-License-Identifier: Apache-2.0
-
-description: RTC SPI/I2C PCF85263
-
-compatible: "nxp,pcf85263a"
-
-include: i2c-device.yaml
