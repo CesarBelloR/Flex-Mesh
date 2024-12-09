@@ -88,8 +88,8 @@ int etc_get_fw_version(char *buf, int buf_len)
 {
 	int copy_size;
 
-	copy_size = sizeof(APP_VERSION_STR) < buf_len ? sizeof(APP_VERSION_STR) : buf_len;
-	memcpy(buf, APP_VERSION_STR, copy_size);
+	copy_size = sizeof(APP_VERSION_STRING) < buf_len ? sizeof(APP_VERSION_STRING) : buf_len;
+	memcpy(buf, APP_VERSION_STRING, copy_size);
 	return copy_size;
 }
 
@@ -212,7 +212,7 @@ int etc_settings_init(void)
 	ret = etc_device_read_setting(SETTINGS_FW_VERSION, saved_fw_version,
 				      ETC_SETTING_FW_VER_LEN);
 	if (ret) {
-		etc_set_fw_version(APP_VERSION_STR);
+		etc_set_fw_version(APP_VERSION_STRING);
 	}
 
 	ret = etc_device_read_setting(SETTINGS_DEVICE_ID, saved_device_id,
@@ -1084,7 +1084,7 @@ int etc_get_soft_watchdog_timeout_secs(void)
 static int cmd_info(const struct shell *shell, size_t argc, char **argv)
 {
 	shell_print(shell, "Hardware: %s", CONFIG_BOARD_VERSION);
-	shell_print(shell, "Firmware: %s", APP_VERSION_STR);
+	shell_print(shell, "Firmware: %s", APP_VERSION_STRING);
 	shell_print(shell, "Serial Number%s: %s", saved_serial_number_type == ETC_SERIAL_TYPE_EXACT_INFO 
 		? "[*] " : "", saved_device_id);
 	int rc = etc_get_hw_id(tmp_saved_value, sizeof(tmp_saved_value));

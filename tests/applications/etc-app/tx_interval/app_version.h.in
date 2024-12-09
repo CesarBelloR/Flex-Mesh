@@ -26,6 +26,6 @@
 	  APP_VERSION_PATCH)
 
 /** Application version (string). */
-#define APP_VERSION_STR "${PROJECT_VERSION}"
+#define APP_VERSION_STRING "${PROJECT_VERSION}"
 
 #endif /* APP_VERSION_H_ */

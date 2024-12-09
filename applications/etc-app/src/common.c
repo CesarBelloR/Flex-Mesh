@@ -40,7 +40,7 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 	decoded_buf_len += snprintf(
 		decoded_buf, sizeof(decoded_buf), "%s,%d,%s,%.2f,*,%.2f,*,%s,%d,%d,",
 		record->logger_ver, record->logger_rssi, record->logger_id, record->battery,
-		relay_vbat, APP_VERSION_STR, record->packet_number, record->timestamp);
+		relay_vbat, APP_VERSION_STRING, record->packet_number, record->timestamp);
 
 	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
 		if (data_codec_compare_temperature_is_valid(record->sensor[i])) {
@@ -119,7 +119,7 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 		<isReclaimed>
 	 */
 	decoded_buf_len +=
-		snprintf(decoded_buf, sizeof(decoded_buf), "%s,%s,%1.2f,%d,%d,", APP_VERSION_STR,
+		snprintf(decoded_buf, sizeof(decoded_buf), "%s,%s,%1.2f,%d,%d,", APP_VERSION_STRING,
 			 buf_tmp, record.battery, pkt_counter, record.timestamp);
 
 	pkt_counter += 1;

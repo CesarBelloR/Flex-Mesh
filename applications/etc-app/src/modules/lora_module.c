@@ -594,7 +594,7 @@ static int module_lora_process_packet(union etc_device_record record)
 	etc_get_device_id(buf_tmp, ETC_SETTINGS_DEVICE_ID_LEN);
 
 	decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "S,XXXX,%s,%s,%1.2f,%d,", 
-				    APP_VERSION_STR, buf_tmp, record.battery, lora_pkt_counter);
+				    APP_VERSION_STRING, buf_tmp, record.battery, lora_pkt_counter);
 
 	if (record.timestamp > (now - 120) && record.timestamp < now) { 
 		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,

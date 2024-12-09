@@ -30,7 +30,7 @@ void memfault_platform_get_device_info(sMemfaultDeviceInfo *info)
 	static bool is_init;
 	int ret;
 
-	static char fw_version[sizeof(APP_VERSION_STR) + 9] = APP_VERSION_STR;
+	static char fw_version[sizeof(APP_VERSION_STRING) + 9] = APP_VERSION_STRING;
 
 	if (!is_init) {
 		size_t version_len = strlen(fw_version);

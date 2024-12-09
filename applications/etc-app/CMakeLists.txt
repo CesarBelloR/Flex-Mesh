@@ -33,14 +33,14 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_POSIX_C_SOURCE=200809")
 configure_file(app_version.h.in ${CMAKE_BINARY_DIR}/app/include/app_version.h)
 configure_file(version.h.in ${CMAKE_BINARY_DIR}/app/config/mcu_version.conf)
 list(APPEND OVERLAY_CONFIG ${CMAKE_BINARY_DIR}/app/config/mcu_version.conf)
+# Include app_version.h for app and libraries
+include_directories(app PRIVATE ${CMAKE_BINARY_DIR}/app/include)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(app LANGUAGES C)
 
-target_include_directories(app PRIVATE 
-    ${CMAKE_BINARY_DIR}/app/include 
-    src)
+target_include_directories(app PRIVATE src)
 
 target_sources(app PRIVATE src/main.c
   src/common.c)

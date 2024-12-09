@@ -87,7 +87,7 @@ int main(void)
 		return -EINVAL;
 	}
 
-	LOG_INF("EXACT Monitor 2.0 version %s", APP_VERSION_STR);
+	LOG_INF("EXACT Monitor 2.0 version %s", APP_VERSION_STRING);
 #ifdef CONFIG_MCUMGR_CMD_ETC_MGMT
 	etc_mgmt_register_group();
 #endif
