@@ -11,8 +11,6 @@ target_include_directories(app PRIVATE .)
 target_sources(app
                PRIVATE 
                ${CMAKE_CURRENT_SOURCE_DIR}/etc_cfg_obj_48931.c
-               ${CMAKE_CURRENT_SOURCE_DIR}/etc_temp_obj_48932.c
-               ${CMAKE_CURRENT_SOURCE_DIR}/etc_info_obj_48933.c
                ${CMAKE_CURRENT_SOURCE_DIR}/etc_reclaim_obj_48934.c
                ${CMAKE_CURRENT_SOURCE_DIR}/etc_relay_obj_48935.c
                ${CMAKE_CURRENT_SOURCE_DIR}/etc_humid_obj_48936.c

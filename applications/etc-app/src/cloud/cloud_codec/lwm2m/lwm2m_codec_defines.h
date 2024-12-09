@@ -8,8 +8,8 @@
 #define LWM2M_CODEC_DEFINES_H__
 
 #include "etc_cfg_obj_48931.h"
-#include "etc_temp_obj_48932.h"
-#include "etc_info_obj_48933.h"
+#include "etc_temp/etc_temp_obj_48932.h"
+#include "etc_info/etc_info_obj_48933.h"
 #include "etc_reclaim_obj_48934.h"
 #include "etc_relay_obj_48935.h"
 #include "etc_humid_obj_48936.h"

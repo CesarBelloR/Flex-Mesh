@@ -166,31 +166,12 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 {
 	int err;
 
-	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
-		err = lwm2m_create_object_inst(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID,
-							  i));
-		if (err) {
-			return err;
-		}
-	}
-
 	err = lwm2m_create_object_inst(
 				&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0));
 	if (err) {
 		return err;
 	}
-	
-	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
-						AVAIL_NETWORK_BEARER_ID, 0));
-	if (err) {
-		return err;
-	}
 
-	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
-						APN, 0));
-	if (err) {
-		return err;
-	}
 	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
 					   APN, 0), 
 				CONFIG_MODEM_QUECTEL_BG95_M3_APN, 
