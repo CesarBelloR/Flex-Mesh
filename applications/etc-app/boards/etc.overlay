@@ -44,6 +44,8 @@
 &spi3 {
 	mx25r1635: mx25r1635@0 {
 		spi-max-frequency = <32000000>;
+		/delete-property/ wp-gpios;
+		/delete-property/ hold-gpios;
 	};
 };
 
