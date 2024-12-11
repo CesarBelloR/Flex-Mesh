@@ -1,7 +1,7 @@
 /dts-v1/;
 #include <nordic/nrf52840_qiaa.dtsi>
 #include <zephyr/dt-bindings/gpio/gpio.h>
-#include "etc_pinctrl.dtsi"
+#include "etc_flex_nrf52840_pinctrl.dtsi"
 
 / {
 	model = "ETC Core - nRF52840 base version";

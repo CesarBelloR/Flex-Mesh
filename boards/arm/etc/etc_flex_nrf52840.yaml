@@ -1,4 +1,4 @@
-identifier: etc
+identifier: etc_flex/nrf52840
 name: ETC Core Base Version nRF52840
 type: mcu
 arch: arm

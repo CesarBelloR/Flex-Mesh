@@ -1,4 +1,4 @@
-#include "etc_0_3_0.dtsi"
+#include "etc_flex_nrf52840_0_3_0.dtsi"
 #include <dt-bindings/modem.h>
 
 / {

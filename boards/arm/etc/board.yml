@@ -1,0 +1,12 @@
+board:
+  name: etc_flex
+  socs:
+  # Physical nRF52840 SoC on etc_flex
+  - name: nrf52840
+  revision:
+    format: major.minor.patch
+    default: 0.3.0
+    exact: false
+    revisions:
+      - name: 0.2.0
+      - name: 0.3.0
