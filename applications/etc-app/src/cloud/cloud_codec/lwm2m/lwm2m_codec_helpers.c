@@ -94,10 +94,10 @@ static int lwm2m_codec_helpers_setup_sensor_obj_values(void)
 	return 0;
 }
 
-static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id,
-						  uint16_t res_id, uint16_t res_inst_id,
-						  uint8_t *data, uint16_t data_len,
-						  bool last_block, size_t total_size)
+static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id, uint16_t res_id,
+						  uint16_t res_inst_id, uint8_t *data,
+						  uint16_t data_len, bool last_block,
+						  size_t total_size, size_t offset)
 {
 	int rc = 0;
 

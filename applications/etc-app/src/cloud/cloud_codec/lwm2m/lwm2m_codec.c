@@ -27,10 +27,10 @@ LOG_MODULE_REGISTER(cloud_codec, CONFIG_CLOUD_CODEC_LOG_LEVEL);
 /* Module event handler.  */
 static cloud_codec_evt_handler_t module_evt_handler;
 
-
 /* Function that is called whenever the configuration object is written to. */
 static int config_update_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst_id,
-			    uint8_t *data, uint16_t data_len, bool last_block, size_t total_size)
+			    uint8_t *data, uint16_t data_len, bool last_block, size_t total_size,
+			    size_t offset)
 {
 	/* Because we are dependent on providing all configurations in the
 	 * CLOUD_CODEC_EVT_CONFIG_UPDATE event, all configuration is retrieved whenever the
