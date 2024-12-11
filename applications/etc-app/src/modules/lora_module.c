@@ -37,6 +37,7 @@ struct lora_msg_data {
 	union {
 		struct app_event app;
 		struct util_event util;
+		struct data_event data;
 		struct cloud_event cloud;
 	} module;
 };
@@ -156,6 +157,14 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		enqueue_msg = true;
 	}
 
+	if (is_data_event(aeh)) {
+		struct data_event *event = cast_data_event(aeh);
+
+		msg.module.data = *event;
+		enqueue_msg = true;
+	}
+
+
 	if (enqueue_msg) {
 		int err = module_enqueue_msg(&self, &msg);
 
@@ -180,6 +189,11 @@ static int setup(void)
 						(k_thread_entry_t)module_lora_rx_thread_fn, NULL, NULL, NULL,
 						K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
 
+	/* Device is relay, and power mode is always ON */
+	if (etc_device_is_relay() && etc_device_is_always_on()) {
+		lora_request = LORA_REQUEST_IN_RUN_RELAY;
+		k_sem_give(&lora_request_sem);
+	}
 	return 0;
 }
 
@@ -583,6 +597,11 @@ retry_recv:
 		}
 	}
 
+	/* In always ON, keep listen RX */
+	if (etc_device_is_always_on()) {
+		goto retry_recv;
+	}
+
 	int64_t delta = k_uptime_get() - start_waiting_time_ms;
 	if (delta >= max_waiting_time_ms) {
 		LOG_DBG("Done time: %lld", delta);
@@ -725,6 +744,11 @@ static void on_all_states(struct lora_msg_data *msg)
 		 */
 		SEND_SHUTDOWN_ACK(lora, LORA_EVT_SHUTDOWN_READY, self.id);
 	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_ENTER_ALWAYS_ON_MODE)) {
+		lora_request = LORA_REQUEST_IN_RUN_RELAY;
+		k_sem_give(&lora_request_sem);
+	}
 }
 
 static void module_lora_rx_thread_fn(void)
@@ -809,5 +833,6 @@ void lora_module_thread_fn(void)
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE(MODULE, app_event);
+APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
 APP_EVENT_SUBSCRIBE(MODULE, cloud_event);

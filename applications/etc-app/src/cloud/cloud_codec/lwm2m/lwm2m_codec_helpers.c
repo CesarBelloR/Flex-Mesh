@@ -191,7 +191,7 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 	return 0;
 }
 
-static int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_data_cb_t callback)
+int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_data_cb_t callback)
 {
 	int err;
 
@@ -512,14 +512,16 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 	}
 
 	err = lwm2m_set_u8(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_RX_TIMEOUT),
-			    cfg->rx_timeout_secs);
+			   cfg->rx_timeout_secs);
 	if (err) {
 		return err;
 	}
-
-	err = lwm2m_codec_helpers_set_callback_for_config_object(callback);
-	if (err) {
-		return err;
+	
+	if (callback) {
+		err = lwm2m_codec_helpers_set_callback_for_config_object(callback);
+		if (err) {
+			return err;
+		}
 	}
 
 	return 0;

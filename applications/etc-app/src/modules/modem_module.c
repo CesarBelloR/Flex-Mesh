@@ -79,6 +79,13 @@ static enum sub_state_lte_connected {
 	SUB_STATE_MODEM_READY
 } lte_connected_sub_state;
 
+/* Value that hold the psm off request */
+static enum sub_state_psm_request {
+	PSM_NO_CHANGE_REQ,
+	PSM_ON_REQ,
+	PSM_OFF_REQ,
+} modem_psm_request = PSM_NO_CHANGE_REQ;
+
 /* Enumerator that specifies the data type that is sampled. */
 enum sample_type {
 	MODEM_STATIC,
@@ -520,6 +527,7 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 
 	case MODEM_API_DYNAMIC_DATA_UPDATE_EVT: {
 		new_dynamic_modem_data(evt->dynamic_data);
+		break;
 	}
 	}
 }
@@ -645,18 +653,21 @@ static int setup(void)
 	}
 
 	/* Adjust the PSM values if the device is configured as a relay. */
-	if (etc_get_device_mode() == ETC_DEVICE_MODE_RELAY) {
+	if (etc_device_is_relay()) {
 		struct modem_api_psm_timers psm_timers;
 		uint16_t soft_psm_timeout_s = CONFIG_MODEM_MODULE_RELAY_SOFT_PSM_TIMEOUT_S;
 
 		BUILD_ASSERT(sizeof(CONFIG_MODEM_MODULE_RELAY_PSM_RAT) == PSM_TIMER_VALUE_SIZE);
 		BUILD_ASSERT(sizeof(CONFIG_MODEM_MODULE_RELAY_PSM_RPTAU) == PSM_TIMER_VALUE_SIZE);
 		memcpy(psm_timers.active_timer, CONFIG_MODEM_MODULE_RELAY_PSM_RAT,
-		       sizeof(psm_timers.active_timer));
+		sizeof(psm_timers.active_timer));
 		memcpy(psm_timers.tau, CONFIG_MODEM_MODULE_RELAY_PSM_RPTAU,
-		       sizeof(psm_timers.tau));
+		sizeof(psm_timers.tau));
 		modem_cmd(modem_dev, MODEM_API_SET_PSM_VALUES, &psm_timers);
 		modem_cmd(modem_dev, MODEM_API_SET_SOFT_PSM_VALUES, &soft_psm_timeout_s);
+		if (etc_device_is_always_on()) {
+			modem_psm_request = PSM_OFF_REQ;
+		}
 	}
 	return 0;
 }
@@ -676,6 +687,11 @@ static bool is_wakeup_modem(struct modem_msg_data *msg)
 		    ((IS_EVENT(msg, app, APP_EVT_DATA_RECEIVE) &&
 		      etc_device_get_mode() == ETC_DEVICE_MODE_RELAY));
 	return is_wakeup;
+}
+
+static bool is_request_modem_psm_change(void)
+{
+	return modem_psm_request != PSM_NO_CHANGE_REQ;
 }
 
 /* Message handler for STATE_DISCONNECTED, sub state SUB_STATE_MODEM_OFF. */
@@ -722,6 +738,14 @@ static void on_state_disconnected(struct modem_msg_data *msg)
 		k_work_reschedule(&modem_work,
 				  K_SECONDS(CONFIG_MODEM_MODULE_UNEXPECTED_WAKEUP_TIMEOUT_S));
 	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_EXIT_ALWAYS_ON_MODE)) {
+		modem_psm_request = PSM_ON_REQ;
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_ENTER_ALWAYS_ON_MODE)) {
+		modem_psm_request = PSM_OFF_REQ;
+	}
 }
 
 /* Message handler for STATE_CONNECTING. */
@@ -755,6 +779,25 @@ static void on_state_connected(struct modem_msg_data *msg)
 	if (IS_EVENT(msg, modem, MODEM_EVT_POWERED_DOWN)) {
 		LOG_DBG("Modem powered down. Sleeping.");
 		modem_enter_sleep();
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_EXIT_ALWAYS_ON_MODE)) {
+		modem_cmd(modem_dev, MODEM_API_CMD_PSM_ON, NULL);
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_ENTER_ALWAYS_ON_MODE)) {
+		modem_cmd(modem_dev, MODEM_API_CMD_PSM_OFF, NULL);
+	}
+
+	/* Check if any request to change PSM */
+	if (is_request_modem_psm_change()) {
+		if (modem_psm_request == PSM_OFF_REQ) {
+			modem_cmd(modem_dev, MODEM_API_CMD_PSM_OFF, NULL);
+		} else {
+			modem_cmd(modem_dev, MODEM_API_CMD_PSM_ON, NULL);
+		}
+		/* Reset request */
+		modem_psm_request = PSM_NO_CHANGE_REQ;
 	}
 }
 

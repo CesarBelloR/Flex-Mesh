@@ -329,6 +329,13 @@ bool etc_device_is_logger_lora(void);
 bool etc_device_is_relay(void);
 
 /**
+ * @brief Check if the ETC device is configured for ALWAYS ON power mode.
+ *
+ * @return	true if ETC device is ALWAYS ON mode
+ */
+bool etc_device_is_always_on(void);
+
+/**
  * @brief Get the receive timeout for the ETC device.
  *
  * @return	The receive timeout value.
@@ -571,6 +578,16 @@ int etc_set_reclaim_request_for_relay(char *logger_id,
  * @param request 	The output to store the reclaim request
  * @return 0 on success, <0 on error.
  */
+
 int etc_get_reclaim_request_for_relay_with_logger_id(const char* logger_id, 
 	struct etc_device_reclaim_request *request);
+
+/**
+ * @brief Check the new configuration if device need to ON/OFF PSM
+ * 
+ * @retval 1 if system need to ON PSM (Exit ALWAYS ON)
+ * @retval 2 if system need to OFF PSM (Enter ALWAYS ON)
+ * @return 0 if no need to do anything
+ */
+int etc_device_verify_to_set_psm(const struct etc_config* new_config);
 #endif /* ETC_DEVICE_H_ */

@@ -521,10 +521,12 @@ static void on_state_running(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
-		transition_list_clear();
-		sub_state_set(SUB_STATE_LORA_LISTEN);
-		transition_list_append(LED_STATE_LORA_LISTEN, HOLD_FOREVER);
-		k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+		if (sub_state_get() != SUB_STATE_LORA_LISTEN) {
+			transition_list_clear();
+			sub_state_set(SUB_STATE_LORA_LISTEN);
+			transition_list_append(LED_STATE_LORA_LISTEN, HOLD_FOREVER);
+			k_work_reschedule(&led_pattern_update_work,  UI_LED_WAIT_TIME);
+		}
 	}
 
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {

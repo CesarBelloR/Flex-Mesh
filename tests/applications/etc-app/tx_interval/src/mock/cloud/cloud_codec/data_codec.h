@@ -2,7 +2,13 @@
 #define DATA_CODEC_H__
 
 #include <stdbool.h>
+#include "etc_device.h"
 #include "events/sensor_event.h"
+
+static int data_codec_sync_config(struct etc_config *cfg)
+{
+	return 0;
+}
 
 static inline bool data_codec_compare_temperature_is_valid(float temperature) {
 	if ((temperature >= SENSOR_TEMP_C_MIN) && 

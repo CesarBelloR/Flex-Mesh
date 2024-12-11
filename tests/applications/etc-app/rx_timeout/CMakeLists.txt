@@ -7,6 +7,7 @@ project(etc_device_record_test)
 FILE(GLOB app_sources src/*.c
                       src/mock/*.c
                       src/mock/cloud/cloud_codec/lwm2m/lwm2m_codec_helpers.c
+                      src/mock/cloud/cloud_codec/lwm2m/lwm2m_codec.c
                       src/mock/zephyr/drivers/*.c)
 target_sources(app PRIVATE ${app_sources})
 

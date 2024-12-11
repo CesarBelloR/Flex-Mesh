@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <zephyr/device.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/random/random.h>
@@ -15,8 +17,7 @@ LOG_MODULE_REGISTER(etc_settings, CONFIG_ETC_SETTINGS_LOG_LEVEL);
 #include "etc_date_time.h"
 #endif
 #include "etc_util.h"
-#include <zephyr/device.h>
-#include <zephyr/kernel.h>
+#include "cloud/cloud_codec/data_codec.h"
 
 #define SETTINGS_CONFIG_READY_CODE 0xCAFEBEEF
 #define SETTINGS_HW_VERSION	   ETC_SETTING_HW_VERSION_ID
@@ -342,6 +343,12 @@ int etc_settings_init(void)
 		etc_set_alarm_threshold(ETC_SETTING_ALARM_THRESHOLD_DEFAULT);
 	}
 
+	/* Add a protection to verify the relay & always on */
+	if ((etc_cfg.device_mode != ETC_DEVICE_MODE_RELAY) &&
+	    (etc_cfg.power_mode == ETC_POWER_MODE_ALWAYS_ON)) {
+		etc_set_power_mode(ETC_POWER_MODE_INTERVAL);
+	}
+
 	/* Read RTC calibration offset and set RTC offset register if available. */
 	float offset_ppm;
 	ret = etc_device_read_setting(ETC_RTC_CALIBRATION_OFFSET_PPM,
@@ -404,15 +411,16 @@ int etc_settings_get_config(struct etc_config *config)
 void etc_settings_update(const struct etc_config *new_config)
 {
 	int rc = 1;
+	/* Swap to check power mode before checking device mode */
+	if (etc_cfg.power_mode != new_config->power_mode) {
+		rc = etc_set_power_mode(new_config->power_mode);
+	} 
 	if (etc_cfg.device_mode != new_config->device_mode) {
 		rc = etc_set_device_mode(new_config->device_mode);
 		if (rc) {
 			goto done;
 		}
 	}
-	if (etc_cfg.power_mode != new_config->power_mode) {
-		rc = etc_set_power_mode(new_config->power_mode);
-	} 
 	if (etc_cfg.log_interval_secs != new_config->log_interval_secs) {
 		rc = etc_set_log_interval_secs(new_config->log_interval_secs);
 	}
@@ -459,16 +467,27 @@ done:
 		LOG_DBG("Value changed success");
 	} else {
 		LOG_ERR("Error changing value: %d", rc);
+		data_codec_sync_config(&etc_cfg);
 	}
 }
 
 int etc_set_device_mode(enum etc_device_mode mode)
 {
 	int rc = 0;
+	bool need_sync = false;
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	if (etc_cfg.device_mode == mode) {
 		k_mutex_unlock(&setting_mutex);
 		return 0;
+	}
+
+	/* Switch from Relay to other mode with ALWAYS ON is current power mode */
+	if ((etc_cfg.device_mode == ETC_DEVICE_MODE_RELAY) && 
+	    (etc_cfg.power_mode == ETC_POWER_MODE_ALWAYS_ON)) {
+		rc = etc_set_power_mode(ETC_POWER_MODE_INTERVAL);
+		if (rc == 0) {
+			need_sync = true;
+		}
 	}
 
 	/* Start adversting if new mode is BLE */
@@ -486,6 +505,11 @@ int etc_set_device_mode(enum etc_device_mode mode)
 	if (rc == 0) {
 		LOG_DBG("set %u", mode);
 	}
+
+	if (need_sync) {
+		/* Sync with cloud */
+		data_codec_sync_config(&etc_cfg);
+	}
 	k_mutex_unlock(&setting_mutex);
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 	date_time_force_event(DATE_TIME_SYSTEM_RELOAD);
@@ -502,7 +526,14 @@ int etc_set_power_mode(enum etc_power_mode_e power)
 		return -EINVAL;
 	}
 	
+	/* Device is set ALWAYS ON in not Relay mode */
+	if ((etc_get_device_mode() != ETC_DEVICE_MODE_RELAY) && 
+	    (power == ETC_POWER_MODE_ALWAYS_ON)) {
+		return -EINVAL;
+	}
+
 	k_mutex_lock(&setting_mutex, K_FOREVER);
+	
 	if (etc_cfg.power_mode == power) {
 		k_mutex_unlock(&setting_mutex);
 		return 0;

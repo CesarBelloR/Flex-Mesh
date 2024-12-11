@@ -379,6 +379,11 @@ bool etc_device_is_relay(void)
 	return (etc_get_device_mode() == ETC_DEVICE_MODE_RELAY);
 }
 
+bool etc_device_is_always_on(void)
+{
+	return (etc_get_power_mode() == ETC_POWER_MODE_ALWAYS_ON);
+}
+
 int etc_device_get_rx_timeout(void)
 {
 	int rx_duration = etc_get_rx_duration_secs();
@@ -635,6 +640,26 @@ int etc_get_reclaim_request_for_relay_with_logger_id(const char* logger_id,
 		}
 	}
 	return -ENOENT;
+}
+
+int etc_device_verify_to_set_psm(const struct etc_config* new_config) {
+	if (etc_device_is_relay()) {
+		if ((new_config->power_mode != ETC_POWER_MODE_ALWAYS_ON) && 
+		    (etc_device_is_always_on())) {
+			return 1;
+		}
+
+		if ((new_config->device_mode != ETC_DEVICE_MODE_RELAY) && 
+		    (etc_device_is_always_on())) {
+			return 1;
+		}
+
+		if ((new_config->power_mode == ETC_POWER_MODE_ALWAYS_ON) && 
+		    (!etc_device_is_always_on())) {
+			return 2;
+		}
+	}
+	return 0;
 }
 
 #ifdef CONFIG_SHELL

@@ -91,7 +91,6 @@ static struct data_modem_dynamic modem_dynamic;
 
 static bool first_send = true;
 static bool need_interval_tx_send = true;
-
 /* Size of the static modem (modem_stat) data structure.
  * Used to provide an array size when encoding batch data.
  */
@@ -256,6 +255,12 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 static void new_config_handle(const struct etc_config *new_config)
 {
+	int rc = etc_device_verify_to_set_psm(new_config);
+	if (rc == 1) {
+		SEND_EVENT(data, DATA_EVT_CONFIG_EXIT_ALWAYS_ON_MODE);
+	} else if (rc == 2) {
+		SEND_EVENT(data, DATA_EVT_CONFIG_ENTER_ALWAYS_ON_MODE);
+	}
 	etc_settings_update(new_config);
 }
 
@@ -263,6 +268,8 @@ static void cloud_codec_event_handler(const struct cloud_codec_evt *evt)
 {
 	if (evt->type == CLOUD_CODEC_EVT_CONFIG_UPDATE) {
 		new_config_handle(&evt->config_update);
+	} else if (evt->type == CLOUD_CODEC_EVT_CONFIG_SYNC) {
+		SEND_EVENT(data, DATA_EVT_CONFIG_SYNC);
 	} else {
 		LOG_ERR("Unknown event");
 	}
@@ -751,7 +758,7 @@ static void on_all_states(struct data_msg_data *msg)
 		 * reset.
 		 */
 		etc_device_record_save();
-		LOG_INF("Saving time: %d", k_uptime_delta(&time_now));
+		LOG_INF("Saving time: %lld", k_uptime_delta(&time_now));
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 
@@ -941,6 +948,10 @@ static void on_all_states(struct data_msg_data *msg)
 		if (ret) {
 			LOG_WRN("Could not save location");
 		}
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_SYNC)) {
+		data_codec_prepare_config_packet(&codec);
 	}
 }
 

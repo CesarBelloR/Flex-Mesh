@@ -105,6 +105,8 @@ struct cloud_codec_data {
 enum cloud_codec_event_type {
 	/** Only used in LwM2M codec. This event carries a config update. */
 	CLOUD_CODEC_EVT_CONFIG_UPDATE = 1,
+	/** Event to notify when need to sync configuration */
+	CLOUD_CODEC_EVT_CONFIG_SYNC,
 };
 
 struct cloud_codec_evt {
@@ -334,4 +336,17 @@ int data_codec_update_location(struct cloud_codec_data *cloud_data,
 */
 int data_codec_update_location_dummy(struct cloud_codec_data *cloud_data);
 
+/**
+ * Sync the configuration from local device to cloud
+ *
+ * @retval 0 success
+ */
+int data_codec_sync_config(struct etc_config *cfg);
+
+/**
+ * Prepare the configuration package for next LwM2M message
+ *
+ * @retval 0 success
+ */
+int data_codec_prepare_config_packet(struct cloud_codec_data *cloud_data);
 #endif /* DATA_CODEC_H__ */

@@ -466,3 +466,34 @@ int data_codec_update_location_dummy(struct cloud_codec_data *cloud_data)
 {
 	return lwm2m_codec_helpers_update_location_dummy(cloud_data);
 }
+
+int data_codec_sync_config(struct etc_config *cfg)
+{
+	/* Force to set callback is NULL before syncing configuration*/
+	lwm2m_codec_helpers_set_callback_for_config_object(NULL);
+	/* Sync the configuration and add callback */
+	int rc = lwm2m_codec_helpers_setup_configuration_object(cfg, config_update_cb);
+	if (rc == 0) {
+		struct cloud_codec_evt evt = {
+			.type = CLOUD_CODEC_EVT_CONFIG_SYNC,
+		};
+		module_evt_handler(&evt);
+	} else {
+		LOG_ERR("Can't sync configuration err %d", rc);
+	}
+	return rc;
+}
+
+int data_codec_prepare_config_packet(struct cloud_codec_data *cloud_data)
+{
+	static const struct lwm2m_obj_path path_list[] = {
+		LWM2M_OBJ(ETC_CFG_OBJECT_ID),
+	};
+	int err = lwm2m_codec_helpers_object_path_list_add(cloud_data, path_list,
+							   ARRAY_SIZE(path_list));
+	if (err) {
+		LOG_ERR("Failed populating object path list, error: %d", err);
+		return err;
+	}
+	return err;
+}

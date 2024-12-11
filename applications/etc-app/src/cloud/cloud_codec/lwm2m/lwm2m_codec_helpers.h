@@ -231,8 +231,15 @@ int lwm2m_codec_helpers_update_location(struct cloud_codec_data *cloud_data,
  * @retval 0 success
  * @retval !=0 error
 */
-int lwm2m_codec_helpers_update_location_dummy(struct cloud_codec_data *cloud_data);					      
+int lwm2m_codec_helpers_update_location_dummy(struct cloud_codec_data *cloud_data);
 
+/**
+ * Set callback function for registering validation for configuration.
+ * 
+ * @retval 0 success
+ * @retval !=0 error
+*/
+int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_data_cb_t callback);
 #ifdef __cplusplus
 }
 #endif

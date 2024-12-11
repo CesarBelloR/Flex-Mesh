@@ -1,0 +1,9 @@
+tests:
+  # section.subsection
+  tests.applications.etc-app.always_on:
+    timeout: 600
+    platform_allow:
+      - native_sim
+      - etc
+    integration_platforms:
+      - native_sim

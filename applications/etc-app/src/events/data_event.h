@@ -92,6 +92,13 @@ enum data_event_type {
 	/* Functional test complete */
 	DATA_EVT_FUNCTIONAL_TEST_COMPLETE,
 	DATA_EVT_FUNCTIONAL_UI_TEST_COMPLETE,
+	/* Flag to enable/disable PSM mode*/
+	DATA_EVT_CONFIG_EXIT_ALWAYS_ON_MODE,
+	DATA_EVT_CONFIG_ENTER_ALWAYS_ON_MODE,
+
+	/* Flag to resync configuration */
+	DATA_EVT_CONFIG_SYNC,
+	
 	/** The data module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
 	 */
