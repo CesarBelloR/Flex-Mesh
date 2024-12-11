@@ -1,0 +1,114 @@
+From 89c9ec967864d765fcd2757a4f258e8ee91becde Mon Sep 17 00:00:00 2001
+From: Andi Gerl <andi.gerl@exacttechnology.com>
+Date: Wed, 11 Dec 2024 16:21:29 -0500
+Subject: [PATCH] gnss: suspend/resume uart as part of pm state handling
+
+---
+ drivers/gnss/gnss_nmea_generic.c | 57 ++++++++++++++++++++++++++++++++
+ 1 file changed, 57 insertions(+)
+
+diff --git a/drivers/gnss/gnss_nmea_generic.c b/drivers/gnss/gnss_nmea_generic.c
+index 2c92ce480ba..c625ccec087 100644
+--- a/drivers/gnss/gnss_nmea_generic.c
++++ b/drivers/gnss/gnss_nmea_generic.c
+@@ -58,12 +58,51 @@ MODEM_CHAT_MATCHES_DEFINE(unsol_matches,
+ #endif
+ );
+ 
++static int pm_suspend_uart(const struct device *uart_dev) 
++{
++	int ret;
++	
++	ret = pm_device_action_run(uart_dev, PM_DEVICE_ACTION_SUSPEND);
++	if (ret)
++	{
++		if (ret == -EALREADY) {
++			LOG_WRN("Device already suspended");
++			return 0;
++		}
++		LOG_ERR("Can't suspend device: %d", ret);
++		return ret;
++	}
++
++	LOG_DBG("UART suspended");
++	
++	return 0;
++}
++
++static int pm_resume_uart(const struct device *uart_dev)
++{
++	int ret;
++
++	ret = pm_device_action_run(uart_dev, PM_DEVICE_ACTION_RESUME);
++	__ASSERT_NO_MSG((ret == 0) || (ret == -EALREADY));
++	if (ret)
++	{
++		LOG_ERR("Can't resume device: %d", ret);
++		return ret;
++	}
++
++	LOG_DBG("UART resumed");
++
++	return 0;
++}
++
+ static int gnss_nmea_generic_resume(const struct device *dev)
+ {
+ 	const struct gnss_nmea_generic_config *cfg = dev->config;
+ 	struct gnss_nmea_generic_data *data = dev->data;
+ 	int ret;
+ 
++	pm_resume_uart(cfg->uart);
++
+ 	ret = modem_pipe_open(data->uart_pipe);
+ 	if (ret < 0) {
+ 		return ret;
+@@ -81,6 +120,20 @@ static int gnss_nmea_generic_resume(const struct device *dev)
+ 	return ret;
+ }
+ 
++static int gnss_nmea_generic_suspend(const struct device *dev)
++{
++	const struct gnss_nmea_generic_config *cfg = dev->config;
++	struct gnss_nmea_generic_data *data = dev->data;
++	int ret;
++
++	modem_chat_release(&data->chat);
++	modem_pipe_close(data->uart_pipe);
++
++	pm_suspend_uart(cfg->uart);
++
++	return 0;
++}
++
+ static struct gnss_driver_api gnss_api = {
+ };
+ 
+@@ -140,6 +193,7 @@ static int gnss_nmea_generic_init_chat(const struct device *dev)
+ 
+ static int gnss_nmea_generic_init(const struct device *dev)
+ {
++	const struct gnss_nmea_generic_config *cfg = dev->config;
+ 	int ret;
+ 
+ 	ret = gnss_nmea_generic_init_nmea0183_match(dev);
+@@ -156,6 +210,7 @@ static int gnss_nmea_generic_init(const struct device *dev)
+ 
+ #if CONFIG_PM_DEVICE
+ 	pm_device_init_suspended(dev);
++	pm_suspend_uart(cfg->uart);
+ #else
+ 	ret = gnss_nmea_generic_resume(dev);
+ 	if (ret < 0) {
+@@ -172,6 +227,8 @@ static int gnss_nmea_generic_pm_action(const struct device *dev, enum pm_device_
+ 	switch (action) {
+ 	case PM_DEVICE_ACTION_RESUME:
+ 		return gnss_nmea_generic_resume(dev);
++	case PM_DEVICE_ACTION_SUSPEND:
++		return gnss_nmea_generic_suspend(dev);
+ 	default:
+ 		return -ENOTSUP;
+ 	}
+-- 
+2.47.1
+

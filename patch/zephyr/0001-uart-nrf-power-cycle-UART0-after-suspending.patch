@@ -1,17 +1,18 @@
-From 93456fae30eb13e6418f13c91e2116405bb77fba Mon Sep 17 00:00:00 2001
+From 30d5b9d2ff6e7ed13ea47abfd84c20899bb34a36 Mon Sep 17 00:00:00 2001
 From: Andi Gerl <andi.gerl@exacttechnology.com>
-Date: Fri, 24 May 2024 18:18:49 -0400
-Subject: [PATCH] UART: NRF: Power cycle UART0 after suspending to fix issue
- with increased sleep current
+Date: Wed, 11 Dec 2024 16:29:27 -0500
+Subject: [PATCH] uart: nrf: power cycle UART0 after suspending
+
+This solves an issue with increased sleep current.
 
 Also fully re-initialize UART0 on resume. Peripheral needs to be re-initialized after
 power cycling.
 ---
- drivers/serial/uart_nrfx_uarte.c | 14 ++++++++++++++
- 1 file changed, 14 insertions(+)
+ drivers/serial/uart_nrfx_uarte.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
 
 diff --git a/drivers/serial/uart_nrfx_uarte.c b/drivers/serial/uart_nrfx_uarte.c
-index 6e1ecfadfd8..8de899ebe37 100644
+index d2b36017051..52444887270 100644
 --- a/drivers/serial/uart_nrfx_uarte.c
 +++ b/drivers/serial/uart_nrfx_uarte.c
 @@ -29,11 +29,13 @@ LOG_MODULE_REGISTER(uart_nrfx_uarte, CONFIG_UART_LOG_LEVEL);
@@ -20,7 +21,7 @@ index 6e1ecfadfd8..8de899ebe37 100644
  #define gppi_channel_alloc nrfx_ppi_channel_alloc
 +#define gppi_channel_free nrfx_ppi_channel_free
  #define gppi_channel_enable nrfx_ppi_channel_enable
- #elif defined(CONFIG_HAS_HW_NRF_DPPIC)
+ #elif defined(DPPI_PRESENT)
  #include <nrfx_dppi.h>
  #define gppi_channel_t uint8_t
  #define gppi_channel_alloc nrfx_dppi_channel_alloc
@@ -28,7 +29,7 @@ index 6e1ecfadfd8..8de899ebe37 100644
  #define gppi_channel_enable nrfx_dppi_channel_enable
  #else
  #error "No PPI or DPPI"
-@@ -1856,6 +1858,11 @@ static int uarte_nrfx_pm_action(const struct device *dev,
+@@ -1877,6 +1879,10 @@ static int uarte_nrfx_pm_action(const struct device *dev,
  
  	switch (action) {
  	case PM_DEVICE_ACTION_RESUME:
@@ -36,11 +37,10 @@ index 6e1ecfadfd8..8de899ebe37 100644
 +			return uarte_instance_init(dev,
 +						   IS_ENABLED(CONFIG_UART_0_INTERRUPT_DRIVEN));
 +		}
-+
  		if (cfg->flags & UARTE_CFG_FLAG_GPIO_MGMT) {
  			ret = pinctrl_apply_state(cfg->pcfg,
  						  PINCTRL_STATE_DEFAULT);
-@@ -1937,6 +1944,13 @@ static int uarte_nrfx_pm_action(const struct device *dev,
+@@ -1959,6 +1965,13 @@ static int uarte_nrfx_pm_action(const struct device *dev,
  			}
  		}
  
@@ -55,5 +55,5 @@ index 6e1ecfadfd8..8de899ebe37 100644
  	default:
  		return -ENOTSUP;
 -- 
-2.45.2
+2.47.1
 
