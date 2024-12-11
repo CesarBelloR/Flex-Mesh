@@ -14,7 +14,7 @@ manifest:
     - name: nrf
       remote: sdk-nrf
       repo-path: sdk-nrf
-      revision: v2.6.0
+      revision: v2.7.0
       import: true
     # list the Memfault SDK as a top-level module
     - name: memfault-firmware-sdk
