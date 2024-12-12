@@ -46,7 +46,7 @@ void *firmware_read_cb(uint16_t obj_inst_id, size_t *data_len);
 /**
  * @brief Verify active firmware image
  */
-int lwm2m_init_firmware(void);
+int lwm2m_etc_init_firmware(void);
 
 /**
  * @brief Initialize Image Update object

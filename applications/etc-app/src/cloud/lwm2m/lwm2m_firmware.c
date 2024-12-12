@@ -937,7 +937,7 @@ static void lwm2m_firmware_set_delivery_method(enum fota_delivery_method method)
 			   method);
 }
 
-int lwm2m_init_firmware(void)
+int lwm2m_etc_init_firmware(void)
 {
 	int ret;
 

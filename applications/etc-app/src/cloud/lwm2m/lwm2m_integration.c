@@ -395,7 +395,7 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 		return err;
 	}
 
-	err = lwm2m_init_firmware();
+	err = lwm2m_etc_init_firmware();
 	if (err) {
 		LOG_ERR("lwm2m_init_firmware, error: %d", err);
 		return err;
