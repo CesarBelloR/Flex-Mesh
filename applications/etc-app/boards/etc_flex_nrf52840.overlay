@@ -41,24 +41,26 @@
 	reg = <0x20000000 DT_SIZE_K(252)>;
 };
 
+// Comment deletion of wp-gpios and hold-gpios after upgrade to NCS v2.7.0
+// Without these properties, the spi_nor driver doesn't initialize properly.
 &spi3 {
 	mx25r1635: mx25r1635@0 {
 		spi-max-frequency = <32000000>;
-		/delete-property/ wp-gpios;
-		/delete-property/ hold-gpios;
+		// /delete-property/ wp-gpios;
+		// /delete-property/ hold-gpios;
 	};
 };
 
-&gpio0 {
-	wp-hog {
-		gpio-hog;
-		gpios = <17 GPIO_ACTIVE_LOW>;
-		output-high;
-	};
+// &gpio0 {
+// 	wp-hog {
+// 		gpio-hog;
+// 		gpios = <17 GPIO_ACTIVE_LOW>;
+// 		output-high;
+// 	};
 
-	hold-hog {
-		gpio-hog;
-		gpios = <19 GPIO_ACTIVE_LOW>;
-		output-high;
-	};
-};
+// 	hold-hog {
+// 		gpio-hog;
+// 		gpios = <19 GPIO_ACTIVE_LOW>;
+// 		output-high;
+// 	};
+// };
