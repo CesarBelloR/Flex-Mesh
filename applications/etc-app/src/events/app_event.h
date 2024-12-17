@@ -28,6 +28,10 @@ enum app_event_type {
 	 *  @ref app_module_data_type.
 	 */
 	APP_EVT_DATA_GET,
+	/* Same as @ref APP_EVT_DATA_GET but signals that the request
+	 * was triggered by a user.
+	 */
+	APP_EVT_DATA_GET_USER_TRIGGERED,
 
 	/** Request transmit the log to lora/cloud */
 	APP_EVT_DATA_TRANSMIT,

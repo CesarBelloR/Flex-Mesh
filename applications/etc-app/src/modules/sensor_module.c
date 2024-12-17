@@ -41,7 +41,12 @@ static enum state_type {
 	STATE_SHUTDOWN
 } state;
 
-static struct k_work_delayable sensor_poll_work;
+enum sensor_sample_type {
+	SENSOR_SAMPLE_NORMAL,
+	SENSOR_SAMPLE_TEST,
+	SENSOR_SAMPLE_USER_TRIGGERED,
+};
+
 static struct sensor_data static_sensor_data;
 
 int64_t last_poll_complete_time_ms = 0;
@@ -141,11 +146,24 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static void sensor_module_send_sensor(struct sensor_data* sensor, bool is_test)
+static void sensor_module_send_sensor(struct sensor_data *sensor,
+				      enum sensor_sample_type sample_type)
 {
 	struct sensor_event *sensor_event = new_sensor_event();
-	sensor_event->type = is_test ? SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY : 
-		SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
+	switch (sample_type) {
+	case SENSOR_SAMPLE_NORMAL:
+		sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_DATA_READY;
+		break;
+	case SENSOR_SAMPLE_TEST:
+		sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_TEST_DATA_READY;
+		break;
+	case SENSOR_SAMPLE_USER_TRIGGERED:
+		sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_USER_TRIGGERED_DATA_READY;
+		break;
+	default:
+		__ASSERT_NO_MSG(true);
+	}
+
 	sensor_event->data.sensors = sensor;
 	APP_EVENT_SUBMIT(sensor_event);
 }
@@ -255,9 +273,11 @@ static bool is_enter_functional_test(void)
 	return false;
 }
 
-static int sensor_poll_handler(bool is_test) {
+static int sensor_poll_handler(enum sensor_sample_type sample_type)
+{
 	int64_t now_ms = k_uptime_get();
-	if (!is_test && (now_ms - last_poll_complete_time_ms) < SENSOR_MIN_INTERVAL_MS) {
+	if ((sample_type != SENSOR_SAMPLE_TEST) &&
+	    (now_ms - last_poll_complete_time_ms) < SENSOR_MIN_INTERVAL_MS) {
 		/* Ignore sample request if last reading finished
 		 * < SENSOR_MIN_INTERVAL_MS ago. Re-enabling VCC_SENS within
 		 * quick succession causes issues with the linear regulator
@@ -302,7 +322,7 @@ static int sensor_poll_handler(bool is_test) {
 		etc_sensor_enter_functional_test();
 		sensor_module_enter_functional_test(data);
 	} else {
-		sensor_module_send_sensor(data, is_test);
+		sensor_module_send_sensor(data, sample_type);
 	}
 	etc_ble_set_current_sensor(data);
 	last_poll_complete_time_ms = k_uptime_get();
@@ -326,20 +346,18 @@ static void on_state_running(struct sensor_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_DATA_GET)) {
 		LOG_INF("APP_EVT_DATA_GET");
-		sensor_poll_handler(false);
+		sensor_poll_handler(SENSOR_SAMPLE_NORMAL);
 		return;
 	}
 
-	if (IS_EVENT(msg, ui, UI_EVT_INPUT_DATA_READY)) {
-		LOG_INF("UI_EVT_INPUT_DATA_READY");
+	if (IS_EVENT(msg, app, APP_EVT_DATA_GET_USER_TRIGGERED)) {
 		/* The UI input (HALL Sensor or Button) is triggered */
-		adc_init();
-		sensor_poll_handler(false);
+		sensor_poll_handler(SENSOR_SAMPLE_USER_TRIGGERED);
 		return;
 	}
 
 	if (IS_EVENT(msg, ui, UI_EVT_TEST_DATA_READY)) {
-		sensor_poll_handler(true);
+		sensor_poll_handler(SENSOR_SAMPLE_TEST);
 		return;
 	}
 
@@ -349,7 +367,7 @@ static void on_state_running(struct sensor_msg_data *msg)
 		if (!is_send) {
 			LOG_DBG("Device is online. Collecting and sending first sensor data");
 			is_send = true;
-			sensor_poll_handler(false);
+			sensor_poll_handler(SENSOR_SAMPLE_NORMAL);
 		}
 		return;
 	}

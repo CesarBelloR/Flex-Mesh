@@ -148,7 +148,7 @@ void etc_device_record_set_nack(int record_id);
 int etc_device_record_get_nack(int new_record, int old_record, int num_record);
 
 /**
- * @brief Save the record to NVS as backup to avoid losing data
+ * @brief Save the record to NVS as backup to avoid losing data.
  */
 void etc_device_record_save(void);
 

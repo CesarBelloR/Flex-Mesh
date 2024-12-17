@@ -604,6 +604,17 @@ static void data_encode_for_ble()
 #endif
 }
 
+static void save_new_sensor_data(struct sensor_data *sensors)
+{
+	if (etc_device_is_relay()) {
+		etc_device_relay_write_record_sensor(sensors);
+	} else {
+		etc_device_write_record_sensor(sensors);
+		uint8_t bat_percent = etc_battery_percentage_from_voltage(sensors->battery_mV);
+		etc_ble_notify_battery(bat_percent);
+	}
+}
+
 static void data_send_work_fn(struct k_work *work)
 {
 	k_work_reschedule(&data_send_work, data_publish_timeout);
@@ -677,9 +688,9 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 static void on_all_states(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
-		/* The module doesn't have anything to shut down and can
-		 * report back immediately.
+		/* Save the record stats to non-volatile memory before shutting down.
 		 */
+		etc_device_record_save();
 		SEND_SHUTDOWN_ACK(data, DATA_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
 	}
@@ -728,14 +739,19 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_DATA_READY)) {
-		if (etc_device_is_relay()) {
-			etc_device_relay_write_record_sensor(msg->module.sensor.data.sensors);
-		} else {
-			etc_device_write_record_sensor(msg->module.sensor.data.sensors);
-			uint8_t bat_percent = 
-				etc_battery_percentage_from_voltage(msg->module.sensor.data.sensors->battery_mV);
-			etc_ble_notify_battery(bat_percent);
-		}
+		save_new_sensor_data(msg->module.sensor.data.sensors);
+		SEND_EVENT(data, DATA_EVT_DATA_READY);
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_USER_TRIGGERED_DATA_READY)) {
+		save_new_sensor_data(msg->module.sensor.data.sensors);
+		int64_t time_now = k_uptime_get();
+		/* Save current device record stat when a sample is triggered by a user.
+		 * This ensures that data can be recovered properly after a magnet hard
+		 * reset.
+		 */
+		etc_device_record_save();
+		LOG_INF("Saving time: %d", k_uptime_delta(&time_now));
 		SEND_EVENT(data, DATA_EVT_DATA_READY);
 	}
 

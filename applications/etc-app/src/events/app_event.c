@@ -23,6 +23,8 @@ static char *get_evt_type_str(enum app_event_type type)
 	switch (type) {
 	case APP_EVT_DATA_GET:
 		return "APP_EVT_DATA_GET";
+	case APP_EVT_DATA_GET_USER_TRIGGERED:
+		return "APP_EVT_DATA_GET_USER_TRIGGERED";
 	case APP_EVT_DATA_TRANSMIT:
 		return "APP_EVT_DATA_TRANSMIT";
 	case APP_EVT_DATA_SYNC_CLOUD:
