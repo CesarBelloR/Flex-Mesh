@@ -3,6 +3,7 @@
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/sys/crc.h>
 #include <zephyr/drivers/retained_mem.h>
 LOG_MODULE_REGISTER(etc_device_record, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -45,6 +46,7 @@ static struct etc_device_record_backup_data etc_device_record_backup;
 #define RECORD_FLAG_OFFSET	(offsetof(struct etc_device_record_data, record_sync_flag))
 #define RECORD_STAT_OFFSET	(offsetof(struct etc_device_record_data, record_stat))
 #define RECORD_BACKUP_OFFSET	(ETC_RECORD_BACKUP_OFFSET_IN_RAM)
+#define RECORD_CRC_OFFSET	(retained_mem_size(retained_ram_dev) - sizeof(uint32_t))
 
 static int etc_device_record_get_ack_status(int record_id)
 {
@@ -87,6 +89,7 @@ static void etc_device_record_reset_ack(void)
 static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb read_cb, void *cb_arg)
 {
 	if (!key) {
+		LOG_WRN("Record is not found in setting");
 		return -ENOENT;
 	}
 
@@ -235,6 +238,30 @@ static void etc_device_record_reset_reclaim(void) {
 	etc_reclaim_info.flag_in_process = 0;
 }
 
+static void etc_device_sync_crc(void)
+{
+	uint32_t current_crc =
+		crc32_ieee((const uint8_t *)pRecord, sizeof(struct etc_device_record_data));
+	LOG_DBG("Saving CRC 0x%08x", current_crc);
+	retained_mem_write(retained_ram_dev, RECORD_CRC_OFFSET, (uint8_t *)&current_crc,
+			   sizeof(current_crc));
+}
+
+static int write_record_data_to_retained_mem(void)
+{
+	int rc;
+	/* Set sync flag */
+	pRecord->record_sync_flag = ETC_DEVICE_RECORD_FLAG;
+	/* Save it */
+	rc = retained_mem_write(retained_ram_dev, 0, (uint8_t *)pRecord,
+				sizeof(struct etc_device_record_data));
+	if (rc) {
+		LOG_ERR("Failed to write data to retained mem - err %d", rc);
+	}
+	etc_device_sync_crc();
+	return rc;
+}
+
 static void etc_device_helpers_sync_record_from_ram(void) {
 	int rc = retained_mem_read(retained_ram_dev, 0, (uint8_t *)pRecord,
 				   sizeof(struct etc_device_record_data));
@@ -265,18 +292,27 @@ static void etc_device_helpers_sync_record_from_ram(void) {
 			}
 		}
 
-		/* Set sync flag */
-		pRecord->record_sync_flag = ETC_DEVICE_RECORD_FLAG;
-		/* Save it */
-		rc = retained_mem_write(retained_ram_dev, 0, (uint8_t *)pRecord,
-					sizeof(struct etc_device_record_data));
-		if (rc) {
-			LOG_ERR("Failed to write data - err %d", rc);
-		} else {
+		rc = write_record_data_to_retained_mem();
+		if (!rc) {
 			LOG_DBG("Export record success");
 		}
 	} else {
-		LOG_DBG("Record is ready");
+		uint32_t current_crc =
+			crc32_ieee((const uint8_t *)pRecord, sizeof(struct etc_device_record_data));
+		uint32_t saved_crc = {0};
+		rc = retained_mem_read(retained_ram_dev, RECORD_CRC_OFFSET, (uint8_t *)&saved_crc,
+				       sizeof(saved_crc));
+		if (rc || ((current_crc != saved_crc) && (saved_crc != 0))) {
+			LOG_DBG("Retained data is not valid (0x%08x - 0x%08x)."
+				"Reload record setting backup",
+				current_crc, saved_crc);
+			/* Reset the sync flag */
+			etc_device_record.record_sync_flag = 0;
+			etc_device_record_load();
+			write_record_data_to_retained_mem();
+		} else {
+			LOG_DBG("Record is ready");
+		}
 	}
 
 	rc = retained_mem_read(retained_ram_dev, ETC_RECORD_BACKUP_OFFSET_IN_RAM, 
@@ -378,6 +414,7 @@ void etc_device_record_set_ack(int record_id)
 	if (rc) {
 		LOG_ERR("Failed to write data - err %d", rc);
 	}
+	etc_device_sync_crc();
 }
 
 void etc_device_record_set_nack(int record_id)
@@ -390,6 +427,7 @@ void etc_device_record_set_nack(int record_id)
 	if (rc) {
 		LOG_ERR("Failed to write data - err %d", rc);
 	}
+	etc_device_sync_crc();
 }
 
 int etc_device_record_get_nack(int new_record, int old_record, int num_record)
@@ -432,6 +470,8 @@ void etc_device_record_save(void)
 {
 	char path[sizeof(ETC_DEVICE_RECORD_PREFIX "/acks") + 1];
 	snprintk(path, sizeof(path), ETC_DEVICE_RECORD_PREFIX "/acks");
+	/* Do we need to sync when success ? */
+	etc_device_sync_crc();
 	if (settings_save_one(path, &etc_device_record, sizeof(etc_device_record))) {
 		LOG_ERR("Failed to store %s", path);
 	} else {
@@ -806,6 +846,7 @@ void etc_device_record_save_stat(void)
 	if (rc) {
 		LOG_ERR("Failed to write data - err %d", rc);
 	}
+	etc_device_sync_crc();
 }
 
 int etc_device_record_reading(uint16_t record_id, void *data)
@@ -837,6 +878,7 @@ void etc_device_record_clean_up(void)
 	if (rc) {
 		LOG_ERR("Failed to write data - err %d", rc);
 	}
+	etc_device_sync_crc();
 }
 
 static int etc_device_update_reclaim(uint16_t record_id, int start_time, int stop_time)
@@ -1339,6 +1381,19 @@ static int cmd_generate_at_record(const struct shell *shell, size_t argc, char *
 	return 0;
 }
 
+static int cmd_dump_record(const struct shell *shell, size_t argc, char **argv)
+{
+	int offset = 0;
+	int offset_max = sizeof(struct etc_device_record_data);
+	do {
+		int print_len = MIN(offset_max - offset, 128);
+		shell_hexdump(shell, (uint8_t *)pRecord + offset, print_len);
+		offset += print_len;
+		k_sleep(K_MSEC(100));
+	} while (offset < offset_max);
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_record,
 	SHELL_CMD(report, NULL, "Report number record (total/ack/nack)", cmd_num_report_record),
@@ -1354,6 +1409,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		  cmd_generate_record),
 	SHELL_CMD(generate_at, NULL, "Generate a record at <sector,index> ",
 		  cmd_generate_at_record),
+	SHELL_CMD(dump, NULL, "Hexdump current record data in retained RAM", cmd_dump_record),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(record, &sub_record, "ETC Record Management", NULL);
 #endif /* CONFIG_SHELL */

@@ -74,6 +74,10 @@ struct etc_device_record_data {
 	uint32_t record_sync_flag;
 };
 
+/* Ensure that struct etc_device_record_data does not overlap with record backup data */
+BUILD_ASSERT(sizeof(struct etc_device_record_data) < ETC_RECORD_BACKUP_OFFSET_IN_RAM,
+	     "struct etc_device_record_stat is too large");
+
 struct etc_device_record_data_old {
 	struct etc_device_record_table record_stat;
 	/* Record bits array to store ACK/NACK data */
