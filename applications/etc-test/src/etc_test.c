@@ -13,6 +13,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/pwm.h>
+#include <zephyr/drivers/sensor.h>
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/pm/pm.h>
 #include <zephyr/pm/device.h>
@@ -24,6 +25,7 @@
 #include "sensor.h"
 #include "ds2484.h"
 #include "ds18b20.h"
+#include "tmp1826.h"
 #include "etc_cape.h"
 #include "watchdog.h"
 #ifdef CONFIG_BQ25618
@@ -81,6 +83,8 @@ static const struct device *ext_flash = DEVICE_DT_GET(DT_NODELABEL(mx25r1635));
 static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
+
+static const struct device *tmp1826 = DEVICE_DT_GET(DT_NODELABEL(w1_tmp1826));
 
 /* Inputs */
 static const struct gpio_dt_spec rtc_int_dt =
@@ -171,6 +175,26 @@ static int cmd_version(const struct shell *shell, size_t argc, char **argv)
 }
 
 SHELL_CMD_ARG_REGISTER(etc_version, NULL, "Show kernel version", cmd_version, 1, 0);
+
+static int read_sensor(const struct device *sensor, struct sensor_value *val,
+		       enum sensor_channel type)
+{
+	int ret;
+
+	ret = sensor_sample_fetch_chan(sensor, type);
+	if (ret) {
+		LOG_ERR("Failed to fetch chan %d", ret);
+		return ret;
+	}
+
+	ret = sensor_channel_get(sensor, type, val);
+	if (ret) {
+		LOG_ERR("Failed to get sensor val %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
 
 static void adc_print_channel(const struct shell *shell, int channel, bool converted)
 {
@@ -1034,6 +1058,72 @@ SHELL_STATIC_SUBCMD_SET_CREATE(ds2484_sub,
 	SHELL_SUBCMD_SET_END
 );
 SHELL_CMD_REGISTER(ds2484, &ds2484_sub, "DS2484 1-wire commands", NULL);
+
+static int cmd_read_tmp1826(const struct shell *shell, size_t argc, char **argv)
+{
+	struct sensor_value val;
+	float float_val;
+	int ret;
+
+	ret = read_sensor(tmp1826, &val, SENSOR_CHAN_AMBIENT_TEMP);
+	if (ret != 0) {
+		shell_error(shell, "Error reading sensor, %d", ret);
+		return -1;
+	}
+
+	float_val = sensor_value_to_float(&val);
+	shell_print(shell, "Temperature: %.2f C", float_val);
+
+	return 0;
+}
+
+static int cmd_set_tmp1826_gpio(const struct shell *shell, size_t argc, char **argv)
+{
+	static const char *usage_format = "Usage: %s <gpio values>\n"
+					  "gpio values: Value of the 4 GPIO states in binary\n"
+					  "             format\n";
+	int ret;
+	int arg_len;
+	int count = 0;
+	uint8_t bitmask = 0;
+	struct sensor_value val;
+
+	if (argc != 2) {
+		shell_fprintf(shell, SHELL_NORMAL, usage_format, argv[0]);
+		return -1;
+	}
+
+	arg_len = strlen(argv[1]) - 1;
+	if (arg_len > 4 || arg_len < 1) {
+		shell_fprintf(shell, SHELL_NORMAL, usage_format, argv[0]);
+		return -1;
+	}
+
+	/* Determine bit mask for setting GPIO */
+	for (int i = arg_len; i >= 0; i--) {
+		if (argv[1][i] == '1') {
+			WRITE_BIT(bitmask, count, 1);
+		}
+		count++;
+	}
+	val.val1 = bitmask;
+
+	ret = sensor_attr_set(tmp1826, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_GPIO, &val);
+	if (ret != 0) {
+		shell_error(shell, "could not set GPIOs");
+		return -1;
+	}
+
+	shell_print(shell, "GPIOs set to 0x%X", bitmask);
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(tmp1826_sub,
+	SHELL_CMD_ARG(read, NULL, "Read the temperature value", cmd_read_tmp1826, 1, 1),
+	SHELL_CMD_ARG(set_gpio, NULL, "Read the temperature value", cmd_set_tmp1826_gpio, 1, 1),
+	SHELL_SUBCMD_SET_END,
+);
+SHELL_CMD_REGISTER(tmp1826, &tmp1826_sub, "Commands interacting with the TMP1826", NULL);
 
 #ifdef CONFIG_BQ25618
 static const struct device *bq25618_dev = DEVICE_DT_GET(DT_NODELABEL(bq25618));

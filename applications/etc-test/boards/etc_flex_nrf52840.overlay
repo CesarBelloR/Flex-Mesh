@@ -18,6 +18,14 @@
 	};
 };
 
+&w1 {
+	w1_tmp1826: w1_tmp1826 {
+		compatible = "ti,tmp1826";
+		resolution = <12>;
+		status = "okay";
+	};
+};
+
 zephyr_udc0: &usbd {
 	cdc_acm_uart1 {
 		status = "disabled";
