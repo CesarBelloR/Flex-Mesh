@@ -83,7 +83,7 @@ jobs:
         with:
           app-path: etc-firmware
           toolchains: arm-zephyr-eabi
-          sdk-version: 0.16.5-1
+          sdk-version: 0.16.8
 
       - name: Apply patches
         working-directory: etc-firmware
@@ -93,7 +93,7 @@ jobs:
       - name: Build etc-test
         working-directory: etc-firmware
         run: |
-          west build -b etc@0.3.0 -s applications/etc-test -p
+          west build -b etc_flex/nrf52840 -s applications/etc-test -p
           mkdir out
           cp build/zephyr/merged.hex out/etc_test_${sha_short}.hex
       

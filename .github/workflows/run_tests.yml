@@ -74,7 +74,7 @@ jobs:
         with:
           app-path: etc-firmware
           toolchains: arm-zephyr-eabi
-          sdk-version: 0.16.5-1
+          sdk-version: 0.16.8
 
       - name: Apply patches
         working-directory: etc-firmware

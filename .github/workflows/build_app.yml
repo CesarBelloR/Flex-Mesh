@@ -93,7 +93,7 @@ jobs:
         with:
           app-path: etc-firmware
           toolchains: arm-zephyr-eabi
-          sdk-version: 0.16.5-1
+          sdk-version: 0.16.8
       
       - name: Apply patches
         working-directory: etc-firmware
@@ -117,7 +117,7 @@ jobs:
       - name: Memfault Overlay
         if: ${{ matrix.type == 'memfault' }}
         run: |
-          echo "overlays=-DOVERLAY_CONFIG=debug.conf;rtt.conf;overlay-memfault.conf;overlay-1nce.conf" >> "$GITHUB_ENV"
+          echo "overlays=-DEXTRA_CONF_FILE=debug.conf;rtt.conf;overlay-memfault.conf;overlay-1nce.conf" >> "$GITHUB_ENV"
 
       - name: Base Overlay
         if: ${{ matrix.type == 'base' }}
@@ -127,7 +127,7 @@ jobs:
       - name: Build etc-app ${{ matrix.type }}_${{ matrix.key }}
         working-directory: etc-firmware
         run: |
-          west build -b etc@0.3.0 -s applications/etc-app -d build_${{ matrix.type }}_${{ matrix.key }} -p -- \
+          west build -b etc_flex/nrf52840 -s applications/etc-app -d build_${{ matrix.type }}_${{ matrix.key }} -p -- \
             $overlays \
             -Dmcuboot_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$mcuboot_key_path\"
 
