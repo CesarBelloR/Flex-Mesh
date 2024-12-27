@@ -11,6 +11,8 @@ target_sources(app PRIVATE ${app_sources})
 
 set(APP_SRC_DIR ../../../../applications/etc-app/src)
 
+target_compile_options(app PRIVATE -Wno-error=double-promotion)
+
 target_sources(app PRIVATE 
                 ${APP_SRC_DIR}/exact/etc_devices/etc_device.c
                 ${APP_SRC_DIR}/exact/etc_devices/etc_device_record.c

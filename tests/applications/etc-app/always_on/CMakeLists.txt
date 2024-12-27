@@ -9,6 +9,8 @@ FILE(GLOB app_sources src/*.c
                       
 set(APP_SRC_DIR ../../../../applications/etc-app/src)
 
+target_compile_options(app PRIVATE -Wno-error=double-promotion)
+
 target_include_directories(app PRIVATE
                             src
                             src/mock 

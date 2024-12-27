@@ -21,6 +21,8 @@ target_sources(app PRIVATE
                 ${APP_SRC_DIR}/exact/etc_util/etc_util.c
 )
 
+target_compile_options(app PRIVATE -Wno-error=double-promotion)
+
 target_include_directories(app PRIVATE
                             src
                             src/mock

@@ -4,6 +4,6 @@ tests:
     timeout: 600
     platform_allow:
       - native_sim
-      - etc
+      - etc_flex/nrf52840
     integration_platforms:
       - native_sim

@@ -20,7 +20,7 @@ ZTEST(etc_util_test, test_parse_for_float_ok)
 
 	ret = parse_for_float(valid_float, &result);
 	zassert_ok(ret, "parse_for_float was not ok");
-	zassert_within(result, 14.6829, 0.0001);
+	zassert_within(result, 14.6829f, 0.0001f);
 }
 
 ZTEST(etc_util_test, test_parse_for_float_invalid)

@@ -21,6 +21,8 @@ FILE(GLOB app_sources src/*.c
 
 target_sources(app PRIVATE ${app_sources})
 
+target_compile_options(app PRIVATE -Wno-error=double-promotion)
+
 set(APP_SRC_DIR ../../../../applications/etc-app/src)
 set(DRIVER_SRC_DIR ../../../../drivers)
 
