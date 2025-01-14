@@ -21,9 +21,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define OBJECT_ID 48931
 #define OBJECT_VERSION_MAJOR 1
-#define OBJECT_VERSION_MINOR 2
+#define OBJECT_VERSION_MINOR 3
 
-#define RESOURCES_MAX_ID			14
+#define RESOURCES_MAX_ID			15
 #define RESOURCE_INSTANCE_COUNT			(RESOURCES_MAX_ID)
 
 /* Storage variables to hold configuration values. */
@@ -41,6 +41,7 @@ static uint16_t lora_probe_offset;
 static uint16_t lte_probe_offset;
 static uint32_t location_req_interval;
 static uint16_t gnss_timeout;
+static uint8_t rx_timeout;
 
 static struct lwm2m_engine_obj object;
 static struct lwm2m_engine_obj_field fields[] = {
@@ -58,6 +59,7 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_LTE_PROBE_OFFSET, RW, U16),
 	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_LOCATION_REQ_INTERVAL, RW, U32),
 	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_GNSS_TIMEOUT, RW, U16),
+	OBJ_FIELD_DATA(ETC_CFG_OBJ_R_RX_TIMEOUT, RW, U8),
 };
 
 static struct lwm2m_engine_obj_inst inst;
@@ -99,6 +101,8 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 			  &location_req_interval, sizeof(location_req_interval));
 	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_GNSS_TIMEOUT, res, i, res_inst, j,
 			  &gnss_timeout, sizeof(gnss_timeout));
+	INIT_OBJ_RES_DATA(ETC_CFG_OBJ_R_RX_TIMEOUT, res, i, res_inst, j,
+			  &rx_timeout, sizeof(rx_timeout));
 
 	inst.resources = res;
 	inst.resource_count = i;
