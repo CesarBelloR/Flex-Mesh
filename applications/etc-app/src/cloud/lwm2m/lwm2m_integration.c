@@ -337,7 +337,7 @@ static int firmware_update_state_cb(uint8_t update_state)
 	case STATE_DOWNLOADED:
 		LOG_DBG("STATE_DOWNLOADED, result: %d", update_result);
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_DOWNLOADED;
-		return 0;
+		break;
 	case STATE_UPDATING:
 		LOG_DBG("STATE_UPDATING, result: %d", update_result);
 		/* Disable further callbacks from FOTA */

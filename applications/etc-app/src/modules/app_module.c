@@ -734,12 +734,19 @@ static void on_sub_state_normal(struct app_msg_data *msg)
 static void on_sub_state_fota(struct app_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DONE) ||
-	    IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR) || IS_EVENT(msg, ble, BLE_EVT_FOTA_DONE) ||
-	    IS_EVENT(msg, ble, BLE_EVT_FOTA_ERROR)) {
+	    IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DOWNLOADED) ||
+	    IS_EVENT(msg, ble, BLE_EVT_FOTA_DONE) || IS_EVENT(msg, ble, BLE_EVT_FOTA_ERROR)) {
 		sub_state_set(SUB_STATE_NORMAL_STATE);
 	}
-}
 
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DOWNLOADED)) {
+		/* Trigger a cloud connection and transmit after FOTA has been downloaded
+		 * to communicate the current firmware update state.
+		*/
+		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+	}
+}
 
 /* Message handler for all states. */
 static void on_all_events(struct app_msg_data *msg)
