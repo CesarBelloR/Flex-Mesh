@@ -529,7 +529,7 @@ static void on_state_running(struct ui_msg_data *msg)
 		}
 	}
 
-	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
+	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY) || IS_EVENT(msg, lora, LORA_EVT_RELAY_RX_COMPLETE)) {
 		/* RX listen is done. Back to battery */
 		transition_list_clear();
 		sub_state_set(last_battery_state);

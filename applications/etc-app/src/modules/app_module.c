@@ -71,7 +71,18 @@ static enum state_type {
 static enum sub_state_type {
 	SUB_STATE_NORMAL_STATE,
 	SUB_STATE_FOTA_STATE,
+	SUB_STATE_RELAY_RECEIVING,
 } sub_state;
+
+static enum relay_state {
+	STATE_RELAY_IDLE,
+	STATE_RELAY_IN_PROGRESS,
+} relay_state;
+
+static enum fota_state {
+	STATE_FOTA_IDLE,
+	STATE_FOTA_IN_PROGRESS
+} fota_state;
 
 /* Application module message queue. */
 #define APP_QUEUE_ENTRY_COUNT	 10
@@ -156,6 +167,8 @@ static char *sub_state2str(enum sub_state_type new_state)
 		return "SUB_STATE_NORMAL_STATE";
 	case SUB_STATE_FOTA_STATE:
 		return "SUB_STATE_FOTA_STATE";
+	case SUB_STATE_RELAY_RECEIVING:
+		return "SUB_STATE_RELAY_RECEIVING";
 	default:
 		return "Unknown";
 	}
@@ -276,9 +289,6 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
-static const struct device *pm_devs[] = {DEVICE_DT_GET(DT_NODELABEL(spi2)),
-					 DEVICE_DT_GET(DT_CHOSEN(zephyr_console))};
-
 static void app_peripheral_off(void)
 {
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
@@ -291,14 +301,15 @@ static void app_peripheral_off(void)
 
 #ifdef CONFIG_PM_DEVICE
 	LOG_DBG("suspending devices");
-	for (int i = 0; i < ARRAY_SIZE(pm_devs); i++) {
-		ret = pm_device_action_run(pm_devs[i], PM_DEVICE_ACTION_SUSPEND);
+	if (relay_state == STATE_RELAY_IDLE) {
+		const struct device *spi2_dev = DEVICE_DT_GET(DT_NODELABEL(spi2));
+		ret = pm_device_action_run(spi2_dev, PM_DEVICE_ACTION_SUSPEND);
 		if (ret != 0) {
-			LOG_ERR("Could not suspend device %s", pm_devs[i]->name);
+			LOG_ERR("Could not suspend device %s", spi2_dev->name);
 		}
 	}
 
-	if (sub_state == SUB_STATE_NORMAL_STATE) {
+	if (fota_state == STATE_FOTA_IDLE) {
 		const struct device *spi3_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
 		ret = pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_SUSPEND);
 		if (ret != 0) {
@@ -545,10 +556,11 @@ static void app_peripheral_on(bool is_rtc)
 	}
 #ifdef CONFIG_PM_DEVICE
 	LOG_DBG("resuming devices");
-	for (int i = 0; i < ARRAY_SIZE(pm_devs); i++) {
-		ret = pm_device_action_run(pm_devs[i], PM_DEVICE_ACTION_RESUME);
+	if (relay_state == STATE_RELAY_IDLE) {
+		const struct device *spi2_dev = DEVICE_DT_GET(DT_NODELABEL(spi2));
+		ret = pm_device_action_run(spi2_dev, PM_DEVICE_ACTION_RESUME);
 		if (ret != 0) {
-			LOG_ERR("Could not resume device %s", pm_devs[i]->name);
+			LOG_ERR("Could not resume device %s", spi2_dev->name);
 		}
 	}
 
@@ -556,7 +568,7 @@ static void app_peripheral_on(bool is_rtc)
 		const struct device *spi3_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
 		ret = pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_RESUME);
 		if (ret != 0) {
-			LOG_ERR("Could not suspend device %s", spi3_dev->name);
+			LOG_ERR("Could not resume device %s", spi3_dev->name);
 		}
 	}
 #endif
@@ -727,6 +739,12 @@ static void on_sub_state_normal(struct app_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START) || IS_EVENT(msg, ble, BLE_EVT_FOTA_START)) {
 		sub_state_set(SUB_STATE_FOTA_STATE);
+		return;
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_RELAY_START_RX)) {
+		sub_state_set(SUB_STATE_RELAY_RECEIVING);
+		return;
 	}
 }
 
@@ -737,7 +755,12 @@ static void on_sub_state_fota(struct app_msg_data *msg)
 	    IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR) ||
 	    IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DOWNLOADED) ||
 	    IS_EVENT(msg, ble, BLE_EVT_FOTA_DONE) || IS_EVENT(msg, ble, BLE_EVT_FOTA_ERROR)) {
-		sub_state_set(SUB_STATE_NORMAL_STATE);
+		/* Changing fota_state is processed in on_all_states() */
+		if (relay_state == STATE_RELAY_IN_PROGRESS) {
+			sub_state_set(SUB_STATE_RELAY_RECEIVING);
+		} else {
+			sub_state_set(SUB_STATE_NORMAL_STATE);
+		}
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DOWNLOADED)) {
@@ -745,6 +768,19 @@ static void on_sub_state_fota(struct app_msg_data *msg)
 		 * to communicate the current firmware update state.
 		*/
 		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+	}
+}
+
+/* Message handler for SUB_STATE_FOTA_STATE. */
+static void on_sub_state_relay_in_progress(struct app_msg_data *msg)
+{
+	if (IS_EVENT(msg, lora, LORA_EVT_RELAY_RX_COMPLETE)) {
+		/* Changing relay_state is processed in on_all_states() */
+		if (fota_state == STATE_FOTA_IN_PROGRESS) {
+			sub_state_set(SUB_STATE_FOTA_STATE);
+		} else {
+			sub_state_set(SUB_STATE_NORMAL_STATE);
+		}
 	}
 }
 
@@ -796,12 +832,8 @@ static void on_all_events(struct app_msg_data *msg)
 		return;
 	}
 	
-	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY)) {
-		app_peripheral_off();
-		return;
-	}
-
-	if (IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
+	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
 		app_peripheral_off();
 		return;
 	}
@@ -822,6 +854,30 @@ static void on_all_events(struct app_msg_data *msg)
 			k_work_reschedule(&app_soft_watchdog_work, 
 					  K_SECONDS(soft_watchdog_timeout_secs));	
 		}
+		return;
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_START) || IS_EVENT(msg, ble, BLE_EVT_FOTA_START)) {
+		fota_state = STATE_FOTA_IN_PROGRESS;
+		return;
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_RELAY_START_RX)) {
+		relay_state = STATE_RELAY_IN_PROGRESS;
+		return;
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DONE) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_ERROR) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_FOTA_DOWNLOADED) ||
+	    IS_EVENT(msg, ble, BLE_EVT_FOTA_DONE) || IS_EVENT(msg, ble, BLE_EVT_FOTA_ERROR)) {
+		fota_state = STATE_FOTA_IDLE;
+		return;
+	}
+
+	if (IS_EVENT(msg, lora, LORA_EVT_RELAY_RX_COMPLETE)) {
+		relay_state = STATE_RELAY_IDLE;
+		app_peripheral_off();
 		return;
 	}
 }
@@ -860,6 +916,9 @@ void app_module_thread_fn(void)
 				break;
 			case SUB_STATE_FOTA_STATE:
 				on_sub_state_fota(&msg);
+				break;
+			case SUB_STATE_RELAY_RECEIVING:
+				on_sub_state_relay_in_progress(&msg);
 				break;
 			default:
 				LOG_WRN("Unknown application sub state");

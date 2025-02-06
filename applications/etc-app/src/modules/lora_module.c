@@ -552,8 +552,8 @@ static int module_lora_relay_wait_packet(void)
 	relay_iccid[ETC_SETTING_RELAY_ICCID_LEN] = '\0';
 
 	start_waiting_time_ms = k_uptime_get();
-	int16_t extra_waiting_time_ms = etc_get_rx_timeout_secs() * 1000;
-	int16_t rx_duration_time_ms = etc_device_get_rx_timeout() * 1000;
+	uint32_t extra_waiting_time_ms = etc_get_rx_timeout_secs() * 1000;
+	uint32_t rx_duration_time_ms = etc_device_get_rx_duration() * 1000;
 	/* FW-125: Point 1 (Increase a RX Timeout by default ) */
 	max_waiting_time_ms = rx_duration_time_ms + extra_waiting_time_ms;
 	LOG_INF("Max waiting time %lld", max_waiting_time_ms);
@@ -638,7 +638,7 @@ static int module_lora_process_packet(union etc_device_record record)
 	}
 
 	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
-		if (data_codec_compare_temperature_is_valid(record.sensor[i])) {
+		if (sensor_temperature_is_valid(record.sensor[i])) {
 			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 						    sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
 						    record.sensor[i]);
@@ -648,7 +648,7 @@ static int module_lora_process_packet(union etc_device_record record)
 		}
 	}
 	
-	if (data_codec_compare_humidity_is_valid(record.sensor[SENSOR_INPUT_HUMID])) {
+	if (sensor_humidity_is_valid(record.sensor[SENSOR_INPUT_HUMID])) {
 		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 			sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
 			record.sensor[SENSOR_INPUT_HUMID]);
@@ -765,13 +765,18 @@ static void module_lora_rx_thread_fn(void)
 				}
 				case LORA_REQUEST_IN_RUN_RELAY: {
 					LOG_INF("Relay is listening for data");
+					{
+						SEND_EVENT(lora, LORA_EVT_RELAY_START_RX);
+					}
 					int rc = module_lora_relay_wait_packet();
 					if (rc == 0) {
 						LOG_INF("Waiting time is done. Go to sleep");
 					} else {
 						LOG_DBG("Error in waiting packet %d", rc);
 					}
-					SEND_EVENT(lora, LORA_EVT_RX_DATA_READY);
+					{
+						SEND_EVENT(lora, LORA_EVT_RELAY_RX_COMPLETE);
+					}
 					break;
 				}
 				case LORA_REQUEST_IN_RUN_LOGGER: {
