@@ -981,7 +981,7 @@ static int set_temperature(int instance_id, float value, int64_t timestamp)
 {
 	int err;
 
-	if (!data_codec_compare_temperature_is_valid(value)) {
+	if (!sensor_temperature_is_valid(value)) {
 		return 0;
 	}
 	
@@ -1039,7 +1039,7 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 		return err;
 	}
 
-	if (data_codec_compare_humidity_is_valid(record->sensor[SENSOR_INPUT_HUMID])) {
+	if (sensor_humidity_is_valid(record->sensor[SENSOR_INPUT_HUMID])) {
 		err = lwm2m_set_time(&LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, TIMESTAMP_RID), 
 				     (time_t)(record->timestamp));
 		if (err) {

@@ -212,7 +212,7 @@ static void etc_sensor_probe_check(void)
 	int no_connected_counter = 0;
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		float temp = etc_sensor_get_probe_temp(i);
-		if (!data_codec_compare_temperature_is_valid(temp)) {
+		if (!sensor_temperature_is_valid(temp)) {
 			no_connected_counter += 1;
 		}
 	}

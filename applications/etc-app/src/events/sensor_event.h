@@ -110,6 +110,22 @@ struct sensor_event {
 
 APP_EVENT_TYPE_DECLARE(sensor_event);
 
+static inline bool sensor_temperature_is_valid(float temperature)
+{
+	if ((temperature >= SENSOR_TEMP_C_MIN) && (temperature <= SENSOR_TEMP_C_MAX)) {
+		return true;
+	}
+	return false;
+}
+
+static inline bool sensor_humidity_is_valid(float humidity)
+{
+	if ((humidity >= SENSOR_HUMID_C_MIN) && (humidity <= SENSOR_HUMID_C_MAX)) {
+		return true;
+	}
+	return false;
+}
+
 #ifdef __cplusplus
 }
 #endif

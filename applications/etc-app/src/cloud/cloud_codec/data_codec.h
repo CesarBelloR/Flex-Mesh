@@ -160,22 +160,6 @@ enum json_common_op_code {
 	JSON_COMMON_GET_POINTER_TO_OBJECT
 };
 
-static inline bool data_codec_compare_temperature_is_valid(float temperature) {
-	if ((temperature >= SENSOR_TEMP_C_MIN) && 
-	    (temperature <= SENSOR_TEMP_C_MAX)) {
-		return true;
-	}
-	return false;
-}
-
-static inline bool data_codec_compare_humidity_is_valid(float humidity) {
-	if ((humidity >= SENSOR_HUMID_C_MIN) && 
-	    (humidity <= SENSOR_HUMID_C_MAX)) {
-		return true;
-	}
-	return false;
-} 
-
 static inline bool data_codec_rsrp_is_valid(int16_t rsrp) 
 {
 	if ((rsrp >= RSRP_MIN_RANGE_VALUE) && (rsrp <= RSRP_MAX_RANGE_VALUE)) {
