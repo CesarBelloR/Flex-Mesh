@@ -18,16 +18,18 @@ target_sources(app PRIVATE
                 ${APP_SRC_DIR}/exact/etc_devices/etc_device_record.c
                 ${APP_SRC_DIR}/exact/etc_memfault/etc_memfault_dummy.c
                 ${APP_SRC_DIR}/exact/etc_util/etc_util.c
+                ${APP_SRC_DIR}/common.c
 )
 
 target_include_directories(app PRIVATE
                             src
                             src/mock
                             src/mock/zephyr/drivers
+                            ${APP_SRC_DIR}/exact/etc_battery
                             ${APP_SRC_DIR}/exact/etc_devices
                             ${APP_SRC_DIR}/exact/etc_memfault
-                            ${APP_SRC_DIR}/exact/etc_settings
                             ${APP_SRC_DIR}/exact/etc_sensor
+                            ${APP_SRC_DIR}/exact/etc_settings
                             ${APP_SRC_DIR}/exact/etc_util
                             ${APP_SRC_DIR})
 
