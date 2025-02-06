@@ -434,11 +434,12 @@ static int data_encode_for_relay() {
 	}
 	/* If no meta-data or record sensor, send Relay queued data */
 	LOG_DBG("Sending relay data for Relay");
-	struct etc_device_relay_record record = {0x00};
-	ret = etc_device_read_relay_data(&record);
+	struct etc_device_relay_packet packet = {0x00};
+	ret = etc_device_read_relay_data_packet(&packet);
 	if (!ret) {
-		int data_len = sizeof(data_relay_buf);
-		ret = etc_common_prepare_relay_legacy_data(&record, data_relay_buf, &data_len);
+		int data_len = 0;
+		ret = etc_common_prepare_relay_legacy_packet(&packet, data_relay_buf, &data_len,
+							     sizeof(data_relay_buf));
 		if (!ret) {
 			LOG_DBG("Relay message %s", data_relay_buf);
 			ret = data_codec_prepare_relay_packet(&codec, data_relay_buf, data_len,
@@ -449,7 +450,7 @@ static int data_encode_for_relay() {
 			}
 			state_relay_send = STATE_RELAY_SEND_RECORD_DONE;
 		} else {
-			LOG_ERR("Can't prepare package for relay");
+			LOG_ERR("Can't prepare packet for relay");
 			return ret;
 		}
 		return STATUS_IN_PROCESS;

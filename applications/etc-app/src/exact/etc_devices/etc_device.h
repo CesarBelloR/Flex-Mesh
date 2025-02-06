@@ -34,6 +34,8 @@
 #define ETC_DEVICE_RELAY_DATA_READY_MASK (0x80000000U)
 /* Maximum reclaim relay supports */
 #define ETC_RECLAIM_RELAY_MAX_ELEMENT (20)
+/* Maximum number of logger samples in one relay package */
+#define ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS 5
 
 /* Define an enum to describe the job of logger currently */
 enum etc_device_job {
@@ -171,21 +173,28 @@ struct etc_device_relay_record {
 	int data[ETC_DEVICE_NUM_EXTRA_ELEMENT];
 };
 
-#pragma pack(push, 1)
+struct etc_device_relay_packet {
+	struct etc_device_relay_record records[ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS];
+	uint8_t num_records;
+};
 
 struct etc_device_relay_record_stat {
 	uint16_t read_index;
 	uint16_t write_index;
+	/* Number of records that were written, but not read */
 	uint16_t number_record;
+	/* The number/count of records last read with etc_device_read_relay_data_packet() */
+	uint8_t last_read_count;
 	bool flag_error;
 	bool flag_over_flow;
 };
+
+#pragma pack(push, 1)
 struct etc_gnss_data {
 	int64_t latitude;
 	int64_t longitude;
 	time_t timestamp;
 };
-
 #pragma pack(pop)
 
 /* Structure for request reclaim over cloud or BLE */
@@ -264,7 +273,7 @@ int etc_device_write_record(union etc_device_record *record);
 
 /**
  * @brief Writes relay data to queue.
- * 
+ *
  * @param record Relay record containing the data to be written.
  * @return 0 on success, an error code otherwise.
  */
@@ -272,16 +281,26 @@ int etc_device_write_relay_data(struct etc_device_relay_record *record);
 
 /**
  * @brief Read relay data from queue.
- * 
+ *
  * @param record Pointer to the relay record where the read data will be stored.
  * @return 0 on success, an error code otherwise.
  */
 int etc_device_read_relay_data(struct etc_device_relay_record *record);
 
 /**
+ * @brief Read a relay data packet from the queue.
+ *
+ * A data packet can contain multiple samples from multiple loggers.
+ *
+ * @param packet Pointer to packet buffer for storing the read data.
+ * @return 0 on success, negative on error.
+ */
+int etc_device_read_relay_data_packet(struct etc_device_relay_packet *packet);
+
+/**
  * @brief Sync the relay read index from queue buffer.
  */
-void etc_device_sync_relay_data(void);
+int etc_device_sync_relay_data(void);
 
 /** 
  * @brief the next-in-line (unack'd) measurement record. If a reclaim is active,
@@ -340,7 +359,7 @@ bool etc_device_is_always_on(void);
  *
  * @return	The receive timeout value.
  */
-int etc_device_get_rx_timeout(void);
+int etc_device_get_rx_duration(void);
 
 /**
  * @brief Get the log interval in seconds for the ETC device.

@@ -1288,7 +1288,7 @@ static int cmd_parser_hex_record(const struct shell *shell, size_t argc, char **
 		int buf_len =
 			snprintf(buf, sizeof(buf), "%u,%1.2f,", record.timestamp, record.battery);
 		for (int i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
-			if (data_codec_compare_temperature_is_valid(record.sensor[i])) {
+			if (sensor_temperature_is_valid(record.sensor[i])) {
 				buf_len += snprintf(buf + buf_len, sizeof(buf) - buf_len, "%2.2f,",
 						    record.sensor[i]);
 			} else {

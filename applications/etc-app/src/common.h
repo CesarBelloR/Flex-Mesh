@@ -15,17 +15,36 @@ typedef enum {
 /**
  * @brief Prepares legacy relay data.
  *
- * This function prepares legacy relay data based on the given record. The data 
+ * This function prepares legacy relay data based on the given record. The data
  * is stored in the provided buffer and its length is updated accordingly.
  *
  * @param record Pointer to the relay record to prepare legacy data for.
  * @param out_buf Pointer to the buffer where the legacy data will be stored.
  * @param out_len Pointer to the length of the output data, updated by the function.
+ * @param out_size Size of out_buf
  *
- * @return 0 on success
+ * @retval 0 on success
+ * @retval -ENOMEM Data is larger than the buffer size
  */
-int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record, 
-	char* out_buf, int* out_len);
+int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record, char *out_buf,
+					 int *out_len, int out_size);
+
+/**
+ * @brief Write relay packet data in legacy format to a given buffer.alignas
+ *
+ * The difference between this and @ref etc_common_prepare_relay_legacy_data is that
+ * this function writes multiple logger packets into one relay packet.
+ *
+ * @param packet Pointer to relay packet
+ * @param out_buf Pointer to the buffer where the relay data will be stored
+ * @param out_len Pointer to the length of the output data
+ * @param out_size Size of out_buf
+ *
+ * @retval 0 on success
+ * @retval -ENOMEM Data is larger than the buffer size
+ */
+int etc_common_prepare_relay_legacy_packet(struct etc_device_relay_packet *packet, char *out_buf,
+					   int *out_len, int out_size);
 
 /**
  * @brief Checks if a packet is from the parent relay.
@@ -38,7 +57,7 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
  *
  * @return true if the packet is from the parent relay, false otherwise.
  */
-bool etc_common_is_packet_from_parent(char* relay_iccid, char* relay_id);
+bool etc_common_is_packet_from_parent(char *relay_iccid, char *relay_id);
 #ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
 /**
  * @brief Prepares legacy logger data for the common ETC device.

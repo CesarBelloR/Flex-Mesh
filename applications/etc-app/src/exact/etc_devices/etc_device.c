@@ -13,6 +13,7 @@
 #include "etc_settings.h"
 #include "etc_device_record.h"
 #include "etc_img.h"
+#include "etc_memfault.h"
 #include "etc_memfault_metrics.h"
 
 #include <zephyr/logging/log.h>
@@ -20,7 +21,7 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define ETC_SETTINGS_NODE_LABEL etc_settings_storage
 
-#define ETC_RECORD_DEFAULT_RX_DURATION_SECONDS (5)
+#define ETC_RECORD_DEFAULT_RX_DURATION_SECONDS (120)
 #define ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS (60)
 #define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
 #define ETC_RECORD_DEFAULT_TX_PROBE_SECONDS (21600)
@@ -300,14 +301,14 @@ int etc_device_read_record(union etc_device_record *record, bool *active_reclaim
 int etc_device_write_relay_data(struct etc_device_relay_record *record)
 {
 	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
-	memcpy(&relay_record_list[p_relay_stat->write_index], record, sizeof(*record));
 	if (p_relay_stat->number_record < ETC_RELAY_RECORD_MAX_ELEMENT) {
+		memcpy(&relay_record_list[p_relay_stat->write_index], record, sizeof(*record));
 		p_relay_stat->number_record += 1;
 		etc_mflt_metrics_relay_buffer_entries(p_relay_stat->number_record);
 	} else {
 		p_relay_stat->flag_over_flow = true;
 		k_mutex_unlock(&etc_relay_record_mutex);
-		LOG_WRN("Relay buffer overflow %d %d %d", p_relay_stat->number_record, 
+		LOG_WRN("Relay buffer overflow %d %d %d", p_relay_stat->number_record,
 			p_relay_stat->write_index, p_relay_stat->read_index);
 		return -ENOMEM;
 	}
@@ -326,23 +327,70 @@ int etc_device_read_relay_data(struct etc_device_relay_record *record)
 		k_mutex_unlock(&etc_relay_record_mutex);
 		return -ENODATA;
 	}
-	memcpy(record, &relay_record_list[p_relay_stat->read_index], 
-		sizeof(*record));
+	memcpy(record, &relay_record_list[p_relay_stat->read_index], sizeof(*record));
+	p_relay_stat->last_read_count = 1;
 	k_mutex_unlock(&etc_relay_record_mutex);
 	return 0;
 }
 
-void etc_device_sync_relay_data(void) {
+static struct etc_device_relay_record *get_relay_data_at_index(uint8_t index)
+{
+	uint8_t relay_record_index;
+	if ((index + 1) > p_relay_stat->number_record) {
+		return NULL;
+	}
+
+	relay_record_index = (p_relay_stat->read_index + index) % ETC_RELAY_RECORD_MAX_ELEMENT;
+	return &relay_record_list[relay_record_index];
+}
+
+int etc_device_read_relay_data_packet(struct etc_device_relay_packet *packet)
+{
 	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
 	if (p_relay_stat->number_record == 0) {
 		k_mutex_unlock(&etc_relay_record_mutex);
-		return;
+		return -ENODATA;
 	}
-	if (++p_relay_stat->read_index == ETC_RELAY_RECORD_MAX_ELEMENT) {
-		p_relay_stat->read_index = 0;
+	if (p_relay_stat->number_record > ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS) {
+		packet->num_records = ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS;
+	} else {
+		packet->num_records = p_relay_stat->number_record;
 	}
-	p_relay_stat->number_record -= 1;
+
+	for (int i = 0; i < packet->num_records; i++) {
+		memcpy(&packet->records[i], get_relay_data_at_index(i), sizeof(packet->records[i]));
+	}
+	/* Save number of records read */
+	p_relay_stat->last_read_count = packet->num_records;
 	k_mutex_unlock(&etc_relay_record_mutex);
+	return 0;
+}
+
+int etc_device_sync_relay_data(void)
+{
+	int retval = 0;
+
+	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
+	if (p_relay_stat->last_read_count == 0) {
+		retval = -ENODATA;
+		goto exit;
+	}
+	if (p_relay_stat->number_record < p_relay_stat->last_read_count) {
+		LOG_WRN("Sync record invalid %d %d", p_relay_stat->number_record,
+			p_relay_stat->last_read_count);
+		ETC_MEMFAULT_TRACE_EVENT_WITH_LOG(
+			relay_sync_record_invalid, "Sync record invalid %d %d",
+			p_relay_stat->number_record, p_relay_stat->last_read_count);
+		retval = -ENODATA;
+		goto exit;
+	}
+	p_relay_stat->read_index = (p_relay_stat->read_index + p_relay_stat->last_read_count) %
+				   ETC_RELAY_RECORD_MAX_ELEMENT;
+	p_relay_stat->number_record -= p_relay_stat->last_read_count;
+	p_relay_stat->last_read_count = 0;
+exit:
+	k_mutex_unlock(&etc_relay_record_mutex);
+	return retval;
 }
 
 int etc_device_set_ack_record(int record_id)
@@ -384,7 +432,7 @@ bool etc_device_is_always_on(void)
 	return (etc_get_power_mode() == ETC_POWER_MODE_ALWAYS_ON);
 }
 
-int etc_device_get_rx_timeout(void)
+int etc_device_get_rx_duration(void)
 {
 	int rx_duration = etc_get_rx_duration_secs();
 	return rx_duration == 0 ? ETC_RECORD_DEFAULT_RX_DURATION_SECONDS
