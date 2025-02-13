@@ -351,6 +351,18 @@ int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_data_cb_
 		return err;
 	}
 
+	err = lwm2m_register_post_write_callback(
+		&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_RX_TIMEOUT), callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(
+		&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_RX_TIMEOUT),
+		lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
+
 	return 0;
 }
 
@@ -614,6 +626,12 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 	
 	err = lwm2m_get_u16(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_GNSS_TIMEOUT),
 		     	    &cfg->gnss_timeout_secs);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_get_u8(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_RX_TIMEOUT),
+			   &cfg->rx_timeout_secs);
 	if (err) {
 		return err;
 	}
