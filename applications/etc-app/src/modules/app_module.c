@@ -474,15 +474,15 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 		if (etc_device_is_relay()) {
 			int16_t wakeup_early = (int16_t)etc_get_wake_early_secs();
 			int16_t sleep_time = next_transmit - now;
-			if (wakeup_early < sleep_time) {
-				next_transmit = next_transmit > wakeup_early
-							? next_transmit - wakeup_early
-							: next_transmit;
-			} else {
-				/* No minus wakeup_early */
+			/* Skip to next interval if transmit time has passed */
+			if (wakeup_early >= sleep_time) {
+				next_transmit = app_module_get_next_transmit_for_interval_or_probe(
+					next_transmit, wakeup_for_transmit, sensor_status);
 			}
+			next_transmit = next_transmit > wakeup_early ? next_transmit - wakeup_early
+								     : next_transmit;
 		}
-		
+
 		struct tm tm_transmit_time = {0};
 		gmtime_r(&next_transmit, &tm_transmit_time);
 		pcf85263a_alarm_type_1_config_t config_1 = {

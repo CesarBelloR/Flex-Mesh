@@ -13,7 +13,7 @@ extern "C" {
 
 /** @brief Data event types submitted by Data module. */
 enum data_event_type {
-	/** All data has been received for a given sample request. */
+	/** New data is available to be sent */
 	DATA_EVT_DATA_READY,
 
 	/** The option to support fast sample request */

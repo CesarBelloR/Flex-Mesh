@@ -653,10 +653,16 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 static void on_cloud_state_connected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) && 
-	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER)
-	{
+	    etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) {
 		need_interval_tx_send = true;
 		data_encode_for_cloud(false, false);
+		return;
+	}
+
+	/* Send relay heartbeat when new data is ready
+	 */
+	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY) && etc_device_is_relay()) {
+		data_encode_for_cloud(false, true);
 		return;
 	}
 

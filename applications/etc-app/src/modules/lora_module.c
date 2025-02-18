@@ -90,7 +90,11 @@ K_MSGQ_DEFINE(msgq_lora, sizeof(struct lora_msg_data), LORA_QUEUE_ENTRY_COUNT,
 	      LORA_QUEUE_BYTE_ALIGNMENT);
 
 K_SEM_DEFINE(lora_request_sem, 0, 1);
-static enum lora_request_type lora_request;
+K_MUTEX_DEFINE(lora_request_mutex);
+static struct lora_request {
+	enum lora_request_type type;
+	int64_t uptime_ms;
+} lora_request;
 
 static struct k_thread module_lora_rx_thread;
 static k_tid_t module_lora_thread_id;
@@ -129,6 +133,11 @@ static struct module_data self = {
 	.msg_q = &msgq_lora,
 	.supports_shutdown = true,
 };
+
+static enum state_type {
+	STATE_CLOUD_DISCONNECTED,
+	STATE_CLOUD_CONNECTED
+} state = STATE_CLOUD_DISCONNECTED;
 
 /* Handlers */
 static bool app_event_handler(const struct app_event_header *aeh)
@@ -178,6 +187,59 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+static char *state2str(enum state_type state)
+{
+	switch (state)
+	{
+	case STATE_CLOUD_CONNECTED:
+		return "STATE_CLOUD_CONNECTED";
+	case STATE_CLOUD_DISCONNECTED:
+		return "STATE_CLOUD_DISCONNECTED";
+	default:
+		return "Unknown";
+	}
+}
+
+static void state_set(enum state_type new_state)
+{
+	if (new_state == state)
+	{
+		LOG_DBG("State: %s", state2str(state));
+		return;
+	}
+
+	LOG_DBG("State transition %s --> %s",
+		state2str(state),
+		state2str(new_state));
+
+	state = new_state;
+}
+
+static void request_relay_run(void)
+{
+	k_mutex_lock(&lora_request_mutex, K_FOREVER);
+	lora_request.type = LORA_REQUEST_IN_RUN_RELAY;
+	lora_request.uptime_ms = k_uptime_get();
+	k_mutex_unlock(&lora_request_mutex);
+	k_sem_give(&lora_request_sem);
+}
+
+static void request_logger_run(void)
+{
+	k_mutex_lock(&lora_request_mutex, K_FOREVER);
+	lora_request.type = LORA_REQUEST_IN_RUN_LOGGER;
+	lora_request.uptime_ms = k_uptime_get();
+	k_mutex_unlock(&lora_request_mutex);
+	k_sem_give(&lora_request_sem);
+}
+
+static inline void get_lora_request(struct lora_request *req)
+{
+	k_mutex_lock(&lora_request_mutex, K_FOREVER);
+	memcpy(req, &lora_request, sizeof(*req));
+	k_mutex_unlock(&lora_request_mutex);
+}
+
 static int setup(void)
 {
 	if (!device_is_ready(lora_dev)) {
@@ -191,8 +253,7 @@ static int setup(void)
 
 	/* Device is relay, and power mode is always ON */
 	if (etc_device_is_relay() && etc_device_is_always_on()) {
-		lora_request = LORA_REQUEST_IN_RUN_RELAY;
-		k_sem_give(&lora_request_sem);
+		request_relay_run();
 	}
 	return 0;
 }
@@ -529,13 +590,11 @@ static void lora_data_send(void)
 	APP_EVENT_SUBMIT(lora_module_event);
 }
 
-static int module_lora_relay_wait_packet(void)
+static int module_lora_relay_wait_packet(int64_t uptime_start_ms)
 {
 	int ret = 0;
 	int16_t rssi;
 	int8_t snr;
-	
-	int64_t start_time = k_uptime_get();
 	int64_t start_waiting_time_ms = 0;
 	int64_t max_waiting_time_ms = 0;
 
@@ -551,12 +610,20 @@ static int module_lora_relay_wait_packet(void)
 	etc_get_relay_iccid(relay_iccid, sizeof(relay_iccid));
 	relay_iccid[ETC_SETTING_RELAY_ICCID_LEN] = '\0';
 
-	start_waiting_time_ms = k_uptime_get();
+	start_waiting_time_ms = uptime_start_ms;
 	uint32_t extra_waiting_time_ms = etc_get_rx_timeout_secs() * 1000;
 	uint32_t rx_duration_time_ms = etc_device_get_rx_duration() * 1000;
 	/* FW-125: Point 1 (Increase a RX Timeout by default ) */
 	max_waiting_time_ms = rx_duration_time_ms + extra_waiting_time_ms;
 	LOG_INF("Max waiting time %lld", max_waiting_time_ms);
+	/* If the current time is past the requested start time + listening duration,
+	 * exit and do not perform a LoRa receive (unless in always on mode)
+	 */
+	if ((k_uptime_get() > start_waiting_time_ms + (int64_t)max_waiting_time_ms) &&
+	    !etc_device_is_always_on()) {
+		LOG_INF("Runtime exceeded. Not receiving data.");
+		return 0;
+	}
 retry_recv:
 	ret = lora_recv(lora_dev, lora_rx_buf, sizeof(lora_rx_buf), 
 			K_MSEC(LORA_LOGGER_ON_RECV_MODE_MSEC), &rssi, &snr);
@@ -720,21 +787,39 @@ retry:
 	return -EINVAL;
 }
 
+/* Message handler for STATE_CLOUD_DISCONNECTED. */
+static void on_state_cloud_disconnected(struct lora_msg_data *msg)
+{
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		state_set(STATE_CLOUD_CONNECTED);
+		if (etc_device_is_relay()) {
+			request_relay_run();
+		}
+	}
+}
+
+/* Message handler for STATE_CLOUD_CONNECTED. */
+static void on_state_cloud_connected(struct lora_msg_data *msg)
+{
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) ||
+	    IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
+		state_set(STATE_CLOUD_DISCONNECTED);
+	}
+
+	if (etc_device_is_relay()) {
+		if (IS_EVENT(msg, app, APP_EVT_DATA_RECEIVE)) {
+			request_relay_run();
+		}
+	}
+}
+
 /* Message handler for all states. */
 static void on_all_states(struct lora_msg_data *msg)
 {
 	if (etc_device_is_logger_lora()) {
-		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) || 
-			IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD)) {
-			lora_request = LORA_REQUEST_IN_RUN_LOGGER;
-			k_sem_give(&lora_request_sem);
-		}
-	}
-
-	if (etc_device_is_relay()) {
-		if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
-			lora_request = LORA_REQUEST_IN_RUN_RELAY;
-			k_sem_give(&lora_request_sem);
+		if (IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+		    IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD)) {
+			request_logger_run();
 		}
 	}
 
@@ -746,19 +831,21 @@ static void on_all_states(struct lora_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_ENTER_ALWAYS_ON_MODE)) {
-		lora_request = LORA_REQUEST_IN_RUN_RELAY;
-		k_sem_give(&lora_request_sem);
+		request_relay_run();
 	}
 }
 
 static void module_lora_rx_thread_fn(void)
 {
+	struct lora_request req;
+
 	LOG_INF("Thread RX is running");
 	while (1) {
 		int err = k_sem_take(&lora_request_sem, K_FOREVER);
 		if (err == 0) {
 			LOG_INF("On request message");
-			switch (lora_request) {
+			get_lora_request(&req);
+			switch (req.type) {
 				case LORA_REQUEST_IN_IDLE: {
 					LOG_DBG("LORA_REQUEST_IN_IDLE");
 					break;
@@ -768,7 +855,7 @@ static void module_lora_rx_thread_fn(void)
 					{
 						SEND_EVENT(lora, LORA_EVT_RELAY_START_RX);
 					}
-					int rc = module_lora_relay_wait_packet();
+					int rc = module_lora_relay_wait_packet(req.uptime_ms);
 					if (rc == 0) {
 						LOG_INF("Waiting time is done. Go to sleep");
 					} else {
@@ -832,6 +919,14 @@ void lora_module_thread_fn(void)
 
 	while (true) {
 		module_get_next_msg(&self, &msg);
+		switch (state) {
+		case STATE_CLOUD_DISCONNECTED:
+			on_state_cloud_disconnected(&msg);
+			break;
+		case STATE_CLOUD_CONNECTED:
+			on_state_cloud_connected(&msg);
+			break;
+		}
 		on_all_states(&msg);
 	}
 }
