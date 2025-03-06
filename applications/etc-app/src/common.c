@@ -59,7 +59,7 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 			snprintf(out_buf + decoded_buf_len, out_size - decoded_buf_len, "*,");
 	}
 
-	decoded_buf_len += snprintf(out_buf + decoded_buf_len, sizeof(out_buf) - decoded_buf_len,
+	decoded_buf_len += snprintf(out_buf + decoded_buf_len, out_size - decoded_buf_len,
 				    "%d,%d,", is_parent ? 1 : 0, record->is_reclaim ? 1 : 0);
 	for (int i = 0; i < ETC_DEVICE_NUM_EXTRA_ELEMENT; i++) {
 		if (record->data[i] == -1) {
