@@ -1,0 +1,17 @@
+menuconfig ETC_CALIBRATION
+	bool "Calibration for Flex device"
+	default y
+	depends on TMP1826
+
+if ETC_CALIBRATION
+
+config CALIBRATION_MODULE_SHELL
+	bool "Enable calibration module shell for testing"
+	depends on SHELL
+	default n
+
+module = ETC_CALIBRATION
+module-str = calibration
+source "subsys/logging/Kconfig.template.log_config"
+
+endif

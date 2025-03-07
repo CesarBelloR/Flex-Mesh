@@ -1,7 +1,5 @@
 /*
  * Copyright (c) 2023 EXACT Technology
- *
- * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef ETC_SENSOR_H_
@@ -9,6 +7,7 @@
 
 #include <zephyr/device.h>
 #include "events/sensor_event.h"
+#include "etc_sensor_helper.h"
 
 enum etc_sensor_status {
 	SENSOR_NO_CONNECTION,
@@ -127,4 +126,89 @@ void etc_sensor_enter_functional_test(void);
  * 
 */
 void etc_sensor_exit_functional_test(void);
+
+/**
+ * @brief Enter the calibration mode.
+ *
+ * This function is responsible for entering calibration mode which involves
+ * turning on the sensor power supplies and the one-wire bus.
+ */
+void etc_sensor_calibration_enter(void);
+
+/**
+ * @brief Scans for sensor calibration data.
+ *
+ * @return int Status code indicating the result of the scan.
+ */
+int etc_sensor_calibration_scan(void);
+
+/**
+ * @brief Writes the sensor calibration code.
+ *
+ * @return int Status code indicating whether the write was successful.
+ */
+int etc_sensor_calibration_write_code(void);
+
+/**
+ * @brief Reads the sensor calibration code.
+ *
+ * @return int The calibration code read from the sensor.
+ */
+int etc_sensor_calibration_read_code(void);
+
+/**
+ * @brief Reads the ADC value during sensor calibration.
+ *
+ * @return int The ADC value.
+ */
+int etc_sensor_calibration_read_adc(void);
+
+/**
+ * @brief Sets the GPIO mask for sensor calibration.
+ *
+ * @param mask The GPIO mask to set.
+ *
+ * @return int Status code indicating whether the operation was successful.
+ */
+int etc_sensor_calibration_set_gpio_mask(int8_t mask);
+
+/**
+ * @brief Reads the temperature from the one-sensor.
+ *
+ * @return float The temperature as read from the sensor.
+ */
+float etc_sensor_calibration_read_temperature_from_sensor(void);
+
+/**
+ * @brief Converts the raw ADC temperature reading to a calibrated temperature value.
+ *
+ * @param raw_adc The raw ADC value representing the temperature.
+ * @param rr_hw_adc Pointer to the hardware-specific ADC value for reference.
+ * @param calibration_info Pointer to current calibration info
+ * @return The calibrated temperature as a floating-point value.
+ */
+float etc_sensor_calibration_convert_temperature(
+	int raw_adc, uint16_t *rr_hw_adc, struct etc_sensor_adc_calibration_info *calibration_info);
+
+/**
+ * @brief Retrieves the hardware version ADC value.
+ *
+ * @return The hardware version ADC value as an unsigned 16-bit integer.
+ */
+uint16_t etc_sensor_calibration_get_hw_version_adc(void);
+
+/**
+ * @brief Saves the temperature compensation value.
+ *
+ * @param hw_raw_adc The raw ADC value representing the hardware's temperature compensation data.
+ */
+void etc_sensor_calibration_save_temperature_compensation(uint16_t hw_raw_adc);
+
+/**
+ * @brief Exit the calibration mode.
+ *
+ * This function exits the calibration mode by turning off the sensor power
+ * supplies and the one-wire bus.
+ */
+void etc_sensor_calibration_exit(void);
 #endif /*  ETC_SENSOR_H_ */

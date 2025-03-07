@@ -12,4 +12,5 @@ rsource "etc_ntc_db/Kconfig"
 rsource "etc_memfault/Kconfig"
 rsource "etc_battery/Kconfig"
 rsource "etc_ble/Kconfig"
+rsource "etc_calibration/Kconfig"
 endmenu

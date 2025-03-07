@@ -10,12 +10,12 @@
 #include "etc_device.h"
 #include "etc_battery.h"
 #include "adc.h"
+#include "tmp1826.h"
+#include "etc_sensor_helper.h"
+#include "etc_calibration.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_sensor, CONFIG_ETC_SENSOR_LOG_LEVEL);
-
-/* Sensor Analog constant information */
-#define SENSOR_NTC_NOMINAL_RESISTANCE (float)DT_PROP(DT_PATH(ntc), norminal_25c_ohms)
 
 /* Mutex to lock write/read from tasks */
 K_MUTEX_DEFINE(etc_sensor_mtx);
@@ -24,29 +24,14 @@ K_MUTEX_DEFINE(etc_sensor_mtx);
 const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
 const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
 
-#if defined(CONFIG_ETC_NTC_TABLE)
-#include "etc_ntc_table.h"
-#else
-#define SENSOR_NTC_NOMINAL_TEMP	     25.0
-#define SENSOR_NTC_BETA		     (float)DT_PROP(DT_PATH(ntc), b_value_k)
-#define SENSOR_NTC_RESISTOR_REF	     (float)DT_PROP(DT_PATH(ntc), reference_res_ohms)
-#define SENSOR_NTC_REFERENCE_VOLTAGE ((float)(DT_PROP(DT_PATH(ntc), reference_voltage_mv)) / 1000.0f)
-#endif
-
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 const struct device *const ambient_i2c_dev = DEVICE_DT_GET_ANY(ti_tmp1075);
 #endif
 
-struct etc_sensor_adc_calibration_info {
-	float offset;
-	float high;
-	float ref;
-	bool loaded;
-};
-
 // Get any one sht31 in current bus. If NULL, SHT31 is not ready
 const struct device *const sht31_i2c_dev = DEVICE_DT_GET_ANY(sensirion_sht31);
 const struct device *ds2484_dev = DEVICE_DT_GET_ANY(exact_ds2484);
+const struct device *tmp1826_dev = DEVICE_DT_GET(DT_NODELABEL(w1_tmp1826));
 
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 static const struct gpio_dt_spec sense_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
@@ -71,6 +56,7 @@ static uint16_t sensor_r_hw_raw_adc = 0;
 static struct etc_sensor_adc_calibration_info etc_sensor_adc_calibration_info = {0x00};
 static etc_sensor_evt_handler_t sensor_evt_handler;
 static enum etc_sensor_status last_sensor_status = SENSOR_CONNECTED;
+static int sensor_calibration_port_1_wire = -1;
 /* Flag that signals if current connected sensors' state qualifies for functional
  * test mode. */
 static bool enter_functional_test = false;
@@ -304,113 +290,70 @@ static void etc_sensor_run_digital_sample(void)
 	etc_sensor_gpios_one_wire_disable();
 }
 
-static uint16_t etc_sensor_temperature_compensation(uint16_t raw_adc) 
-{
-	uint16_t rr_value = etc_get_rr_value();
-	uint16_t compensated_adc = raw_adc;
-	if (!etc_sensor_rr_value_is_valid(rr_value)) {
-		LOG_DBG("No compensation applied. raw_adc: %u", compensated_adc);
-		return compensated_adc;
-	}
-
-	if (etc_sensor_rr_value_is_valid(sensor_r_hw_raw_adc)) {
-		compensated_adc = raw_adc + 0.6 * (rr_value - sensor_r_hw_raw_adc) * raw_adc /
-				  sensor_r_hw_raw_adc;
-		LOG_DBG("Applying compensation. raw: %u, Rr: %u, R: %u, result: %u",
-			raw_adc, rr_value, sensor_r_hw_raw_adc, compensated_adc);
-	}
-	return compensated_adc;
-}
-
-static int etc_sensor_get_calibrated_adc(int raw_adc)
-{
-	int calibrated_adc = raw_adc;
-	
-	if (etc_sensor_adc_calibration_info.loaded) {
-		calibrated_adc = (int)(((float)(raw_adc)-etc_sensor_adc_calibration_info.offset) /
-				       (etc_sensor_adc_calibration_info.high -
-					etc_sensor_adc_calibration_info.offset) *
-				       etc_sensor_adc_calibration_info.ref);
-	}
-	calibrated_adc = etc_sensor_temperature_compensation(calibrated_adc);
-
-	return calibrated_adc;
-}
-
 static void etc_sensor_run_analog_sample(void)
 {
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG) {
 			etc_sensor_adc_switch_channel(i);
 			k_msleep(50);
-			list_sensor_raw_adc[i] = etc_sensor_get_calibrated_adc(
-				adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR));
+			list_sensor_raw_adc[i] = etc_sensor_helper_get_calibrated_adc(
+				adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR),
+				&sensor_r_hw_raw_adc, &etc_sensor_adc_calibration_info);
 		} else {
 			list_sensor_raw_adc[i] = -1;
 		}
 	}
 }
 
-#if defined(CONFIG_ETC_NTC_TABLE)
-static float etc_sensor_ntc_converter(const float table[], int table_length, int offset, int raw_adc,
-				      int max_adc)
-{
-	float input = ((float)max_adc / (float)raw_adc) - 1;
-	input = (float)SENSOR_NTC_NOMINAL_RESISTANCE / input;
-	input = input / 1000.0;
-	float temp_value = SENSOR_TEMP_NO_CONNECTED;
-	float tmp;
-	for (int i = 0; i < table_length - 1; i++) {
-		if (input <= table[i] && input >= table[i + 1]) {
-			tmp = ((-40 + (i * offset)) - (-40 + ((i + 1) * offset))) / (table[i] - table[i + 1]);
-			tmp = tmp * (input - table[i]);
-			tmp = tmp + (-40 + (i * offset));
-			temp_value = tmp;
-			return temp_value;
-		}
-	}
-	return temp_value;
-}
-#else
-static float etc_sensor_ntc_converter(int data, float full_scale_v, int full_scale_count)
-{
-	float raw_data = ((float)(data)*full_scale_v / SENSOR_NTC_REFERENCE_VOLTAGE);
-	float tmp_value = (float)full_scale_count / (float)raw_data - 1.0;
-	tmp_value = SENSOR_NTC_RESISTOR_REF / tmp_value;
-	tmp_value = tmp_value / SENSOR_NTC_NOMINAL_RESISTANCE;
-	tmp_value = logf(tmp_value);
-	tmp_value = tmp_value / SENSOR_NTC_BETA;
-	tmp_value += 1.0 / (SENSOR_NTC_NOMINAL_TEMP + 273.15);
-	tmp_value = 1.0 / tmp_value;
-	tmp_value -= 273.15;
-	return tmp_value;
-}
-#endif
-
 static void etc_sensor_load_calibration(void)
 {
 	int rc = 0;
 	etc_sensor_adc_calibration_info.loaded = false;
-	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID, &etc_sensor_adc_calibration_info.offset,
+	rc = etc_device_read_setting(ETC_CALIBRATION_USER_OFFSET_ID,
+				     &etc_sensor_adc_calibration_info.offset,
 				     sizeof(etc_sensor_adc_calibration_info.offset));
 	if (rc) {
-		LOG_ERR("Can't load the calibration for offset");
-		return;
+		LOG_ERR("Can't load the user calibration for offset");
+		goto factory;
 	}
-	rc = etc_device_read_setting(ETC_CALIBRATION_RAWHIGH_ID, &etc_sensor_adc_calibration_info.high,
+	rc = etc_device_read_setting(ETC_CALIBRATION_USER_RAWHIGH_ID,
+				     &etc_sensor_adc_calibration_info.high,
 				     sizeof(etc_sensor_adc_calibration_info.high));
 	if (rc) {
-		LOG_ERR("Can't load the calibration for raw high offset");
+		LOG_ERR("Can't load the user calibration for raw high offset");
+		goto factory;
+	}
+	rc = etc_device_read_setting(ETC_CALIBRATION_USER_REF_ID,
+				     &etc_sensor_adc_calibration_info.ref,
+				     sizeof(etc_sensor_adc_calibration_info.ref));
+	if (rc) {
+		LOG_ERR("Can't load the user calibration for reference");
+		goto factory;
+	}
+	LOG_INF("Calibration value %f %f %f", etc_sensor_adc_calibration_info.offset,
+		etc_sensor_adc_calibration_info.high, etc_sensor_adc_calibration_info.ref);
+	etc_sensor_adc_calibration_info.loaded = true;
+factory:
+	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID,
+				     &etc_sensor_adc_calibration_info.offset,
+				     sizeof(etc_sensor_adc_calibration_info.offset));
+	if (rc) {
+		LOG_ERR("Can't load the factory calibration for offset");
+		return;
+	}
+	rc = etc_device_read_setting(ETC_CALIBRATION_RAWHIGH_ID,
+				     &etc_sensor_adc_calibration_info.high,
+				     sizeof(etc_sensor_adc_calibration_info.high));
+	if (rc) {
+		LOG_ERR("Can't load the factory calibration for raw high offset");
 		return;
 	}
 	rc = etc_device_read_setting(ETC_CALIBRATION_REF_ID, &etc_sensor_adc_calibration_info.ref,
 				     sizeof(etc_sensor_adc_calibration_info.ref));
 	if (rc) {
-		LOG_ERR("Can't load the calibration for reference");
+		LOG_ERR("Can't load the factory calibration for reference");
 		return;
 	}
-	LOG_INF("Calibration value %f %f %f", etc_sensor_adc_calibration_info.offset,
-		etc_sensor_adc_calibration_info.high, etc_sensor_adc_calibration_info.ref);
 	etc_sensor_adc_calibration_info.loaded = true;
 }
 
@@ -436,15 +379,7 @@ void etc_sensor_init(etc_sensor_evt_handler_t handler)
 float etc_sensor_get_ambient_temp(void)
 {
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_NTC_SENSOR)
-#if defined(CONFIG_ETC_NTC_TABLE)
-	return etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset,
-					sensor_ambient_raw_adc,
-					adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
-#else
-	return etc_sensor_ntc_converter(sensor_ambient_raw_adc,
-					(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_AMB) / 1000.0f,
-					adc_get_full_scale_count(ETC_ADC_CHANNEL_AMB));
-#endif
+	return etc_sensor_helper_ntc_get(sensor_ambient_raw_adc, ETC_ADC_CHANNEL_AMB);
 #elif IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 	int rc = sensor_sample_fetch(ambient_i2c_dev);
 	if (rc) {
@@ -468,18 +403,8 @@ float etc_sensor_get_probe_temp(enum sensor_input input)
 {
 	__ASSERT(input >= 0 && input <= 3, "invalid channel number");
 	if (list_sensor_type[input] == SENSOR_TYPE_ANALOG) {
-		float temp = 0.0;
-#if defined(CONFIG_ETC_NTC_TABLE)
-		temp = etc_sensor_ntc_converter(table_ntc_resistance_temp, table_length, table_offset,
-						list_sensor_raw_adc[input],
-						adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
-#else
-		temp = etc_sensor_ntc_converter(list_sensor_raw_adc[input],
-						(float)adc_get_full_scale_voltage_mv(ETC_ADC_CHANNEL_SENSOR) /
-							1000.0f,
-						adc_get_full_scale_count(ETC_ADC_CHANNEL_SENSOR));
-#endif
-		return temp;
+		return etc_sensor_helper_ntc_get(list_sensor_raw_adc[input],
+						 ETC_ADC_CHANNEL_SENSOR);
 	} else if (list_sensor_type[input] == SENSOR_TYPE_DIGITAL) {
 		return list_sensor_digital_temp[input];
 	} else {
@@ -508,6 +433,7 @@ uint16_t etc_sensor_get_battery(void)
 
 void etc_sensor_run_acquisition(void)
 {
+	etc_calibration_lock();
 	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	/* Enable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_enable();
@@ -516,9 +442,13 @@ void etc_sensor_run_acquisition(void)
 	/* Run detection sensor */
 	etc_sensor_run_detection();
 	/* Run sample for ambient ADC */
-	sensor_ambient_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_AMB));
+	sensor_ambient_raw_adc = etc_sensor_helper_get_calibrated_adc(
+		adc_get_channel(ETC_ADC_CHANNEL_AMB), &sensor_r_hw_raw_adc,
+		&etc_sensor_adc_calibration_info);
 	/* Run sample for battery */
-	sensor_battery_raw_adc = etc_sensor_get_calibrated_adc(adc_get_channel(ETC_ADC_CHANNEL_BATTERY));
+	sensor_battery_raw_adc = etc_sensor_helper_get_calibrated_adc(
+		adc_get_channel(ETC_ADC_CHANNEL_BATTERY), &sensor_r_hw_raw_adc,
+		&etc_sensor_adc_calibration_info);
 	/* Run sample for HW sensor */
 	/* Run sample sensor for all ports - analog part*/
 	etc_sensor_run_analog_sample();
@@ -538,6 +468,8 @@ void etc_sensor_run_acquisition(void)
 			etc_set_rr_value(sensor_r_hw_raw_adc);
 		}
 	}
+
+	etc_calibration_unlock();
 }
 
 enum sensor_type etc_sensor_get_probe_type(enum sensor_input input)
@@ -566,6 +498,144 @@ void etc_sensor_enter_functional_test(void)
 }
 
 void etc_sensor_exit_functional_test(void)
+{
+	etc_sensor_gpios_disable();
+}
+
+void etc_sensor_calibration_enter(void)
+{
+	etc_sensor_gpios_enable();
+}
+
+int etc_sensor_calibration_scan(void)
+{
+	int num_sensor = 0;
+	int rc = 0;
+	etc_sensor_gpios_one_wire_enable();
+	k_msleep(10);
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		etc_sensor_adc_switch_channel(i);
+		k_msleep(10);
+		rc = ds2484_get_logic_level(ds2484_dev);
+		if (rc == 0) {
+			continue;
+		}
+		if (!device_is_ready(tmp1826_dev)) {
+			LOG_ERR("TMP1826 is not ready in I2C bus");
+			continue;
+		}
+
+		sensor_calibration_port_1_wire = i;
+		num_sensor += 1;
+	}
+	etc_sensor_gpios_one_wire_disable();
+	return num_sensor;
+}
+
+int etc_sensor_calibration_write_code(void)
+{
+	etc_sensor_gpios_one_wire_enable();
+	k_msleep(10);
+	etc_sensor_adc_switch_channel(sensor_calibration_port_1_wire);
+	k_msleep(10);
+	const char buf[8] = "EXACT\0";
+	int rc = tmp1826_write_eeprom(tmp1826_dev, 0, buf, sizeof(buf));
+	etc_sensor_gpios_one_wire_disable();
+	return rc;
+}
+
+int etc_sensor_calibration_read_code(void)
+{
+	char buf[8] = {0};
+	int rc = 0;
+	etc_sensor_gpios_one_wire_enable();
+	k_msleep(10);
+	etc_sensor_adc_switch_channel(sensor_calibration_port_1_wire);
+	k_msleep(10);
+	rc = tmp1826_read_eeprom(tmp1826_dev, 0, (uint8_t *)buf, sizeof(buf));
+	if (rc == 0) {
+		if (strstr(buf, "EXACT") != 0) {
+			LOG_DBG("Found the calibration code");
+			return 0;
+		}
+	}
+	return -ENOENT;
+}
+
+int etc_sensor_calibration_read_adc()
+{
+	int sum_adc = 0;
+	etc_sensor_gpios_one_wire_disable();
+	k_msleep(10);
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		etc_sensor_adc_switch_channel(i);
+		k_msleep(10);
+		sum_adc += adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
+	}
+	return sum_adc / 4;
+}
+
+int etc_sensor_calibration_set_gpio_mask(int8_t mask)
+{
+	struct sensor_value val;
+	val.val1 = mask;
+	etc_sensor_gpios_one_wire_enable();
+	k_msleep(10);
+	etc_sensor_adc_switch_channel(sensor_calibration_port_1_wire);
+	k_msleep(10);
+	int rc = sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_GPIO, &val);
+	etc_sensor_gpios_one_wire_disable();
+	return rc;
+}
+
+float etc_sensor_calibration_convert_temperature(
+	int raw_adc, uint16_t *rr_hw_adc, struct etc_sensor_adc_calibration_info *calibration_info)
+{
+	float temp = 0.0;
+	uint16_t calibrated_adc =
+		etc_sensor_helper_get_calibrated_adc(raw_adc, rr_hw_adc, calibration_info);
+	return etc_sensor_helper_ntc_get(raw_adc, ETC_ADC_CHANNEL_SENSOR);
+}
+
+float etc_sensor_calibration_read_temperature_from_sensor(void)
+{
+	struct sensor_value temp, hum;
+	float out = SENSOR_TEMP_NO_CONNECTED;
+	/* Reset the bus */
+	etc_sensor_gpios_one_wire_enable();
+	k_msleep(10);
+	etc_sensor_adc_switch_channel(sensor_calibration_port_1_wire);
+	k_msleep(10);
+	int rc = sensor_sample_fetch(tmp1826_dev);
+	if (rc) {
+		LOG_ERR("Failed to fetch sensor TMP1826 (err %d)", rc);
+		goto done;
+	}
+	rc = sensor_channel_get(tmp1826_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
+	if (rc) {
+		LOG_ERR("Failed to get temperature sensor (err %d)", rc);
+		goto done;
+	}
+	out = (float)sensor_value_to_double(&temp);
+	LOG_DBG("Temperature value %f", out);
+done:
+	etc_sensor_gpios_one_wire_disable();
+	return out;
+}
+
+void etc_sensor_calibration_save_temperature_compensation(uint16_t hw_raw_adc)
+{
+	if (etc_sensor_rr_value_is_valid(hw_raw_adc)) {
+		etc_set_rr_value(hw_raw_adc);
+	}
+}
+
+uint16_t etc_sensor_calibration_get_hw_version_adc(void)
+{
+	return adc_get_channel_filtered(ETC_ADC_CHANNEL_HW_VER);
+}
+
+void etc_sensor_calibration_exit(void)
 {
 	etc_sensor_gpios_disable();
 }

@@ -16,6 +16,7 @@
 #include "etc_device_record.h"
 #include "etc_ble.h"
 #include "etc_battery.h"
+#include "etc_calibration.h"
 #include "cloud/lwm2m/lwm2m_firmware.h"
 #include "cloud/cloud_wrapper.h"
 
@@ -695,6 +696,11 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		track_functional_test(DATA_TYPE_MODEM, &rsrp);
 		functional_test_set_state(FUNC_TEST_STATE_SENDING_DATA);
 		data_encode_for_cloud(false, false);
+	}
+
+	if (IS_EVENT(msg, app, APP_EVT_REQUEST_CALIBRATION)) {
+		etc_calibration_run();
+		etc_calibration_exit();
 	}
 }
 

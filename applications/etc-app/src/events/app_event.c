@@ -47,6 +47,8 @@ static char *get_evt_type_str(enum app_event_type type)
 		return "APP_EVT_SHUTDOWN_READY";
 	case APP_EVT_REQUEST_SHUTDOWN:
 		return "APP_EVT_REQUEST_SHUTDOWN";
+	case APP_EVT_REQUEST_CALIBRATION:
+		return "APP_EVT_REQUEST_CALIBRATION";
 	case APP_EVT_ERROR:
 		return "APP_EVT_ERROR";
 	default: {

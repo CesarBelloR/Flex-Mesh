@@ -1,3 +1,4 @@
+
 &i2c1 {
 	w1: w1@18 {
 		compatible = "exact,ds2484";
@@ -14,6 +15,12 @@
 				reg = <0x44>;
 				status = "okay";
 			};
+		};
+		w1_tmp1826: w1_tmp1826 {
+			compatible = "ti,tmp1826";
+			family-code = <0x26>;
+			resolution = <12>;
+			status = "okay";
 		};
 	};
 };

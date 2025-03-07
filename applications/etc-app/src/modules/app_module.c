@@ -15,6 +15,7 @@
 #include "etc_device.h"
 #include "etc_sensor.h"
 #include "etc_ble.h"
+#include "etc_calibration.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
@@ -645,9 +646,13 @@ static void app_input_handler(enum etc_interface_event_type type)
 	if (type == ETC_INTERFACE_EVENT_RTC) {
 		app_peripheral_on(true);
 	} else if (type == ETC_INTERFACE_EVENT_HALL) {
-		app_set_tx_work_type(APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK);
-		etc_ble_start_adv_with_timeout();
-		app_peripheral_on(false);
+		if (etc_calibration_check() == 0) {
+			SEND_EVENT(app, APP_EVT_REQUEST_CALIBRATION);
+		} else {
+			app_set_tx_work_type(APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK);
+			etc_ble_start_adv_with_timeout();
+			app_peripheral_on(false);
+		}
 	} else {
 		/* No action required */
 	}

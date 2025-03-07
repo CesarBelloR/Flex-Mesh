@@ -61,6 +61,9 @@ enum app_event_type {
 	 */
 	APP_EVT_SHUTDOWN_READY,
 
+	/** The application module receives a request from user to start calibration
+	 */
+	APP_EVT_REQUEST_CALIBRATION,
 	/** An irrecoverable error has occurred in the application module. Error details are
 	 *  attached in the event structure.
 	 */
