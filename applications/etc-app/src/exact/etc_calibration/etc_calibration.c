@@ -94,6 +94,7 @@ int etc_calibration_check(void)
 	int rc = etc_sensor_calibration_scan();
 	if (rc == 0) {
 		LOG_ERR("No calibration tool is here");
+		rc = -ENOENT;
 		goto done;
 	}
 
@@ -103,10 +104,8 @@ int etc_calibration_check(void)
 	}
 
 done:
-	if (rc) {
-		etc_calibration_unlock();
-	}
-	return 0;
+	etc_calibration_unlock();
+	return rc;
 }
 
 int etc_calibration_run(void) 
