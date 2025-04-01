@@ -16,7 +16,7 @@
 #include "events/led_state_event.h"
 #include "events/lora_event.h"
 #include "etc_interface.h"
-
+#include "etc_calibration.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -33,13 +33,14 @@ struct ui_msg_data {
 };
 
 /* UI module states. */
-static enum state_type {
+enum state_type {
 	STATE_INIT,
 	STATE_RUNNING,
 	STATE_FOTA_UPDATE,
 	STATE_FUNCTIONAL_TEST,
+	STATE_CALIBRATION,
 	STATE_SHUTDOWN
-} state;
+};
 
 /* UI module sub states. */
 enum sub_state_type {
@@ -58,6 +59,8 @@ enum sub_state_type {
 static enum sub_state_type sub_state = SUB_STATE_NORMAL;
 static enum sub_state_type last_sub_state = SUB_STATE_NORMAL; 
 static enum sub_state_type last_battery_state = SUB_STATE_NORMAL;
+static enum state_type state = STATE_INIT;
+static enum state_type last_state = STATE_INIT;
 static int ui_module_gen_num_of_sample = 0;
 
 /* Forward declarations */
@@ -71,7 +74,7 @@ static void led_pattern_update_work_fn(struct k_work *work);
 #define UI_LED_BATTERY_NORMAL_ON_DURATION_MSEC (100)
 #define UI_LED_BATTERY_NORMAL_OFF_DURATION_MSEC (9900)
 #define UI_LED_ERROR_BASE_DURATION_MSEC (1000)
-
+#define UI_LED_CALIBRATION_RESULT_MSEC		(10000)
 /* List of LED patterns supported in the UI module. */
 static struct led_pattern {
 	/* Variable used to construct a linked list of led patterns. */
@@ -164,7 +167,7 @@ static void state_set(enum state_type new_state)
 	LOG_DBG("State transition %s --> %s",
 		state2str(state),
 		state2str(new_state));
-
+	last_state = state;
 	state = new_state;
 }
 
@@ -638,6 +641,12 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_FUNCTIONAL_TEST);
 	}
+
+	if (IS_EVENT(msg, app, APP_EVT_REQUEST_CALIBRATION)) {
+		transition_list_append(LED_STATE_CALIBRATION_IN_PROCESS, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		state_set(STATE_CALIBRATION);
+	}
 }
 
 /* Message handler for STATE_FOTA_UPDATING. */
@@ -678,6 +687,33 @@ static void on_state_functional_test(struct ui_msg_data *msg)
 		sub_state_set(last_battery_state);
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_RUNNING);
+	}
+}
+
+static void on_state_calibration(struct ui_msg_data *msg)
+{
+	if (IS_EVENT(msg, data, DATA_EVT_CALIBRATION_ERROR)) {
+		uint8_t result = msg->module.data.data.calibration_result;
+		(void)result;
+		/* MEASUREMENT_FAIL led state is used for all errors, as it the most visible */
+		transition_list_append(LED_STATE_CALIBRATION_MEASUREMENT_FAIL,
+				       UI_LED_CALIBRATION_RESULT_MSEC);
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		state_set(last_state);
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CALIBRATION_COMPLETE)) {
+		transition_list_append(LED_STATE_CALIBRATION_SUCCESS,
+				       UI_LED_CALIBRATION_RESULT_MSEC);
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		state_set(last_state);
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_DISCONNECTED) ||
+	    IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED)) {
+		transition_list_append(LED_STATE_CLOUD_ERROR, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		state_set(last_state);
 	}
 }
 
@@ -738,6 +774,9 @@ static void message_handler(struct ui_msg_data *msg)
 		break;
 	case STATE_FUNCTIONAL_TEST:
 		on_state_functional_test(msg);
+		break;
+	case STATE_CALIBRATION:
+		on_state_calibration(msg);
 		break;
 	case STATE_SHUTDOWN:
 		/* The shutdown state has no transition. */

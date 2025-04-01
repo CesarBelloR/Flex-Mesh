@@ -96,6 +96,10 @@ enum data_event_type {
 	DATA_EVT_CONFIG_EXIT_ALWAYS_ON_MODE,
 	DATA_EVT_CONFIG_ENTER_ALWAYS_ON_MODE,
 
+	/* Calibration complete */
+	DATA_EVT_CALIBRATION_COMPLETE,
+	/* Calibration error */
+	DATA_EVT_CALIBRATION_ERROR,
 	/* Flag to resync configuration */
 	DATA_EVT_CONFIG_SYNC,
 
@@ -149,6 +153,8 @@ struct data_event {
 		struct relay_data_buffer relay_data;
 		/* Result of the functional test */
 		enum functional_test_result test_result;
+		/* Result of calibration */
+		int calibration_result;
 	} data;
 };
 

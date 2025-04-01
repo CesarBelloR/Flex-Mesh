@@ -122,6 +122,8 @@ static struct k_work_delayable data_send_work;
  */
 static bool reclaim_active;
 
+static atomic_t calibration_process;
+static bool calibration_success;
 /* Define a buffer to save data encoded*/
 static struct data_module_data_buffers data_encoded_buffers;
 
@@ -347,6 +349,14 @@ static void data_module_send_message_id(uint32_t message_id)
 	struct data_event *data_event = new_data_event();
 	data_event->type = DATA_EVT_DATA_SEND;
 	data_event->data.message_id = message_id;
+	APP_EVENT_SUBMIT(data_event);
+}
+
+static void data_module_send_calibration_status(enum data_event_type type)
+{
+	struct data_event *data_event = new_data_event();
+	data_event->type = type;
+	data_event->data.test_result = etc_calibration_get_calibration_result();
 	APP_EVENT_SUBMIT(data_event);
 }
 
@@ -616,6 +626,7 @@ static void data_encode_for_ble()
 static void data_do_and_send_calibration(void)
 {
 	if ((etc_calibration_get_calibration_status() != ETC_SENSOR_CALIB_IDLE)) {
+		atomic_set(&calibration_process, true);
 		/* Keep LwM2M running! */
 		lwm2m_rd_client_update();
 		etc_calibration_run();
@@ -624,10 +635,24 @@ static void data_do_and_send_calibration(void)
 			if ((etc_calibration_get_calibration_result() ==
 			     ETC_SENSOR_CALIB_SUCCESS)) {
 				data_codec_update_calibration(&codec);
+			} else {
+				data_module_send_calibration_status(DATA_EVT_CALIBRATION_ERROR);
 			}
 		}
 		etc_calibration_exit();
+		atomic_set(&calibration_process, false);
+		calibration_success = true;
 		data_send(DATA_EVT_DATA_SEND, &codec);
+	}
+}
+
+static void data_do_check_calibration(void)
+{
+	if (atomic_get(&calibration_process)) {
+		data_module_send_calibration_status(DATA_EVT_CALIBRATION_ERROR);
+		etc_calibration_exit();
+		atomic_set(&calibration_process, false);
+		calibration_success = false;
 	}
 }
 
@@ -714,6 +739,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	    IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED) ||
 	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
 		/* Reset send status to allow future sends. */
+		data_do_check_calibration();
 		reset_send_status(&send_status);
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
@@ -730,6 +756,10 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	if (IS_EVENT(msg, app, APP_EVT_REQUEST_CALIBRATION)) {
 		/* Run calibration when system already connected to cloud */
 		data_do_and_send_calibration();
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_DISCONNECTED)) {
+		data_do_check_calibration();
 	}
 }
 
@@ -818,6 +848,10 @@ static void on_all_states(struct data_msg_data *msg)
 			bool ack = true;
 			track_functional_test(DATA_TYPE_ACK, (void *)&ack);
 			stop_functional_test();
+		}
+		if (calibration_success) {
+			data_module_send_calibration_status(DATA_EVT_CALIBRATION_COMPLETE);
+			calibration_success = false;
 		}
 		if (send_status.record_id > 0) {
 			/* Acknowledge record and encode more data, if connected to cloud */
