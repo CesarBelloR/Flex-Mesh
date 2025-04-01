@@ -79,6 +79,9 @@ K_MUTEX_DEFINE(etc_calibration_mutex);
 
 // Boolean flag indicating whether the calibration process is ready to proceed.
 static bool etc_calibration_ready = false;
+
+// Calibrator SN
+static uint32_t etc_calibrator_sn = 0;
 static struct etc_sensor_calibration_status_info calibration_status = {0};
 
 void etc_calibration_init(void)
@@ -104,11 +107,13 @@ int etc_calibration_check(void)
 		goto done;
 	}
 	LOG_DBG("Number of sensor %d", rc);
-	rc = etc_sensor_calibration_read_code();
-	if (rc) {
+	rc = etc_sensor_calibration_read_sn();
+	if (rc < ETC_CALIB_MIN_SN || rc > ETC_CALIB_MAX_SN) {
 		LOG_ERR("No calibration code!");
+		return rc;
 	}
 	LOG_DBG("Code sensor %d", rc);
+	etc_calibrator_sn = rc;
 	calibration_status.status = ETC_SENSOR_CALIB_PRECALIB_VALUE_CHECK;
 	/* TODO: need to know the calibrator code */
 	rc = 0;
@@ -169,8 +174,17 @@ static int etc_calibration_packet_ref(char *ref_msg, int ref_size)
 		}
 		strncat(ref_msg, temp_str, ref_size - strlen(ref_msg) - 1);
 		if (strlen(ref_msg) >= ref_size - 1) {
-			return -ENOSPC;
+			return -ENOMEM;
 		}
+	}
+	return 0;
+}
+
+static int etc_calibration_packet_calibrator_sn(char *id_msg, int id_size)
+{
+	snprintf(id_msg, id_size, "%d", etc_calibrator_sn);
+	if (strlen(id_msg) >= id_size - 1) {
+		return -ENOMEM;
 	}
 	return 0;
 }
@@ -242,7 +256,7 @@ int etc_calibration_run(void)
 			sizeof(calibration_status.pre_adjustment));
 		__ASSERT_NO_MSG(rc == 0);
 	}
-	
+
 	/* Get post-adjustment with calibration */
 	rc = etc_calibration_packet_status(&calibration_info, &hw_raw_adc,
 					   calibration_status.post_adjustment,
@@ -286,6 +300,8 @@ int etc_calibration_run(void)
 				 sizeof(calibration_info.ref));
 	etc_device_write_setting(ETC_CALIBRATION_USER_TIME_REF_ID, &calibration_info.time,
 				 sizeof(calibration_info.time));
+	etc_calibration_packet_calibrator_sn(calibration_info.id, sizeof(calibration_info.id));
+	etc_device_write_setting(ETC_CALIBRATOR_USER_ID, calibration_info.id, sizeof(calibration_info.id));
 	calibration_status.result = ETC_SENSOR_CALIB_SUCCESS;
 done:
 	calibration_status.status = ETC_SENSOR_CALIB_DATA_UPLOAD;

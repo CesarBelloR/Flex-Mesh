@@ -24,6 +24,9 @@ K_MUTEX_DEFINE(etc_sensor_mtx);
 const uint32_t sFullOhms = DT_PROP(DT_PATH(vbatt), full_ohms);
 const uint32_t sOutputOhms = DT_PROP(DT_PATH(vbatt), output_ohms);
 
+/* Constant prefix for calibrator */
+const char sn_prefix[8] = "EXACT\0";
+
 #if IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 const struct device *const ambient_i2c_dev = DEVICE_DT_GET_ANY(ti_tmp1075);
 #endif
@@ -558,34 +561,50 @@ int etc_sensor_calibration_scan(void)
 	return num_sensor;
 }
 
-int etc_sensor_calibration_write_code(void)
+int etc_sensor_calibration_read_sn(void)
 {
-	etc_sensor_gpios_one_wire_enable();
-	k_msleep(10);
-	etc_sensor_adc_switch_channel(sensor_calibration_port_1_wire);
-	k_msleep(10);
-	const char buf[8] = "EXACT\0";
-	int rc = tmp1826_write_eeprom(tmp1826_dev, 0, buf, sizeof(buf));
-	etc_sensor_gpios_one_wire_disable();
-	return rc;
-}
-
-int etc_sensor_calibration_read_code(void)
-{
-	char buf[8] = {0};
+	uint32_t serial_number;
+	uint8_t buf[sizeof(sn_prefix) + sizeof(serial_number)];
 	int rc = 0;
+
+	if (sensor_calibration_port_1_wire == -1) {
+		return -ENOENT;
+	}
+
 	etc_sensor_gpios_one_wire_enable();
 	k_msleep(10);
 	etc_sensor_adc_switch_channel(sensor_calibration_port_1_wire);
 	k_msleep(10);
-	rc = tmp1826_read_eeprom(tmp1826_dev, 0, (uint8_t *)buf, sizeof(buf));
+	rc = tmp1826_read_eeprom(tmp1826_dev, 0, buf, sizeof(buf));
 	if (rc == 0) {
-		if (strstr(buf, "EXACT") != 0) {
+		if (memcmp(buf, sn_prefix, sizeof(sn_prefix)) == 0) {
 			LOG_DBG("Found the calibration code");
-			return 0;
+			serial_number = *((uint32_t *)&buf[sizeof(sn_prefix)]);
+			return serial_number;
 		}
 	}
 	return -ENOENT;
+}
+
+int etc_sensor_calibration_write_sn(uint32_t serial_number)
+{
+	uint8_t buf[sizeof(sn_prefix) + sizeof(serial_number)];
+	int rc;
+
+	if (serial_number > ETC_CALIB_MAX_SN) {
+		return -EINVAL;
+	}
+
+	etc_sensor_gpios_one_wire_enable();
+	k_msleep(10);
+	etc_sensor_adc_switch_channel(sensor_calibration_port_1_wire);
+	k_msleep(10);
+
+	memcpy(buf, sn_prefix, sizeof(sn_prefix));
+	memcpy(buf + sizeof(sn_prefix), &serial_number, sizeof(serial_number));
+	rc = tmp1826_write_eeprom(tmp1826_dev, 0, buf, sizeof(buf));
+	etc_sensor_gpios_one_wire_disable();
+	return rc;
 }
 
 int etc_sensor_calibration_read_adc(struct etc_sensor_adc_raw_data *raw_adc)

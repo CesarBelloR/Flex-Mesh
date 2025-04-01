@@ -9,6 +9,9 @@
 #include "events/sensor_event.h"
 #include "etc_sensor_helper.h"
 
+#define ETC_CALIB_MAX_SN 99999
+#define ETC_CALIB_MIN_SN 10000
+
 enum etc_sensor_status {
 	SENSOR_NO_CONNECTION,
 	SENSOR_CONNECTED,
@@ -145,16 +148,17 @@ int etc_sensor_calibration_scan(void);
 /**
  * @brief Writes the sensor calibration code.
  *
+ * @param serial_number the input serial number
  * @return int Status code indicating whether the write was successful.
  */
-int etc_sensor_calibration_write_code(void);
+int etc_sensor_calibration_write_sn(uint32_t serial_number);
 
 /**
- * @brief Reads the sensor calibration code.
+ * @brief Reads the serial number of calibrator
  *
- * @return int The calibration code read from the sensor.
+ * @return int The serial number of calibrator or error code.
  */
-int etc_sensor_calibration_read_code(void);
+int etc_sensor_calibration_read_sn(void);
 
 /**
  * @brief Reads the ADC value during sensor calibration.
