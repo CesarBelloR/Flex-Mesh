@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LWM2M xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.openmobilealliance.org/tech/profiles/LWM2M.xsd">
+	<Object ObjectType="MODefinition">
+		<Name>EXACT Calibration Status</Name>
+		<Description1><![CDATA[Contains the current status and results of the calibration process, including pre- and post-adjustment values, reference values, and active calibration index.]]></Description1>
+		<ObjectID>48939</ObjectID>
+		<ObjectURN></ObjectURN>
+		<LWM2MVersion>1.1</LWM2MVersion>
+		<ObjectVersion>1.0</ObjectVersion>
+		<MultipleInstances>Single</MultipleInstances>
+		<Mandatory>Optional</Mandatory>
+		<Resources>
+			<Item ID="1">
+				<Name>Status</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0-4</RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Status of the current calibration. Non-idle while the calibration is ongoing. Possible values: 0: Idle, 1: Pre-calibration value check, 2: Calibration in progress, 3: Post-calibration value check, 4: Data upload]]></Description>
+			</Item>
+			<Item ID="2">
+				<Name>Result</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0-4</RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Result of the last performed calibration. Possible values: 0: Initial value/no status, 1: Calibration success, 2: Post-adjustment out of range, 3: Ambient temperature out of range, 4: Calibration unsuccessful, N: error n]]></Description>
+			</Item>
+			<Item ID="3">
+				<Name>Pre-adjustment values</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Pre-adjustment values for all device ports at reference temperatures]]></Description>
+			</Item>
+			<Item ID="4">
+				<Name>Post-adjustment values</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Post-adjustment values for all device ports at reference temperatures]]></Description>
+			</Item>
+			<Item ID="5">
+				<Name>Reference values</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[The list of reference temperatures for the pre- and post-adjustment values]]></Description>
+			</Item>
+			<Item ID="6">
+				<Name>Active Calibration</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Index of the calibration that is currently in use]]></Description>
+			</Item>
+		</Resources>
+		<Description2 />
+	</Object>
+</LWM2M>

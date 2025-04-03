@@ -16,4 +16,6 @@ target_sources(app
                ${CMAKE_CURRENT_SOURCE_DIR}/etc_humid_obj_48936.c
                ${CMAKE_CURRENT_SOURCE_DIR}/etc_functional_test_obj_48937.c
                ${CMAKE_CURRENT_SOURCE_DIR}/etc_location_obj_48938.c
+               ${CMAKE_CURRENT_SOURCE_DIR}/etc_calibration_obj_48950.c
+               ${CMAKE_CURRENT_SOURCE_DIR}/etc_calibration_status_obj_48939.c
 )
