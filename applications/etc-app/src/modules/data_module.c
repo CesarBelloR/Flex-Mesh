@@ -613,6 +613,24 @@ static void data_encode_for_ble()
 #endif
 }
 
+static void data_do_and_send_calibration(void)
+{
+	if ((etc_calibration_get_calibration_status() != ETC_SENSOR_CALIB_IDLE)) {
+		/* Keep LwM2M running! */
+		lwm2m_rd_client_update();
+		etc_calibration_run();
+		if ((etc_calibration_get_calibration_status()) == ETC_SENSOR_CALIB_DATA_UPLOAD) {
+			data_codec_update_calibration_status(&codec);
+			if ((etc_calibration_get_calibration_result() ==
+			     ETC_SENSOR_CALIB_SUCCESS)) {
+				data_codec_update_calibration(&codec);
+			}
+		}
+		etc_calibration_exit();
+		data_send(DATA_EVT_DATA_SEND, &codec);
+	}
+}
+
 static void save_new_sensor_data(struct sensor_data *sensors)
 {
 	if (etc_device_is_relay()) {
@@ -634,6 +652,10 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		state_set(STATE_CLOUD_CONNECTED);
+
+		/* Retry to calibration check */
+		data_do_and_send_calibration();
+
 		if (functional_test_get_state() == FUNC_TEST_STATE_COLLECTING_DATA) {
 			functional_test_schedule_send();
 		} else if ((etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) || 
@@ -646,6 +668,13 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 			reset_send_status(&send_status);
 			need_interval_tx_send = true;
 			data_encode_for_cloud(false, true);
+		}
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY)) {
+		if ((etc_calibration_get_calibration_status() != ETC_SENSOR_CALIB_IDLE)) {
+			/* Request cloud sync */
+			SEND_EVENT(data, DATA_EVT_REQUEST_CALIBRATION);
 		}
 	}
 }
@@ -699,8 +728,8 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, app, APP_EVT_REQUEST_CALIBRATION)) {
-		etc_calibration_run();
-		etc_calibration_exit();
+		/* Run calibration when system already connected to cloud */
+		data_do_and_send_calibration();
 	}
 }
 

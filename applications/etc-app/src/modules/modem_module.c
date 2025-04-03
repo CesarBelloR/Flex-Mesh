@@ -678,12 +678,13 @@ static int setup(void)
 static bool is_wakeup_modem(struct modem_msg_data *msg)
 {
 	bool is_wakeup;
-	
+
 	is_wakeup = (((IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
 		       IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) &&
 		      etc_device_get_mode() == ETC_DEVICE_MODE_LTE_LOGGER)) ||
 		    IS_EVENT(msg, app, APP_EVT_DATA_SYNC_CLOUD) ||
-		    IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_START) || 
+		    IS_EVENT(msg, app, APP_EVT_REQUEST_CALIBRATION) ||
+		    IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_START) ||
 		    ((IS_EVENT(msg, app, APP_EVT_DATA_RECEIVE) &&
 		      etc_device_get_mode() == ETC_DEVICE_MODE_RELAY));
 	return is_wakeup;

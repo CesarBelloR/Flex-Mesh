@@ -98,7 +98,9 @@ enum data_event_type {
 
 	/* Flag to resync configuration */
 	DATA_EVT_CONFIG_SYNC,
-	
+
+	/* Flag to notify cloud-connection for calibration */
+	DATA_EVT_REQUEST_CALIBRATION,
 	/** The data module has performed all procedures to prepare for
 	 *  a shutdown of the system. The event carries the ID (id) of the module.
 	 */

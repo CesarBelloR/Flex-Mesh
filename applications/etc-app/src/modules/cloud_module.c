@@ -577,6 +577,7 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 
 	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
 	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	    IS_EVENT(msg, data, DATA_EVT_REQUEST_CALIBRATION) ||
 	    IS_EVENT(msg, cloud, CLOUD_EVT_RECONNECT_REQUEST)) {
 		/* Start cloud connection process */
 		if (connect_cloud() == 0) {
@@ -597,7 +598,8 @@ static void on_sub_state_cloud_connecting(struct cloud_msg_data *msg)
 	 * Use _schedule instead of _reschedule here, as we could otherwise repeatedly
 	 * reschedule the work without the work ever being executed. */
 	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
-	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT)) {
+	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	    IS_EVENT(msg, data, DATA_EVT_REQUEST_CALIBRATION)) {
 		k_work_schedule(&connection_timeout_work,
 				K_SECONDS(DISCONNECT_RECONNECTION_TIMEOUT_S));
 	}
@@ -612,6 +614,7 @@ static void on_sub_state_cloud_paused(struct cloud_msg_data *msg)
 {
 	if (IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE) ||
 	    IS_EVENT(msg, app, APP_EVT_DATA_TRANSMIT) ||
+	    IS_EVENT(msg, data, DATA_EVT_REQUEST_CALIBRATION) ||
 	    IS_EVENT(msg, cloud, CLOUD_EVT_RECONNECT_REQUEST)) {
 		resume_cloud();
 		sub_state_lte_connected_set(SUB_STATE_CLOUD_RUNNING);
