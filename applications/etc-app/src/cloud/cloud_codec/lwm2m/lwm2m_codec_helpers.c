@@ -836,6 +836,129 @@ int lwm2m_codec_helpers_update_location_dummy(struct cloud_codec_data *cloud_dat
 	return lwm2m_codec_helpers_update_location(cloud_data, &dummy_location);
 }
 
+int lwm2m_codec_helpers_update_calibration(struct cloud_codec_data *cloud_data)
+{
+	int err = 0;
+	struct etc_sensor_adc_calibration_info info = {0};
+	for (int i = 0; i < 2; i++) {
+		int obj_inst_id = i;
+		const struct lwm2m_obj_path path_list[] = {
+			LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id),
+		};
+
+		err = etc_calibration_load_config(&info, obj_inst_id == 0);
+		if (err == 0) {
+			err = lwm2m_set_u8(&LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id,
+						      ETC_CALIBRATION_R_TYPE),
+					   obj_inst_id == 0);
+			if (err) {
+				return err;
+			}
+			err = lwm2m_set_time(&LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id,
+							ETC_CALIBRATION_R_TIME),
+					     info.time);
+			if (err) {
+				return err;
+			}
+			err = lwm2m_set_f64(&LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id,
+						       ETC_CALIBRATION_R_OFFSET),
+					    info.offset);
+			if (err) {
+				return err;
+			}
+			err = lwm2m_set_f64(&LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id,
+						       ETC_CALIBRATION_R_HIGH),
+					    info.high);
+			if (err) {
+				return err;
+			}
+			err = lwm2m_set_f64(&LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id,
+						       ETC_CALIBRATION_R_REFERENCE),
+					    info.ref);
+			if (err) {
+				return err;
+			}
+			err = lwm2m_set_string(&LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id,
+							  ETC_CALIBRATION_R_ID),
+					       info.id);
+			if (err) {
+				return err;
+			}
+
+			if (cloud_data != NULL) {
+				err = lwm2m_codec_helpers_object_path_list_add(
+					cloud_data, path_list, ARRAY_SIZE(path_list));
+				if (err) {
+					LOG_ERR("Failed populating object path list, error: %d",
+						err);
+				}
+			}
+		}
+	}
+
+	return err;
+}
+
+int lwm2m_codec_helpers_update_calibration_status(struct cloud_codec_data *cloud_data)
+{
+	int err = 0;
+	struct etc_sensor_calibration_status_info info = {0};
+	/* Copy from calibration */
+	etc_calibration_get_current_status(&info);
+	/* Only update when status is data upload */
+	if (info.status != ETC_SENSOR_CALIB_DATA_UPLOAD) {
+		return -EINVAL;
+	}
+
+	err = lwm2m_set_u8(
+		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_STATUS),
+		info.status);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_u8(
+		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_RESULT),
+		info.result);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_string(
+		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_PRE_VALUES),
+		info.pre_adjustment);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_string(
+		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_POST_VALUES),
+		info.post_adjustment);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_set_string(
+		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_REF_VALUES),
+		info.reference);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_u32(
+		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_ACTIVE_CALIB),
+		info.activation);
+	if (err) {
+		return err;
+	}
+
+	if (cloud_data != NULL) {
+		err = lwm2m_codec_helpers_object_path_list_add(
+			cloud_data, &LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0), 1);
+	}
+
+	return err;
+}
+
 int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_static)
 {
 	int err;

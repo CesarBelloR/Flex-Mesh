@@ -15,6 +15,8 @@
 #include "etc_humid_obj_48936.h"
 #include "etc_functional_test_obj_48937.h"
 #include "etc_location_obj_48938.h"
+#include "etc_calibration_obj_48950.h"
+#include "etc_calibration_status_obj_48939.h"
 
 /* LwM2M read-write flag. */
 #define LWM2M_RES_DATA_FLAG_RW 0

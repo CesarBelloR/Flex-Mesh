@@ -333,4 +333,7 @@ int data_codec_sync_config(struct etc_config *cfg);
  * @retval 0 success
  */
 int data_codec_prepare_config_packet(struct cloud_codec_data *cloud_data);
+
+int data_codec_update_calibration(struct cloud_codec_data *cloud_data);
+int data_codec_update_calibration_status(struct cloud_codec_data *cloud_data);
 #endif /* DATA_CODEC_H__ */

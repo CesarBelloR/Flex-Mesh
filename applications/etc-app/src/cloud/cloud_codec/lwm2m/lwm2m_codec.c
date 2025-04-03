@@ -497,3 +497,13 @@ int data_codec_prepare_config_packet(struct cloud_codec_data *cloud_data)
 	}
 	return err;
 }
+
+int data_codec_update_calibration(struct cloud_codec_data *cloud_data)
+{
+	return lwm2m_codec_helpers_update_calibration(cloud_data);
+}
+
+int data_codec_update_calibration_status(struct cloud_codec_data *cloud_data)
+{
+	return lwm2m_codec_helpers_update_calibration_status(cloud_data);
+}

@@ -14,6 +14,7 @@
 #include <zephyr/net/lwm2m.h>
 
 #include "data_codec.h"
+#include "etc_calibration.h"
 
 /**
  * @defgroup lwm2m_codec_helpers LwM2M codec helpers library
@@ -234,12 +235,27 @@ int lwm2m_codec_helpers_update_location(struct cloud_codec_data *cloud_data,
 int lwm2m_codec_helpers_update_location_dummy(struct cloud_codec_data *cloud_data);
 
 /**
+ * @brief Updates the calibration data in the cloud codec structure.
+ *
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int lwm2m_codec_helpers_update_calibration(struct cloud_codec_data *cloud_data);
+
+/**
+ * @brief Updates the calibration status in the cloud codec structure.
+ *
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int lwm2m_codec_helpers_update_calibration_status(struct cloud_codec_data *cloud_data);
+
+/**
  * Set callback function for registering validation for configuration.
  * 
  * @retval 0 success
  * @retval !=0 error
 */
 int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_data_cb_t callback);
+
 #ifdef __cplusplus
 }
 #endif
