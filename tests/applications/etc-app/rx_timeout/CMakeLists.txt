@@ -33,6 +33,7 @@ target_include_directories(app PRIVATE
                             ${APP_SRC_DIR}/exact/etc_settings
                             ${APP_SRC_DIR}/exact/etc_sensor
                             ${APP_SRC_DIR}/exact/etc_util
+                            ${APP_SRC_DIR}/exact/etc_calibration
                             ${APP_SRC_DIR})
 
 zephyr_compile_definitions_ifdef(CONFIG_BOARD_NATIVE_SIM CONFIG_BOARD_VERSION="0.0.0")

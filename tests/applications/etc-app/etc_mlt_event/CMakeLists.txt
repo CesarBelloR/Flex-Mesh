@@ -33,6 +33,7 @@ target_include_directories(app PRIVATE
                             ${APP_SRC_DIR}/exact/etc_settings
                             ${APP_SRC_DIR}/exact/etc_sensor
                             ${APP_SRC_DIR}/exact/etc_util
+                            ${APP_SRC_DIR}/exact/etc_calibration
                             ${APP_SRC_DIR}
                             ${MEMFAULT_SDK_ROOT}/components/include
 )

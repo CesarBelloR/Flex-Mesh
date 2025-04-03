@@ -507,6 +507,30 @@ void etc_sensor_calibration_enter(void)
 	etc_sensor_gpios_enable();
 }
 
+static struct w1_rom tmp1826_rom;
+
+static void w1_search_callback(struct w1_rom val, void *user_data)
+{
+	int *devices_on_bus = (int *)user_data;
+	*devices_on_bus = *devices_on_bus + 1;
+	tmp1826_rom = val;
+	LOG_DBG("found w1 sensor with id 0x%016llx", w1_rom_to_uint64(&val));
+}
+
+static void etc_sensor_calibration_probe_slaves(void)
+{
+	const struct device *const w1 = DEVICE_DT_GET(DT_NODELABEL(w1));
+	uint8_t family_code;
+	struct w1_rom stored_rom;
+	int num_devices = 0;
+	family_code = DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
+	w1_search_bus(w1, W1_CMD_SEARCH_ROM, family_code, w1_search_callback, &num_devices);
+	LOG_INF("found %d devices on one-wire bus", num_devices);
+	struct sensor_value val;
+	w1_rom_to_sensor_value(&tmp1826_rom, &val);
+	sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_W1_ROM, &val);
+}
+
 int etc_sensor_calibration_scan(void)
 {
 	int num_sensor = 0;
@@ -520,6 +544,8 @@ int etc_sensor_calibration_scan(void)
 		if (rc == 0) {
 			continue;
 		}
+		/* Probe slaves */
+		etc_sensor_calibration_probe_slaves();
 		if (!device_is_ready(tmp1826_dev)) {
 			LOG_ERR("TMP1826 is not ready in I2C bus");
 			continue;
@@ -562,15 +588,20 @@ int etc_sensor_calibration_read_code(void)
 	return -ENOENT;
 }
 
-int etc_sensor_calibration_read_adc()
+int etc_sensor_calibration_read_adc(struct etc_sensor_adc_raw_data *raw_adc)
 {
 	int sum_adc = 0;
+	int cur_adc = 0;
 	etc_sensor_gpios_one_wire_disable();
 	k_msleep(10);
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		etc_sensor_adc_switch_channel(i);
 		k_msleep(10);
-		sum_adc += adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
+		cur_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
+		if (raw_adc) {
+			raw_adc->port[i] = cur_adc;
+		}
+		sum_adc += cur_adc;
 	}
 	return sum_adc / 4;
 }

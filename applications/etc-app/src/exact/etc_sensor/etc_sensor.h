@@ -161,7 +161,7 @@ int etc_sensor_calibration_read_code(void);
  *
  * @return int The ADC value.
  */
-int etc_sensor_calibration_read_adc(void);
+int etc_sensor_calibration_read_adc(struct etc_sensor_adc_raw_data *raw_adc);
 
 /**
  * @brief Sets the GPIO mask for sensor calibration.

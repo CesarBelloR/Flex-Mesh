@@ -44,6 +44,7 @@ set(INCLUDE_DIRS
         ${APP_SRC_DIR}/exact/etc_settings
         ${APP_SRC_DIR}/exact/etc_sensor
         ${APP_SRC_DIR}/exact/etc_util
+        ${APP_SRC_DIR}/exact/etc_calibration
         ${APP_SRC_DIR}/exact/etc_functional_test
         ${APP_SRC_DIR}/modules
         ${APP_SRC_DIR}

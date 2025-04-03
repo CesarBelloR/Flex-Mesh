@@ -10,6 +10,48 @@ config CALIBRATION_MODULE_SHELL
 	depends on SHELL
 	default n
 
+config TEMP_RANGE_SPECIFIC_MIN
+    int "Specific Range Minimum (centidegrees C)"
+    default 1800
+    help
+        Minimum value for the specific temperature range (in centidegrees C)
+
+config TEMP_RANGE_SPECIFIC_MAX
+    int "Specific Range Maximum (centidegrees C)"
+    default 2800
+    help
+        Maximum value for the specific temperature range (in centidegrees C)
+
+config TEMP_RANGE_SWITCH2_REF
+    int "Switch 2 Temperature Reference (centidegrees C)"
+    default 20
+    help
+        Reference value for switch 2 temperature range (in centidegrees C)
+
+config TEMP_RANGE_SWITCH3_REF
+    int "Switch 3 Temperature Reference (centidegrees C)"
+    default 2500
+    help
+        Reference value for switch 3 temperature range (in centidegrees C)
+
+config TEMP_RANGE_SWITCH4_REF
+    int "Switch 4 Temperature Reference (centidegrees C)"
+    default 4460
+    help
+        Reference value for switch 4 temperature range (in centidegrees C)
+
+config TEMP_RANGE_SWITCH5_REF
+    int "Switch 5 Temperature Reference (centidegrees C)"
+    default 7040
+    help
+        Reference value for switch 5 temperature range (in centidegrees C)
+
+config TEMP_TOLERANCE
+    int "Temperature Tolerance (centidegrees C)"
+    default 24
+    help
+        Tolerance value applied to switch temperature ranges (in centidegrees C)
+
 module = ETC_CALIBRATION
 module-str = calibration
 source "subsys/logging/Kconfig.template.log_config"

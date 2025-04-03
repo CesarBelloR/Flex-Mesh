@@ -6,16 +6,7 @@
 #define ETC_SENSOR_HELPER_H_
 
 #include <stdbool.h>
-
-/**
- * @brief Structure to hold ADC calibration information for ETC sensor
- */
-struct etc_sensor_adc_calibration_info {
-	float offset; /**< Offset value for calibration */
-	float high;   /**< High reference value for calibration */
-	float ref;    /**< Reference value for calibration */
-	bool loaded;  /**< Flag indicating if calibration data is loaded */
-};
+#include "etc_calibration.h"
 
 /**
  * @brief Applies temperature compensation to raw ADC value
