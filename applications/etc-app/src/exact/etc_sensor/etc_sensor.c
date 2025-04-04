@@ -625,7 +625,7 @@ float etc_sensor_calibration_convert_temperature(
 	float temp = 0.0;
 	uint16_t calibrated_adc =
 		etc_sensor_helper_get_calibrated_adc(raw_adc, rr_hw_adc, calibration_info);
-	return etc_sensor_helper_ntc_get(raw_adc, ETC_ADC_CHANNEL_SENSOR);
+	return etc_sensor_helper_ntc_get(calibrated_adc, ETC_ADC_CHANNEL_SENSOR);
 }
 
 float etc_sensor_calibration_read_temperature_from_sensor(void)

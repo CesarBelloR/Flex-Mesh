@@ -498,6 +498,18 @@ static void on_state_lte_connected(struct cloud_msg_data *msg)
 		state_set(STATE_LTE_DISCONNECTED);
 		sub_state_lte_disconnected_set(SUB_STATE_LTE_PSM);
 	}
+
+	if (IS_EVENT(msg, app, APP_EVT_REQUEST_CALIBRATION)) {
+		if (sub_state_lte_connected == SUB_STATE_CLOUD_PAUSED) {
+			resume_cloud();
+			sub_state_lte_connected_set(SUB_STATE_CLOUD_RUNNING);
+			if (sub_state_cloud_running == SUB_STATE_CLOUD_DISCONNECTED) {
+				if (connect_cloud() == 0) {
+					sub_state_cloud_running_set(SUB_STATE_CLOUD_CONNECTING);
+				}
+			}
+		}
+	}
 }
 
 /* Message handler for STATE_LTE_DISCONNECTED. */
