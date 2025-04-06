@@ -64,6 +64,8 @@ enum app_event_type {
 	/** The application module receives a request from user to start calibration
 	 */
 	APP_EVT_REQUEST_CALIBRATION,
+	/* Calibration timeout */
+	APP_EVT_TIMEOUT_CALIBRATION,
 	/** An irrecoverable error has occurred in the application module. Error details are
 	 *  attached in the event structure.
 	 */

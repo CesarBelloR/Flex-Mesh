@@ -10,6 +10,13 @@ config CALIBRATION_MODULE_SHELL
 	depends on SHELL
 	default n
 
+config CALIBRATION_TIMEOUT
+    int "Calibration timeout in seconds"
+    default 30
+    help
+        Time in seconds after which calibration will abort if cloud connection
+        cannot be established. When timeout occurs, LED will blink red.
+
 config TEMP_RANGE_SPECIFIC_MIN
     int "Specific Range Minimum (centidegrees C)"
     default 1800

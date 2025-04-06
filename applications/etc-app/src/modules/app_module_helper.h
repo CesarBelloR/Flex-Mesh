@@ -78,4 +78,8 @@ time_t app_module_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logg
  */
 void app_module_print_time_debug(time_t time, const char *msg);
 
+/**
+ * @brief Notify the calibration timeout
+ */
+void app_module_notify_calibration_timeout(void);
 #endif /* APP_MODULE_HELPER_H_ */

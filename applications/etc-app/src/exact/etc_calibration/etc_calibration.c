@@ -10,6 +10,7 @@ LOG_MODULE_REGISTER(etc_calibration, CONFIG_ETC_CALIBRATION_LOG_LEVEL);
 #include "etc_sensor.h"
 #include "etc_sensor_helper.h"
 #include "etc_calibration.h"
+#include "app_module_helper.h"
 
 // Enumration for switch state list
 enum switch_state {
@@ -77,6 +78,10 @@ static const struct adc_range list_adc[] = {{-100, 100}, {3914, 4114}};
 // Mutex to block the sensor processing
 K_MUTEX_DEFINE(etc_calibration_mutex);
 
+// Work delayable to handle timeout
+static void etc_calibration_timeout_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(etc_calibration_timeout, etc_calibration_timeout_handler);
+
 // Boolean flag indicating whether the calibration process is ready to proceed.
 static bool etc_calibration_ready = false;
 
@@ -117,6 +122,7 @@ int etc_calibration_check(void)
 	calibration_status.status = ETC_SENSOR_CALIB_PRECALIB_VALUE_CHECK;
 	/* TODO: need to know the calibrator code */
 	rc = 0;
+	k_work_schedule(&etc_calibration_timeout, K_SECONDS(CONFIG_CALIBRATION_TIMEOUT));
 done:
 	etc_calibration_unlock();
 	return rc;
@@ -189,6 +195,15 @@ static int etc_calibration_packet_calibrator_sn(char *id_msg, int id_size)
 	return 0;
 }
 
+static void etc_calibration_timeout_handler(struct k_work *work)
+{
+	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
+	calibration_status.status = ETC_SENSOR_CALIB_IDLE;
+	etc_sensor_calibration_exit();
+	app_module_notify_calibration_timeout();
+	k_mutex_unlock(&etc_calibration_mutex);
+}
+
 int etc_calibration_run(void)
 {
 	int rc = 0;
@@ -199,6 +214,9 @@ int etc_calibration_run(void)
 	struct etc_sensor_adc_calibration_info previous_calibration_info = {0};
 	struct etc_sensor_adc_raw_data raw_data = {0};
 	etc_calibration_lock();
+
+	/* Cancel timeout work */
+	k_work_cancel_delayable(&etc_calibration_timeout);
 
 	if (!etc_calibration_ready) {
 		etc_calibration_ready = true;

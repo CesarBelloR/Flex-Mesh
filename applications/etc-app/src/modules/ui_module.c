@@ -715,6 +715,12 @@ static void on_state_calibration(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(last_state);
 	}
+
+	if (IS_EVENT(msg, app, APP_EVT_TIMEOUT_CALIBRATION)) {
+		transition_list_append(LED_STATE_CALIBRATION_TIMEOUT, HOLD_FOREVER);
+		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		state_set(last_state);
+	}
 }
 
 /* Message handler for all states. */

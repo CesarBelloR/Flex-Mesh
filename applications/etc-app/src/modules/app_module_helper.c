@@ -1,6 +1,8 @@
 #include "app_module_helper.h"
+#include "events/app_event.h"
 #include "etc_util.h"
 #include "etc_settings.h"
+#include "modules_common.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(app_module_helper, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -228,4 +230,9 @@ time_t app_module_get_next_transmit_lora_sync_cloud(time_t now, uint16_t tx_logg
 
 	/* Return the next transmit for logger lora mode to sync with cloud */
 	return wakeup_s;
+}
+
+void app_module_notify_calibration_timeout(void)
+{
+	SEND_EVENT(app, APP_EVT_TIMEOUT_CALIBRATION);
 }
