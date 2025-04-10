@@ -124,6 +124,11 @@ int etc_calibration_check(void)
 	rc = 0;
 	k_work_schedule(&etc_calibration_timeout, K_SECONDS(CONFIG_CALIBRATION_TIMEOUT));
 done:
+	/* Reset & exit calibration when not ready */
+	if (rc) {
+		calibration_status.status = ETC_SENSOR_CALIB_IDLE;
+		etc_sensor_calibration_exit();
+	}
 	etc_calibration_unlock();
 	return rc;
 }
