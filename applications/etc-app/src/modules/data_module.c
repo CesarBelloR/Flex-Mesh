@@ -522,6 +522,7 @@ static void data_encode_for_cloud(bool split, bool is_relay)
 	if (first_send) {
 		state_relay_send = STATE_RELAY_SEND_META_MODEL;
 		data_codec_prepare_update_packet(&codec);
+		data_codec_update_calibration(&codec);
 		first_send = false;
 	}
 
