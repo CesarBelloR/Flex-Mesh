@@ -845,7 +845,7 @@ int lwm2m_codec_helpers_update_calibration(struct cloud_codec_data *cloud_data)
 		const struct lwm2m_obj_path path_list[] = {
 			LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id),
 		};
-
+		memset(&info, 0, sizeof(info));
 		err = etc_calibration_load_config(&info, obj_inst_id == 0);
 		if (err == 0) {
 			err = lwm2m_set_u8(&LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id,

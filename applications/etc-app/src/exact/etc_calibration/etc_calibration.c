@@ -369,6 +369,7 @@ int etc_calibration_load_config(struct etc_sensor_adc_calibration_info *info, bo
 		rc = etc_device_read_setting(ETC_CALIBRATOR_USER_ID, &info->id, sizeof(info->id));
 		if (rc) {
 			LOG_ERR("Can't load the user calibration for calibrator id");
+			memset(info->id, 0, sizeof(info->id));
 			rc = 0;
 		}
 	} else {
@@ -392,13 +393,14 @@ int etc_calibration_load_config(struct etc_sensor_adc_calibration_info *info, bo
 		rc = etc_device_read_setting(ETC_CALIBRATOR_ID, &info->id, sizeof(info->id));
 		if (rc) {
 			LOG_ERR("Can't load the factory calibration for calibrator id");
+			memset(info->id, 0, sizeof(info->id));
 			rc = 0;
 		}
 		rc = etc_device_read_setting(ETC_CALIBRATION_TIME_ID, &info->time,
 					     sizeof(info->time));
 		if (rc) {
 			LOG_ERR("No factory calibration for date/time");
-			info->time = -1;
+			info->time = 0;
 			rc = 0;
 		}
 	}
