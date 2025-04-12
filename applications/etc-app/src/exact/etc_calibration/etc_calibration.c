@@ -115,7 +115,7 @@ int etc_calibration_check(void)
 	rc = etc_sensor_calibration_read_sn();
 	if (rc < ETC_CALIB_MIN_SN || rc > ETC_CALIB_MAX_SN) {
 		LOG_ERR("No calibration code!");
-		return rc;
+		goto done;
 	}
 	LOG_DBG("Code sensor %d", rc);
 	etc_calibrator_sn = rc;
