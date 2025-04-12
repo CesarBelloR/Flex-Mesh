@@ -522,7 +522,6 @@ static void data_encode_for_cloud(bool split, bool is_relay)
 	if (first_send) {
 		state_relay_send = STATE_RELAY_SEND_META_MODEL;
 		data_codec_prepare_update_packet(&codec);
-		data_codec_update_calibration(&codec);
 		first_send = false;
 	}
 
@@ -632,13 +631,12 @@ static void data_do_and_send_calibration(void)
 		lwm2m_rd_client_update();
 		etc_calibration_run();
 		if ((etc_calibration_get_calibration_status()) == ETC_SENSOR_CALIB_DATA_UPLOAD) {
-			data_codec_update_calibration_status(&codec);
-			if ((etc_calibration_get_calibration_result() ==
+			if ((etc_calibration_get_calibration_result() !=
 			     ETC_SENSOR_CALIB_SUCCESS)) {
-				data_codec_update_calibration(&codec);
-			} else {
 				data_module_send_calibration_status(DATA_EVT_CALIBRATION_ERROR);
 			}
+			data_codec_update_calibration(&codec);
+			data_codec_update_calibration_status(&codec);
 		}
 		etc_calibration_exit();
 		atomic_set(&calibration_process, false);

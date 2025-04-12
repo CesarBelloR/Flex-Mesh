@@ -93,6 +93,13 @@ int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_hand
 		return err;
 	}
 
+	err = lwm2m_codec_helpers_update_calibration(NULL);
+	if (err) {
+		LOG_ERR("lwm2m_codec_helpers_update_calibration, error: %d",
+			err);
+		return err;
+	}
+
 	module_evt_handler = event_handler;
 	return 0;
 }
