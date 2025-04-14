@@ -63,6 +63,9 @@ enum analog_range_list {
 // Constant array of ADC ranges used for calibration testing.
 static const struct adc_range list_adc[] = {{-100, 100}, {3914, 4114}};
 
+// Constant value for battery valid to do calibration
+static const int batt_valid_mV = 3300;
+
 // Macro to check if a given temperature is within a specified temperature range index in
 // list_temperature.
 #define IS_TEMP_IN_RANGE(index, temp)                                                              \
@@ -105,7 +108,15 @@ int etc_calibration_check(void)
 	}
 
 	etc_sensor_calibration_enter();
-	int rc = etc_sensor_calibration_scan();
+	int rc = 0;
+	uint16_t current_bat_mV = etc_sensor_get_battery();
+	if (current_bat_mV < batt_valid_mV) {
+		LOG_ERR("Low power to handle calibration");
+		rc = -EINVAL;
+		calibration_status.result = ETC_SENSOR_CALIB_BATTERY_LOW;
+		goto done;
+	}
+	rc = etc_sensor_calibration_scan();
 	if (rc == 0) {
 		LOG_ERR("No calibration tool is here");
 		rc = -ENOENT;
@@ -226,6 +237,14 @@ int etc_calibration_run(void)
 	if (!etc_calibration_ready) {
 		etc_calibration_ready = true;
 		etc_calibration_init();
+	}
+
+	uint16_t current_bat_mV = etc_sensor_get_battery();
+	if (current_bat_mV < batt_valid_mV) {
+		LOG_ERR("Low power to handle calibration");
+		rc = -EINVAL;
+		calibration_status.result = ETC_SENSOR_CALIB_BATTERY_LOW;
+		goto done;
 	}
 
 	float current_temp = etc_sensor_calibration_read_temperature_from_sensor();

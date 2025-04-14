@@ -647,6 +647,15 @@ static void on_state_running(struct ui_msg_data *msg)
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(STATE_CALIBRATION);
 	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CALIBRATION_ERROR)) {
+		uint8_t result = msg->module.data.data.calibration_result;
+		if (result == ETC_SENSOR_CALIB_BATTERY_LOW) {
+			transition_list_append(LED_STATE_CALIBRATION_BATTERY_LOW,
+					       UI_LED_CALIBRATION_RESULT_MSEC);
+			k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		}
+	}
 }
 
 /* Message handler for STATE_FOTA_UPDATING. */
@@ -694,10 +703,13 @@ static void on_state_calibration(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_CALIBRATION_ERROR)) {
 		uint8_t result = msg->module.data.data.calibration_result;
-		(void)result;
-		/* MEASUREMENT_FAIL led state is used for all errors, as it the most visible */
-		transition_list_append(LED_STATE_CALIBRATION_MEASUREMENT_FAIL,
-				       UI_LED_CALIBRATION_RESULT_MSEC);
+		if (result == ETC_SENSOR_CALIB_BATTERY_LOW) {
+			transition_list_append(LED_STATE_CALIBRATION_BATTERY_LOW,
+					       UI_LED_CALIBRATION_RESULT_MSEC);
+		} else {
+			transition_list_append(LED_STATE_CALIBRATION_MEASUREMENT_FAIL,
+					       UI_LED_CALIBRATION_RESULT_MSEC);
+		}
 		k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		state_set(last_state);
 	}
