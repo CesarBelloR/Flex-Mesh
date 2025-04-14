@@ -112,15 +112,22 @@ static void app_soft_watchdog_work_handler(struct k_work* work);
 K_MUTEX_DEFINE(app_module_lock);
 K_WORK_DELAYABLE_DEFINE(app_soft_watchdog_work, app_soft_watchdog_work_handler);
 
-/* Defind functions for set/get next wake up */
-static void app_set_next_wakekup(int wakeup, enum app_wakeup_tx_work_type work_type) {
-	next_wakeup = wakeup;
-	wakeup_tx_type = work_type;
-}
-
 static void app_set_tx_work_type(enum app_wakeup_tx_work_type work_type) {
 	k_mutex_lock(&app_module_lock, K_FOREVER);
+	if (wakeup_tx_type >= APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+		LOG_WRN("Wakeup tx work type already set to %d", wakeup_tx_type);
+		k_mutex_unlock(&app_module_lock);
+		return;
+	}
 	wakeup_tx_type = work_type;
+	k_mutex_unlock(&app_module_lock);
+}
+
+/* Defind functions for set/get next wake up */
+static void app_set_next_wakeup(int wakeup, enum app_wakeup_tx_work_type work_type) {
+	k_mutex_lock(&app_module_lock, K_FOREVER);
+	next_wakeup = wakeup;
+	app_set_tx_work_type(work_type);
 	k_mutex_unlock(&app_module_lock);
 }
 
@@ -130,6 +137,15 @@ static int app_get_next_wakeup(void) {
 	wakeup = next_wakeup;
 	k_mutex_unlock(&app_module_lock);
 	return wakeup;
+}
+
+static enum app_wakeup_tx_work_type app_get_and_reset_wakeup_tx_work_type(void) {
+	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
+	k_mutex_lock(&app_module_lock, K_FOREVER);
+	type = wakeup_tx_type;
+	wakeup_tx_type = APP_WAKEUP_TX_INTERVAL_WORK;
+	k_mutex_unlock(&app_module_lock);
+	return type;
 }
 
 static enum app_wakeup_tx_work_type app_get_wakeup_tx_work_type(void) {
@@ -525,7 +541,7 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 		}
 	}
 
-	app_set_next_wakekup(wakeup, type);
+	app_set_next_wakeup(wakeup, type);
 	
 	LOG_DBG("Now at: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
 	LOG_DBG("Log %u - Transmit/Receive %u", (uint32_t)next_log, (uint32_t)next_transmit);
@@ -604,7 +620,7 @@ static void app_peripheral_on(bool is_rtc)
 		case ETC_DEVICE_JOB_TX_RX: {
 			etc_device_set_job(ETC_DEVICE_JOB_TX_RX);
 			app_module_backoff_check_multiple_value();
-			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+			if (app_get_and_reset_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else {
@@ -625,7 +641,7 @@ static void app_peripheral_on(bool is_rtc)
 			app_module_backoff_check_multiple_value();
 			etc_device_set_job(ETC_DEVICE_JOB_BOTH);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
-			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+			if (app_get_and_reset_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			}
@@ -813,11 +829,12 @@ static void on_all_events(struct app_msg_data *msg)
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
 		enum etc_device_job job = etc_device_get_job();
 		if ((job == ETC_DEVICE_JOB_BOTH) || (job == ETC_DEVICE_JOB_TX_RX)) {
-			if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+			enum app_wakeup_tx_work_type type = app_get_and_reset_wakeup_tx_work_type();
+			if (type == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_SYNC_CLOUD");
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
-			} else if (app_get_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK) {
+			} else if (type == APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK) {
 				LOG_DBG("DATA_EVT_DATA_READY -> APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK");
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_MAGNET);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
