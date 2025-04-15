@@ -244,7 +244,7 @@ int etc_calibration_run(void)
 		etc_calibration_init();
 	}
 
-	uint16_t current_bat_mV = etc_sensor_sample_and_get_battery();
+	current_bat_mv = etc_sensor_sample_and_get_battery();
 	if (current_bat_mv < batt_valid_mv) {
 		LOG_ERR("Low power to handle calibration");
 		rc = -EINVAL;
