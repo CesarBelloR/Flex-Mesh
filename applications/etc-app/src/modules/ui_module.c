@@ -656,6 +656,15 @@ static void on_state_running(struct ui_msg_data *msg)
 			k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
 		}
 	}
+
+	if (IS_EVENT(msg, app, APP_EVT_CALIBRATION_ERROR)) {
+		int result = msg->module.app.data.calibration_result;
+		if (result == ETC_SENSOR_CALIB_BATTERY_LOW) {
+			transition_list_append(LED_STATE_CALIBRATION_BATTERY_LOW,
+					       UI_LED_CALIBRATION_RESULT_MSEC);
+			k_work_reschedule(&led_pattern_update_work, K_NO_WAIT);
+		}
+	}
 }
 
 /* Message handler for STATE_FOTA_UPDATING. */

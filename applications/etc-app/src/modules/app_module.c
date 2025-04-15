@@ -657,6 +657,14 @@ static void app_peripheral_on(bool is_rtc)
 	}
 }
 
+static void send_calibration_result(enum app_event_type type, int result)
+{
+	struct app_event *app_event = new_app_event();
+	app_event->type = type;
+	app_event->data.calibration_result = result;
+	APP_EVENT_SUBMIT(app_event);
+}
+
 static void app_input_handler(enum etc_interface_event_type type)
 {
 	if (type == ETC_INTERFACE_EVENT_RTC) {
@@ -665,6 +673,10 @@ static void app_input_handler(enum etc_interface_event_type type)
 		if (etc_calibration_check() == 0) {
 			SEND_EVENT(app, APP_EVT_REQUEST_CALIBRATION);
 		} else {
+			int calib_result = etc_calibration_get_calibration_result();
+			if (calib_result >= ETC_SENSOR_CALIB_POST_ADJ_OUT_OF_RANGE) {
+				send_calibration_result(APP_EVT_CALIBRATION_ERROR, calib_result);
+			}
 			app_set_tx_work_type(APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK);
 			etc_ble_start_adv_with_timeout();
 			app_peripheral_on(false);

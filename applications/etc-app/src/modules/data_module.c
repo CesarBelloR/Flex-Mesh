@@ -356,7 +356,7 @@ static void data_module_send_calibration_status(enum data_event_type type)
 {
 	struct data_event *data_event = new_data_event();
 	data_event->type = type;
-	data_event->data.test_result = etc_calibration_get_calibration_result();
+	data_event->data.calibration_result = etc_calibration_get_calibration_result();
 	APP_EVENT_SUBMIT(data_event);
 }
 

@@ -66,6 +66,8 @@ enum app_event_type {
 	APP_EVT_REQUEST_CALIBRATION,
 	/* Calibration timeout */
 	APP_EVT_TIMEOUT_CALIBRATION,
+	/* Calibration failed during the "calibration check" stage */
+	APP_EVT_CALIBRATION_ERROR,
 	/** An irrecoverable error has occurred in the application module. Error details are
 	 *  attached in the event structure.
 	 */
@@ -89,6 +91,8 @@ struct app_event {
 		int err;
 		/* Module ID, used when acknowledging shutdown requests. */
 		uint32_t id;
+		/* Calibration result */
+		int calibration_result;
 	} data;
 
 	size_t count;

@@ -92,6 +92,17 @@ int8_t etc_sensor_get_probe_humid_index(void);
 uint16_t etc_sensor_get_battery(void);
 
 /**
+ * @brief Sample and get the battery voltage in mV.
+ *
+ * The caller is responsible for ensuring that `etc_calibration_lock()` is called
+ * before sampling and retrieving the value. This should only be used from
+ * etc_sensor or etc_calibration.
+ *
+ * @return battery voltage in mV
+ */
+uint16_t etc_sensor_sample_and_get_battery(void);
+
+/**
  * @brief Run or start a new data acquisition cycle.
  * 
  * This function initiates a new round of data collection from the sensors.

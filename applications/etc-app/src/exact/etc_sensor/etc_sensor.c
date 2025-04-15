@@ -434,6 +434,14 @@ uint16_t etc_sensor_get_battery(void)
 	return adc_mv_battery;
 }
 
+uint16_t etc_sensor_sample_and_get_battery(void)
+{
+	sensor_battery_raw_adc = etc_sensor_helper_get_calibrated_adc(
+		adc_get_channel(ETC_ADC_CHANNEL_BATTERY), &sensor_r_hw_raw_adc,
+		&etc_sensor_adc_calibration_info);
+	return etc_sensor_get_battery();
+}
+
 void etc_sensor_run_acquisition(void)
 {
 	etc_calibration_lock();

@@ -51,6 +51,8 @@ static char *get_evt_type_str(enum app_event_type type)
 		return "APP_EVT_REQUEST_CALIBRATION";
 	case APP_EVT_TIMEOUT_CALIBRATION:
 		return "APP_EVT_TIMEOUT_CALIBRATION";
+	case APP_EVT_CALIBRATION_ERROR:
+		return "APP_EVT_CALIBRATION_ERROR";
 	case APP_EVT_ERROR:
 		return "APP_EVT_ERROR";
 	default: {
