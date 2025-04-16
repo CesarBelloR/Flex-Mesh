@@ -142,7 +142,8 @@ done:
 	/* Reset & exit calibration when not ready */
 	if (rc) {
 		calibration_status.status = ETC_SENSOR_CALIB_IDLE;
-		etc_sensor_calibration_exit();
+		/* Do not turn off power to analog circuitry, as this can cause
+		 * issues with regular sampling after the magnet swipe. */
 	}
 	etc_calibration_unlock();
 	return rc;

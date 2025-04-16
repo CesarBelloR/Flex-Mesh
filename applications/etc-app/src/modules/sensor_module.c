@@ -283,6 +283,13 @@ static int sensor_poll_handler(enum sensor_sample_type sample_type)
 		 * quick succession causes issues with the linear regulator
 		 * supplying VCC_A (voltage for analog sensors)
 		 */
+		/* Ensure power to the analog circuitry is disabled. If a previous
+		 * calibration check failed, it is possible that the analog circuitry
+		 * is still powered on, which can lead to increased power draw. */
+		if (etc_sensor_disable_power()) {
+			LOG_DBG("Sensor power disabled");
+			last_poll_complete_time_ms = now_ms;
+		}
 		return 0;
 	}
 

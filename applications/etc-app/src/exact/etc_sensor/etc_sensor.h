@@ -124,6 +124,13 @@ enum sensor_type etc_sensor_get_probe_type(enum sensor_input input);
  */
 enum etc_sensor_status etc_sensor_get_status(void);
 
+/**
+ * @brief Disable the sensor voltage rail, if enabled.
+ *
+ * @return true if power was disabled, false if there was no action.
+ */
+bool etc_sensor_disable_power(void);
+
 /** Get the enter functional test status. This will return true if all four
  * sensor ports report a connected analog sensor and a low level on the 1-wire
  * sensor line.

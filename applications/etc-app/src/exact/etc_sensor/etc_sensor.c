@@ -130,8 +130,9 @@ static void etc_sensor_adc_hw_init(void)
 		return;
 	}
 #endif
-
-	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_INACTIVE);
+	/* Configure as output with input connected. This allows reading the pin state through
+	 * the gpio_get API calls. */
+	gpio_pin_configure_dt(&vsen_en_dt, GPIO_OUTPUT_INACTIVE | GPIO_INPUT);
 
 	adc_init();
 }
@@ -154,6 +155,15 @@ static void etc_sensor_gpios_one_wire_enable(void)
 #if DT_NODE_EXISTS(DT_NODELABEL(onewire_slpz))
 	gpio_pin_configure_dt(&onewire_slpz_dt, GPIO_OUTPUT_INACTIVE);
 #endif
+}
+
+bool etc_sensor_disable_power(void)
+{
+	if (gpio_pin_get_dt(&vsen_en_dt)) {
+		gpio_pin_set_dt(&vsen_en_dt, 0U);
+		return true;
+	}
+	return false;
 }
 
 static void etc_sensor_gpios_disable(void)
