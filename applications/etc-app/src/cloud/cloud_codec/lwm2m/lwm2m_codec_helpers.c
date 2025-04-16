@@ -836,21 +836,50 @@ int lwm2m_codec_helpers_update_location_dummy(struct cloud_codec_data *cloud_dat
 	return lwm2m_codec_helpers_update_location(cloud_data, &dummy_location);
 }
 
-int lwm2m_codec_helpers_update_calibration(struct cloud_codec_data *cloud_data)
+static int update_active_calibration(struct cloud_codec_data *cloud_data, int active_calib)
 {
 	int err = 0;
+	err = lwm2m_set_u32(
+		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_ACTIVE_CALIB),
+		active_calib);
+	if (err) {
+		return err;
+	}
+
+	if (cloud_data != NULL) {
+		err = lwm2m_codec_helpers_object_path_list_add(
+			cloud_data,
+			&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0,
+				   ETC_CALIBRATION_STATUS_R_ACTIVE_CALIB),
+			1);
+	}
+	return err;
+}
+
+int lwm2m_codec_helpers_update_calibration(struct cloud_codec_data *cloud_data)
+{
 	struct etc_sensor_adc_calibration_info info = {0};
+	/* Choose factory calibration (index 1) as default index */
+	int active_calib_index = 1;
+	int err = 0;
+
 	for (int i = 0; i < 2; i++) {
 		int obj_inst_id = i;
+		bool is_user = (obj_inst_id == 0);
 		const struct lwm2m_obj_path path_list[] = {
 			LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id),
 		};
 		memset(&info, 0, sizeof(info));
-		err = etc_calibration_load_config(&info, obj_inst_id == 0);
+		err = etc_calibration_load_config(&info, is_user);
 		if (err == 0) {
+			/* Active calibration is always the user calibration if it is
+			   available. */
+			if (is_user && strlen(info.id) > 0) {
+				active_calib_index = obj_inst_id;
+			}
 			err = lwm2m_set_u8(&LWM2M_OBJ(ETC_CALIBRATION_OBJ_ID, obj_inst_id,
 						      ETC_CALIBRATION_R_TYPE),
-					   obj_inst_id == 0);
+					   (uint8_t)is_user);
 			if (err) {
 				return err;
 			}
@@ -896,6 +925,8 @@ int lwm2m_codec_helpers_update_calibration(struct cloud_codec_data *cloud_data)
 		}
 	}
 
+	update_active_calibration(cloud_data, active_calib_index);
+
 	return err;
 }
 
@@ -940,13 +971,6 @@ int lwm2m_codec_helpers_update_calibration_status(struct cloud_codec_data *cloud
 	err = lwm2m_set_string(
 		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_REF_VALUES),
 		info.reference);
-	if (err) {
-		return err;
-	}
-
-	err = lwm2m_set_u32(
-		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_ACTIVE_CALIB),
-		info.activation);
 	if (err) {
 		return err;
 	}
