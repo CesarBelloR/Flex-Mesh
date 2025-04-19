@@ -466,6 +466,7 @@ void etc_calibration_exit(void)
 {
 	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
 	calibration_status.status = ETC_SENSOR_CALIB_IDLE;
+	etc_calibration_ready = false;
 	etc_sensor_calibration_exit();
 	k_mutex_unlock(&etc_calibration_mutex);
 }
