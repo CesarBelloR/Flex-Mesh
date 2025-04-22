@@ -101,7 +101,6 @@ void etc_calibration_init(void)
 
 int etc_calibration_check(void)
 {
-	uint16_t current_bat_mv;
 	etc_calibration_lock();
 	if (!etc_calibration_ready) {
 		etc_calibration_ready = true;
@@ -124,15 +123,6 @@ int etc_calibration_check(void)
 		goto done;
 	}
 	LOG_DBG("Code sensor %d", rc);
-
-	current_bat_mv = etc_sensor_sample_and_get_battery();
-	if (current_bat_mv < batt_valid_mv) {
-		LOG_ERR("Low power to handle calibration");
-		rc = -EINVAL;
-		calibration_status.result = ETC_SENSOR_CALIB_BATTERY_LOW;
-		goto done;
-	}
-
 	etc_calibrator_sn = rc;
 	calibration_status.status = ETC_SENSOR_CALIB_PRECALIB_VALUE_CHECK;
 	/* TODO: need to know the calibrator code */
@@ -234,7 +224,7 @@ int etc_calibration_run(void)
 		.high = 0.0, .loaded = true, .offset = 0.0, .ref = 3948.75};
 	struct etc_sensor_adc_calibration_info previous_calibration_info = {0};
 	struct etc_sensor_adc_raw_data raw_data = {0};
-	uint16_t current_bat_mv;
+	uint16_t current_bat_mv = 0;
 	etc_calibration_lock();
 
 	/* Cancel timeout work */

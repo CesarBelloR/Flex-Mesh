@@ -6,7 +6,7 @@
 		<ObjectID>48939</ObjectID>
 		<ObjectURN></ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.0</ObjectVersion>
+		<ObjectVersion>1.1</ObjectVersion>
 		<MultipleInstances>Single</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -26,9 +26,9 @@
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>0-4</RangeEnumeration>
+				<RangeEnumeration>0-5</RangeEnumeration>
 				<Units></Units>
-				<Description><![CDATA[Result of the last performed calibration. Possible values: 0: Initial value/no status, 1: Calibration success, 2: Post-adjustment out of range, 3: Ambient temperature out of range, 4: Calibration unsuccessful, N: error n]]></Description>
+				<Description><![CDATA[Result of the last performed calibration. Possible values: 0: Initial value/no status, 1: Calibration success, 2: Post-adjustment out of range, 3: Ambient temperature out of range, 4: Calibration unsuccessful, 5: Battery low, N: error n]]></Description>
 			</Item>
 			<Item ID="3">
 				<Name>Pre-adjustment values</Name>
