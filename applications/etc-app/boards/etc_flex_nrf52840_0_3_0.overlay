@@ -3,7 +3,7 @@
 	w1: w1@18 {
 		compatible = "exact,ds2484";
 		reg = <0x18>;
-		ds28e18 {
+		w1_ds28e18: w1_ds28e18 {
 			compatible = "maxim,ds28e18";
 			family-code = <0x56>;
 			status = "okay";
