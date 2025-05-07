@@ -15,7 +15,7 @@
 #include "etc_img.h"
 #include "etc_memfault.h"
 #include "etc_memfault_metrics.h"
-
+#include "etc_device_helper.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -250,6 +250,15 @@ int etc_device_write_record_sensor(struct sensor_data *sensor)
 	int ret;
 	int64_t time_start = k_uptime_get();
 	union etc_device_record record;
+	memset(record.data, 0, sizeof(record.data));
+#if defined(CONFIG_ETC_RECORD_CBOR)
+	int data_len = sizeof(record.data);
+	ret = etc_common_encode_sensor_data(sensor, record.data, &data_len);
+	if (ret) {
+		LOG_ERR("Failed to encode sensor data %d", ret);
+		return ret;
+	}
+#else
 	record.battery = (float)sensor->battery_mV / 1000.0;
 	record.flag = (uint32_t)(sensor->battery_status);
 	record.timestamp = (uint32_t)sensor->timestamp;
@@ -257,6 +266,7 @@ int etc_device_write_record_sensor(struct sensor_data *sensor)
 		record.sensor[i] = sensor->sensor[i];
 	}
 	LOG_HEXDUMP_DBG((uint8_t *)&record, sizeof(record), "SAVE");
+#endif
 	ret = etc_device_write_record(&record);
 	LOG_DBG("NVS time record %d: %lld", ret, k_uptime_get() - time_start);
 	return ret;
@@ -294,6 +304,19 @@ int etc_device_read_record(union etc_device_record *record, bool *active_reclaim
 		return 0;
 	}
 
+#if defined(CONFIG_ETC_RECORD_CBOR)
+	struct sensor_data decoded_sensor = {0};
+	rc = etc_common_decode_sensor_data(&decoded_sensor, record->data, sizeof(record->data));
+	if (rc) {
+		LOG_ERR("Failed to encode sensor data %d", rc);
+		return rc;
+	}
+	record->battery = (double)decoded_sensor.battery_mV / 1000.0;
+	record->timestamp = (uint32_t)decoded_sensor.timestamp;
+	for (uint8_t i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
+		record->sensor[i] = decoded_sensor.sensor[i];
+	}
+#endif
 	LOG_DBG("Record ID %d", rc);
 	return rc;
 }
@@ -609,7 +632,7 @@ void etc_device_relay_write_record_sensor(struct sensor_data *sensor)
 {
 	LOG_DBG("Write sensor data for relay");
 	k_mutex_lock(&relay_data_sensor_mtx, K_FOREVER);
-	current_relay_data_sensor.battery = (float)sensor->battery_mV / 1000.0;
+	current_relay_data_sensor.battery = (double)sensor->battery_mV / 1000.0;
 	current_relay_data_sensor.flag = (uint32_t)(sensor->battery_status);
 	current_relay_data_sensor.flag |= (uint32_t)(ETC_DEVICE_RELAY_DATA_READY_MASK);
 	current_relay_data_sensor.timestamp = (uint32_t)sensor->timestamp;

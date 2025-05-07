@@ -57,7 +57,25 @@ config ETC_RECORD_MAX_SECTOR
 	default 2
 	help
 	  This option sets the maximum number of ETC sectors to save record.
-			
+	  
+choice ETC_RECORD_FORMAT_CHOICE
+    prompt "Select Data Format"
+    default ETC_RECORD_CBOR
+    help
+        Select the data format to be used. Choose between the legacy format and the new format.
+
+config ETC_RECORD_RAW
+    bool "The old ETC format with structure in/out as normal structure"
+    help
+        Use the legacy data format.
+
+config ETC_RECORD_CBOR
+    bool "The new ETC format with structure encode/decode as CBOR"
+    help
+        Use the new data format.
+
+endchoice
+
 module = ETC_DEVICE
 module-str = device
 source "subsys/logging/Kconfig.template.log_config"

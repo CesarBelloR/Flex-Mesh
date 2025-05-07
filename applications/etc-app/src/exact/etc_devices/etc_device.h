@@ -3,13 +3,18 @@
 
 #include "events/sensor_event.h"
 #include "etc_sensor.h"
+#include "etc_device_helper.h"
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+#if defined(CONFIG_ETC_RECORD_CBOR)
+#define ETC_DEVICE_RECORD_SIZE (120)
+#else 
 #define ETC_DEVICE_RECORD_SIZE (36)
+#endif
 /* Logger ID size */
 #define ETC_DEVICE_LORA_LOGGER_ID_SIZE	(sizeof("FFFFFFFFFFFFFFFF"))
 /* App version size */

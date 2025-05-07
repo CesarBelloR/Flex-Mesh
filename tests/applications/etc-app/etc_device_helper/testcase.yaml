@@ -1,0 +1,11 @@
+tests:
+  # section.subsection
+  tests.applications.etc-app.etc_device_helper:
+    timeout: 600
+    platform_allow:
+      - native_sim
+      - etc_flex/nrf52840
+    integration_platforms:
+      - native_sim
+    # platform_exclude:
+    #   - etc

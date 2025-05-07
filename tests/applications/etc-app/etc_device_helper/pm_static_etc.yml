@@ -1,31 +1,31 @@
 app:
-  address: 0x10200
+  address: 0x00
   end_address: 0xf0000
   region: flash_primary
-  size: 0xDFE00
+  size: 0xEFF00
 external_flash:
   address: 0x00
   end_address: 0x200000
   region: external_flash
   size: 0x200000
-mcuboot:
-  address: 0x0
-  end_address: 0x10000
-  placement:
-    before:
-    - mcuboot_primary
-  region: flash_primary
-  size: 0x10000
-mcuboot_pad:
-  address: 0x10000
-  end_address: 0x10200
-  placement:
-    align:
-      start: 0x10000
-    before:
-    - mcuboot_primary_app
-  region: flash_primary
-  size: 0x200
+# mcuboot:
+#   address: 0x0
+#   end_address: 0x10000
+#   placement:
+#     before:
+#     - mcuboot_primary
+#   region: flash_primary
+#   size: 0x10000
+# mcuboot_pad:
+#   address: 0x10000
+#   end_address: 0x10200
+#   placement:
+#     align:
+#       start: 0x10000
+#     before:
+#     - mcuboot_primary_app
+#   region: flash_primary
+#   size: 0x200
 mcuboot_primary:
   address: 0x10000
   end_address: 0xE8000
@@ -82,9 +82,9 @@ etc_settings_storage:
 etc_records_storage:
   address: 0x100000
   device: DT_CHOSEN(nordic_pm_ext_flash)
-  end_address: 0x200000
+  end_address: 0x160000
   region: external_flash
-  size: 0x100000
+  size: 0x60000
 sram_primary:
   address: 0x20000000
   end_address: 0x20020000

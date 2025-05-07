@@ -1183,10 +1183,17 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 		return err;
 	}
 
+#if defined(CONFIG_ETC_RECORD_CBOR)
+	/* Set the battery current status */
+	err = set_resource_if_changed_s32(cloud_data,
+					  &LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, BATTERY_STATUS_RID),
+					  (int32_t)etc_battery_get_status());
+#else
 	/* Set the battery status */
 	err = set_resource_if_changed_s32(cloud_data,
 					  &LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, BATTERY_STATUS_RID),
 					  (int32_t)record->flag);
+#endif
 	if (err) {
 		return err;
 	}
