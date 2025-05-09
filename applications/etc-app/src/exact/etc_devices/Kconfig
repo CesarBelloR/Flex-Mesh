@@ -60,7 +60,7 @@ config ETC_RECORD_MAX_SECTOR
 	  
 choice ETC_RECORD_FORMAT_CHOICE
     prompt "Select Data Format"
-    default ETC_RECORD_CBOR
+    default ETC_RECORD_RAW
     help
         Select the data format to be used. Choose between the legacy format and the new format.
 

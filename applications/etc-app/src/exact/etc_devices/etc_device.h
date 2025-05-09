@@ -10,17 +10,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#if defined(CONFIG_ETC_RECORD_CBOR)
-#define ETC_DEVICE_RECORD_SIZE (120)
-#else 
-#define ETC_DEVICE_RECORD_SIZE (36)
-#endif
 /* Logger ID size */
 #define ETC_DEVICE_LORA_LOGGER_ID_SIZE	(sizeof("FFFFFFFFFFFFFFFF"))
 /* App version size */
 #define ETC_DEVICE_APP_VER_SIZE (sizeof("##.##.##") + 1)
-/* Number of sensor */
-#define ETC_DEVICE_NUM_SENSOR  (6)
+
 /* Lora mode sync with cloud offset */
 #define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR (16)
 /* Maximum random hourly offset for LoRa cloud sync */
@@ -158,19 +152,6 @@ struct etc_config {
 	uint16_t gnss_timeout_secs;
 	uint8_t rx_timeout_secs;
 };
-
-union etc_device_record {
-	uint8_t data[ETC_DEVICE_RECORD_SIZE];
-	struct {
-		float battery;
-		float sensor[ETC_DEVICE_NUM_SENSOR];
-		uint32_t timestamp;
-		uint32_t flag; /* Use 8 bytes to save battery status */
-	};
-};
-
-/* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
-BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
 
 struct etc_device_relay_record {
 	bool is_reclaim;

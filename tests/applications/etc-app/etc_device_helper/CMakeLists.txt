@@ -36,6 +36,7 @@ target_include_directories(app PRIVATE
                             ${APP_SRC_DIR})
 
 zephyr_compile_definitions(IMAGE_HASH_LEN=32)
-zephyr_compile_definitions(CONFIG_ETC_APP_LOG_LEVEL=3)
+zephyr_compile_definitions(CONFIG_ETC_APP_LOG_LEVEL=4)
 zephyr_compile_definitions(CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY=64)
 zephyr_compile_definitions(CONFIG_ETC_DEVICE_SAVE_RECORD_SEC=1)
+zephyr_compile_definitions(CONFIG_ETC_RECORD_CBOR=1)

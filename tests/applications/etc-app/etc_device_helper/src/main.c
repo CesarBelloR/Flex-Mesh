@@ -16,6 +16,8 @@ LOG_MODULE_REGISTER(etc_device_record_test, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define EPSILON 0.01f
 
+static int8_t humid_index = -1;
+
 static void *test_setup(void)
 {
 	return NULL;
@@ -25,31 +27,76 @@ static void test_teardown(void *)
 {
 }
 
-ZTEST(etc_device_helper_test, test_01)
+int8_t etc_sensor_get_probe_humid_index(void)
 {
-	struct sensor_data original = {.timestamp = 1234567890,
-				       .battery_mV = 3800,
-				       .sensor = {25.5f, 26.0f, 26.5f, 27.0f, 27.5f, 28.0f},
-				       .battery_status = 1};
+	return humid_index;
+}
+
+static void etc_device_helper_common_test(struct sensor_data *original)
+{
 
 	uint8_t buf[256];
 	size_t buf_len = sizeof(buf);
 
-	int ret = etc_common_encode_sensor_data(&original, buf, &buf_len);
+	int ret = etc_device_encode_cbor_data(original, buf, &buf_len);
 	zassert_equal(ret, 0);
 
 	struct sensor_data decoded = {0};
-	ret = etc_common_decode_sensor_data(&decoded, buf, buf_len);
+	ret = etc_device_decode_cbor_data(&decoded, buf, buf_len);
 	zassert_equal(ret, 0);
 
-	zassert_equal(original.timestamp, decoded.timestamp);
-	zassert_equal(original.battery_mV, decoded.battery_mV);
-	zassert_equal(original.battery_status, decoded.battery_status);
+	zassert_equal(original->timestamp, decoded.timestamp);
+	zassert_equal(original->battery_mV, decoded.battery_mV);
 
-	for (int i = 0; i < ETC_DEVICE_NUM_SENSOR; i++) {
-		ret = (fabsf((double)(original.sensor[i] - decoded.sensor[i])) < EPSILON);
+	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
+		if (sensor_temperature_is_valid(original->sensor[i])) {
+			ret = (fabsf((double)(original->sensor[i] - decoded.sensor[i])) < EPSILON);
+			zassert_equal(ret, 1);
+		}
+	}
+
+	if (sensor_humidity_is_valid(original->sensor[SENSOR_INPUT_HUMID])) {
+		ret = (fabsf((double)(original->sensor[SENSOR_INPUT_HUMID] -
+				      decoded.sensor[SENSOR_INPUT_HUMID])) < EPSILON);
 		zassert_equal(ret, 1);
 	}
+}
+
+ZTEST(etc_device_helper_test, test_case)
+{
+	struct sensor_data test_data_1 = {.timestamp = 1234567890,
+					  .battery_mV = 3800,
+					  .sensor = {25.5f, 26.0f, 26.5f, 27.0f, 27.5f, 80.0f},
+					  .battery_status = 1};
+
+	struct sensor_data test_data_2 = {.timestamp = 1234567890,
+					  .battery_mV = 3800,
+					  .sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, 80.0f},
+					  .battery_status = 1};
+
+	struct sensor_data test_data_3 = {.timestamp = 1234567890,
+					  .battery_mV = 3800,
+					  .sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, 110.0f},
+					  .battery_status = 1};
+
+	struct sensor_data test_data_4 = {.timestamp = 1234567890,
+					  .battery_mV = 3800,
+					  .sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, -1.0f},
+					  .battery_status = 1};
+
+	struct sensor_data test_data_5 = {.timestamp = 1234567890,
+					  .battery_mV = 3800,
+					  .sensor = {-31.0f, -31.0f, -31.0f, -31.0f, -31.0f, -1.0f},
+					  .battery_status = 1};
+
+	humid_index = 5;
+	etc_device_helper_common_test(&test_data_1);
+	etc_device_helper_common_test(&test_data_2);
+
+	humid_index = -1;
+	etc_device_helper_common_test(&test_data_3);
+	etc_device_helper_common_test(&test_data_4);
+	etc_device_helper_common_test(&test_data_5);
 }
 
 ZTEST_SUITE(etc_device_helper_test, NULL, test_setup, NULL, NULL, test_teardown);

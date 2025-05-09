@@ -4,6 +4,28 @@
 #include <stdint.h>
 #include "events/sensor_event.h"
 
+#if defined(CONFIG_ETC_RECORD_CBOR)
+#define ETC_DEVICE_RECORD_SIZE (120)
+#else 
+#define ETC_DEVICE_RECORD_SIZE (36)
+#endif
+
+/* Number of sensor */
+#define ETC_DEVICE_NUM_SENSOR  (SENSOR_EVENT_NUM_DEV_MAX)
+
+union etc_device_record {
+	uint8_t data[ETC_DEVICE_RECORD_SIZE];
+	struct {
+		float battery;
+		float sensor[ETC_DEVICE_NUM_SENSOR];
+		uint32_t timestamp;
+		uint32_t flag; /* Use 8 bytes to save battery status */
+	};
+};
+
+/* Assert to verify the record size must fit the macro ETC_DEVICE_RECORD_SIZE */
+BUILD_ASSERT(ETC_DEVICE_RECORD_SIZE >= sizeof(union etc_device_record));
+#if defined(CONFIG_ETC_RECORD_CBOR)
 /**
  * @brief Encodes sensor data into a CBOR buffer.
  *
@@ -18,16 +40,16 @@
  *
  * @return 0 on success, or a negative error code on failure:
  *         - -EINVAL if encoding fails due to invalid data or CBOR structure.
- *         - -ENOSPC if the buffer is too small to hold the encoded data.
+ *         - -ENOMEM if the buffer is too small to hold the encoded data.
  */
-int etc_common_encode_sensor_data(struct sensor_data *sensor, uint8_t *buf, size_t *buf_len);
+int etc_device_encode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t *buf_len);
 
 /**
  * @brief Decodes a CBOR buffer into sensor data.
  *
  * This function decodes a CBOR buffer into a `struct sensor_data` using the zcbor library.
  * The CBOR structure must include a timestamp, an array of sensor samples, and a battery level,
- * matching the format produced by `etc_common_encode_sensor_data`.
+ * matching the format produced by `etc_device_encode_cbor_data`.
  *
  * @param sensor Pointer to the sensor data structure where the decoded data will be stored.
  * @param buf Pointer to the input buffer containing the CBOR data.
@@ -37,6 +59,31 @@ int etc_common_encode_sensor_data(struct sensor_data *sensor, uint8_t *buf, size
  *         - -EINVAL if decoding fails due to invalid CBOR structure, type mismatches, or missing
  * keys.
  */
-int etc_common_decode_sensor_data(struct sensor_data *sensor, uint8_t *buf, size_t buf_len);
+int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t buf_len);
+#endif
+/**
+ * @file sensor_data.h
+ * @brief Functions for packing and unpacking sensor data into/from device records.
+ */
 
+/**
+ * @brief Packs sensor data into a device record.
+ * 
+ * This function takes sensor data and packs it into the provided device record structure.
+ * 
+ * @param sensor Pointer to the sensor data structure containing the data to pack.
+ * @param record Pointer to the device record union where the data will be packed.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int etc_device_pack_sensor_data(struct sensor_data *sensor, union etc_device_record* record);
+
+/**
+ * @brief Unpacks sensor data from a device record.
+ * 
+ * This function extracts sensor data from the provided device record union.
+ * 
+ * @param record Pointer to the device record union containing the packed data.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int etc_device_unpack_sensor_data(union etc_device_record* record);
 #endif /* ETC_DEVICE_HELPER_H */
