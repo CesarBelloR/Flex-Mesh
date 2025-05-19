@@ -270,13 +270,136 @@ int etc_device_encode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t
 	return 0;
 }
 
-int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t buf_len)
+// Helper function to calculate CBOR data length
+// Extra zero padding is added when decoding the read data from memory flash!
+// CBOR doens't support zero padding, so we need to calculate the data length!.
+static bool get_cbor_data_length(const uint8_t *buf, size_t buf_len, size_t *data_len)
 {
-	ZCBOR_STATE_D(decoding_state, CBOR_MAX_BACKUPS, buf, buf_len, 1, 0);
+	ZCBOR_STATE_D(state, CBOR_MAX_BACKUPS, buf, buf_len, 1, 0);
 
 	// Start decoding the main map
+	if (!zcbor_map_start_decode(state)) {
+		LOG_ERR("Failed to start map decode for length: %d", zcbor_peek_error(state));
+		return false;
+	}
+
+	// Process key-value pairs
+	while (!zcbor_list_or_map_end(state)) {
+		uint32_t key;
+		if (!zcbor_uint32_decode(state, &key)) {
+			LOG_ERR("Failed to decode key for length: %d", zcbor_peek_error(state));
+			return false;
+		}
+
+		switch (key) {
+		case CBOR_KEY_TIMESTAMP:
+			uint32_t timestamp;
+			if (!zcbor_uint32_decode(state, &timestamp)) {
+				LOG_ERR("Failed to decode timestamp for length: %d",
+					zcbor_peek_error(state));
+				return false;
+			}
+			break;
+		case CBOR_KEY_BATTERY_MV:
+			uint32_t battery;
+			if (!zcbor_uint32_decode(state, &battery)) {
+				LOG_ERR("Failed to decode battery for length: %d",
+					zcbor_peek_error(state));
+				return false;
+			}
+			break;
+		case CBOR_KEY_SENSOR_SAMPLES:
+			if (!zcbor_list_start_decode(state)) {
+				LOG_ERR("Failed to start sensor samples list for length: %d",
+					zcbor_peek_error(state));
+				return false;
+			}
+			size_t array_len = state->elem_count;
+			for (size_t i = 0; i < array_len; i++) {
+				if (!zcbor_map_start_decode(state)) {
+					LOG_ERR("Failed to start sensor map for length: %d",
+						zcbor_peek_error(state));
+					return false;
+				}
+				while (!zcbor_list_or_map_end(state)) {
+					uint32_t inner_key;
+					if (!zcbor_uint32_decode(state, &inner_key)) {
+						LOG_ERR("Failed to decode inner key for length: %d",
+							zcbor_peek_error(state));
+						return false;
+					}
+					switch (inner_key) {
+					case CBOR_KEY_SENSOR_PORT:
+					case CBOR_KEY_SENSOR_TYPE:
+						uint32_t val;
+						if (!zcbor_uint32_decode(state, &val)) {
+							LOG_ERR("Failed to decode port/type for "
+								"length: %d",
+								zcbor_peek_error(state));
+							return false;
+						}
+						break;
+					case CBOR_KEY_SENSOR_VALUE:
+						float val_float;
+						if (!zcbor_float16_decode(state, &val_float)) {
+							LOG_ERR("Failed to decode value for "
+								"length: %d",
+								zcbor_peek_error(state));
+							return false;
+						}
+						break;
+					default:
+						LOG_ERR("Invalid inner key for length: %u",
+							inner_key);
+						return false;
+					}
+				}
+				if (!zcbor_map_end_decode(state)) {
+					LOG_ERR("Failed to end sensor map for length: %d",
+						zcbor_peek_error(state));
+					return false;
+				}
+			}
+			if (!zcbor_list_end_decode(state)) {
+				LOG_ERR("Failed to end sensor samples list for length: %d",
+					zcbor_peek_error(state));
+				return false;
+			}
+			break;
+		default:
+			LOG_ERR("Invalid key for length: %u", key);
+			return false;
+		}
+	}
+
+	if (!zcbor_map_end_decode(state)) {
+		LOG_ERR("Failed to end map decode for length: %d", zcbor_peek_error(state));
+		return false;
+	}
+
+	*data_len = state->payload - buf;
+	return true;
+}
+
+int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t buf_len)
+{
+	// Calculate actual CBOR data length
+	size_t data_len;
+	if (!get_cbor_data_length(buf, buf_len, &data_len)) {
+		LOG_ERR("Failed to determine CBOR data length");
+		return -EINVAL;
+	}
+
+	if (data_len > buf_len) {
+		LOG_ERR("Calculated data length %zu exceeds buffer %zu", data_len, buf_len);
+		return -EINVAL;
+	}
+
+	ZCBOR_STATE_D(decoding_state, CBOR_MAX_BACKUPS, buf, buf_len, 1, 0);
+	LOG_HEXDUMP_DBG(buf, buf_len, "DECODE");
+	// Start decoding the main map
 	if (!zcbor_map_start_decode(decoding_state)) {
-		LOG_ERR("Failed to start map decode: %d", zcbor_peek_error(decoding_state));
+		LOG_ERR("Failed tostart map decode: %d", zcbor_peek_error(decoding_state));
 		return -EINVAL;
 	}
 
@@ -331,7 +454,7 @@ int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t
 	return 0;
 }
 #else
-int etc_device_encoder_legacy_data(struct sensor_data *sensor, union etc_device_record* record)
+int etc_device_encoder_legacy_data(struct sensor_data *sensor, union etc_device_record *record)
 {
 	record->battery = (float)sensor->battery_mV / 1000.0;
 	record->flag = (uint32_t)(sensor->battery_status);
@@ -343,25 +466,25 @@ int etc_device_encoder_legacy_data(struct sensor_data *sensor, union etc_device_
 }
 #endif
 
-int etc_device_pack_sensor_data(struct sensor_data *sensor, union etc_device_record* record) 
+int etc_device_pack_sensor_data(struct sensor_data *sensor, union etc_device_record *record)
 {
 #if defined(CONFIG_ETC_RECORD_CBOR)
 	size_t buf_len = sizeof(record->data);
 	return etc_device_encode_cbor_data(sensor, record->data, &buf_len);
-#else 
+#else
 	return etc_device_encoder_legacy_data(sensor, record);
 #endif
 	return -ENOTSUP;
 }
 
-int etc_device_unpack_sensor_data(union etc_device_record* record) 
+int etc_device_unpack_sensor_data(union etc_device_record *record)
 {
 	int rc = -ENOTSUP;
 #if defined(CONFIG_ETC_RECORD_CBOR)
 	struct sensor_data sensor = {0};
 	rc = etc_device_decode_cbor_data(&sensor, record->data, sizeof(record->data));
 	if (rc) {
-		LOG_ERR("Failed to encode sensor data %d", rc);
+		LOG_ERR("Failed to decode sensor data %d", rc);
 		return rc;
 	}
 	record->battery = (double)sensor.battery_mV / 1000.0;
@@ -369,7 +492,7 @@ int etc_device_unpack_sensor_data(union etc_device_record* record)
 	for (uint8_t i = 0; i < SENSOR_EVENT_NUM_DEV_MAX; i++) {
 		record->sensor[i] = sensor.sensor[i];
 	}
-#else 
+#else
 	rc = 0;
 #endif
 	return rc;

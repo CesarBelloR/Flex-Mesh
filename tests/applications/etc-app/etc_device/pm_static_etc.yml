@@ -82,9 +82,9 @@ etc_settings_storage:
 etc_records_storage:
   address: 0x100000
   device: DT_CHOSEN(nordic_pm_ext_flash)
-  end_address: 0x160000
+  end_address: 0x200000
   region: external_flash
-  size: 0x60000
+  size: 0x100000
 sram_primary:
   address: 0x20000000
   end_address: 0x20020000

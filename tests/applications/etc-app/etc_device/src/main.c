@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <zephyr/ztest.h>
-
+#include <math.h>
 #include "etc_device.h"
 #include "etc_device_record.h"
 #include "etc_util.h"
@@ -14,6 +14,8 @@
 #include <zephyr/random/random.h>
 
 LOG_MODULE_REGISTER(etc_device_record_test, CONFIG_ETC_APP_LOG_LEVEL);
+
+#define FLOAT_TOLERANCE 0.5f
 
 const static struct device *retained_ram_dev = DEVICE_DT_GET(DT_ALIAS(record_header_ram));
 struct etc_device_record_table last_current_record;
@@ -26,28 +28,58 @@ struct etc_device_record_table last_current_record;
 #error "No support other SoC"
 #endif
 
-const static union etc_device_record record_sample = {.battery = 4.1,
-						      .sensor[0] = 12.1,
-						      .sensor[1] = 87.1,
-						      .sensor[2] = -6.2,
-						      .sensor[3] = 32.6,
-						      .sensor[4] = 0.2,
-						      .sensor[5] = 99.9};
+#if defined(CONFIG_ETC_RECORD_CBOR)
+int8_t etc_sensor_get_probe_humid_index(void)
+{
+	return 5;
+}
+#endif
 
-union etc_device_record records[RECORD_ARRAY_SIZE];
+const struct sensor_data record_sample = {.timestamp = 1234567890,
+					  .battery_mV = 3800,
+					  .sensor = {12.1f, 87.1f, -6.2f, 32.6f, 0.2f, 99.9f},
+					  .battery_status = 1};
+
+struct sensor_data records[RECORD_ARRAY_SIZE];
+
+bool compare_sensor_records(const union etc_device_record *record, const struct sensor_data *sensor)
+{
+	bool is_equal = true;
+	float sensor_battery_volts = sensor->battery_mV / 1000.0f;
+	if (fabsf(sensor_battery_volts - record->battery) > FLOAT_TOLERANCE) {
+		is_equal = false;
+	}
+
+	for (size_t i = 0; i < ETC_DEVICE_NUM_SENSOR; i++) {
+		if (fabsf(sensor->sensor[i] - record->sensor[i]) > FLOAT_TOLERANCE) {
+			LOG_ERR("Sensor %zu: %f != %f", i, sensor->sensor[i], record->sensor[i]);
+			is_equal = false;
+		}
+	}
+
+	if (sensor->timestamp != (int64_t)record->timestamp) {
+		LOG_ERR("Sensor %zu: %f != %f", sensor->timestamp, record->timestamp);
+		is_equal = false;
+	}
+
+	return is_equal;
+}
 
 static void *test_setup(void)
 {
-	int index;
+	int64_t index;
 	etc_device_nvs_init();
 	/* Make sure the record is fresh */
 	etc_device_record_clean_up();
 	etc_device_record_erase_record_flash();
 	/* Populate records */
-	for (int time = 1; time <= ARRAY_SIZE(records); time++) {
-		index = time - 1;
-		memcpy(&records[index], &record_sample, sizeof(record_sample));
-		records[index].timestamp = time;
+	for (int i = 0; i < ARRAY_SIZE(records); i++) {
+		records[i].timestamp = record_sample.timestamp + i;
+		records[i].battery_mV = record_sample.battery_mV;
+		for (int j = 0; j < 6; j++) {
+			records[i].sensor[j] = record_sample.sensor[j];
+		}
+		records[i].battery_status = 1;
 	}
 
 	return NULL;
@@ -79,7 +111,7 @@ static void on_write_num_records(uint16_t num_records, bool check_ack, bool chec
 	}
 
 	for (int i = 0; i < num_records; i++) {
-		ret = etc_device_write_record(&records[i]);
+		ret = etc_device_write_record_sensor(&records[i]);
 		if (check_index && index == i) {
 			/* This record should be next of last current record */
 			struct etc_device_record_table *status = etc_device_record_get_status();
@@ -147,8 +179,8 @@ static void on_read_num_records(uint16_t num_records)
 	for (int i = num_records - 1; i >= 0; i--) {
 		record_id = etc_device_read_record(&read_record, &reclaim);
 		zassert(record_id > 0, "record id");
-		ret = memcmp(&read_record, &records[i], sizeof(read_record));
-		zassert_ok(ret, "record %d %d", record_id, i);
+		ret = compare_sensor_records(&read_record, &records[i]);
+		zassert_true(ret, "record %d %d", record_id, i);
 		etc_device_set_ack_record(record_id);
 		nack_count--;
 		zassert_equal(nack_count, etc_device_nack_count());

@@ -1,0 +1,8 @@
+menu "Zephyr Kernel"
+source "Kconfig.zephyr"
+endmenu
+
+config ETC_RECORD_CBOR
+    bool "The new ETC format with structure encode/decode as CBOR"
+    help
+        Use the new data format.
