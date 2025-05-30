@@ -33,7 +33,6 @@ static time_t button_ts;
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 static char hardware_version[ETC_SETTING_HW_VER_LEN];
 
-/* Timestamps, minimum, and maximum values for the BME680 present on the Thingy:91. */
 static double temp_min_range_val = TEMP_MIN_RANGE_VALUE;
 static double temp_max_range_val = TEMP_MAX_RANGE_VALUE;
 static double humid_min_range_val = HUMID_MIN_RANGE_VALUE;
@@ -1149,12 +1148,13 @@ static int set_temperature(int instance_id, float value, int64_t timestamp)
 	if (!sensor_temperature_is_valid(value)) {
 		return 0;
 	}
-	
+
 	err = lwm2m_set_time(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, instance_id, TIMESTAMP_RID),
 			(time_t)(timestamp));
 	if (err) {
 		return err;
 	}
+
 	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_TEMP_OBJECT_ID, instance_id, SENSOR_VALUE_RID),
 				value);
 	if (err) {
@@ -1244,10 +1244,11 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 	}
 
 	/* Set external sensor temperature and timestamp */
-	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN8; i++) {
 		int obj_inst_id = i + 1;
 		const struct lwm2m_obj_path path_list[] = {
-			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, SENSOR_VALUE_RID),
+			LWM2M_OBJ(ETC_TEMP_OBJECT_ID, obj_inst_id, TIMESTAMP_RID),
 		};
 		
 		err = set_temperature(obj_inst_id, record->sensor[i], record->timestamp);
@@ -1296,7 +1297,6 @@ int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_da
 							 paths, ARRAY_SIZE(paths));
 	}
 
-	
 	const struct lwm2m_obj_path path_list[] = {
 		LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
 		LWM2M_OBJ(ETC_FUNCTIONAL_TEST_OBJECT_ID, 0, ETC_FUNCTIONAL_TEST_OBJ_R_STATUS),
@@ -1473,7 +1473,7 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 			bool new_path = true;
 
 			/* Compare existing paths to the path that needs to be added
-			 * and check if they are the identical. If they are identical,
+			 * and check if they are identical. If they are identical,
 			 * skip comparing more paths. */
 			for (int j = 0; j < output->valid_object_paths; j++) {
 				if (memcmp(&path[i], &output->paths[j], 
@@ -1534,11 +1534,18 @@ int lwm2m_codec_helpers_object_path_list_add(struct cloud_codec_data *output,
 	return 0;
 }
 
+/**
+ * Check if the path is a resource path that contains measurement data.
+ * This function will return false for paths with a higher level than resources.
+ *
+ * @param path Path to check.
+ * @return True if the path is a resource path that contains measurement data, false otherwise.
+*/
 static inline bool is_path_measurement(struct lwm2m_obj_path *path)
 {
 	__ASSERT_NO_MSG(path != NULL);
 
-	if ((path->level > 0) &&
+	if ((path->level == 3) &&
 	    ((path->obj_id == ETC_TEMP_OBJECT_ID) ||
 	     (path->obj_id == ETC_HUMID_OBJECT_ID))) {
 		return true;

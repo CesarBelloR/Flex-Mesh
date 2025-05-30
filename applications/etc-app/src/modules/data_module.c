@@ -551,16 +551,11 @@ static void data_encode_for_cloud(bool split, bool is_relay)
 		} else {
 			ret = data_encode_for_logger();
 		}
-		if (ret == STATUS_DONE) {
+		if (ret == STATUS_DONE && !split) {
 			LOG_INF("No record found");
 			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
 			/* Trigger the OTA pending job */
 			lwm2m_firmware_start_pending_job();
-			return;
-		} else if (ret == STATUS_IN_PROCESS) {
-			/* No action required */
-		} else {
-			LOG_ERR("Error in encoding data (err %d)", ret);
 			return;
 		}
 	}

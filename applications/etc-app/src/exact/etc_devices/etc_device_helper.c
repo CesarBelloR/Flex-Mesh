@@ -407,7 +407,7 @@ int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t
 	}
 
 	ZCBOR_STATE_D(decoding_state, CBOR_MAX_BACKUPS, buf, data_len, 1, 0);
-	LOG_HEXDUMP_DBG(buf, buf_len, "DECODE");
+	LOG_HEXDUMP_DBG(buf, data_len, "DECODE");
 	// Start decoding the main map
 	if (!zcbor_map_start_decode(decoding_state)) {
 		LOG_ERR("Failed tostart map decode: %d", zcbor_peek_error(decoding_state));
