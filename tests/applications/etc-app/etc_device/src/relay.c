@@ -18,7 +18,8 @@
 LOG_MODULE_REGISTER(etc_device_relay_test, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define RELAY_LEGACY_DATA_STR                                                                      \
-	"1.2.5,-99,10000199,4.12,*,3.99,*,0.0.0-twister,1,1738795004,41.2,41.6,35.3,*,23.5,*,1,0,"
+	"1.2.5,-99,10000199,4.12,*,3.99,*,0.0.0-twister,1,1738795004,41.2,41.6,35.3,*,23.5,*,*,*," \
+	"*,*,1,0,"
 
 static struct etc_device_relay_record record = {
 	.battery = 4.12,
@@ -29,7 +30,9 @@ static struct etc_device_relay_record record = {
 	.relay_id = "OPEN",
 	.logger_ver = "1.2.5",
 	.logger_id = "10000199",
-	.sensor = {41.2, 41.6, 35.32, SENSOR_TEMP_NO_CONNECTED, 23.5, SENSOR_HUMID_NO_CONNECTED},
+	.sensor = {41.2, 41.6, 35.32, SENSOR_TEMP_NO_CONNECTED, 23.5, SENSOR_TEMP_NO_CONNECTED,
+		   SENSOR_TEMP_NO_CONNECTED, SENSOR_TEMP_NO_CONNECTED, SENSOR_TEMP_NO_CONNECTED,
+		   SENSOR_HUMID_NO_CONNECTED},
 	.data = {ETC_DEVICE_INVALID_VALUE_ELEMENT},
 };
 

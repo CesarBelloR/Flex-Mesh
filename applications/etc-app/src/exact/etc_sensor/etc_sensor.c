@@ -48,9 +48,9 @@ static const struct gpio_dt_spec s1_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_s
 static const struct gpio_dt_spec vsen_en_dt =
 	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 
-static enum sensor_type list_sensor_type[SENSOR_INPUT_IN4 + 1];
-static int list_sensor_raw_adc[SENSOR_INPUT_IN4 + 1];
-static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
+static enum sensor_type list_sensor_type[SENSOR_INPUT_IN8 + 1];
+static int list_sensor_raw_adc[SENSOR_INPUT_IN8 + 1];
+static float list_sensor_digital_temp[SENSOR_INPUT_IN8 + 1];
 static float sensor_digital_humid;
 static int8_t sensor_digital_humid_port_index;
 static int sensor_ambient_raw_adc = 0;
@@ -60,6 +60,7 @@ static struct etc_sensor_adc_calibration_info etc_sensor_adc_calibration_info = 
 static etc_sensor_evt_handler_t sensor_evt_handler;
 static enum etc_sensor_status last_sensor_status = SENSOR_CONNECTED;
 static int sensor_calibration_port_1_wire = -1;
+static struct w1_rom tmp1826_rom;
 /* Flag that signals if current connected sensors' state qualifies for functional
  * test mode. */
 static bool enter_functional_test = false;
@@ -100,6 +101,9 @@ inline static int8_t remap_th_channel(int8_t channel)
 
 static void etc_sensor_adc_switch_channel(int8_t channel)
 {
+	if (channel >= SENSOR_INPUT_IN5 && channel <= SENSOR_INPUT_IN8) {
+		channel = channel - SENSOR_INPUT_IN5;
+	}
 	channel = remap_th_channel(channel);
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	gpio_pin_set_dt(&sense_dt, 0U);
@@ -188,19 +192,96 @@ static void etc_sensor_gpios_one_wire_disable(void)
 #endif
 }
 
+static void w1_search_callback(struct w1_rom val, void *user_data)
+{
+	int *devices_on_bus = (int *)user_data;
+	*devices_on_bus = *devices_on_bus + 1;
+	tmp1826_rom = val;
+	LOG_DBG("found w1 sensor with id 0x%016llx", w1_rom_to_uint64(&val));
+}
+
+static int etc_sensor_scan_probe_slaves(void)
+{
+	const struct device *const w1 = DEVICE_DT_GET(DT_NODELABEL(w1));
+	uint8_t family_code;
+	struct w1_rom stored_rom;
+	int num_devices = 0;
+	family_code = DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
+	memset(&tmp1826_rom, 0, sizeof(tmp1826_rom));
+	w1_search_bus(w1, W1_CMD_SEARCH_ROM, family_code, w1_search_callback, &num_devices);
+	LOG_DBG("found %d devices on one-wire bus", num_devices);
+	if (num_devices > 0) {
+		struct sensor_value val;
+		w1_rom_to_sensor_value(&tmp1826_rom, &val);
+		sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_W1_ROM, &val);
+	}
+	return num_devices;
+}
+
+static int etc_sensor_set_splitter_switch(int8_t channel)
+{
+	etc_sensor_gpios_one_wire_enable();
+	k_msleep(1);
+	int ret = ds2484_get_logic_level(ds2484_dev);
+	if (ret == 0) {
+		ret = -ENODEV;
+		goto exit;
+	}
+	ret = etc_sensor_scan_probe_slaves();
+	if (ret == 0) {
+		ret = -ENODEV;
+		goto exit;
+	}
+	if (!device_is_ready(tmp1826_dev)) {
+		LOG_ERR("TMP1826 is not ready in I2C bus");
+		ret = -ENODEV;
+		goto exit;
+	} else {
+		struct sensor_value val;
+		sensor_attr_get(tmp1826_dev, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_READ_ADDR, &val);
+		int addr = val.val1;
+		val.val1 = channel <= SENSOR_INPUT_IN4 ? 0x00 : 0x01;
+		val.val2 = addr;
+		LOG_DBG("Val %d", addr);
+		ret = sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_GPIO_ADDR,
+				      &val);
+	}
+exit:
+	etc_sensor_gpios_one_wire_disable();
+	return ret;
+}
+
+#if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
+static bool etc_sensor_set_type(int8_t channel, int raw_adc)
+{
+	bool is_set = true;
+	if (raw_adc >= SENSOR_ADC_NO_CONNECTED) {
+		list_sensor_type[channel] = SENSOR_TYPE_UNDEF;
+		is_set = false;
+	} else if (raw_adc <= SENSOR_ADC_ONE_WIRE_CONNECTED) {
+		list_sensor_type[channel] = SENSOR_TYPE_DIGITAL;
+	} else {
+		list_sensor_type[channel] = SENSOR_TYPE_ANALOG;
+	}
+	return is_set;
+}
+#endif
+
 static void etc_sensor_run_detection(void)
 {
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		etc_sensor_adc_switch_channel(i);
 		k_msleep(50);
+		int rc = etc_sensor_set_splitter_switch(i);
 		int raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
-		if (raw_adc >= SENSOR_ADC_NO_CONNECTED) {
-			list_sensor_type[i] = SENSOR_TYPE_UNDEF;
-		} else if (raw_adc <= SENSOR_ADC_ONE_WIRE_CONNECTED) {
-			list_sensor_type[i] = SENSOR_TYPE_DIGITAL;
-		} else {
-			list_sensor_type[i] = SENSOR_TYPE_ANALOG;
+		bool is_set = etc_sensor_set_type(i, raw_adc);
+		if (!is_set) {
+			if (rc == 0) {
+				etc_sensor_set_splitter_switch(i + SENSOR_INPUT_IN5);
+				raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
+				etc_sensor_set_type(i + SENSOR_INPUT_IN5, raw_adc);
+			}
 		}
 	}
 #endif
@@ -209,7 +290,7 @@ static void etc_sensor_run_detection(void)
 static void etc_sensor_probe_check(void)
 {
 	int no_connected_counter = 0;
-	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN8; i++) {
 		float temp = etc_sensor_get_probe_temp(i);
 		if (!sensor_temperature_is_valid(temp)) {
 			no_connected_counter += 1;
@@ -305,13 +386,15 @@ static void etc_sensor_run_digital_sample(void)
 
 static void etc_sensor_run_analog_sample(void)
 {
-	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN8; i++) {
 		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG) {
 			etc_sensor_adc_switch_channel(i);
 			k_msleep(50);
+			etc_sensor_set_splitter_switch(i);
 			list_sensor_raw_adc[i] = etc_sensor_helper_get_calibrated_adc(
 				adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR),
 				&sensor_r_hw_raw_adc, &etc_sensor_adc_calibration_info);
+			LOG_INF("ADC[%d] %d", i, list_sensor_raw_adc[i]);
 		} else {
 			list_sensor_raw_adc[i] = -1;
 		}
@@ -378,7 +461,7 @@ void etc_sensor_init(etc_sensor_evt_handler_t handler)
 #endif
 	etc_sensor_load_calibration();
 	etc_sensor_adc_hw_init();
-	for (int i = 0; i < SENSOR_INPUT_IN4 + 1; i++) {
+	for (int i = 0; i < SENSOR_INPUT_IN8 + 1; i++) {
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
 		list_sensor_type[i] = SENSOR_TYPE_UNDEF;
 #else
@@ -414,7 +497,7 @@ float etc_sensor_get_ambient_temp(void)
 
 float etc_sensor_get_probe_temp(enum sensor_input input)
 {
-	__ASSERT(input >= 0 && input <= 3, "invalid channel number");
+	__ASSERT(input >= 0 && input <= 7, "invalid channel number");
 	if (list_sensor_type[input] == SENSOR_TYPE_ANALOG) {
 		return etc_sensor_helper_ntc_get(list_sensor_raw_adc[input],
 						 ETC_ADC_CHANNEL_SENSOR);
@@ -528,30 +611,6 @@ void etc_sensor_calibration_enter(void)
 	etc_sensor_gpios_enable();
 }
 
-static struct w1_rom tmp1826_rom;
-
-static void w1_search_callback(struct w1_rom val, void *user_data)
-{
-	int *devices_on_bus = (int *)user_data;
-	*devices_on_bus = *devices_on_bus + 1;
-	tmp1826_rom = val;
-	LOG_DBG("found w1 sensor with id 0x%016llx", w1_rom_to_uint64(&val));
-}
-
-static void etc_sensor_calibration_probe_slaves(void)
-{
-	const struct device *const w1 = DEVICE_DT_GET(DT_NODELABEL(w1));
-	uint8_t family_code;
-	struct w1_rom stored_rom;
-	int num_devices = 0;
-	family_code = DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
-	w1_search_bus(w1, W1_CMD_SEARCH_ROM, family_code, w1_search_callback, &num_devices);
-	LOG_INF("found %d devices on one-wire bus", num_devices);
-	struct sensor_value val;
-	w1_rom_to_sensor_value(&tmp1826_rom, &val);
-	sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_W1_ROM, &val);
-}
-
 int etc_sensor_calibration_scan(void)
 {
 	int num_sensor = 0;
@@ -566,12 +625,11 @@ int etc_sensor_calibration_scan(void)
 			continue;
 		}
 		/* Probe slaves */
-		etc_sensor_calibration_probe_slaves();
+		etc_sensor_scan_probe_slaves();
 		if (!device_is_ready(tmp1826_dev)) {
 			LOG_ERR("TMP1826 is not ready in I2C bus");
 			continue;
 		}
-
 		sensor_calibration_port_1_wire = i;
 		num_sensor += 1;
 	}

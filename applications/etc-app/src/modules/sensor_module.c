@@ -310,7 +310,7 @@ static int sensor_poll_handler(enum sensor_sample_type sample_type)
 	if (sensor_temperature_is_valid(data->sensor[SENSOR_INPUT_AMBIENT])) {
 		LOG_DBG("Ambient temp %2.2f", data->sensor[SENSOR_INPUT_AMBIENT]);
 	}
-	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN8; i++) {
 		data->sensor[i] = etc_sensor_get_probe_temp(i);
 		if (sensor_temperature_is_valid(data->sensor[i])) {
 			LOG_DBG("Channel %d temp %f", i, data->sensor[i]);

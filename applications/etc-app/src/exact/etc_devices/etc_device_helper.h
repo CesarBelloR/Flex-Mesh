@@ -6,8 +6,8 @@
 
 #if defined(CONFIG_ETC_RECORD_CBOR)
 #define ETC_DEVICE_RECORD_SIZE (120)
-#else 
-#define ETC_DEVICE_RECORD_SIZE (36)
+#else
+#define ETC_DEVICE_RECORD_SIZE (12 + SENSOR_EVENT_NUM_DEV_MAX * sizeof(float))
 #endif
 
 /* Number of sensor */

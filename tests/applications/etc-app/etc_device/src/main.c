@@ -35,10 +35,11 @@ int8_t etc_sensor_get_probe_humid_index(void)
 }
 #endif
 
-const struct sensor_data record_sample = {.timestamp = 1234567890,
-					  .battery_mV = 3800,
-					  .sensor = {12.1f, 87.1f, -6.2f, 32.6f, 0.2f, 99.9f},
-					  .battery_status = 1};
+const struct sensor_data record_sample = {
+	.timestamp = 1234567890,
+	.battery_mV = 3800,
+	.sensor = {12.1f, 87.1f, -6.2f, 32.6f, 0.2f, 0.3f, 0.3f, 0.3f, 0.3f, 99.9f},
+	.battery_status = 1};
 
 struct sensor_data records[RECORD_ARRAY_SIZE];
 
@@ -76,7 +77,7 @@ static void *test_setup(void)
 	for (int i = 0; i < ARRAY_SIZE(records); i++) {
 		records[i].timestamp = record_sample.timestamp + i;
 		records[i].battery_mV = record_sample.battery_mV;
-		for (int j = 0; j < 6; j++) {
+		for (int j = 0; j < SENSOR_EVENT_NUM_DEV_MAX; j++) {
 			records[i].sensor[j] = record_sample.sensor[j];
 		}
 		records[i].battery_status = 1;

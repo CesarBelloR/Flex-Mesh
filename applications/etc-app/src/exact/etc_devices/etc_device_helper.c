@@ -38,6 +38,10 @@ static const struct sensor_metadata sensor_meta[] = {
 	{SENSOR_INPUT_IN2, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
 	{SENSOR_INPUT_IN3, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
 	{SENSOR_INPUT_IN4, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
+	{SENSOR_INPUT_IN5, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
+	{SENSOR_INPUT_IN6, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
+	{SENSOR_INPUT_IN7, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
+	{SENSOR_INPUT_IN8, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
 	{SENSOR_INPUT_AMBIENT, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
 	{SENSOR_INPUT_HUMID, CBOR_VALUE_SENSOR_TYPE_HUMIDITY, sensor_humidity_is_valid}};
 #define SENSOR_META_COUNT (sizeof(sensor_meta) / sizeof(sensor_meta[0]))
@@ -49,9 +53,7 @@ static int encode_sensor_sample(zcbor_state_t *state, const struct sensor_metada
 	bool success = true;
 	success &= zcbor_map_start_encode(state, CBOR_DECODE_INNER_MAP);
 	success &= zcbor_uint32_put(state, CBOR_KEY_SENSOR_PORT);
-	success &= zcbor_uint32_put(state, meta->type == CBOR_VALUE_SENSOR_TYPE_HUMIDITY
-						   ? etc_sensor_get_probe_humid_index()
-						   : meta->port);
+	success &= zcbor_uint32_put(state, meta->port);
 	success &= zcbor_uint32_put(state, CBOR_KEY_SENSOR_TYPE);
 	success &= zcbor_uint32_put(state, meta->type);
 	success &= zcbor_uint32_put(state, CBOR_KEY_SENSOR_VALUE);
@@ -265,7 +267,6 @@ int etc_device_encode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t
 		LOG_ERR("Encoded data exceeds buffer: %zu > %zu", encoded_len, *buf_len);
 		return -ENOMEM;
 	}
-
 	*buf_len = encoded_len;
 	return 0;
 }
@@ -282,7 +283,6 @@ static bool get_cbor_data_length(const uint8_t *buf, size_t buf_len, size_t *dat
 		LOG_ERR("Failed to start map decode for length: %d", zcbor_peek_error(state));
 		return false;
 	}
-
 	// Process key-value pairs
 	while (!zcbor_list_or_map_end(state)) {
 		uint32_t key;
@@ -395,7 +395,7 @@ int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t
 		return -EINVAL;
 	}
 
-	ZCBOR_STATE_D(decoding_state, CBOR_MAX_BACKUPS, buf, buf_len, 1, 0);
+	ZCBOR_STATE_D(decoding_state, CBOR_MAX_BACKUPS, buf, data_len, 1, 0);
 	LOG_HEXDUMP_DBG(buf, buf_len, "DECODE");
 	// Start decoding the main map
 	if (!zcbor_map_start_decode(decoding_state)) {

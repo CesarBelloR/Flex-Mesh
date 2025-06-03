@@ -16,8 +16,6 @@ LOG_MODULE_REGISTER(etc_device_record_test, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define EPSILON 0.01f
 
-static int8_t humid_index = -1;
-
 static void *test_setup(void)
 {
 	return NULL;
@@ -25,11 +23,6 @@ static void *test_setup(void)
 
 static void test_teardown(void *)
 {
-}
-
-int8_t etc_sensor_get_probe_humid_index(void)
-{
-	return humid_index;
 }
 
 static void etc_device_helper_common_test(struct sensor_data *original)
@@ -41,6 +34,7 @@ static void etc_device_helper_common_test(struct sensor_data *original)
 	int ret = etc_device_encode_cbor_data(original, buf, &buf_len);
 	zassert_equal(ret, 0);
 
+	buf_len = sizeof(buf);
 	struct sensor_data decoded = {0};
 	ret = etc_device_decode_cbor_data(&decoded, buf, buf_len);
 	zassert_equal(ret, 0);
@@ -64,36 +58,38 @@ static void etc_device_helper_common_test(struct sensor_data *original)
 
 ZTEST(etc_device_helper_test, test_case)
 {
-	struct sensor_data test_data_1 = {.timestamp = 1234567890,
-					  .battery_mV = 3800,
-					  .sensor = {25.5f, 26.0f, 26.5f, 27.0f, 27.5f, 80.0f},
-					  .battery_status = 1};
+	struct sensor_data test_data_1 = {
+		.timestamp = 1234567890,
+		.battery_mV = 3800,
+		.sensor = {25.5f, 26.0f, 26.5f, 27.0f, 27.5f, 27.5f, 27.5f, 27.5f, 27.5f, 80.0f},
+		.battery_status = 1};
 
-	struct sensor_data test_data_2 = {.timestamp = 1234567890,
-					  .battery_mV = 3800,
-					  .sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, 80.0f},
-					  .battery_status = 1};
+	struct sensor_data test_data_2 = {
+		.timestamp = 1234567890,
+		.battery_mV = 3800,
+		.sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, 27.5f, 27.5f, 27.5f, 27.5f, 80.0f},
+		.battery_status = 1};
 
-	struct sensor_data test_data_3 = {.timestamp = 1234567890,
-					  .battery_mV = 3800,
-					  .sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, 110.0f},
-					  .battery_status = 1};
+	struct sensor_data test_data_3 = {
+		.timestamp = 1234567890,
+		.battery_mV = 3800,
+		.sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, 27.5f, 27.5f, 27.5f, 27.5f, 110.0f},
+		.battery_status = 1};
 
-	struct sensor_data test_data_4 = {.timestamp = 1234567890,
-					  .battery_mV = 3800,
-					  .sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, -1.0f},
-					  .battery_status = 1};
+	struct sensor_data test_data_4 = {
+		.timestamp = 1234567890,
+		.battery_mV = 3800,
+		.sensor = {25.5f, -31.0f, 120.5f, 27.0f, 27.5f, 27.5f, 27.5f, 27.5f, 27.5f, -1.0f},
+		.battery_status = 1};
 
 	struct sensor_data test_data_5 = {.timestamp = 1234567890,
 					  .battery_mV = 3800,
-					  .sensor = {-31.0f, -31.0f, -31.0f, -31.0f, -31.0f, -1.0f},
+					  .sensor = {-31.0f, -31.0f, -31.0f, -31.0f, -31.0f, 27.5f,
+						     27.5f, 27.5f, 27.5f, -1.0f},
 					  .battery_status = 1};
 
-	humid_index = 5;
 	etc_device_helper_common_test(&test_data_1);
 	etc_device_helper_common_test(&test_data_2);
-
-	humid_index = -1;
 	etc_device_helper_common_test(&test_data_3);
 	etc_device_helper_common_test(&test_data_4);
 	etc_device_helper_common_test(&test_data_5);
