@@ -30,20 +30,31 @@ struct sensor_metadata {
 	uint32_t port;
 	uint32_t type;
 	bool (*is_valid)(float value);
+	float default_value;
 };
 
 // sensor metadata lookup table
 static const struct sensor_metadata sensor_meta[] = {
-	{SENSOR_INPUT_IN1, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_IN2, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_IN3, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_IN4, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_IN5, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_IN6, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_IN7, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_IN8, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_AMBIENT, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid},
-	{SENSOR_INPUT_HUMID, CBOR_VALUE_SENSOR_TYPE_HUMIDITY, sensor_humidity_is_valid}};
+	{SENSOR_INPUT_IN1, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_IN2, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_IN3, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_IN4, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_IN5, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_IN6, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_IN7, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_IN8, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_AMBIENT, CBOR_VALUE_SENSOR_TYPE_TEMPERATURE, sensor_temperature_is_valid,
+	 SENSOR_TEMP_NO_CONNECTED},
+	{SENSOR_INPUT_HUMID, CBOR_VALUE_SENSOR_TYPE_HUMIDITY, sensor_humidity_is_valid,
+	 SENSOR_HUMID_NO_CONNECTED}};
 #define SENSOR_META_COUNT (sizeof(sensor_meta) / sizeof(sensor_meta[0]))
 
 // Encode a single sensor sample (unchanged from previous)
@@ -406,6 +417,11 @@ int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t
 	bool timestamp_found = false;
 	bool sensors_found = false;
 	bool battery_found = false;
+
+	/* Set all sensors as default value (no connected) */
+	for (size_t i = 0; i < SENSOR_META_COUNT; i++) {
+		sensor->sensor[i] = sensor_meta[i].default_value;
+	}
 
 	// Handle each key-value pair
 	while (!zcbor_list_or_map_end(decoding_state)) {
