@@ -275,13 +275,12 @@ static void etc_sensor_run_detection(void)
 		k_msleep(50);
 		int rc = etc_sensor_set_splitter_switch(i);
 		int raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
-		bool is_set = etc_sensor_set_type(i, raw_adc);
-		if (!is_set) {
-			if (rc == 0) {
-				etc_sensor_set_splitter_switch(i + SENSOR_INPUT_IN5);
-				raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
-				etc_sensor_set_type(i + SENSOR_INPUT_IN5, raw_adc);
-			}
+		etc_sensor_set_type(i, raw_adc);
+		/* Only process the second splitter channel if there is a splitter connected. */
+		if (rc == 0) {
+			etc_sensor_set_splitter_switch(i + SENSOR_INPUT_IN5);
+			raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
+			etc_sensor_set_type(i + SENSOR_INPUT_IN5, raw_adc);
 		}
 	}
 #endif
@@ -384,20 +383,33 @@ static void etc_sensor_run_digital_sample(void)
 	etc_sensor_gpios_one_wire_disable();
 }
 
+/**
+ * Read an analog sample from an already configured physical sensor port.
+ */
+static void read_analog_sample(int8_t channel)
+{
+	if (list_sensor_type[channel] == SENSOR_TYPE_ANALOG) {
+		etc_sensor_set_splitter_switch(channel);
+		list_sensor_raw_adc[channel] = etc_sensor_helper_get_calibrated_adc(
+			adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR),
+			&sensor_r_hw_raw_adc, &etc_sensor_adc_calibration_info);
+		LOG_INF("ADC[%d] %d", channel, list_sensor_raw_adc[channel]);
+	} else {
+		list_sensor_raw_adc[channel] = -1;
+	}
+}
+
 static void etc_sensor_run_analog_sample(void)
 {
-	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN8; i++) {
-		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG) {
+	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		if (list_sensor_type[i] == SENSOR_TYPE_ANALOG ||
+		    list_sensor_type[i + SENSOR_INPUT_IN5] == SENSOR_TYPE_ANALOG) {
 			etc_sensor_adc_switch_channel(i);
 			k_msleep(50);
-			etc_sensor_set_splitter_switch(i);
-			list_sensor_raw_adc[i] = etc_sensor_helper_get_calibrated_adc(
-				adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR),
-				&sensor_r_hw_raw_adc, &etc_sensor_adc_calibration_info);
-			LOG_INF("ADC[%d] %d", i, list_sensor_raw_adc[i]);
-		} else {
-			list_sensor_raw_adc[i] = -1;
 		}
+		/* Read from the splitter */
+		read_analog_sample(i);
+		read_analog_sample(i + SENSOR_INPUT_IN5);
 	}
 }
 
