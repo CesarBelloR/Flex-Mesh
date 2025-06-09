@@ -286,19 +286,21 @@ int etc_device_write_record(union etc_device_record *record)
 
 int etc_device_read_record(union etc_device_record *record, bool *active_reclaim)
 {
-	int rc = etc_device_record_find_nack(etc_device_record_reading,
+	int record_id = etc_device_record_find_nack(etc_device_record_reading,
 		record, active_reclaim);
-	if (rc < 0) {
+	if (record_id < 0) {
 		LOG_WRN("Don't have NACK record");
 		return 0;
 	}
 	int ret = etc_device_unpack_sensor_data(record);
-	if (ret != 0) {
+	if (ret < 0) {
 		LOG_ERR("Failed to unpack sensor data %d", ret);
+		/* Skip record if parsing sensor data failed. */
+		etc_device_set_ack_record(record_id);
 		return ret;
 	}
-	LOG_DBG("Record ID %d", rc);
-	return rc;
+	LOG_DBG("Record ID %d", record_id);
+	return record_id;
 }
 
 int etc_device_write_relay_data(struct etc_device_relay_record *record)
