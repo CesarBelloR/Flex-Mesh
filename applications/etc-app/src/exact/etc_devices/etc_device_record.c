@@ -86,6 +86,23 @@ static void etc_device_record_reset_ack(void)
 	pRecord->record_stat.total = total_id;
 }
 
+
+static void etc_device_record_reset_stat(void)
+{
+	pRecord->record_stat.newest.sector_idx = 0;
+	pRecord->record_stat.oldest.sector_idx = 0;
+	pRecord->record_stat.newest.element_idx = 0;
+	pRecord->record_stat.oldest.element_idx = 0;
+	pRecord->record_stat.total = 0;
+}
+
+static void etc_device_record_reset_reclaim(void) {
+	etc_reclaim_info.start_index = -1;
+	etc_reclaim_info.stop_index = -1;
+	etc_reclaim_info.current_index = 0;
+	etc_reclaim_info.flag_in_process = 0;
+}
+
 static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb read_cb, void *cb_arg)
 {
 	if (!key) {
@@ -125,6 +142,13 @@ static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb re
 #else
 	memcpy(pRecord, &record_data, sizeof(record_data));
 #endif
+	if (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG) {
+		LOG_WRN("Sync flag does not match, reset record data");
+		memset(pRecord, 0, sizeof(struct etc_device_record_data));
+		etc_device_record_reset_stat();
+		return -EINVAL;
+	}
+	
 	LOG_DBG("\tNewest record (%d,%d)", p_etc_device_record_table->newest.sector_idx,
 		p_etc_device_record_table->newest.element_idx);
 	LOG_DBG("\tOldest record (%d,%d)", p_etc_device_record_table->oldest.sector_idx,
@@ -220,22 +244,6 @@ static int etc_device_export_old_structure(void)
 	/* Remove STAT */
 	etc_device_delete_setting(ETC_RECORD_STAT);
 	return 0;
-}
-
-static void etc_device_record_reset_stat(void)
-{
-	pRecord->record_stat.newest.sector_idx = 0;
-	pRecord->record_stat.oldest.sector_idx = 0;
-	pRecord->record_stat.newest.element_idx = 0;
-	pRecord->record_stat.oldest.element_idx = 0;
-	pRecord->record_stat.total = 0;
-}
-
-static void etc_device_record_reset_reclaim(void) {
-	etc_reclaim_info.start_index = -1;
-	etc_reclaim_info.stop_index = -1;
-	etc_reclaim_info.current_index = 0;
-	etc_reclaim_info.flag_in_process = 0;
 }
 
 static void etc_device_sync_crc(void)
