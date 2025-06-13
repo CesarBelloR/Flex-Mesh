@@ -50,6 +50,13 @@ enum etc_transmit_sub_job {
 	ETC_TRANSMIT_SYNC_MAGNET,
 };
 
+enum etc_device_type {
+	ETC_DEVICE_TYPE_LOGGER,
+	ETC_DEVICE_TYPE_RELAY,
+	ETC_DEVICE_TYPE_EMBEDDABLE,
+	ETC_DEVICE_TYPE_AMBIENT,
+};
+
 /* Define a enum to describe about device mode */
 enum etc_device_mode {
 	ETC_DEVICE_MODE_RELAY = 0x00,

@@ -944,6 +944,37 @@ int etc_set_rx_timeout_secs(uint8_t timeout_secs)
 	return rc;
 }
 
+enum etc_device_type etc_get_device_type(void)
+{
+	enum etc_device_type type = ETC_DEVICE_TYPE_LOGGER;
+	char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
+	int len = etc_get_device_id(device_id, sizeof(device_id));
+
+	if (len >= 2) {
+		int prefix = (device_id[0] - '0') * 10 + (device_id[1] - '0');
+
+		switch (prefix) {
+		case 10:
+			type = ETC_DEVICE_TYPE_LOGGER;
+			break;
+		case 11:
+			type = ETC_DEVICE_TYPE_RELAY;
+			break;
+		case 12:
+			type = ETC_DEVICE_TYPE_EMBEDDABLE;
+			break;
+		case 13:
+			type = ETC_DEVICE_TYPE_AMBIENT;
+			break;
+		default:
+			type = ETC_DEVICE_TYPE_LOGGER;
+			break;
+		}
+	}
+
+	return type;
+}
+
 enum etc_device_mode etc_get_device_mode(void)
 {
 	enum etc_device_mode mode;
@@ -1228,21 +1259,9 @@ static int cmd_set_device_id(const struct shell *shell, size_t argc, char **argv
 			}
 		}
 
-		int prod_code = atoi(argv[1]);
-		bool is_valid = false;
-		for (int i = 0; i < ARRAY_SIZE(etc_setting_production_code_valid); i++) {
-			if (prod_code == etc_setting_production_code_valid[i]) {
-				is_valid = true;
-			}
-		}
-
-		if (!is_valid) {
-			shell_error(shell, "Invalid input, Production Code doesn't support");
-			return 0;
-		}
-
 		shell_print(shell, "OK");
-		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%02d%06d", prod_code, atoi(argv[2]));
+		snprintf(tmp_saved_value, sizeof(tmp_saved_value), "%02d%06d", atoi(argv[1]),
+			 atoi(argv[2]));
 		etc_set_device_id(tmp_saved_value);
 	} else {
 		shell_error(shell, "Invalid input parameter\n. Syntax: set_device_id <Production Code> <Serial Number>");

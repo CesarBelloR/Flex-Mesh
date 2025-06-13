@@ -59,7 +59,13 @@ static void functional_test_send_data_work_fn(struct k_work *work)
 */
 static bool check_sensor_values(struct sensor_data *data) 
 {
-	for (int i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+	int input_high_index = SENSOR_INPUT_IN4;
+
+	if (etc_get_device_type() == ETC_DEVICE_TYPE_EMBEDDABLE) {
+		input_high_index = SENSOR_INPUT_IN2;
+	}
+
+	for (int i = SENSOR_INPUT_IN1; i <= input_high_index; i++) {
 		float val = data->sensor[i];
 		float expected_val = functional_test_values[i];
 		if (val < (expected_val - SENSOR_VALUE_ACCURACY) ||

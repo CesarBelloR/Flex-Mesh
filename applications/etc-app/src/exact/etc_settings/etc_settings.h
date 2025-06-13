@@ -171,6 +171,17 @@ int etc_get_hw_id(char *buf, int buf_len);
 int etc_get_device_id(char *buf, int buf_len);
 
 /**
+ * Retrieve the device type based on the device ID.
+ *
+ * @return The device type. One of @ref enum etc_device_type:
+ * - ETC_DEVICE_TYPE_LOGGER: Logger
+ * - ETC_DEVICE_TYPE_RELAY: Relay
+ * - ETC_DEVICE_TYPE_EMBEDDABLE: Embeddedable
+ * - ETC_DEVICE_TYPE_AMBIENT: Ambient
+ */
+enum etc_device_type etc_get_device_type(void);
+
+/**
  * Check if the device ID is set to the default value.
  *
  * @retval true if value is default.

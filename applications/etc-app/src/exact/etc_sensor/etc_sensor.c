@@ -353,11 +353,17 @@ extern int ds2484_get_logic_level(const struct device *dev);
 static void etc_sensor_run_digital_sample(void)
 {
 	int ret;
+	int input_high_index = SENSOR_INPUT_IN4;
 
-	etc_sensor_gpios_one_wire_enable();
 	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	sensor_digital_humid_port_index = -1;
 	enter_functional_test = true;
+
+	if (etc_get_device_type() == ETC_DEVICE_TYPE_EMBEDDABLE) {
+		input_high_index = SENSOR_INPUT_IN2;
+	}
+
+	etc_sensor_gpios_one_wire_enable();
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
 		list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
 		etc_sensor_adc_switch_channel(i);
@@ -375,7 +381,7 @@ static void etc_sensor_run_digital_sample(void)
 			k_msleep(50);
 			ret = ds2484_get_logic_level(ds2484_dev);
 			LOG_DBG("LL: %d", ret);
-			if (ret != 0) {
+			if (ret != 0 && i <= input_high_index) {
 				enter_functional_test = false;
 			}
 		}
