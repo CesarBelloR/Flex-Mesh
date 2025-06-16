@@ -10,9 +10,10 @@ LOG_MODULE_REGISTER(etc_device_record, CONFIG_ETC_APP_LOG_LEVEL);
 #include <zephyr/drivers/flash.h>
 #include <zephyr/fs/nvs.h>
 #include <zephyr/storage/flash_map.h>
+#include "cloud/cloud_codec/data_codec.h"
 #include "etc_device.h"
 #include "etc_device_record.h"
-#include "cloud/cloud_codec/data_codec.h"
+#include "etc_memfault.h"
 
 #define ETC_DEVICE_RECORD_PREFIX     "etc:record"
 #define ETC_DEVICE_RECORD_NODE_LABEL etc_records_storage
@@ -103,6 +104,47 @@ static void etc_device_record_reset_reclaim(void) {
 	etc_reclaim_info.flag_in_process = 0;
 }
 
+static int erase_all_record_data(void)
+{
+	off_t addr = record_fs.offset;
+	size_t size = record_fs.sector_size * record_fs.sector_count;
+	LOG_WRN("Erasing all data from 0x%08x to 0x%08x", (uint32_t)addr, (uint32_t)(addr + size));
+	int rc = flash_erase(record_fs.flash_device, addr, size);
+	if (rc != 0) {
+		LOG_ERR("Error in erasing flash err %d", rc);
+		return rc;
+	}
+	return 0;
+}
+
+/**
+ * Wipe all record data in flash if not wiped previously.
+ */
+static int etc_device_record_erase_all_data(void)
+{
+	bool erased_after_upgrade = false;
+	int ret;
+	ret = etc_device_read_setting(ETC_RECORDS_ERASED_AFTER_UPGRADE, &erased_after_upgrade, sizeof(erased_after_upgrade));
+	if (ret < 0 && ret != -ENOENT) {
+		LOG_ERR("Failed to read setting err %d", ret);
+		return ret;
+	}
+	if (erased_after_upgrade) {
+		LOG_INF("Not wiping records. Already wiped previously");
+		ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(wipe_record_data, 0);
+		return 0;
+	}
+	erase_all_record_data();
+	ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(wipe_record_data, 1);
+	erased_after_upgrade = true;
+	ret = etc_device_write_setting(ETC_RECORDS_ERASED_AFTER_UPGRADE, &erased_after_upgrade, sizeof(erased_after_upgrade));
+	if (ret != 0) {
+		LOG_ERR("Failed to write setting err %d", ret);
+		return ret;
+	}
+	return 0;
+}
+
 static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb read_cb, void *cb_arg)
 {
 	if (!key) {
@@ -143,9 +185,10 @@ static int etc_device_on_set(const char *key, size_t len_rd, settings_read_cb re
 	memcpy(pRecord, &record_data, sizeof(record_data));
 #endif
 	if (pRecord->record_sync_flag != ETC_DEVICE_RECORD_FLAG) {
-		LOG_WRN("Sync flag does not match, reset record data");
+		LOG_WRN("Sync flag does not match, reset and wipe all record data");
 		memset(pRecord, 0, sizeof(struct etc_device_record_data));
 		etc_device_record_reset_stat();
+		etc_device_record_erase_all_data();
 		return -EINVAL;
 	}
 	

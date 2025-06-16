@@ -101,6 +101,8 @@ enum etc_setting_id {
 	ETC_GNSS_LAST_LOCATION,
 	/* Time when GNSS was last requested */
 	ETC_GNSS_TIME_LAST_REQUEST,
+	/* Flag to indicate if records have been erased after upgrade */
+	ETC_RECORDS_ERASED_AFTER_UPGRADE,
 	ETC_SETTING_HW_VERSION_ID = 0x100,
 	ETC_SETTING_FW_VERSION_ID,
 	ETC_SETTING_DEVICE_ID,
