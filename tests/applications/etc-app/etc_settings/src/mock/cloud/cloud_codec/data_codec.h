@@ -1,3 +1,4 @@
+#include "etc_device.h"
 
 /**
  * Sync the configuration from local device to cloud
