@@ -1172,7 +1172,8 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 	int err;
 
 	const struct lwm2m_obj_path humid_path_list[] = {
-		LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0),
+		LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, SENSOR_VALUE_RID),
+		LWM2M_OBJ(ETC_HUMID_OBJECT_ID, 0, TIMESTAMP_RID),
 	};
 	
 	/* Set battery voltage in mV (required by resource spec) */

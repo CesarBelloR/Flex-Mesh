@@ -108,7 +108,8 @@ static int erase_all_record_data(void)
 {
 	off_t addr = record_fs.offset;
 	size_t size = record_fs.sector_size * record_fs.sector_count;
-	LOG_WRN("Erasing all data from 0x%08x to 0x%08x", (uint32_t)addr, (uint32_t)(addr + size));
+	LOG_WRN("Erasing all data from 0x%08x to 0x%08x on %s", (uint32_t)addr,
+		(uint32_t)(addr + size), record_fs.flash_device->name);
 	int rc = flash_erase(record_fs.flash_device, addr, size);
 	if (rc != 0) {
 		LOG_ERR("Error in erasing flash err %d", rc);

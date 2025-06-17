@@ -35,6 +35,7 @@ const struct device *const ambient_i2c_dev = DEVICE_DT_GET_ANY(ti_tmp1075);
 const struct device *const sht31_i2c_dev = DEVICE_DT_GET_ANY(sensirion_sht31);
 const struct device *ds2484_dev = DEVICE_DT_GET_ANY(exact_ds2484);
 const struct device *tmp1826_dev = DEVICE_DT_GET(DT_NODELABEL(w1_tmp1826));
+const uint8_t tmp1826_family = (uint8_t)DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
 
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 static const struct gpio_dt_spec sense_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
@@ -204,7 +205,6 @@ static int etc_sensor_scan_probe_slaves(void)
 {
 	const struct device *const w1 = DEVICE_DT_GET(DT_NODELABEL(w1));
 	uint8_t family_code;
-	struct w1_rom stored_rom;
 	int num_devices = 0;
 	family_code = DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
 	memset(&tmp1826_rom, 0, sizeof(tmp1826_rom));
@@ -213,6 +213,10 @@ static int etc_sensor_scan_probe_slaves(void)
 	if (num_devices > 0) {
 		struct sensor_value val;
 		w1_rom_to_sensor_value(&tmp1826_rom, &val);
+		if (tmp1826_rom.family != tmp1826_family) {
+			LOG_DBG("1w found is not a TMP1826");
+			return 0;
+		}
 		sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_W1_ROM, &val);
 	}
 	return num_devices;
@@ -224,6 +228,7 @@ static int etc_sensor_set_splitter_switch(int8_t channel)
 	k_msleep(1);
 	int ret = ds2484_get_logic_level(ds2484_dev);
 	if (ret == 0) {
+		LOG_DBG("1w shorted to GND");
 		ret = -ENODEV;
 		goto exit;
 	}
@@ -238,13 +243,16 @@ static int etc_sensor_set_splitter_switch(int8_t channel)
 		goto exit;
 	} else {
 		struct sensor_value val;
-		sensor_attr_get(tmp1826_dev, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_READ_ADDR, &val);
-		int addr = val.val1;
-		val.val1 = channel <= SENSOR_INPUT_IN4 ? 0x00 : 0x01;
-		val.val2 = addr;
-		LOG_DBG("Val %d", addr);
-		ret = sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_GPIO_ADDR,
+		val.val1 = channel <= SENSOR_INPUT_IN4 ? 0x01 : 0x00;
+		val.val2 = 0;
+		LOG_DBG("Val %d", val.val1);
+		ret = sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_GPIO,
 				      &val);
+		if (ret != 0) {
+			LOG_ERR("Failed to set GPIO (err %d)", ret);
+			ret = 0;
+			goto exit;
+		}
 	}
 exit:
 	etc_sensor_gpios_one_wire_disable();
