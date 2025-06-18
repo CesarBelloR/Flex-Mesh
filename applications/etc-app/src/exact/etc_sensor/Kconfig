@@ -20,6 +20,12 @@ config ETC_AMBIENT_I2C_SENSOR
 
 endchoice
 
+config ETC_SENSOR_TMP1826_GPIO_RETRIES
+	int "Number of retries to set GPIO for TMP1826"
+	default 3
+	help
+	  Number of retries to set GPIO for TMP1826.
+
 module = ETC_SENSOR
 module-str = etc sensor
 source "subsys/logging/Kconfig.template.log_config"

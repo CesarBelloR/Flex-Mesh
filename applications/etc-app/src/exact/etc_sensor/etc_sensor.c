@@ -196,9 +196,15 @@ static void etc_sensor_gpios_one_wire_disable(void)
 static void w1_search_callback(struct w1_rom val, void *user_data)
 {
 	int *devices_on_bus = (int *)user_data;
+	char *family_name = "1w";
+
 	*devices_on_bus = *devices_on_bus + 1;
-	tmp1826_rom = val;
-	LOG_DBG("found w1 sensor with id 0x%016llx", w1_rom_to_uint64(&val));
+	if (val.family == tmp1826_family) {
+		tmp1826_rom = val;
+		family_name = "TMP1826";
+		return;
+	}
+	LOG_DBG("found %s sensor with id 0x%016llx", family_name, w1_rom_to_uint64(&val));
 }
 
 static int etc_sensor_scan_probe_slaves(void)
@@ -214,7 +220,6 @@ static int etc_sensor_scan_probe_slaves(void)
 		struct sensor_value val;
 		w1_rom_to_sensor_value(&tmp1826_rom, &val);
 		if (tmp1826_rom.family != tmp1826_family) {
-			LOG_DBG("1w found is not a TMP1826");
 			return 0;
 		}
 		sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_W1_ROM, &val);
@@ -241,18 +246,18 @@ static int etc_sensor_set_splitter_switch(int8_t channel)
 		LOG_ERR("TMP1826 is not ready in I2C bus");
 		ret = -ENODEV;
 		goto exit;
-	} else {
-		struct sensor_value val;
-		val.val1 = channel <= SENSOR_INPUT_IN4 ? 0x01 : 0x00;
-		val.val2 = 0;
-		LOG_DBG("Val %d", val.val1);
-		ret = sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_GPIO,
-				      &val);
-		if (ret != 0) {
-			LOG_ERR("Failed to set GPIO (err %d)", ret);
-			ret = 0;
-			goto exit;
-		}
+	}
+	struct sensor_value val;
+	int retries = 0;
+	val.val1 = channel <= SENSOR_INPUT_IN4 ? 0x01 : 0x00;
+	val.val2 = 0;
+	LOG_DBG("Val %d", val.val1);
+	do {
+		ret = sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, TMP1826_SENSOR_ATTR_GPIO, &val);
+		retries++;
+	} while (ret != 0 && retries < CONFIG_ETC_SENSOR_TMP1826_GPIO_RETRIES);
+	if (ret != 0) {
+		LOG_ERR("Failed to set GPIO (err %d)", ret);
 	}
 exit:
 	etc_sensor_gpios_one_wire_disable();
