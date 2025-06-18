@@ -868,7 +868,7 @@ static void module_lora_rx_thread_fn(void)
 					int rc = 0;
 					do {
 						union etc_device_record record;
-						uint16_t record_id;
+						int record_id;
 						record_id = etc_device_read_record(&record, NULL);
 						if (record_id > 0) {
 							LOG_INF("Sending data over LORA");

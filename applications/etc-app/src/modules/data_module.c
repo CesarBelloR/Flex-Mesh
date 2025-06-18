@@ -59,7 +59,7 @@ struct data_msg_data {
 
 struct send_msg_status {
 	/* Current record id being sent */
-	uint16_t record_id;
+	int record_id;
 	/* Is there a send ongoing? */
 	bool active_send;
 };
@@ -480,7 +480,7 @@ static int data_encode_for_logger() {
 	data_encode_prepare_modem_info(&modem_dynamic);
 	send_status.record_id = etc_device_read_record(&record, &reclaim_status);
 	/* Only add a record if it is valid. */
-	if (send_status.record_id != 0) {
+	if (send_status.record_id > 0) {
 		ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
 		if (ret != 0) {
 			LOG_WRN("Error populating data codec");
@@ -578,7 +578,7 @@ static void data_encode_for_ble()
 	bool reclaim_status;
 	send_status.record_id = etc_device_read_record(&record, &reclaim_status);
 	/* Only add a record if it is valid. */
-	if (send_status.record_id != 0) {
+	if (send_status.record_id > 0) {
 #ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
 		ret = etc_common_prepare_logger_legacy_data(record, reclaim_status,
 			data_payload_buf, &data_payload_len);
