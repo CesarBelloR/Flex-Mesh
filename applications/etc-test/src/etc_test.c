@@ -14,6 +14,7 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/pwm.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/w1.h>
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/pm/pm.h>
 #include <zephyr/pm/device.h>
@@ -25,6 +26,7 @@
 #include "sensor.h"
 #include "ds2484.h"
 #include "ds18b20.h"
+#include "onewire_i2c/ds28e18.h"
 #include "tmp1826.h"
 #include "etc_cape.h"
 #include "watchdog.h"
@@ -84,7 +86,17 @@ static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
 
+#define MAX_W1_DEVICES 4
+
 static const struct device *tmp1826 = DEVICE_DT_GET(DT_NODELABEL(w1_tmp1826));
+
+const uint8_t tmp1826_family = DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
+const uint8_t ds28e18_family = 0x56;
+
+struct w1_search_data {
+	struct w1_rom roms[MAX_W1_DEVICES];
+	int num_devices;
+};
 
 /* Inputs */
 static const struct gpio_dt_spec rtc_int_dt =
@@ -812,19 +824,122 @@ error:
 	return ret;
 }
 
+static void w1_search_callback(struct w1_rom val, void *user_data)
+{
+	struct w1_search_data *data = (struct w1_search_data *)user_data;
+	if (data->num_devices >= MAX_W1_DEVICES) {
+		LOG_ERR("Max number of devices reached");
+		return;
+	}
+	data->roms[data->num_devices] = val;
+	data->num_devices++;
+}
+
+static void assign_tmp1826_rom(struct w1_search_data *data)
+{
+	for (int i = 0; i < data->num_devices; i++) {
+		if (data->roms[i].family == tmp1826_family) {
+			struct sensor_value val;
+			w1_rom_to_sensor_value(&data->roms[i], &val);
+			sensor_attr_set(tmp1826, SENSOR_CHAN_ALL, SENSOR_ATTR_W1_ROM, &val);
+			break;
+		}
+	}
+}
+
+static uint16_t ds28e18_crc16(const uint8_t *input, uint16_t len, uint16_t crc)
+{
+	static const uint8_t oddparity[16] = {0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0};
+
+	for (uint16_t i = 0; i < len; i++) {
+		uint16_t cdata = input[i];
+		cdata = (cdata ^ crc) & 0xff;
+		crc >>= 8;
+
+		if (oddparity[cdata & 0x0F] ^ oddparity[cdata >> 4]) {
+			crc ^= 0xC001;
+		}
+
+		cdata <<= 6;
+		crc ^= cdata;
+		cdata <<= 1;
+		crc ^= cdata;
+	}
+	return crc;
+}
+
+/**
+ * Populate the ROM for DS28E18 devices.
+ * This is a workaround to get the ROM for DS28E18 devices. The DS28E18 driver
+ * is not included in the application and the process needs to be modified to
+ * not include a match_rom in any case.
+ */
+static void w1_populate_rom(const struct device *dev) 
+{
+	const struct w1_slave_config config = {0};
+	uint8_t tx_buf[10] = {DS28E18_CMD_START, 5, DS28E18_CMD_WRITE_IO_CONFIG};
+	uint8_t rx_buf[5] = {0x00};
+	uint16_t crc = 0;
+	int ret;
+
+	tx_buf[3] = 0x0B;
+	tx_buf[4] = 0x03;
+	tx_buf[5] = 0xA5;
+	tx_buf[6] = 0x0F;
+
+	crc = ~ds28e18_crc16(tx_buf, 7, crc);
+	tx_buf[7] = (uint8_t)(crc & 0x00FF);
+	tx_buf[8] = (uint8_t)((crc & 0xFF00) >> 8);
+	tx_buf[9] = DS28E18_CMD_RELEASE_BYTE;
+
+	w1_skip_rom(dev, &config);
+
+	/* Write everything up to the CRC */
+	ret = w1_write_block(dev, tx_buf, 7);
+	if (ret < 0) {
+		LOG_ERR("Failed to write IO config");
+		return ret;
+	}
+	/* Read CRC response */
+	w1_read_block(dev, rx_buf, 2);
+
+	w1_write_byte(dev, DS28E18_CMD_RELEASE_BYTE);
+
+	w1_read_block(dev, rx_buf, sizeof(rx_buf));
+
+	w1_reset_bus(dev);
+}
+
 static int cmd_ds2484_search(const struct shell *shell, size_t argc, char **argv)
 {
-	int ret;
+	const struct device *const w1 = DEVICE_DT_GET(DT_NODELABEL(w1));
+	struct w1_search_data data = {
+		.roms = {0},
+		.num_devices = 0,
+	};
 	char rom[DS2484_ROM_MAX_SIZE];
+	int ret;
 
-	ret = ds2484_request_search(rom);
+	w1_populate_rom(w1);
 
-	if (ret == 0) {
-		shell_fprintf(shell, SHELL_NORMAL, "Found 0x");
-		for (int i = DS2484_ROM_MAX_SIZE - 1; i >= 0; i--) {
-			shell_fprintf(shell, SHELL_NORMAL, "%02X", rom[i]);
+	ret = w1_search_bus(w1, W1_CMD_SEARCH_ROM, W1_SEARCH_ALL_FAMILIES, w1_search_callback,
+			    &data);
+
+	if (ret > 0) {
+		assign_tmp1826_rom(&data);
+		for (int i = 0; i < data.num_devices; i++) {
+			char *family_name = "";
+			if (data.roms[i].family == tmp1826_family) {
+				family_name = "TMP1826";
+			} else if (data.roms[i].family == ds28e18_family) {
+				family_name = "DS28E18";
+			}
+			shell_fprintf(shell, SHELL_NORMAL, "Found %s with id 0x%016llx\n",
+				      family_name,
+				      w1_rom_to_uint64(&data.roms[i]));
 		}
-		shell_print(shell, "");
+	} else if (ret == 0) {
+		shell_print(shell, "No devices found");
 	} else {
 		shell_print(shell, "Error %d", ret);
 	}

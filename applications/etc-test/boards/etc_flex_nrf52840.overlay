@@ -21,6 +21,7 @@
 &w1 {
 	w1_tmp1826: w1_tmp1826 {
 		compatible = "ti,tmp1826";
+		family-code = <0x26>;
 		resolution = <12>;
 		status = "okay";
 	};
