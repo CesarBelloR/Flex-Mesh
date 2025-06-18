@@ -5,6 +5,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/random/random.h>
 #include <string.h>
+#include "common.h"
 #include "etc_date_time.h"
 #include "etc_device.h"
 #include "etc_device_record.h"
@@ -704,17 +705,13 @@ static int module_lora_process_packet(union etc_device_record record)
 		lora_pkt_counter = 0;
 	}
 
-	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
-		if (sensor_temperature_is_valid(record.sensor[i])) {
-			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-						    sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
-						    record.sensor[i]);
-		} else {
-			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-						    sizeof(decoded_buf) - decoded_buf_len, "*,");
-		}
+	for (int i = 0; i <= SENSOR_INPUT_IN4; i++) {
+		etc_common_add_sensor_value(decoded_buf, &decoded_buf_len, sizeof(decoded_buf),
+					    record.sensor[i]);
 	}
-	
+	etc_common_add_sensor_value(decoded_buf, &decoded_buf_len, sizeof(decoded_buf),
+				    record.sensor[SENSOR_INPUT_AMBIENT]);
+
 	if (sensor_humidity_is_valid(record.sensor[SENSOR_INPUT_HUMID])) {
 		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 			sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",

@@ -84,4 +84,16 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
  * @return 0 on success
  */
 int etc_common_export_relay_command(const char* buf, const size_t len);
+
+/**
+ * @brief Add a sensor value to the decoded buffer when assembling a legacy
+ * LoRa packet.
+ * 
+ * @param decoded_buf The decoded buffer
+ * @param decoded_buf_len The length of the decoded buffer
+ * @param decoded_buf_size The size of the decoded buffer
+ * @param value The value to add
+ */
+void etc_common_add_sensor_value(char *decoded_buf, int *decoded_buf_len, int decoded_buf_size,
+				 float value);
 #endif /* COMMON_H_ */

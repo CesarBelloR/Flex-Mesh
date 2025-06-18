@@ -130,6 +130,18 @@ bool etc_common_is_packet_from_parent(char *relay_iccid, char *relay_id)
 
 static char buf_tmp[ETC_SETTINGS_DEVICE_ID_LEN];
 
+void etc_common_add_sensor_value(char *decoded_buf, int *decoded_buf_len, int decoded_buf_size,
+				 float value)
+{
+	if (sensor_temperature_is_valid(value)) {
+		*decoded_buf_len += snprintf(decoded_buf + *decoded_buf_len,
+					     decoded_buf_size - *decoded_buf_len, "%2.2f,", value);
+	} else {
+		*decoded_buf_len += snprintf(decoded_buf + *decoded_buf_len,
+					     decoded_buf_size - *decoded_buf_len, "*,");
+	}
+}
+
 int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool is_reclaim,
 					  char *out_buf, uint8_t *out_len)
 {
@@ -152,16 +164,12 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 		pkt_counter = 0;
 	}
 
-	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
-		if (sensor_temperature_is_valid(record.sensor[i])) {
-			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-						    sizeof(decoded_buf) - decoded_buf_len, "%2.2f,",
-						    record.sensor[i]);
-		} else {
-			decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
-						    sizeof(decoded_buf) - decoded_buf_len, "*,");
-		}
+	for (int i = 0; i <= SENSOR_INPUT_IN4; i++) {
+		etc_common_add_sensor_value(decoded_buf, &decoded_buf_len, sizeof(decoded_buf),
+					    record.sensor[i]);
 	}
+	etc_common_add_sensor_value(decoded_buf, &decoded_buf_len, sizeof(decoded_buf),
+				    record.sensor[SENSOR_INPUT_AMBIENT]);
 
 	if (sensor_humidity_is_valid(record.sensor[SENSOR_INPUT_HUMID])) {
 		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
