@@ -51,7 +51,7 @@ static const struct gpio_dt_spec vsen_en_dt =
 
 static enum sensor_type list_sensor_type[SENSOR_INPUT_IN8 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN8 + 1];
-static float list_sensor_digital_temp[SENSOR_INPUT_IN8 + 1];
+static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
 static float sensor_digital_humid;
 static int8_t sensor_digital_humid_port_index;
 static int sensor_ambient_raw_adc = 0;
@@ -533,7 +533,11 @@ float etc_sensor_get_probe_temp(enum sensor_input input)
 		return etc_sensor_helper_ntc_get(list_sensor_raw_adc[input],
 						 ETC_ADC_CHANNEL_SENSOR);
 	} else if (list_sensor_type[input] == SENSOR_TYPE_DIGITAL) {
-		return list_sensor_digital_temp[input];
+		if (input <= SENSOR_INPUT_IN4) {
+			return list_sensor_digital_temp[input];
+		} else {
+			return SENSOR_TEMP_NO_CONNECTED;
+		}
 	} else {
 		/* No action required */
 	}
