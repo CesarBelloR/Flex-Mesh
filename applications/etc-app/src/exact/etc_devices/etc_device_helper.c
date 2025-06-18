@@ -68,7 +68,12 @@ static int encode_sensor_sample(zcbor_state_t *state, const struct sensor_metada
 	success &= zcbor_uint32_put(state, CBOR_KEY_SENSOR_TYPE);
 	success &= zcbor_uint32_put(state, meta->type);
 	success &= zcbor_uint32_put(state, CBOR_KEY_SENSOR_VALUE);
-	success &= zcbor_float16_put(state, value);
+	if (value == 0.0f) {
+		LOG_DBG("Encoding 0.0f as integer");
+		success &= zcbor_uint32_put(state, (uint32_t)value);
+	} else {
+		success &= zcbor_float16_put(state, value);
+	}
 	success &= zcbor_map_end_encode(state, 0);
 	return success ? 0 : -EINVAL;
 }
@@ -156,10 +161,17 @@ static int decode_sensor_sample(zcbor_state_t *state, struct sensor_data *sensor
 			}
 			break;
 		case CBOR_KEY_SENSOR_VALUE:
-			if (!zcbor_float16_decode(state, &value)) {
-				LOG_ERR("Failed to decode value: %d", zcbor_peek_error(state));
-				return -EINVAL;
-			}
+				float val_float;
+				uint32_t val_uint32;
+				if (!zcbor_float16_decode(state, &val_float)) {
+					if (!zcbor_uint32_decode(state, &val_uint32)) {
+						LOG_ERR("Failed to decode value: %d", zcbor_peek_error(state));
+						return -EINVAL;
+					}
+					value = (float)val_uint32;
+				} else {
+					value = val_float;
+				}
 			break;
 		default:
 			LOG_ERR("Invalid inner key: %u", inner_key);
@@ -352,10 +364,11 @@ static bool get_cbor_data_length(const uint8_t *buf, size_t buf_len, size_t *dat
 						break;
 					case CBOR_KEY_SENSOR_VALUE:
 						float val_float;
-						if (!zcbor_float16_decode(state, &val_float)) {
-							LOG_ERR("Failed to decode value for "
-								"length: %d",
-								zcbor_peek_error(state));
+						uint32_t val_uint32;
+						if (!zcbor_float16_decode(state, &val_float) &&
+						    !zcbor_uint32_decode(state, &val_uint32)) {
+							int error = zcbor_peek_error(state);
+							LOG_ERR("Failed to decode value: %d", error);
 							return false;
 						}
 						break;
@@ -396,6 +409,14 @@ int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t
 {
 	// Calculate actual CBOR data length
 	size_t data_len;
+
+	sensor->timestamp = 0;
+	sensor->battery_mV = 0;
+	/* Set all sensors as default value (no connected) */
+	for (size_t i = 0; i < SENSOR_META_COUNT; i++) {
+		sensor->sensor[i] = sensor_meta[i].default_value;
+	}
+
 	if (!get_cbor_data_length(buf, buf_len, &data_len)) {
 		LOG_ERR("Failed to determine CBOR data length");
 		return -EINVAL;
@@ -417,11 +438,6 @@ int etc_device_decode_cbor_data(struct sensor_data *sensor, uint8_t *buf, size_t
 	bool timestamp_found = false;
 	bool sensors_found = false;
 	bool battery_found = false;
-
-	/* Set all sensors as default value (no connected) */
-	for (size_t i = 0; i < SENSOR_META_COUNT; i++) {
-		sensor->sensor[i] = sensor_meta[i].default_value;
-	}
 
 	// Handle each key-value pair
 	while (!zcbor_list_or_map_end(decoding_state)) {
