@@ -13,6 +13,18 @@ LOG_MODULE_REGISTER(common, CONFIG_ETC_APP_LOG_LEVEL);
 
 static char decoded_buf[PAYLOAD_LOGGER_LEGACY_LEN] = {0x00};
 
+void etc_common_add_sensor_value(char *decoded_buf, int *decoded_buf_len, int decoded_buf_size,
+				 float value)
+{
+	if (sensor_temperature_is_valid(value)) {
+		*decoded_buf_len += snprintf(decoded_buf + *decoded_buf_len,
+					     decoded_buf_size - *decoded_buf_len, "%.1f,", value);
+	} else {
+		*decoded_buf_len += snprintf(decoded_buf + *decoded_buf_len,
+					     decoded_buf_size - *decoded_buf_len, "*,");
+	}
+}
+
 int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record, char *out_buf,
 					 int *out_len, int out_size)
 {
@@ -40,16 +52,12 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 			 record->logger_rssi, record->logger_id, record->battery, relay_vbat,
 			 APP_VERSION_STRING, record->packet_number, record->timestamp);
 
-	for (int i = 0; i <= SENSOR_INPUT_AMBIENT; i++) {
-		if (sensor_temperature_is_valid(record->sensor[i])) {
-			decoded_buf_len +=
-				snprintf(out_buf + decoded_buf_len, out_size - decoded_buf_len,
-					 "%.1f,", record->sensor[i]);
-		} else {
-			decoded_buf_len += snprintf(out_buf + decoded_buf_len,
-						    out_size - decoded_buf_len, "*,");
-		}
+	for (int i = 0; i <= SENSOR_INPUT_IN4; i++) {
+		etc_common_add_sensor_value(out_buf, &decoded_buf_len, out_size,
+					    record->sensor[i]);
 	}
+	etc_common_add_sensor_value(out_buf, &decoded_buf_len, out_size,
+				    record->sensor[SENSOR_INPUT_AMBIENT]);
 
 	if (sensor_humidity_is_valid(record->sensor[SENSOR_INPUT_HUMID])) {
 		decoded_buf_len += snprintf(out_buf + decoded_buf_len, out_size - decoded_buf_len,
@@ -129,18 +137,6 @@ bool etc_common_is_packet_from_parent(char *relay_iccid, char *relay_id)
 #ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
 
 static char buf_tmp[ETC_SETTINGS_DEVICE_ID_LEN];
-
-void etc_common_add_sensor_value(char *decoded_buf, int *decoded_buf_len, int decoded_buf_size,
-				 float value)
-{
-	if (sensor_temperature_is_valid(value)) {
-		*decoded_buf_len += snprintf(decoded_buf + *decoded_buf_len,
-					     decoded_buf_size - *decoded_buf_len, "%2.2f,", value);
-	} else {
-		*decoded_buf_len += snprintf(decoded_buf + *decoded_buf_len,
-					     decoded_buf_size - *decoded_buf_len, "*,");
-	}
-}
 
 int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool is_reclaim,
 					  char *out_buf, uint8_t *out_len)

@@ -426,7 +426,7 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 			break;
 		case MSG_POS_TEMP_AMBIENT:
 			ret = populate_logger_sensor_value(
-				pt, &message->record.sensor[msg_pos - MSG_POS_TEMP1]);
+				pt, &message->record.sensor[SENSOR_INPUT_AMBIENT]);
 			if (ret != 0) {
 				goto exit_error;
 			}
