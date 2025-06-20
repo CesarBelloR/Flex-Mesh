@@ -301,16 +301,17 @@ static void etc_sensor_run_detection(void)
 
 static void etc_sensor_probe_check(void)
 {
-	int no_connected_counter = 0;
+	bool probe_connected = false;
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN8; i++) {
 		float temp = etc_sensor_get_probe_temp(i);
-		if (!sensor_temperature_is_valid(temp)) {
-			no_connected_counter += 1;
+		if (sensor_temperature_is_valid(temp)) {
+			probe_connected = true;
+			break;
 		}
 	}
 
 	enum etc_sensor_status sensor_status = SENSOR_NO_CONNECTION;
-	if (no_connected_counter != ETC_SENSOR_NUM_PROBE_SENSOR) {
+	if (probe_connected) {
 		sensor_status = SENSOR_CONNECTED;
 	}
 

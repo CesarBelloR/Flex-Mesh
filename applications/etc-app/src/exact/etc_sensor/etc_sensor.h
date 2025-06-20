@@ -18,9 +18,6 @@ enum etc_sensor_status {
 	SENSOR_NA,
 };
 
-/* Define a maximum probe sensor in hardware */
-#define ETC_SENSOR_NUM_PROBE_SENSOR (4)
-
 typedef void(*etc_sensor_evt_handler_t)(enum etc_sensor_status status);
 
 static inline bool etc_sensor_rr_value_is_valid(uint16_t rr_value) {
