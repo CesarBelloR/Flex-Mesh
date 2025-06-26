@@ -917,11 +917,14 @@ void etc_device_record_clean_up(void)
 static int etc_device_update_reclaim(uint16_t record_id, int start_time, int stop_time)
 {
 	int rc = 0;
-	uint8_t buf[ETC_DEVICE_RECORD_SIZE] = {0x00};
 	union etc_device_record record;
-	rc = etc_device_record_reading(record_id, buf);
+	rc = etc_device_record_reading(record_id, record.data);
 	if (rc == record_id) {
-		memcpy(record.data, buf, ETC_DEVICE_RECORD_SIZE);
+		rc = etc_device_unpack_sensor_data(&record);
+		if (rc < 0) {
+			LOG_WRN("Failed to unpack sensor data %d", rc);
+			return 0;
+		}
 		LOG_DBG("Record %d Time %d", record_id, record.timestamp);
 		if ((start_time <= record.timestamp) && (record.timestamp <= stop_time)) {
 			if (etc_reclaim_info.start_index == -1) {
@@ -954,6 +957,7 @@ static int etc_device_record_get_num_reclaim_records(void)
 int etc_device_record_reclaim(int start_time, int stop_time, bool dry_run)
 {
 	if (!atomic_cas(&etc_reclaim_status, false, true)) {
+		LOG_ERR("Reclaim already in progress");
 		return -EINPROGRESS;
 	}
 
