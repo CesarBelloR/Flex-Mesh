@@ -6,8 +6,10 @@
 
 #include <zephyr/kernel.h>
 #include <stdio.h>
+#include "adc.h"
 #include "etc_sensor.h"
 #include "etc_sensor_helper.h"
+#include "etc_settings.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_sensor_helpers, CONFIG_ETC_SENSOR_LOG_LEVEL);

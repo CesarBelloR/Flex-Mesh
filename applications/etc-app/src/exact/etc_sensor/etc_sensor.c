@@ -66,6 +66,8 @@ static struct w1_rom tmp1826_rom;
  * test mode. */
 static bool enter_functional_test = false;
 
+extern int ds2484_get_logic_level(const struct device *dev);
+
 /* Remap channels according to HW-772, so that PCBA ports match housing port numbering */
 inline static int8_t remap_th_channel(int8_t channel)
 {
@@ -361,8 +363,6 @@ static inline int etc_sensor_acquire_digital_sensor(float *humidity_val, int8_t 
 
 	return 0;
 }
-
-extern int ds2484_get_logic_level(const struct device *dev);
 
 static void etc_sensor_run_digital_sample(void)
 {
