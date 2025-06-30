@@ -300,10 +300,6 @@ static void stop_functional_test(void)
 	if (functional_test_stop()) {
 		enum functional_test_result result = functional_test_get_result();
 
-		if (result == FUNC_TEST_SUCCESS) {
-			etc_set_power_mode(ETC_POWER_MODE_PROBE);
-		}
-
 		struct data_event *data_event = new_data_event();
 		data_event->type = DATA_EVT_FUNCTIONAL_TEST_COMPLETE;
 		data_event->data.test_result = result;

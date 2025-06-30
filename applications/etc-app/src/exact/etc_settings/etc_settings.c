@@ -408,6 +408,17 @@ int etc_settings_get_config(struct etc_config *config)
 	return 0;
 }
 
+void etc_settings_sync_config(void)
+{
+	int rc = 0;
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	rc = data_codec_sync_config(&etc_cfg);
+	k_mutex_unlock(&setting_mutex);
+	if (rc != 0) {
+		LOG_ERR("Failed to sync configuration to cloud");
+	}
+}
+
 void etc_settings_update(const struct etc_config *new_config)
 {
 	int rc = 1;
@@ -467,7 +478,7 @@ done:
 		LOG_DBG("Value changed success");
 	} else {
 		LOG_ERR("Error changing value: %d", rc);
-		data_codec_sync_config(&etc_cfg);
+		etc_settings_sync_config();
 	}
 }
 
@@ -508,7 +519,7 @@ int etc_set_device_mode(enum etc_device_mode mode)
 
 	if (need_sync) {
 		/* Sync with cloud */
-		data_codec_sync_config(&etc_cfg);
+		etc_settings_sync_config();
 	}
 	k_mutex_unlock(&setting_mutex);
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)

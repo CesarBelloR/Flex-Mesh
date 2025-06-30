@@ -195,6 +195,10 @@ bool functional_test_stop(void)
 
 	test_data.result = evaluate_functional_test_result();
 	LOG_INF("Test result: %u", test_data.result);
+	if (test_data.result == FUNC_TEST_SUCCESS) {
+		etc_set_power_mode(ETC_POWER_MODE_PROBE);
+		etc_settings_sync_config();
+	}
 
 	test_data.state = FUNC_TEST_STATE_COMPLETE;
 	k_mutex_unlock(&functional_test_mutex);

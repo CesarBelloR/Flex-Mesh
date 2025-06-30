@@ -272,4 +272,10 @@ int etc_get_soft_watchdog_timeout_secs(void);
  */
 int16_t etc_get_functional_test_rsrp_value(void);
 
+/**
+ * Sync the configuration to the cloud. This ensures that values read through
+ * LwM2M are up to date.
+ */
+void etc_settings_sync_config(void);
+
 #endif /* ETC_SETTINGS_H__ */
