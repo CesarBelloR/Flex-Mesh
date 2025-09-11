@@ -1,4 +1,5 @@
 #include <string.h>
+#include "etc_settings.h"
 
 int etc_get_relay_iccid(char *buf, int buf_len) 
 {
@@ -8,4 +9,9 @@ int etc_get_relay_iccid(char *buf, int buf_len)
 	copy_size = sizeof(iccid) < buf_len ? sizeof(iccid) : buf_len;
 	memcpy(buf, iccid, copy_size);
 	return copy_size;
+}
+
+enum etc_device_type etc_get_device_type(void)
+{
+	return ETC_DEVICE_TYPE_LOGGER;
 }

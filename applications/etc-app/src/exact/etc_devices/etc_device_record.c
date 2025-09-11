@@ -925,6 +925,7 @@ static int etc_device_update_reclaim(uint16_t record_id, int start_time, int sto
 			LOG_WRN("Failed to unpack sensor data %d", rc);
 			return 0;
 		}
+		etc_device_map_embeddable_sensor_data(&record);
 		LOG_DBG("Record %d Time %d", record_id, record.timestamp);
 		if ((start_time <= record.timestamp) && (record.timestamp <= stop_time)) {
 			if (etc_reclaim_info.start_index == -1) {

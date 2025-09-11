@@ -4,6 +4,8 @@
 #include <zephyr/logging/log.h>
 #include "etc_device_helper.h"
 #include "etc_sensor.h"
+#include "etc_device.h"
+#include "etc_settings.h"
 
 LOG_MODULE_REGISTER(etc_device_helper, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -528,4 +530,14 @@ int etc_device_unpack_sensor_data(union etc_device_record *record)
 	rc = 0;
 #endif
 	return rc;
+}
+
+void etc_device_map_embeddable_sensor_data(union etc_device_record *record)
+{
+	if (etc_get_device_type() == ETC_DEVICE_TYPE_EMBEDDABLE) {
+		record->sensor[SENSOR_INPUT_IN3] = record->sensor[SENSOR_INPUT_IN5];
+		record->sensor[SENSOR_INPUT_IN4] = record->sensor[SENSOR_INPUT_IN6];
+		record->sensor[SENSOR_INPUT_IN5] = SENSOR_TEMP_NO_CONNECTED;
+		record->sensor[SENSOR_INPUT_IN6] = SENSOR_TEMP_NO_CONNECTED;
+	}
 }

@@ -299,6 +299,7 @@ int etc_device_read_record(union etc_device_record *record, bool *active_reclaim
 		etc_device_set_ack_record(record_id);
 		return ret;
 	}
+	etc_device_map_embeddable_sensor_data(record);
 	LOG_DBG("Record ID %d", record_id);
 	return record_id;
 }

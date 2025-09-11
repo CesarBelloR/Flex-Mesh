@@ -86,4 +86,16 @@ int etc_device_pack_sensor_data(struct sensor_data *sensor, union etc_device_rec
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int etc_device_unpack_sensor_data(union etc_device_record* record);
+
+
+/**
+ * If device is an embeddable swap sensor data to enable LoRa communication support
+ * when splitters are connected.
+ * Swap is performed as follows:
+ *   Port 1.B -> Port 3
+ *   Port 2.B -> Port 4
+ * @param record The record to modify.
+ */
+void etc_device_map_embeddable_sensor_data(union etc_device_record *record);
+
 #endif /* ETC_DEVICE_HELPER_H */
