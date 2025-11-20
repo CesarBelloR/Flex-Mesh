@@ -1,0 +1,11 @@
+menu "EXACT LoRa Listener Application"
+
+endmenu
+
+menu "Zephyr Kernel"
+source "$ZEPHYR_BASE/Kconfig.zephyr"
+endmenu
+
+module = ETC_LORA_LISTENER
+module-str = ETC LoRa Listener
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
