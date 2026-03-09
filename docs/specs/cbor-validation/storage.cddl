@@ -1,0 +1,8 @@
+.include prelude.cddl
+
+storage-record = {
+  1 => timestamp,
+  2 => [+ sensor-sample],
+  ? 6 => battery-mv,                 ; present in first chunk only
+  chunk-fields,
+}

@@ -1,0 +1,16 @@
+.include prelude.cddl
+
+lora-relay-portal = {
+  1  => timestamp,
+  2  => [+ sensor-sample],
+  ? 6  => battery-mv,                 ; logger battery (first chunk)
+  ? 11 => fw-version,                 ; logger FW version (first chunk)
+  12 => uint .size 8,                 ; logger device ID (MAC address)
+  13 => uint .size 1,                 ; packet number
+  15 => fw-version,                   ; relay FW version
+  16 => battery-mv,                   ; relay battery
+  17 => int,                           ; relay signal quality (int8)
+  18 => int,                           ; logger RSSI (dBm, int16)
+  19 => uint .size 1,                 ; flags
+  chunk-fields,
+}

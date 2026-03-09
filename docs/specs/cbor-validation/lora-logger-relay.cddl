@@ -1,0 +1,12 @@
+.include prelude.cddl
+
+lora-logger-relay = {
+  1  => timestamp,
+  2  => [+ sensor-sample],
+  ? 6  => battery-mv,                 ; first chunk only
+  ? 11 => fw-version,                 ; first chunk only
+  12 => uint .size 8,                 ; logger device ID (MAC address)
+  13 => uint .size 1,                 ; packet number (0-99)
+  14 => uint .size 2,                 ; relay ICCID last 4 digits
+  chunk-fields,
+}

@@ -1,0 +1,44 @@
+; -- Shared type definitions --
+
+timestamp  = uint           ; UNIX seconds (32-bit)
+battery-mv = uint .size 2   ; millivolts, max 65535
+fw-version = uint .size 2   ; major*10000 + minor*100 + patch
+
+flat-port  = uint           ; 0..9
+hier-port  = [+ uint]       ; hierarchical, e.g. [2, 1, 1]
+port       = flat-port / hier-port
+
+value-type = &(
+  temperature: 1,
+  humidity:    2,
+)
+
+sensor-type = &(
+  temperature:      1,
+  humidity:         2,
+  splitter:         3,
+  dual-temperature: 99,
+)
+
+sensor-value = float        ; float16 on wire, but accept any float for validation
+
+units = &(
+  celsius:    1,              ; °C
+  percent-rh: 2,              ; %RH
+)
+
+sensor-sample = {
+  3  => port,                          ; port (required)
+  ? 4  => value-type,                  ; value type (omit if 1 = temperature)
+  ? 5  => sensor-value,                ; value (omit for splitters)
+  ? 7  => sensor-type,                 ; sensor type (omit only for temperature sensors)
+  ? 20 => uint .size 8,               ; 64-bit UID (required for splitters, optional otherwise)
+  ? 21 => uint .size 1,               ; position within multi-value sensor (1-based)
+  ? 22 => units,                       ; measurement units (optional)
+}
+
+chunk-fields = (
+  ? 8  => uint .size 1,               ; total chunks (omit if 1)
+  ? 9  => uint .size 1,               ; chunk number, 0-based (omit if 1)
+  ? 10 => uint .size 1,               ; chunk sequence (omit if 0)
+)
