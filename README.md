@@ -65,7 +65,7 @@ pip3 install -r {ROOT}\bootloader\mcuboot\scripts\requirements.txt
     * Build with LwM2M support with logging over RTT
         ```
         cd {ROOT}
-        west build -b etc@0.3.0 -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf overlay-1nce.conf overlay-memfault.conf debug.conf"
+        west build -b etc@0.3.0 -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf overlay-memfault.conf debug.conf"
         ```
 
 <a name="Flash"></a>
