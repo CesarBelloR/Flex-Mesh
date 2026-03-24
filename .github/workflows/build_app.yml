@@ -117,7 +117,7 @@ jobs:
       - name: Memfault Overlay
         if: ${{ matrix.type == 'memfault' }}
         run: |
-          echo "overlays=-DEXTRA_CONF_FILE=debug.conf;rtt.conf;overlay-memfault.conf;overlay-1nce.conf" >> "$GITHUB_ENV"
+          echo "overlays=-DEXTRA_CONF_FILE=debug.conf;rtt.conf;overlay-memfault.conf" >> "$GITHUB_ENV"
 
       - name: Base Overlay
         if: ${{ matrix.type == 'base' }}
