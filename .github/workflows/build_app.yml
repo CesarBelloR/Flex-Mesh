@@ -2,7 +2,7 @@ name: Build Application
 
 on:
   push:
-    branches: 
+    branches:
       - main
       - v*
       - RC/*
@@ -22,9 +22,20 @@ on:
       - 'drivers/**'
       - 'patch/**'
       - '.github/workflows/build_app.yml'
+  workflow_dispatch:
+    inputs:
+      carrier:
+        description: 'Carrier selection'
+        required: false
+        type: choice
+        default: ''
+        options:
+          - ''
+          - soracom
+          - teal
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}-${{ inputs.carrier || 'default' }}
   cancel-in-progress: true
 
 jobs:
@@ -42,6 +53,26 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Set carrier variables
+        run: |
+          carrier="${{ inputs.carrier }}"
+          if [ "$carrier" = "soracom" ]; then
+            echo "carrier_overlay=overlay-soracom.conf" >> "$GITHUB_ENV"
+            echo "carrier_cmake=-DPROJECT_VERSION_CARRIER=sora" >> "$GITHUB_ENV"
+            echo "carrier_prefix=soracom_" >> "$GITHUB_ENV"
+            echo "carrier_file_prefix=soracom_" >> "$GITHUB_ENV"
+          elif [ "$carrier" = "teal" ]; then
+            echo "carrier_overlay=overlay-teal.conf" >> "$GITHUB_ENV"
+            echo "carrier_cmake=-DPROJECT_VERSION_CARRIER=teal" >> "$GITHUB_ENV"
+            echo "carrier_prefix=teal_" >> "$GITHUB_ENV"
+            echo "carrier_file_prefix=teal_" >> "$GITHUB_ENV"
+          else
+            echo "carrier_overlay=" >> "$GITHUB_ENV"
+            echo "carrier_cmake=" >> "$GITHUB_ENV"
+            echo "carrier_prefix=" >> "$GITHUB_ENV"
+            echo "carrier_file_prefix=" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup etc common SSH key
         uses: webfactory/ssh-agent@v0.9.0
@@ -64,7 +95,7 @@ jobs:
         id: vars
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
-     
+
       - name: Install python dependencies
         run: |
           pip3 install memfault-cli
@@ -87,14 +118,14 @@ jobs:
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('etc-firmware/west.yml') }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
-      
+
       - name: Setup Zephyr project
         uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           app-path: etc-firmware
           toolchains: arm-zephyr-eabi
           sdk-version: 0.16.8
-      
+
       - name: Apply patches
         working-directory: etc-firmware
         run: |
@@ -117,18 +148,27 @@ jobs:
       - name: Memfault Overlay
         if: ${{ matrix.type == 'memfault' }}
         run: |
-          echo "overlays=-DEXTRA_CONF_FILE=debug.conf;rtt.conf;overlay-memfault.conf" >> "$GITHUB_ENV"
+          if [ -n "$carrier_overlay" ]; then
+            echo "overlays=-DEXTRA_CONF_FILE=debug.conf;rtt.conf;overlay-memfault.conf;${carrier_overlay}" >> "$GITHUB_ENV"
+          else
+            echo "overlays=-DEXTRA_CONF_FILE=debug.conf;rtt.conf;overlay-memfault.conf" >> "$GITHUB_ENV"
+          fi
 
       - name: Base Overlay
         if: ${{ matrix.type == 'base' }}
         run: |
-          echo "overlays=" >> "$GITHUB_ENV"
-          
+          if [ -n "$carrier_overlay" ]; then
+            echo "overlays=-DEXTRA_CONF_FILE=${carrier_overlay}" >> "$GITHUB_ENV"
+          else
+            echo "overlays=" >> "$GITHUB_ENV"
+          fi
+
       - name: Build etc-app ${{ matrix.type }}_${{ matrix.key }}
         working-directory: etc-firmware
         run: |
           west build -b etc_flex/nrf52840 -s applications/etc-app -d build_${{ matrix.type }}_${{ matrix.key }} -p -- \
             $overlays \
+            $carrier_cmake \
             -Dmcuboot_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$mcuboot_key_path\"
 
       - name: Upload symbol file to Memfault
@@ -151,7 +191,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build_${{ matrix.type }}_${{ matrix.key }}
+          name: build_${{ env.carrier_prefix }}${{ matrix.type }}_${{ matrix.key }}
           path: |
             etc-firmware/build_${{ matrix.type }}_${{ matrix.key }}/zephyr/merged.hex
             etc-firmware/build_${{ matrix.type }}_${{ matrix.key }}/zephyr/app_update.bin
@@ -163,6 +203,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - name: Set carrier variables
+        run: |
+          carrier="${{ inputs.carrier }}"
+          if [ "$carrier" = "soracom" ]; then
+            echo "carrier_prefix=soracom_" >> "$GITHUB_ENV"
+            echo "carrier_file_prefix=soracom_" >> "$GITHUB_ENV"
+          elif [ "$carrier" = "teal" ]; then
+            echo "carrier_prefix=teal_" >> "$GITHUB_ENV"
+            echo "carrier_file_prefix=teal_" >> "$GITHUB_ENV"
+          else
+            echo "carrier_prefix=" >> "$GITHUB_ENV"
+            echo "carrier_file_prefix=" >> "$GITHUB_ENV"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -172,13 +226,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: etc-firmware/build_memfault_dev
-          name: build_memfault_dev
-          
+          name: build_${{ env.carrier_prefix }}memfault_dev
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           path: etc-firmware/build_memfault_production
-          name: build_memfault_production
+          name: build_${{ env.carrier_prefix }}memfault_production
 
       - name: Install python dependencies
         run: |
@@ -206,10 +260,10 @@ jobs:
             for key in dev production; do
               build_dir=build_${type}_${key}
               pubkey_id=$(python scripts/imgtools/etc_imgtool.py pubkeyid $build_dir/app_update.bin)
-              cp $build_dir/merged.hex "out/flex_${version}_pubkey-${pubkey_id}.hex"
-              cp $build_dir/app_update.bin "out/update/update_flex_${version}_pubkey-${pubkey_id}.bin"
-              cp $build_dir/app_signed.hex "out/misc/update_test_flex_${version}_pubkey-${pubkey_id}.hex"
-              cp $build_dir/zephyr.elf "out/misc/flex_${version}_pubkey-${pubkey_id}.elf"
+              cp $build_dir/merged.hex "out/flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.hex"
+              cp $build_dir/app_update.bin "out/update/update_flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.bin"
+              cp $build_dir/app_signed.hex "out/misc/update_test_flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.hex"
+              cp $build_dir/zephyr.elf "out/misc/flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.elf"
             done
           done
           echo "APP_VERSION=${version}" >> $GITHUB_ENV
@@ -218,6 +272,5 @@ jobs:
       - name: Upload output files
         uses: actions/upload-artifact@v4
         with:
-          name: flex_${{ env.APP_VERSION }}
+          name: flex_${{ env.carrier_file_prefix }}${{ env.APP_VERSION }}
           path: etc-firmware/out/
-
