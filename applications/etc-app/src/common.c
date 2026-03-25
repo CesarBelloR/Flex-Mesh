@@ -44,7 +44,9 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 		`<Relay RSSI>`,`<Relay Vbat>`,`<Relay Qual>`,<Relay FW Ver>,
 		<packet #>,<timestamp>,
 		<temp 1>,<temp 2>,<temp 3>,<temp 4>,<temp 5>,<Humidity>,
-		<isParent?>,<isReclaimed?>
+		<isParent?>,<isReclaimed?>,
+		<temp 1.B>,<temp 2.B>,<temp 3.B>,<temp 4.B>,
+		<Error Code>
 	 */
 	float relay_vbat = (float)etc_battery_get_voltage_mV() / 1000.0;
 	decoded_buf_len +=
@@ -53,8 +55,7 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 			 APP_VERSION_STRING, record->packet_number, record->timestamp);
 
 	for (int i = 0; i <= SENSOR_INPUT_IN4; i++) {
-		etc_common_add_sensor_value(out_buf, &decoded_buf_len, out_size,
-					    record->sensor[i]);
+		etc_common_add_sensor_value(out_buf, &decoded_buf_len, out_size, record->sensor[i]);
 	}
 	etc_common_add_sensor_value(out_buf, &decoded_buf_len, out_size,
 				    record->sensor[SENSOR_INPUT_AMBIENT]);
@@ -67,8 +68,26 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 			snprintf(out_buf + decoded_buf_len, out_size - decoded_buf_len, "*,");
 	}
 
-	decoded_buf_len += snprintf(out_buf + decoded_buf_len, out_size - decoded_buf_len,
-				    "%d,%d,", is_parent ? 1 : 0, record->is_reclaim ? 1 : 0);
+	decoded_buf_len += snprintf(out_buf + decoded_buf_len, out_size - decoded_buf_len, "%d,%d,",
+				    is_parent ? 1 : 0, record->is_reclaim ? 1 : 0);
+
+	/* Splitter sub-port temperatures (fixed position after isReclaimed).
+	 * Only include if at least one sub-port has a valid reading.
+	 */
+	bool has_splitter = false;
+	for (int i = SENSOR_INPUT_IN5; i <= SENSOR_INPUT_IN8; i++) {
+		if (sensor_temperature_is_valid(record->sensor[i])) {
+			has_splitter = true;
+			break;
+		}
+	}
+	if (has_splitter) {
+		for (int i = SENSOR_INPUT_IN5; i <= SENSOR_INPUT_IN8; i++) {
+			etc_common_add_sensor_value(out_buf, &decoded_buf_len, out_size,
+						    record->sensor[i]);
+		}
+	}
+
 	for (int i = 0; i < ETC_DEVICE_NUM_EXTRA_ELEMENT; i++) {
 		if (record->data[i] == -1) {
 			decoded_buf_len += snprintf(out_buf + decoded_buf_len,
@@ -81,6 +100,7 @@ int etc_common_prepare_relay_legacy_data(struct etc_device_relay_record *record,
 			break;
 		}
 	}
+
 	if (decoded_buf_len + 1 <= out_size) {
 		out_buf[decoded_buf_len] = '\0';
 	} else {
@@ -97,29 +117,54 @@ int etc_common_prepare_relay_legacy_packet(struct etc_device_relay_packet *packe
 	char *p_buf = out_buf;
 	int temp_len = 0;
 	int ret;
+	int packed = 0;
 
 	*out_len = 0;
 
 	for (int i = 0; i < packet->num_records; i++) {
-		if ((out_size - *out_len) <= 2) {
-			return -ENOMEM;
-		}
-		if (i > 0) {
+		int sep_len = 0;
+
+		/* Records are joined with '|'. Write the separator first, but be ready
+		 * to back it out if the following record does not fit. */
+		if (packed > 0) {
+			if ((out_size - *out_len) <= 1) {
+				break;
+			}
 			*p_buf = '|';
 			p_buf++;
 			(*out_len)++;
 			*p_buf = '\0';
+			sep_len = 1;
 		}
+
 		ret = etc_common_prepare_relay_legacy_data(&packet->records[i], p_buf, &temp_len,
 							   out_size - *out_len);
 		if (ret != 0) {
-			return -ENOMEM;
-		} else {
-			p_buf += temp_len;
-			*out_len += temp_len;
+			/* This record does not fit. Drop the separator just written and
+			 * stop here; the unpacked records stay queued for the next send so
+			 * the relay always makes forward progress instead of stalling on an
+			 * oversized package (FW-886). */
+			p_buf -= sep_len;
+			*out_len -= sep_len;
+			if (sep_len) {
+				*p_buf = '\0';
+			}
+			break;
 		}
+		p_buf += temp_len;
+		*out_len += temp_len;
+		packed++;
 	}
 
+	if (packed == 0) {
+		/* Not even the first record fit (a single record larger than out_size).
+		 * Surface the error as before - there is no partial progress to make. */
+		return -ENOMEM;
+	}
+
+	/* Report how many records actually made it into the buffer so the caller can
+	 * advance the relay read index by exactly that many. */
+	packet->num_records = packed;
 	return 0;
 }
 
@@ -191,4 +236,3 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 	return 0;
 }
 #endif
-

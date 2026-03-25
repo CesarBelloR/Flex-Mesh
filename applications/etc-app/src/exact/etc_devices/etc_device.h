@@ -21,8 +21,8 @@
 #define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR_OFFSET_MAX (6)
 /* Equal the buffer for decoded buffer Lora */
 #define ETC_DEVICE_RELAY_BUF_SIZE			  (128)
-/* Number of extra elements in logger data */
-#define ETC_DEVICE_NUM_EXTRA_ELEMENT			  (4)
+/* Number of extra elements in logger data (single error-code field) */
+#define ETC_DEVICE_NUM_EXTRA_ELEMENT			  (1)
 /* Define a invalid for element in Logger data */
 #define ETC_DEVICE_INVALID_VALUE_ELEMENT		  (0xCAFEBEEF)
 /* Define a pubkey ID length */
@@ -293,6 +293,19 @@ int etc_device_read_relay_data_packet(struct etc_device_relay_packet *packet);
  * @brief Sync the relay read index from queue buffer.
  */
 int etc_device_sync_relay_data(void);
+
+/**
+ * @brief Override the count of records to commit on the next sync.
+ *
+ * etc_device_read_relay_data_packet() records how many records it peeked. When the
+ * caller forwards only a subset (e.g. the legacy CSV encoder packed fewer records
+ * than peeked because the buffer filled), call this with the number actually
+ * forwarded so etc_device_sync_relay_data() advances the read index by exactly that
+ * many and the remainder stays queued. Clamped to the number of queued records.
+ *
+ * @param n Number of records that were forwarded.
+ */
+void etc_device_relay_set_last_read_count(uint8_t n);
 
 /**
  * @brief the next-in-line (unack'd) measurement record. If a reclaim is active,

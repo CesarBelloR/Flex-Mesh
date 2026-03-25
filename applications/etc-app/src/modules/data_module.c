@@ -463,6 +463,10 @@ static int data_encode_for_relay() {
 		ret = etc_common_prepare_relay_legacy_packet(&packet, data_relay_buf, &data_len,
 							     sizeof(data_relay_buf));
 		if (!ret) {
+			/* The encoder may have packed fewer records than were peeked if
+			 * they did not all fit; commit only the records actually forwarded
+			 * so the remainder ships on the next interval. */
+			etc_device_relay_set_last_read_count(packet.num_records);
 			LOG_DBG("Relay message %s", data_relay_buf);
 			ret = data_codec_prepare_relay_packet(&codec, data_relay_buf, data_len,
 							      true);

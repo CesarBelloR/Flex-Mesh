@@ -88,7 +88,11 @@ enum logger_msg_pos {
 	MSG_POS_TEMP4,
 	MSG_POS_TEMP_AMBIENT,
 	MSG_POS_HUMIDITY,
-	MSG_POS_EXTRA_ELEMENT
+	MSG_POS_EXTRA_ELEMENT, /* Single error-code field, kept right after humidity */
+	MSG_POS_TEMP1_B,
+	MSG_POS_TEMP2_B,
+	MSG_POS_TEMP3_B,
+	MSG_POS_TEMP4_B,
 };
 
 /* Lora module message queue. */
@@ -301,27 +305,27 @@ static struct logger_lora_response lora_module_get_sync_data(char *package)
 				return response;
 			}
 			switch (i) {
-			case 0:
-				snprintf(response.logger_id, sizeof(response.logger_id), "%s", pt);
-				break;
-			case 1:
-				response.tx_interval_in_mins = strtoul(pt, &ptr, 10);
-				break;
-			case 2:
-				response.relay_id = strtoul(pt, &ptr, 10);
-				break;
-			case 3:
-				response.current_time = strtoul(pt, &ptr, 10);
-				break;
-			case 4:
-				response.reclaim_start_time = strtoul(pt, &ptr, 10);
-				break;
-			case 5:
-				response.reclaim_end_time = strtoul(pt, &ptr, 10);
-				response.is_okay = true;
-				break;
-			default:
-				break;
+				case 0: 
+					snprintf(response.logger_id, sizeof(response.logger_id), "%s", pt); 
+					break;
+				case 1: 
+					response.tx_interval_in_mins = strtoul(pt, &ptr, 10); 
+					break;
+				case 2:	
+					response.relay_id = strtoul(pt, &ptr, 10); 
+					break;
+				case 3: 
+					response.current_time = strtoul(pt, &ptr, 10); 
+					break;
+				case 4: 
+					response.reclaim_start_time = strtoul(pt, &ptr, 10); 
+					break;
+				case 5: 
+					response.reclaim_end_time = strtoul(pt, &ptr, 10);
+					response.is_okay = true;
+					break;
+				default:
+					break;
 			}
 			pt = strtok_r(NULL, ",", &saveptr);
 		}
@@ -452,23 +456,33 @@ static int lora_module_relay_get_message(char *package, int16_t rssi,
 				goto exit_error;
 			}
 			break;
-		default: {
-			if ((msg_pos >= MSG_POS_EXTRA_ELEMENT) &&
-			    msg_pos <= (MSG_POS_EXTRA_ELEMENT + ETC_DEVICE_NUM_EXTRA_ELEMENT)) {
-				if (is_empty_value(pt)) {
-					message->record.data[msg_pos - MSG_POS_EXTRA_ELEMENT] = -1;
-				} else {
-					ret = parse_for_int(
-						pt,
-						&message->record
-							 .data[msg_pos - MSG_POS_EXTRA_ELEMENT]);
-					if (ret != 0) {
-						goto exit_error;
-					}
+		case MSG_POS_EXTRA_ELEMENT:
+			/* Single error-code field. An empty value keeps data[0] at its
+			 * INVALID initialization so the relay-to-cloud encoder omits it
+			 * (trailing-empty omission); a splitter logger sends it as '*' to
+			 * reserve this position ahead of the sub-port temps.
+			 */
+			if (!is_empty_value(pt)) {
+				ret = parse_for_int(pt, &message->record.data[0]);
+				if (ret != 0) {
+					goto exit_error;
 				}
 			}
 			break;
-		}
+		case MSG_POS_TEMP1_B:
+		case MSG_POS_TEMP2_B:
+		case MSG_POS_TEMP3_B:
+		case MSG_POS_TEMP4_B:
+			ret = populate_logger_sensor_value(
+				pt,
+				&message->record
+					 .sensor[SENSOR_INPUT_IN5 + (msg_pos - MSG_POS_TEMP1_B)]);
+			if (ret != 0) {
+				goto exit_error;
+			}
+			break;
+		default:
+			break;
 		}
 		pt = strtok_r(NULL, ",", &saveptr);
 		msg_pos += 1;
@@ -657,10 +671,12 @@ retry_recv:
 			LOG_DBG("Logger info %s", message.record.logger_ver);
 			LOG_DBG("rssi %d - battery %.2f - timestamp %d", message.record.logger_rssi,
 				message.record.battery, message.record.timestamp);
-			LOG_DBG("Sensor %.2f %.2f %.2f %.2f %.2f %.2f", message.record.sensor[0],
-				message.record.sensor[1], message.record.sensor[2],
-				message.record.sensor[3], message.record.sensor[4],
-				message.record.sensor[5]);
+			LOG_DBG("Sensor %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f",
+				message.record.sensor[0], message.record.sensor[1],
+				message.record.sensor[2], message.record.sensor[3],
+				message.record.sensor[4], message.record.sensor[5],
+				message.record.sensor[6], message.record.sensor[7],
+				message.record.sensor[8], message.record.sensor[9]);
 			if (etc_common_is_packet_from_parent(relay_iccid,
 							     message.record.relay_id)) {
 				/* FW-125: Point 2 (Valid message) */
@@ -744,6 +760,29 @@ static int module_lora_process_packet(union etc_device_record record)
 	} else {
 		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
 					    sizeof(decoded_buf) - decoded_buf_len, "*,");
+	}
+
+	/* Splitter sub-port temperatures: 1.B (IN5), 2.B (IN6), 3.B (IN7), 4.B (IN8)
+	 * Only include if at least one sub-port has a valid reading.
+	 */
+	bool has_splitter = false;
+	for (int i = SENSOR_INPUT_IN5; i <= SENSOR_INPUT_IN8; i++) {
+		if (sensor_temperature_is_valid(record.sensor[i])) {
+			has_splitter = true;
+			break;
+		}
+	}
+	if (has_splitter) {
+		/* Reserve the error-code field (position right after humidity) with an
+		 * empty marker so the sub-port temps follow it, keeping the error field
+		 * at its original position for backward compatibility.
+		 */
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+					    sizeof(decoded_buf) - decoded_buf_len, "*,");
+		for (int i = SENSOR_INPUT_IN5; i <= SENSOR_INPUT_IN8; i++) {
+			etc_common_add_sensor_value(decoded_buf, &decoded_buf_len,
+						    sizeof(decoded_buf), record.sensor[i]);
+		}
 	}
 
 #if 0 // Test decrypt the message encoded

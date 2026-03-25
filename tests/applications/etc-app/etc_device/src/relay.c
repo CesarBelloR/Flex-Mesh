@@ -18,6 +18,7 @@
 
 LOG_MODULE_REGISTER(etc_device_relay_test, CONFIG_ETC_APP_LOG_LEVEL);
 
+/* No splitter connected: IN5-IN8 all invalid → splitter fields omitted */
 #define RELAY_LEGACY_DATA_STR                                                                      \
 	"1.2.5,-99,10000199,4.12,*,3.99,*,0.0.0-twister,1,1738795004,41.2,41.6,35.3,*,23.5,*,1,0,"
 
@@ -36,6 +37,26 @@ static struct etc_device_relay_record record = {
 	.data = {ETC_DEVICE_INVALID_VALUE_ELEMENT},
 };
 
+/* Splitter connected: IN5 has a valid reading → all 4 splitter fields included */
+#define RELAY_LEGACY_DATA_SPLITTER_STR                                                             \
+	"1.2.5,-99,10000199,4.12,*,3.99,*,0.0.0-twister,1,1738795004,41.2,41.6,35.3,*,23.5,*,"     \
+	"1,0,22.5,*,*,*,"
+
+static struct etc_device_relay_record record_splitter = {
+	.battery = 4.12,
+	.is_reclaim = false,
+	.logger_rssi = -99,
+	.packet_number = 1,
+	.timestamp = 1738795004,
+	.relay_id = "OPEN",
+	.logger_ver = "1.2.5",
+	.logger_id = "10000199",
+	.sensor = {41.2, 41.6, 35.32, SENSOR_TEMP_NO_CONNECTED, 22.5, SENSOR_TEMP_NO_CONNECTED,
+		   SENSOR_TEMP_NO_CONNECTED, SENSOR_TEMP_NO_CONNECTED, 23.5,
+		   SENSOR_HUMID_NO_CONNECTED},
+	.data = {ETC_DEVICE_INVALID_VALUE_ELEMENT},
+};
+
 static struct etc_device_relay_packet packet;
 
 #define BUF_SIZE 512
@@ -51,7 +72,6 @@ static void *test_setup(void)
 	return NULL;
 }
 
-
 ZTEST(etc_device_relay_test, test_single_legacy_data)
 {
 	int len;
@@ -62,6 +82,18 @@ ZTEST(etc_device_relay_test, test_single_legacy_data)
 	LOG_INF("%s", buf);
 	zassert_equal(len, strlen(buf));
 	zassert_mem_equal(buf, RELAY_LEGACY_DATA_STR, len);
+}
+
+ZTEST(etc_device_relay_test, test_single_legacy_data_with_splitter)
+{
+	int len;
+	int ret;
+
+	ret = etc_common_prepare_relay_legacy_data(&record_splitter, buf, &len, sizeof(buf));
+	zassert_ok(ret);
+	LOG_INF("%s", buf);
+	zassert_equal(len, strlen(buf));
+	zassert_mem_equal(buf, RELAY_LEGACY_DATA_SPLITTER_STR, len);
 }
 
 ZTEST(etc_device_relay_test, test_legacy_data_packet)
@@ -77,6 +109,48 @@ ZTEST(etc_device_relay_test, test_legacy_data_packet)
 			  RELAY_LEGACY_DATA_STR "|" RELAY_LEGACY_DATA_STR "|" RELAY_LEGACY_DATA_STR
 						"|" RELAY_LEGACY_DATA_STR "|" RELAY_LEGACY_DATA_STR,
 			  len);
+}
+
+ZTEST(etc_device_relay_test, test_legacy_data_packet_partial_fits)
+{
+	/* Five splitter-bearing records exceed a small buffer. The encoder must pack
+	 * as many as fit, report the reduced count, and finish well-formed instead of
+	 * failing the whole package (which would stall the relay queue, FW-886). */
+	struct etc_device_relay_packet p;
+	char small_buf[256];
+	int len = 0;
+	int ret;
+
+	for (int i = 0; i < ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS; i++) {
+		memcpy(&p.records[i], &record_splitter, sizeof(record_splitter));
+	}
+	p.num_records = ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS;
+
+	ret = etc_common_prepare_relay_legacy_packet(&p, small_buf, &len, sizeof(small_buf));
+	zassert_ok(ret, "partial pack must succeed, not stall");
+
+	/* At least one record packed, but not all five (the buffer is too small). */
+	zassert_true(p.num_records >= 1, "must pack at least one record");
+	zassert_true(p.num_records < ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS,
+		     "count must be reduced when the buffer cannot hold all records");
+
+	/* Well-formed: NUL-terminated at len, within bounds, no trailing separator. */
+	zassert_equal(len, (int)strlen(small_buf));
+	zassert_true(len < (int)sizeof(small_buf));
+	zassert_not_equal(small_buf[len - 1], '|', "no trailing separator");
+
+	/* Exactly (num_records - 1) separators join the packed records. */
+	int separators = 0;
+	for (int i = 0; i < len; i++) {
+		if (small_buf[i] == '|') {
+			separators++;
+		}
+	}
+	zassert_equal(separators, p.num_records - 1, "one '|' between each record");
+
+	/* The first record is the intact splitter CSV (not truncated). */
+	zassert_mem_equal(small_buf, RELAY_LEGACY_DATA_SPLITTER_STR,
+			  strlen(RELAY_LEGACY_DATA_SPLITTER_STR));
 }
 
 ZTEST(etc_device_relay_test, test_relay_read_init)
@@ -174,11 +248,11 @@ ZTEST(etc_device_relay_test, test_relay_write_full_read_empty)
 		zassert_ok(ret);
 		ret = etc_device_sync_relay_data();
 		zassert_ok(ret);
-		num_records = i >= ETC_RELAY_RECORD_MAX_ELEMENT /
-						      ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS
-				      ? ETC_RELAY_RECORD_MAX_ELEMENT %
-						ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS
-				      : ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS;
+		num_records =
+			i >= ETC_RELAY_RECORD_MAX_ELEMENT / ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS
+				? ETC_RELAY_RECORD_MAX_ELEMENT %
+					  ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS
+				: ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS;
 		zassert_equal(p.num_records, num_records);
 		for (int j = 0; j < num_records; j++) {
 			r.data[0] = (ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS * i) + j + 1;

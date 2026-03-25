@@ -396,6 +396,16 @@ exit:
 	return retval;
 }
 
+void etc_device_relay_set_last_read_count(uint8_t n)
+{
+	k_mutex_lock(&etc_relay_record_mutex, K_FOREVER);
+	if (n > p_relay_stat->number_record) {
+		n = p_relay_stat->number_record;
+	}
+	p_relay_stat->last_read_count = n;
+	k_mutex_unlock(&etc_relay_record_mutex);
+}
+
 int etc_device_set_ack_record(int record_id)
 {
 	int64_t time_start = k_uptime_get();
