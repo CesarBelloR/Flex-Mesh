@@ -21,11 +21,11 @@ LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define ETC_SETTINGS_NODE_LABEL etc_settings_storage
 
-#define ETC_RECORD_DEFAULT_RX_DURATION_SECONDS (120)
+#define ETC_RECORD_DEFAULT_RX_DURATION_SECONDS	(120)
 #define ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS (60)
-#define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS (300)
-#define ETC_RECORD_DEFAULT_TX_PROBE_SECONDS (21600)
-#define ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE (15)
+#define ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS	(300)
+#define ETC_RECORD_DEFAULT_TX_PROBE_SECONDS	(21600)
+#define ETC_DEVICE_TX_NO_PROBE_OFFSET_MINUTE	(15)
 
 static enum etc_device_mode etc_device_current_mode;
 static union etc_device_record current_relay_data_sensor;
@@ -55,10 +55,10 @@ static time_t time_last_gnss_request;
 
 K_MUTEX_DEFINE(relay_data_sensor_mtx);
 
-static struct etc_device_record_backup_data* p_record_backup = NULL;
+static struct etc_device_record_backup_data *p_record_backup = NULL;
 
-/* The public key ID of the current (signed) image. The public key ID 
- * is the first 4 bytes of the public key hash. 
+/* The public key ID of the current (signed) image. The public key ID
+ * is the first 4 bytes of the public key hash.
  */
 static uint8_t img_pubkey_id[IMG_PUBKEY_ID_LEN];
 
@@ -87,11 +87,11 @@ void etc_device_nvs_init(void)
 		LOG_ERR("Failed to mount the etc storage");
 		return;
 	} else {
-			LOG_DBG("Mounted the etc storage successfully");
+		LOG_DBG("Mounted the etc storage successfully");
 	}
 
-	rc = etc_nvs_read(ETC_SETTING_DEVICE_MODE_ID, &etc_device_current_mode, 
-		sizeof(etc_device_current_mode));
+	rc = etc_nvs_read(ETC_SETTING_DEVICE_MODE_ID, &etc_device_current_mode,
+			  sizeof(etc_device_current_mode));
 	if (rc) {
 		/* If failed in reading device mode ID */
 		etc_device_current_mode = ETC_SETTING_DEVICE_MODE_DEFAULT;
@@ -111,7 +111,7 @@ void etc_device_nvs_init(void)
 	etc_device_sync_record_on_ram();
 	/* Initialize the reclaim request for Relay */
 	for (int i = 0; i < ETC_RECLAIM_RELAY_MAX_ELEMENT; i++) {
-		struct etc_device_reclaim_request* request = &list_reclaim_request[i];
+		struct etc_device_reclaim_request *request = &list_reclaim_request[i];
 		atomic_set(&request->flag_set, false);
 		request->start_time = 0;
 		request->stop_time = 0;
@@ -163,7 +163,8 @@ static int etc_nvs_read_with_len(uint16_t element_id, void *data, size_t len)
 	return read_len;
 }
 
-static int etc_nvs_reset_relay_stat(void) {
+static int etc_nvs_reset_relay_stat(void)
+{
 	relay_record_stat.flag_error = false;
 	relay_record_stat.flag_over_flow = false;
 	relay_record_stat.number_record = 0;
@@ -234,7 +235,7 @@ int etc_device_read_setting(uint16_t setting_id, void *setting, int setting_size
 	return etc_nvs_read(setting_id, setting, setting_size);
 }
 
-int etc_device_delete_setting(uint16_t setting_id) 
+int etc_device_delete_setting(uint16_t setting_id)
 {
 	return nvs_delete(&etc_fs, setting_id);
 }
@@ -274,11 +275,11 @@ int etc_device_write_record(union etc_device_record *record)
 	uint16_t record_id = etc_device_record_get_latest_id();
 	struct etc_device_record_index wrote_record_index = etc_device_get_index_by_id(record_id);
 	off_t recorded_addr = etc_device_record_get_addr_offset_by_id(record_id);
-	LOG_DBG("Record to write data %d (0x%08x / 0x%08x) (%d,%d) -> (%d,%d)", ETC_RECORD_ID_HEADER(record_id), 
-		(uint32_t)record_addr, (uint32_t)recorded_addr, 
-		record_index.sector_idx, record_index.element_idx, 
-		wrote_record_index.sector_idx, wrote_record_index.element_idx);
-		
+	LOG_DBG("Record to write data %d (0x%08x / 0x%08x) (%d,%d) -> (%d,%d)",
+		ETC_RECORD_ID_HEADER(record_id), (uint32_t)record_addr, (uint32_t)recorded_addr,
+		record_index.sector_idx, record_index.element_idx, wrote_record_index.sector_idx,
+		wrote_record_index.element_idx);
+
 	etc_device_record_set_nack(record_id);
 	etc_device_record_save_stat();
 	return 0;
@@ -286,8 +287,8 @@ int etc_device_write_record(union etc_device_record *record)
 
 int etc_device_read_record(union etc_device_record *record, bool *active_reclaim)
 {
-	int record_id = etc_device_record_find_nack(etc_device_record_reading,
-		record, active_reclaim);
+	int record_id =
+		etc_device_record_find_nack(etc_device_record_reading, record, active_reclaim);
 	if (record_id < 0) {
 		LOG_WRN("Don't have NACK record");
 		return 0;
@@ -409,11 +410,10 @@ int etc_device_set_ack_record(int record_id)
 
 uint16_t etc_device_nack_count(void)
 {
-	return (etc_device_record_get_total_record() - 
-		etc_device_record_get_num_ack());
+	return (etc_device_record_get_total_record() - etc_device_record_get_num_ack());
 }
 
-int etc_device_erase_setting(uint16_t setting_id) 
+int etc_device_erase_setting(uint16_t setting_id)
 {
 	return nvs_delete(&etc_fs, setting_id);
 }
@@ -428,7 +428,7 @@ bool etc_device_is_logger_lora(void)
 	return (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER);
 }
 
-bool etc_device_is_relay(void) 
+bool etc_device_is_relay(void)
 {
 	return (etc_get_device_mode() == ETC_DEVICE_MODE_RELAY);
 }
@@ -441,58 +441,59 @@ bool etc_device_is_always_on(void)
 int etc_device_get_rx_duration(void)
 {
 	int rx_duration = etc_get_rx_duration_secs();
-	return rx_duration == 0 ? ETC_RECORD_DEFAULT_RX_DURATION_SECONDS
-				: rx_duration;
+	return rx_duration == 0 ? ETC_RECORD_DEFAULT_RX_DURATION_SECONDS : rx_duration;
 }
 
-int etc_device_get_log_interval_second(void) 
+int etc_device_get_log_interval_second(void)
 {
 	int second = etc_get_log_interval_secs();
-	return second == 0 ? ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS
-				: second;
+	return second == 0 ? ETC_RECORD_DEFAULT_LOG_INTERVAL_SECONDS : second;
 }
 
-int etc_device_get_tx_interval_second(void) 
+int etc_device_get_tx_interval_second(void)
 {
 	int second = etc_get_tx_interval_secs();
 	return second == 0 ? ETC_RECORD_DEFAULT_TX_INTERVAL_SECONDS : second;
 }
 
-int etc_device_get_tx_probe_second(void) 
+int etc_device_get_tx_probe_second(void)
 {
 	int second = etc_get_tx_probe_secs();
 	return second == 0 ? ETC_RECORD_DEFAULT_TX_PROBE_SECONDS : second;
 }
 
-void etc_device_set_job(enum etc_device_job job) 
+void etc_device_set_job(enum etc_device_job job)
 {
 	logger_job = job;
 }
 
-enum etc_device_job etc_device_get_job(void) 
+enum etc_device_job etc_device_get_job(void)
 {
 	return logger_job;
 }
 
-void etc_device_set_transmit_sub_job(enum etc_transmit_sub_job job) {
+void etc_device_set_transmit_sub_job(enum etc_transmit_sub_job job)
+{
 	transmit_sub_job = job;
 }
 
-enum etc_transmit_sub_job etc_device_get_transmit_sub_job(void) {
+enum etc_transmit_sub_job etc_device_get_transmit_sub_job(void)
+{
 	return transmit_sub_job;
 }
 
-int etc_device_erase_cfg(void) 
+int etc_device_erase_cfg(void)
 {
 	int rc = 0;
 	/* Erase config, record and reclaim */
-	for (int id = ETC_CONFIG_ID; id <= ETC_RECORD_RECLAIM; id ++ ) {
+	for (int id = ETC_CONFIG_ID; id <= ETC_RECORD_RECLAIM; id++) {
 		rc = nvs_delete(&etc_fs, id);
 		__ASSERT_NO_MSG(rc == 0);
 	}
 
 	/* Erase setting */
-	for (int id = ETC_SETTING_TIME_MEASURE_INTERVAL_ID; id <= ETC_SETTING_TX_PROBE_SEC_ID; id ++ ) {
+	for (int id = ETC_SETTING_TIME_MEASURE_INTERVAL_ID; id <= ETC_SETTING_TX_PROBE_SEC_ID;
+	     id++) {
 		rc = nvs_delete(&etc_fs, id);
 		__ASSERT_NO_MSG(rc == 0);
 	}
@@ -512,7 +513,7 @@ uint16_t etc_device_get_tx_lora_cloud_sync_hour(void)
 	return tx_lora_cloud_sync_hour;
 }
 
-uint16_t etc_device_get_tx_no_probe_offset_mins(void) 
+uint16_t etc_device_get_tx_no_probe_offset_mins(void)
 {
 	uint16_t probe_offset = 0;
 	if (etc_get_device_mode() == ETC_DEVICE_MODE_LORA_LOGGER) {
@@ -528,7 +529,7 @@ int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len)
 	__ASSERT_NO_MSG(pubkey_id_len >= sizeof(img_pubkey_id));
 
 	memcpy(pubkey_id, img_pubkey_id, sizeof(img_pubkey_id));
-	
+
 	return sizeof(img_pubkey_id);
 }
 
@@ -611,7 +612,7 @@ int etc_device_retrieve_location(struct etc_gnss_data *data)
 	return rc;
 }
 
-void etc_device_relay_write_record_sensor(struct sensor_data *sensor) 
+void etc_device_relay_write_record_sensor(struct sensor_data *sensor)
 {
 	LOG_DBG("Write sensor data for relay");
 	k_mutex_lock(&relay_data_sensor_mtx, K_FOREVER);
@@ -625,7 +626,8 @@ void etc_device_relay_write_record_sensor(struct sensor_data *sensor)
 	k_mutex_unlock(&relay_data_sensor_mtx);
 }
 
-int etc_device_relay_read_record_sensor(union etc_device_record* record) {
+int etc_device_relay_read_record_sensor(union etc_device_record *record)
+{
 	int rc = -EIO;
 	k_mutex_lock(&relay_data_sensor_mtx, K_FOREVER);
 	if (current_relay_data_sensor.flag & ETC_DEVICE_RELAY_DATA_READY_MASK) {
@@ -637,7 +639,8 @@ int etc_device_relay_read_record_sensor(union etc_device_record* record) {
 	return rc;
 }
 
-void etc_device_sync_record_on_ram(void) {
+void etc_device_sync_record_on_ram(void)
+{
 	union etc_device_record record;
 	for (int i = 0; i < p_record_backup->num_records; i++) {
 		memcpy(&record, &p_record_backup->records[i], sizeof(record));
@@ -647,8 +650,7 @@ void etc_device_sync_record_on_ram(void) {
 	etc_device_record_backup_sync();
 }
 
-int etc_set_reclaim_request_for_relay(char *logger_id, 
-	int start_time, int stop_time) 
+int etc_set_reclaim_request_for_relay(char *logger_id, int start_time, int stop_time)
 {
 	if (!etc_device_is_relay()) {
 		return -EINVAL;
@@ -659,7 +661,7 @@ int etc_set_reclaim_request_for_relay(char *logger_id,
 	}
 
 	for (int i = 0; i < ETC_RECLAIM_RELAY_MAX_ELEMENT; i++) {
-		struct etc_device_reclaim_request* request = &list_reclaim_request[i];
+		struct etc_device_reclaim_request *request = &list_reclaim_request[i];
 		if (atomic_get(&request->flag_set)) {
 			continue;
 		}
@@ -674,8 +676,8 @@ int etc_set_reclaim_request_for_relay(char *logger_id,
 	return -ENOMEM;
 }
 
-int etc_get_reclaim_request_for_relay_with_logger_id(const char* logger_id,
-	struct etc_device_reclaim_request *reclaim_request) 
+int etc_get_reclaim_request_for_relay_with_logger_id(
+	const char *logger_id, struct etc_device_reclaim_request *reclaim_request)
 {
 	if (logger_id == NULL) {
 		return -EINVAL;
@@ -696,19 +698,20 @@ int etc_get_reclaim_request_for_relay_with_logger_id(const char* logger_id,
 	return -ENOENT;
 }
 
-int etc_device_verify_to_set_psm(const struct etc_config* new_config) {
+int etc_device_verify_to_set_psm(const struct etc_config *new_config)
+{
 	if (etc_device_is_relay()) {
-		if ((new_config->power_mode != ETC_POWER_MODE_ALWAYS_ON) && 
+		if ((new_config->power_mode != ETC_POWER_MODE_ALWAYS_ON) &&
 		    (etc_device_is_always_on())) {
 			return 1;
 		}
 
-		if ((new_config->device_mode != ETC_DEVICE_MODE_RELAY) && 
+		if ((new_config->device_mode != ETC_DEVICE_MODE_RELAY) &&
 		    (etc_device_is_always_on())) {
 			return 1;
 		}
 
-		if ((new_config->power_mode == ETC_POWER_MODE_ALWAYS_ON) && 
+		if ((new_config->power_mode == ETC_POWER_MODE_ALWAYS_ON) &&
 		    (!etc_device_is_always_on())) {
 			return 2;
 		}
@@ -725,10 +728,10 @@ static int cmd_erase_configuration(const struct shell *shell, size_t argc, char 
 	return 0;
 }
 
-SHELL_STATIC_SUBCMD_SET_CREATE(
-	sub_config,
-	SHELL_CMD(erase, NULL, "Erase all configuration - development only", cmd_erase_configuration),
-	SHELL_SUBCMD_SET_END);
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_config,
+			       SHELL_CMD(erase, NULL, "Erase all configuration - development only",
+					 cmd_erase_configuration),
+			       SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(config, &sub_config, "ETC Configuration Management", NULL);
 
 #endif

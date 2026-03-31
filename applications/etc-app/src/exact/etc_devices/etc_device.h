@@ -11,30 +11,30 @@
 #include <stdlib.h>
 
 /* Logger ID size */
-#define ETC_DEVICE_LORA_LOGGER_ID_SIZE	(sizeof("FFFFFFFFFFFFFFFF"))
+#define ETC_DEVICE_LORA_LOGGER_ID_SIZE (sizeof("FFFFFFFFFFFFFFFF"))
 /* App version size */
-#define ETC_DEVICE_APP_VER_SIZE (sizeof("##.##.##") + 1)
+#define ETC_DEVICE_APP_VER_SIZE	       (sizeof("##.##.##") + 1)
 
 /* Lora mode sync with cloud offset */
-#define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR (16)
+#define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR		  (16)
 /* Maximum random hourly offset for LoRa cloud sync */
 #define ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR_OFFSET_MAX (6)
 /* Equal the buffer for decoded buffer Lora */
-#define ETC_DEVICE_RELAY_BUF_SIZE (128) 
+#define ETC_DEVICE_RELAY_BUF_SIZE			  (128)
 /* Number of extra elements in logger data */
-#define ETC_DEVICE_NUM_EXTRA_ELEMENT (4)
+#define ETC_DEVICE_NUM_EXTRA_ELEMENT			  (4)
 /* Define a invalid for element in Logger data */
-#define ETC_DEVICE_INVALID_VALUE_ELEMENT (0xCAFEBEEF)
+#define ETC_DEVICE_INVALID_VALUE_ELEMENT		  (0xCAFEBEEF)
 /* Define a pubkey ID length */
-#define IMG_PUBKEY_ID_LEN	(4)
+#define IMG_PUBKEY_ID_LEN				  (4)
 /* Max element in record for Relay */
-#define ETC_RELAY_RECORD_MAX_ELEMENT (CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY)
+#define ETC_RELAY_RECORD_MAX_ELEMENT			  (CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY)
 /* Define a mask for relay data ready */
-#define ETC_DEVICE_RELAY_DATA_READY_MASK (0x80000000U)
+#define ETC_DEVICE_RELAY_DATA_READY_MASK		  (0x80000000U)
 /* Maximum reclaim relay supports */
-#define ETC_RECLAIM_RELAY_MAX_ELEMENT (20)
+#define ETC_RECLAIM_RELAY_MAX_ELEMENT			  (20)
 /* Maximum number of logger samples in one relay package */
-#define ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS 5
+#define ETC_DEVICE_RELAY_PACKAGE_MAX_RECORDS		  5
 
 /* Define an enum to describe the job of logger currently */
 enum etc_device_job {
@@ -248,13 +248,13 @@ int etc_device_delete_setting(uint16_t setting_id);
 /**
  * @brief Read a setting from non-volatile storage and return the data's length.
  * Same as @ref etc_device_read_setting, but returning the length of the setting.
- * 
+ *
  * @param setting_id NVS ID of the setting to be read. One of @ref enum etc_setting_id
  * @param setting Buffer to store the retrieved setting
  * @param setting_size Size of the setting buffer
- * 
+ *
  * @return Number of bytes read on success. Negative on error.
-*/
+ */
 int etc_device_read_setting_with_len(uint16_t setting_id, void *setting, int setting_size);
 
 /**
@@ -304,25 +304,25 @@ int etc_device_read_relay_data_packet(struct etc_device_relay_packet *packet);
  */
 int etc_device_sync_relay_data(void);
 
-/** 
+/**
  * @brief the next-in-line (unack'd) measurement record. If a reclaim is active,
  * previously ack'd records that are part of the reclaim period will be returned
  * as well.
- * 
+ *
  * @param record Buffer to store measurement record.
  * @param active_reclaim Buffer to store the current reclaim status. True if
  * reclaim is active.
- * 
+ *
  * @retval Record ID >0 if successful.
  * @retval 0 if error or no nack record available (all records have been ack'd
  * and there is no active reclaim).
-*/
+ */
 int etc_device_read_record(union etc_device_record *record, bool *active_reclaim);
 
 /**
  *  @brief Set the ack status
  *  @param record_id the ID of record to set ack status
- * 
+ *
  * @return	0 on success, an error code otherwise.
  */
 int etc_device_set_ack_record(int record_id);
@@ -330,9 +330,9 @@ int etc_device_set_ack_record(int record_id);
 /**
  * Get the current number of not acknowledged samples (nacks) stored on the
  * device.
- * 
+ *
  * @return Number of not acknowledged samples.
-*/
+ */
 uint16_t etc_device_nack_count(void);
 
 /**
@@ -437,10 +437,10 @@ int etc_device_erase_cfg(void);
  */
 uint16_t etc_device_get_tx_logger_lora_offset_mins(void);
 
-/** 
+/**
  * @brief Get the hour of the day when the cloud sync should happen for LoRa loggers.
- * 
- * This hour is randomly generated and is 
+ *
+ * This hour is randomly generated and is
  * @ref ETC_DEVICE_LOGGER_LORA_SYNC_CLOUD_HOUR plus a random offset of maximum
  * 5 hours.
  */
@@ -453,22 +453,22 @@ uint16_t etc_device_get_tx_lora_cloud_sync_hour(void);
  */
 uint16_t etc_device_get_tx_no_probe_offset_mins(void);
 
-/** 
+/**
  * @brief Get the current image's pubkey ID. The public key ID is the first 4 bytes
  * of the public key hash that is stored in the image's TLV.
- * 
+ *
  * @param pubkey_id Buffer to hold the pubkey id. Needs to be at least 4 bytes
  * long. See @ref IMG_PUBKEY_ID_LEN.
  * @param pubkey_id_len Size of the buffer.
- * 
- * @return Number of bytes written to pubkey_id 
-*/
+ *
+ * @return Number of bytes written to pubkey_id
+ */
 int etc_device_get_img_pubkey_id(uint8_t *pubkey_id, uint8_t pubkey_id_len);
 
 /**
  * @brief Set the next transmit time for the device.
  *
- * This function sets the next transmit time for the device. 
+ * This function sets the next transmit time for the device.
  * The time is specified in seconds until the next transmission.
  *
  * @param next_transmit_s The number of seconds for the next transmission.
@@ -478,104 +478,104 @@ void etc_device_set_next_transmit(time_t next_transmit_s);
 /**
  * @brief Get the next transmit time for the device.
  *
- * Retrieves the next transmit time that has been set for the device. 
+ * Retrieves the next transmit time that has been set for the device.
  * The time is returned in seconds until the next transmission.
  *
  * @return Returns the number of seconds until the next transmission.
  */
 time_t etc_device_get_next_transmit(void);
- 
+
 /**
  * Set a GNSS location request status. The modem module uses this information
  * to determine if a location should be searched through GNSS.
- * 
+ *
  * @param status New status of type @ref enum gnss_location_request_status
- * 
+ *
  * @retval 0 success
  * @retval <0 fail
-*/
+ */
 int etc_device_set_location_request(enum gnss_location_request_status status);
 
 /**
  * Check if a location through GNSS was requested. If there is an active request,
  * GNSS should be enabled to try to determine a location.
- * 
+ *
  * @retval true A GNSS location was requested.
  * @retval false A GNSS location was not requested.
-*/
+ */
 bool etc_device_is_location_requested(void);
 
 /**
  * Set the time that GNSS was last requested and save to non-volatile memory.
  * Storing the last requested time in nv memory ensures that there is not a GNSS
  * request on every reboot.
- * 
+ *
  * NOT THREAD SAFE
- * 
+ *
  * @param time_requested Last time GNSS was requested in seconds since epoch.
- * 
+ *
  * @retval 0 success
  * @retval <0 fail
-*/
+ */
 int etc_device_set_last_time_gnss_request(time_t time_requested);
 
 /**
  * Get the time that GNSS was last requested.
- * 
+ *
  * NOT THREAD SAFE
- * 
+ *
  * @return Time GNSS was last requested in seconds since epoch.
-*/
+ */
 time_t etc_device_get_last_time_gnss_request(void);
 
 /**
  * Write the location information to non-volatile memory.
- * 
+ *
  * NOT THREAD SAFE
- * 
+ *
  * @param data Buffer containing GNSS data.
- * 
+ *
  * @retval 0 success
  * @retval <0 error
-*/
+ */
 int etc_device_set_location(struct etc_gnss_data *data);
 
 /**
  * Retrieve the last saved GNSS location from non-volatile memory.
- * 
+ *
  * NOT THREAD SAFE
- * 
+ *
  * @param data Buffer to write retrieved GNSS data to.
- * 
+ *
  * @retval 0 success
  * @retval <0 error
-*/
+ */
 int etc_device_retrieve_location(struct etc_gnss_data *data);
 
 /**
  * @brief Writes a sensor record to the relay.
- * 
+ *
  * This function writes the sensor data to RAM data for relay
- * 
+ *
  * @param sensor Pointer to the sensor_data that contains the sensor to be set
  */
 void etc_device_relay_write_record_sensor(struct sensor_data *sensor);
 
 /**
  * @brief Reads a sensor record from the relay device.
- * 
+ *
  * This function attempts to read latest sensor data for relay device.
- * 
+ *
  * @param record Pointer to a union etc_device_record where the read sensor data will be stored.
- * 
+ *
  * @retval 0 success
  * @retval <0 error
  */
-int etc_device_relay_read_record_sensor(union etc_device_record* record);
+int etc_device_relay_read_record_sensor(union etc_device_record *record);
 
 /**
- * @brief Re-sync record on RAM 
- * 
+ * @brief Re-sync record on RAM
+ *
  * This function will sync all record on RAM to external flash.
  * It should call after OTA done.
  */
@@ -589,8 +589,7 @@ void etc_device_sync_record_on_ram(void);
  * @param stop_time	The stop time of the reclaim range.
  * @return 0 on success, <0 on error.
  */
-int etc_set_reclaim_request_for_relay(char *logger_id, 
-	int start_time, int stop_time);
+int etc_set_reclaim_request_for_relay(char *logger_id, int start_time, int stop_time);
 
 /**
  * Retrieve the reclaim request for a specific logger ID
@@ -600,15 +599,15 @@ int etc_set_reclaim_request_for_relay(char *logger_id,
  * @return 0 on success, <0 on error.
  */
 
-int etc_get_reclaim_request_for_relay_with_logger_id(const char* logger_id, 
-	struct etc_device_reclaim_request *request);
+int etc_get_reclaim_request_for_relay_with_logger_id(const char *logger_id,
+						     struct etc_device_reclaim_request *request);
 
 /**
  * @brief Check the new configuration if device need to ON/OFF PSM
- * 
+ *
  * @retval 1 if system need to ON PSM (Exit ALWAYS ON)
  * @retval 2 if system need to OFF PSM (Enter ALWAYS ON)
  * @return 0 if no need to do anything
  */
-int etc_device_verify_to_set_psm(const struct etc_config* new_config);
+int etc_device_verify_to_set_psm(const struct etc_config *new_config);
 #endif /* ETC_DEVICE_H_ */
