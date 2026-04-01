@@ -10,7 +10,20 @@
 			status = "okay";
 		};
 	};
+	sram@1000 {
+		compatible = "zephyr,memory-region";
+		reg = <0x1000 0x400>;
+		status = "okay";
+		zephyr,memory-region = "ReclaimRetention";
+
+		retainedmem1: retainedmem1 {
+			compatible = "zephyr,retained-ram";
+			status = "okay";
+		};
+	};
+
 	aliases {
+		reclaim-request-ram = &retainedmem1;
 		record-header-ram = &retainedmem0;
 	};
 };
