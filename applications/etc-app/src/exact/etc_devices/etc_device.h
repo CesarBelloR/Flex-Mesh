@@ -204,6 +204,7 @@ struct etc_device_reclaim_request {
 	char logger_id[ETC_DEVICE_LORA_LOGGER_ID_SIZE];
 	int start_time;
 	int stop_time;
+	int32_t created_at;
 	atomic_t flag_set;
 };
 
@@ -610,4 +611,17 @@ int etc_get_reclaim_request_for_relay_with_logger_id(const char *logger_id,
  * @return 0 if no need to do anything
  */
 int etc_device_verify_to_set_psm(const struct etc_config *new_config);
+
+/**
+ * Clear the reclaim request for a logger if the supplied timestamp falls within the
+ * requested window [start_time, stop_time]. The cleared entry is immediately
+ * persisted to retained RAM so it survives a subsequent reset.
+ *
+ * @param logger_id  Logger whose reclaim entry should be checked.
+ * @param timestamp  Timestamp of the arriving reclaim record.
+ *
+ * @retval 0       Request found and cleared.
+ * @retval -ENOENT No matching active request found.
+ */
+int etc_clear_reclaim_request_if_satisfied(const char *logger_id, int timestamp);
 #endif /* ETC_DEVICE_H_ */

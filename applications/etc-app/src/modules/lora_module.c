@@ -657,6 +657,11 @@ retry_recv:
 					module_lora_prepare_packet(message.record.logger_id,
 								   relay_iccid);
 					lora_data_send();
+					if (message.record.is_reclaim) {
+						etc_clear_reclaim_request_if_satisfied(
+							message.record.logger_id,
+							(int)message.record.timestamp);
+					}
 				}
 			} else {
 				LOG_WRN("Unknown packet from parent");
@@ -881,7 +886,7 @@ static void module_lora_rx_thread_fn(void)
 							LOG_ERR("Timeout in waiting ACK");
 							break;
 						}
-					} else if (rc < 0) {
+					} else if (record_id < 0) {
 						LOG_ERR("Error in reading record");
 						break;
 					} else {

@@ -14,7 +14,7 @@
 / {
 	sram@2003F000 {
 		compatible = "zephyr,memory-region", "mmio-sram";
-		reg = <0x2003F000 0x1000>;
+		reg = <0x2003F000 0xC00>;
 		zephyr,memory-region = "RetainedMem";
 		status = "okay";
 
@@ -24,7 +24,20 @@
 	        };
         };
 
+	sram@2003FC00 {
+		compatible = "zephyr,memory-region", "mmio-sram";
+		reg = <0x2003FC00 0x400>;
+		zephyr,memory-region = "ReclaimRetainedMem";
+		status = "okay";
+
+		retainedmem1: retainedmem1 {
+			compatible = "zephyr,retained-ram";
+			status = "okay";
+		};
+	};
+
 	aliases {
+		reclaim-request-ram = &retainedmem1;
 		record-header-ram = &retainedmem0;
 	};
 };
