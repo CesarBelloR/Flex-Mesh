@@ -21,9 +21,7 @@
 #include "etc_util.h"
 #include "etc_device.h"
 
-#if defined(CONFIG_MEMFAULT)
-#include <memfault/core/trace_event.h>
-#endif
+#include "etc_memfault.h"
 
 #ifdef CONFIG_PM_DEVICE
 #include <zephyr/pm/pm.h>
@@ -527,6 +525,14 @@ static void modem_evt_handler(const struct modem_api_evt *const evt)
 
 	case MODEM_API_DYNAMIC_DATA_UPDATE_EVT: {
 		new_dynamic_modem_data(evt->dynamic_data);
+		break;
+	}
+
+	case MODEM_API_REGISTRATION_DENIED_EVT: {
+		LOG_WRN("Registration denied: cause_type=%u, reject_cause=%u",
+			evt->dynamic_data->cause_type, evt->dynamic_data->reject_cause);
+		ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(cereg_registration_denied,
+						     evt->dynamic_data->reject_cause);
 		break;
 	}
 	}
