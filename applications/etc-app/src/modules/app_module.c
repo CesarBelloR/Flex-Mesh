@@ -38,6 +38,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include "events/debug_event.h"
 #include "events/ble_event.h"
 #include "modules_common.h"
+#include <zephyr/shell/shell.h>
 #include "app_module_helper.h"
 
 enum app_wakeup_tx_work_type {
@@ -112,7 +113,8 @@ static void app_soft_watchdog_work_handler(struct k_work* work);
 K_MUTEX_DEFINE(app_module_lock);
 K_WORK_DELAYABLE_DEFINE(app_soft_watchdog_work, app_soft_watchdog_work_handler);
 
-static void app_set_tx_work_type(enum app_wakeup_tx_work_type work_type) {
+static void app_set_tx_work_type(enum app_wakeup_tx_work_type work_type)
+{
 	k_mutex_lock(&app_module_lock, K_FOREVER);
 	if (wakeup_tx_type >= APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 		LOG_WRN("Wakeup tx work type already set to %d", wakeup_tx_type);
@@ -124,14 +126,16 @@ static void app_set_tx_work_type(enum app_wakeup_tx_work_type work_type) {
 }
 
 /* Defind functions for set/get next wake up */
-static void app_set_next_wakeup(int wakeup, enum app_wakeup_tx_work_type work_type) {
+static void app_set_next_wakeup(int wakeup, enum app_wakeup_tx_work_type work_type)
+{
 	k_mutex_lock(&app_module_lock, K_FOREVER);
 	next_wakeup = wakeup;
 	app_set_tx_work_type(work_type);
 	k_mutex_unlock(&app_module_lock);
 }
 
-static int app_get_next_wakeup(void) {
+static int app_get_next_wakeup(void)
+{
 	int wakeup = 0;
 	k_mutex_lock(&app_module_lock, K_FOREVER);
 	wakeup = next_wakeup;
@@ -139,7 +143,8 @@ static int app_get_next_wakeup(void) {
 	return wakeup;
 }
 
-static enum app_wakeup_tx_work_type app_get_and_reset_wakeup_tx_work_type(void) {
+static enum app_wakeup_tx_work_type app_get_and_reset_wakeup_tx_work_type(void)
+{
 	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
 	k_mutex_lock(&app_module_lock, K_FOREVER);
 	type = wakeup_tx_type;
@@ -148,7 +153,8 @@ static enum app_wakeup_tx_work_type app_get_and_reset_wakeup_tx_work_type(void) 
 	return type;
 }
 
-static enum app_wakeup_tx_work_type app_get_wakeup_tx_work_type(void) {
+static enum app_wakeup_tx_work_type app_get_wakeup_tx_work_type(void)
+{
 	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
 	k_mutex_lock(&app_module_lock, K_FOREVER);
 	type = wakeup_tx_type;
@@ -276,17 +282,15 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		msg.module.lora = *evt;
 		enqueue_msg = true;
 	}
-	
-	if (is_debug_event(aeh))
-	{
+
+	if (is_debug_event(aeh)) {
 		struct debug_event *evt = cast_debug_event(aeh);
 
 		msg.module.debug = *evt;
 		enqueue_msg = true;
 	}
 
-	if (is_ble_event(aeh))
-	{
+	if (is_ble_event(aeh)) {
 		struct ble_event *evt = cast_ble_event(aeh);
 
 		msg.module.ble = *evt;
@@ -355,7 +359,8 @@ static bool is_gnss_request_interval(time_t now)
 		struct tm tm_time = {0};
 
 		if (app_module_is_aligned_interval(interval_s)) {
-			/* Assign the aligned interval closest to the current time as last interval. */
+			/* Assign the aligned interval closest to the current time as last interval.
+			 */
 			time_last_aligned_gnss_request = round_int32(now, interval_s);
 		} else {
 			time_last_aligned_gnss_request = now;
@@ -364,9 +369,9 @@ static bool is_gnss_request_interval(time_t now)
 		
 		gmtime_r(&time_last_aligned_gnss_request, &tm_time);
 		LOG_INF("GNSS request interval detected");
-		LOG_INF("Next GNSS request interval at: %04d-%02d-%02d %02d:%02d:%02d", 
-			TM_YEAR_TO_YEAR(tm_time.tm_year), TM_MON_TO_MONTH(tm_time.tm_mon), tm_time.tm_mday,
-			tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
+		LOG_INF("Next GNSS request interval at: %04d-%02d-%02d %02d:%02d:%02d",
+			TM_YEAR_TO_YEAR(tm_time.tm_year), TM_MON_TO_MONTH(tm_time.tm_mon),
+			tm_time.tm_mday, tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
 
 		return true;
 	}
@@ -415,14 +420,15 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 		}
 		case ETC_DEVICE_JOB_TX_RX: {
 			/* Get next transmit in normal case */
-			next_transmit_normal = app_module_get_next_transmit_for_interval_or_probe(now, wakeup_for_transmit,
-				sensor_status);
+			next_transmit_normal = app_module_get_next_transmit_for_interval_or_probe(
+				now, wakeup_for_transmit, sensor_status);
 			/* Get next transmit in logger lora case (-1 is no plan for next transmit) */
-			next_transmit_logger_lora_sync_cloud = app_module_get_next_transmit_lora_sync_cloud(now, 
-				tx_offset_logger_lora_mins, sensor_status);
+			next_transmit_logger_lora_sync_cloud =
+				app_module_get_next_transmit_lora_sync_cloud(
+					now, tx_offset_logger_lora_mins, sensor_status);
 			/* Get next transmit in no probe case (-1 is no plan for next transmit) */
-			next_transmit_no_probe = app_module_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
-				sensor_status);
+			next_transmit_no_probe = app_module_get_next_transmit_no_probe(
+				now, tx_offset_no_probe_mins, sensor_status);
 			/* Cast all next transmit to highest integer value if -1 */
 			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
 				(uint32_t)next_transmit_logger_lora_sync_cloud, 
@@ -433,14 +439,15 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 			/* Get next log */
 			next_log = app_module_align_wakeup(now, wakeup_for_log, ETC_DEVICE_JOB_LOG);
 			/* Get next transmit in normal case */
-			next_transmit_normal = app_module_get_next_transmit_for_interval_or_probe(now, wakeup_for_transmit,
-				sensor_status);
+			next_transmit_normal = app_module_get_next_transmit_for_interval_or_probe(
+				now, wakeup_for_transmit, sensor_status);
 			/* Get next transmit in logger lora case (-1 is no plan for next transmit) */
-			next_transmit_logger_lora_sync_cloud = app_module_get_next_transmit_lora_sync_cloud(now, 
-				tx_offset_logger_lora_mins, sensor_status);
+			next_transmit_logger_lora_sync_cloud =
+				app_module_get_next_transmit_lora_sync_cloud(
+					now, tx_offset_logger_lora_mins, sensor_status);
 			/* Get next transmit in no probe case (-1 is no plan for next transmit) */
-			next_transmit_no_probe = app_module_get_next_transmit_no_probe(now, tx_offset_no_probe_mins, 
-				sensor_status);
+			next_transmit_no_probe = app_module_get_next_transmit_no_probe(
+				now, tx_offset_no_probe_mins, sensor_status);
 			/* Cast all next transmit to highest integer value if -1 */
 			next_transmit = MIN_OF_3((uint32_t)next_transmit_normal, 
 				(uint32_t)next_transmit_logger_lora_sync_cloud, 
@@ -620,7 +627,8 @@ static void app_peripheral_on(bool is_rtc)
 		case ETC_DEVICE_JOB_TX_RX: {
 			etc_device_set_job(ETC_DEVICE_JOB_TX_RX);
 			app_module_backoff_check_multiple_value();
-			if (app_get_and_reset_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+			if (app_get_and_reset_wakeup_tx_work_type() ==
+			    APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else {
@@ -641,7 +649,8 @@ static void app_peripheral_on(bool is_rtc)
 			app_module_backoff_check_multiple_value();
 			etc_device_set_job(ETC_DEVICE_JOB_BOTH);
 			SEND_EVENT(app, APP_EVT_DATA_GET);
-			if (app_get_and_reset_wakeup_tx_work_type() == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
+			if (app_get_and_reset_wakeup_tx_work_type() ==
+			    APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			}
@@ -703,9 +712,8 @@ void date_time_handler(const struct date_time_evt *evt)
 		} else {
 			tx_sec = tx_interval_sec;
 		}
-		if ((now > wakeup) || 
-		    ((now_wakeup_diff > etc_device_get_log_interval_second()) &&
-		    (now_wakeup_diff > tx_sec))) {
+		if ((now > wakeup) || ((now_wakeup_diff > etc_device_get_log_interval_second()) &&
+				       (now_wakeup_diff > tx_sec))) {
 			LOG_INF("Update wakeup time after date/time synced");
 			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_BOTH);
 		} else if (now_wakeup_diff > etc_device_get_log_interval_second()) {
@@ -820,8 +828,8 @@ static void on_sub_state_relay_in_progress(struct app_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_events(struct app_msg_data *msg)
 {
-	if ((IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY) 
-	    && !IS_ENABLED(CONFIG_DEBUG_MODULE)) ||
+	if ((IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTED_READY) &&
+	     !IS_ENABLED(CONFIG_DEBUG_MODULE)) ||
 	    IS_EVENT(msg, debug, DEBUG_EVT_MEMFAULT_COREDUMP_COMPLETE)) {
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 		date_time_start_work();
@@ -847,7 +855,8 @@ static void on_all_events(struct app_msg_data *msg)
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else if (type == APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK) {
-				LOG_DBG("DATA_EVT_DATA_READY -> APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK");
+				LOG_DBG("DATA_EVT_DATA_READY -> "
+					"APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK");
 				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_MAGNET);
 				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 			} else {
@@ -865,9 +874,8 @@ static void on_all_events(struct app_msg_data *msg)
 		}
 		return;
 	}
-	
-	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY) ||
-	    IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
+
+	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY) || IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
 		app_peripheral_off();
 		return;
 	}
@@ -972,6 +980,38 @@ void app_module_thread_fn(void)
 		on_all_events(&msg);
 	}
 }
+
+static int cmd_trigger_tx(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	shell_print(sh, "Triggering sample + LoRa TX (interval)");
+	etc_device_set_job(ETC_DEVICE_JOB_BOTH);
+	SEND_EVENT(app, APP_EVT_DATA_GET);
+	return 0;
+}
+
+static int cmd_trigger_rx(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	shell_print(sh, "Triggering relay LoRa RX listen (interval)");
+	etc_device_set_job(ETC_DEVICE_JOB_TX_RX);
+	SEND_EVENT(app, APP_EVT_DATA_RECEIVE);
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_app_module,
+			       SHELL_CMD(trigger_rx, NULL,
+					 "Trigger relay LoRa RX listen (interval-based)",
+					 cmd_trigger_rx),
+			       SHELL_CMD(trigger_tx, NULL,
+					 "Trigger sample read and LoRa TX (interval-based)",
+					 cmd_trigger_tx),
+			       SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(app_module, &sub_app_module, "App module commands", NULL);
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, cloud_event);
