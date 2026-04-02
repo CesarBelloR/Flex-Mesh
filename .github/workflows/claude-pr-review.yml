@@ -1,13 +1,7 @@
 name: Claude PR Review
 
 on:
-  pull_request:
-    types: [opened, synchronize]
-    branches:
-      - main
-      - v*
-      - RC/*
-      - dev
+  - workflow_dispatch
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
