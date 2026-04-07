@@ -46,6 +46,7 @@ TESTS=(
 	"storage.cddl samples/storage-multi-chunk-1.diag 0 Storage: multi-chunk 1 (splitters+humidity+dual-temp)"
 	"lora-logger-relay.cddl samples/lora-logger-relay.diag 127 LoRa Logger->Relay"
 	"lora-relay-portal.cddl samples/lora-relay-portal.diag 0 LoRa Relay->Portal"
+	"lora-relay-portal.cddl samples/lora-relay-portal-minimal-skylo.diag 0 LoRa Relay->Portal (minimal)"
 )
 
 for test in "${TESTS[@]}"; do
