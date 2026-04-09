@@ -1,0 +1,14 @@
+Execute AT commands:
+AT+QCFG="dbgctl",0      //if it reports error, just ignore it
+AT+CFUN=0               // Start logging after this command
+AT+CFUN=1                  //the module starts network registration 
+AT+QMBNCFG="list"
+AT+QCFG="nwscanmode"
+AT+QCFG="servicedomain"
+AT+QCFG="iotopmode"
+AT+QCFG="band"
+AT+CGDCONT?
+AT+COPS?
+AT+CEREG?
+AT+QNWINFO
+AT+QENG="servingcell"
