@@ -60,9 +60,12 @@ static void functional_test_send_data_work_fn(struct k_work *work)
 static bool check_sensor_values(struct sensor_data *data) 
 {
 	int input_high_index = SENSOR_INPUT_IN4;
+	enum etc_device_type device_type = etc_get_device_type();
 
-	if (etc_get_device_type() == ETC_DEVICE_TYPE_EMBEDDABLE) {
+	if (device_type == ETC_DEVICE_TYPE_EMBEDDABLE) {
 		input_high_index = SENSOR_INPUT_IN2;
+	} else if (device_type == ETC_DEVICE_TYPE_AMBIENT) {
+		input_high_index = SENSOR_INPUT_IN1;
 	}
 
 	for (int i = SENSOR_INPUT_IN1; i <= input_high_index; i++) {

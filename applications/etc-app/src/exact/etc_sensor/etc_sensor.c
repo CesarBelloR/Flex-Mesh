@@ -373,8 +373,12 @@ static void etc_sensor_run_digital_sample(void)
 	sensor_digital_humid_port_index = -1;
 	enter_functional_test = true;
 
-	if (etc_get_device_type() == ETC_DEVICE_TYPE_EMBEDDABLE) {
+	enum etc_device_type device_type = etc_get_device_type();
+
+	if (device_type == ETC_DEVICE_TYPE_EMBEDDABLE) {
 		input_high_index = SENSOR_INPUT_IN2;
+	} else if (device_type == ETC_DEVICE_TYPE_AMBIENT) {
+		input_high_index = SENSOR_INPUT_IN1;
 	}
 
 	etc_sensor_gpios_one_wire_enable();
