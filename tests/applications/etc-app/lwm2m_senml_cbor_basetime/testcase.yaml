@@ -1,0 +1,9 @@
+tests:
+  tests.applications.etc-app.lwm2m_senml_cbor_basetime:
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim
+    tags:
+      - lwm2m
+      - net

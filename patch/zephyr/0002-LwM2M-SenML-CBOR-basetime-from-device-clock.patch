@@ -1,0 +1,382 @@
+From 0601cc4749b4b9a090834416d7da163922ec6971 Mon Sep 17 00:00:00 2001
+From: Andi Gerl <andi.gerl@exacttechnology.com>
+Date: Tue, 21 Apr 2026 14:02:53 -0400
+Subject: [PATCH] LwM2M: SenML CBOR basetime from device clock with ms
+ resolution
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Introduce a weak hook lwm2m_rw_senml_cbor_basetime() that supplies the
+wall-clock time stamped into every outgoing SenML CBOR payload as the
+`bt` field (key -3) on the first record. The default implementation
+returns 0.0, which suppresses `bt` emission when no application override
+is linked; this avoids leaking the small-positive values Zephyr's
+CLOCK_REALTIME returns before date_time has called clock_settime().
+
+The CDDL `bt` field is widened to `int .size 8 / float` per RFC 8428
+so the hook can preserve sub-second precision — the returned value is
+fractional seconds (e.g. `now_ms / 1000.0`). Generated codec files
+emit bt via a union choice: `record_bt_float_c` when populated from
+the hook and `record_bt_int_c` for the legacy LwM2M TIME resource
+path.
+
+Applications opt in by providing a strong symbol that returns a
+synchronised UTC time (for example, wrapping date_time_now()).
+
+Signed-off-by: Andi Gerl <andi.gerl@exacttechnology.com>
+---
+ subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c    | 35 +++++--
+ subsys/net/lib/lwm2m/lwm2m_senml_cbor.cddl    |  2 +-
+ .../net/lib/lwm2m/lwm2m_senml_cbor_decode.c   | 19 ++--
+ .../net/lib/lwm2m/lwm2m_senml_cbor_decode.h   |  2 +-
+ .../net/lib/lwm2m/lwm2m_senml_cbor_encode.c   | 94 +++++++++++--------
+ .../net/lib/lwm2m/lwm2m_senml_cbor_encode.h   |  2 +-
+ subsys/net/lib/lwm2m/lwm2m_senml_cbor_types.h | 15 ++-
+ 7 files changed, 109 insertions(+), 60 deletions(-)
+
+diff --git a/subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c b/subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c
+index 4994250ddeb..1f66d66fe00 100644
+--- a/subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c
++++ b/subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c
+@@ -46,8 +46,8 @@ struct cbor_out_fmt_data {
+ 		uint8_t name_cnt;
+ 	};
+ 
+-	/* Basetime for Cached data timestamp */
+-	time_t basetime;
++	/* Basetime for Cached data timestamp (fractional seconds). */
++	double basetime;
+ 
+ 	/* Storage for object links */
+ 	struct {
+@@ -78,6 +78,16 @@ static int path_to_string(char *buf, size_t buf_size, const struct lwm2m_obj_pat
+  */
+ K_MUTEX_DEFINE(fd_mtx);
+ 
++/* Wall-clock source for the SenML-CBOR base time (bt, key -3). Returning 0.0
++ * suppresses bt emission. Applications should override this with a strong
++ * symbol that returns a synchronised UTC timestamp as fractional seconds
++ * (ms precision is preserved via the CDDL `float` alternative for bt).
++ */
++__weak double lwm2m_rw_senml_cbor_basetime(void)
++{
++	return 0.0;
++}
++
+ #define GET_CBOR_FD_NAME(fd) ((fd)->names[(fd)->name_cnt])
+ /* Get the current record */
+ #define GET_CBOR_FD_REC(fd) \
+@@ -99,7 +109,7 @@ static void setup_out_fmt_data(struct lwm2m_message *msg)
+ 	(void)memset(fd, 0, sizeof(*fd));
+ 	engine_set_out_user_data(&msg->out, fd);
+ 	fd->name_sz = SENML_MAX_NAME_SIZE;
+-	fd->basetime = 0;
++	fd->basetime = lwm2m_rw_senml_cbor_basetime();
+ 	fd->objlnk_sz = sizeof("65535:65535");
+ }
+ 
+@@ -172,6 +182,16 @@ static int put_basename(struct lwm2m_output_context *out, struct lwm2m_obj_path
+ 
+ 	fd->name_cnt++;
+ 
++	/* Attach base time (bt) to the first record of the message when a
++	 * wall-clock is available. Guarded on record count so multi-object
++	 * payloads still carry bt only once, on record 0.
++	 */
++	if (fd->input.lwm2m_senml_record_m_count == 0 && fd->basetime != 0.0) {
++		record->record_bt.record_bt_float = fd->basetime;
++		record->record_bt.record_bt_choice = record_bt_float_c;
++		record->record_bt_present = 1;
++	}
++
+ 	return 0;
+ }
+ 
+@@ -284,12 +304,13 @@ static int put_data_timestamp(struct lwm2m_output_context *out, time_t value)
+ 	/* Tell CBOR encoder where to find the name */
+ 	out_record = GET_CBOR_FD_REC(fd);
+ 
+-	if (fd->basetime) {
+-		out_record->record_t.record_t = value - fd->basetime;
++	if (fd->basetime != 0.0) {
++		out_record->record_t.record_t = (int64_t)(value - fd->basetime);
+ 		out_record->record_t_present = 1;
+ 	} else {
+-		fd->basetime = value;
+-		out_record->record_bt.record_bt = value;
++		fd->basetime = (double)value;
++		out_record->record_bt.record_bt_int = value;
++		out_record->record_bt.record_bt_choice = record_bt_int_c;
+ 		out_record->record_bt_present = 1;
+ 	}
+ 
+diff --git a/subsys/net/lib/lwm2m/lwm2m_senml_cbor.cddl b/subsys/net/lib/lwm2m/lwm2m_senml_cbor.cddl
+index 375f54ab690..623e9393c86 100644
+--- a/subsys/net/lib/lwm2m/lwm2m_senml_cbor.cddl
++++ b/subsys/net/lib/lwm2m/lwm2m_senml_cbor.cddl
+@@ -2,7 +2,7 @@ lwm2m_senml = [1* record]
+ 
+ record = {
+ 	? bn => tstr,            ; Base Name
+-	? bt => int .size 8,     ; Base Time
++	? bt => int .size 8 / float,     ; Base Time (float enables sub-second)
+ 	? n => tstr,             ; Name
+ 	? t => int .size 8,      ; Time
+ 	? ( vi => int .size 8 // ; Integer Value
+diff --git a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_decode.c b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_decode.c
+index 28b0265b9cc..8c09bd9ff38 100644
+--- a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_decode.c
++++ b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_decode.c
+@@ -3,7 +3,7 @@
+  *
+  * SPDX-License-Identifier: Apache-2.0
+  *
+- * Generated using zcbor version 0.8.1
++ * Generated using zcbor version 0.8.99
+  * https://github.com/zephyrproject-rtos/zcbor
+  * Generated with a --default-max-qty of 99
+  */
+@@ -17,7 +17,7 @@
+ #include "zcbor_print.h"
+ 
+ static bool decode_repeated_record_bn(zcbor_state_t *state, struct record_bn *result);
+-static bool decode_repeated_record_bt(zcbor_state_t *state, struct record_bt *result);
++static bool decode_repeated_record_bt(zcbor_state_t *state, struct record_bt_r *result);
+ static bool decode_repeated_record_n(zcbor_state_t *state, struct record_n *result);
+ static bool decode_repeated_record_t(zcbor_state_t *state, struct record_t *result);
+ static bool decode_repeated_record_union(zcbor_state_t *state, struct record_union_r *result);
+@@ -45,15 +45,22 @@ static bool decode_repeated_record_bn(zcbor_state_t *state, struct record_bn *re
+ 	return tmp_result;
+ }
+ 
+-static bool decode_repeated_record_bt(zcbor_state_t *state, struct record_bt *result)
++static bool decode_repeated_record_bt(zcbor_state_t *state, struct record_bt_r *result)
+ {
+ 	zcbor_log("%s\r\n", __func__);
++	bool int_res;
+ 
+ 	bool tmp_result =
+ 		((((zcbor_int32_expect(state, (-3)))) &&
+-		  (zcbor_int64_decode(state, (&(*result).record_bt))) &&
+-		  ((((*result).record_bt >= INT64_MIN) && ((*result).record_bt <= INT64_MAX)) ||
+-		   (zcbor_error(state, ZCBOR_ERR_WRONG_RANGE), false))));
++		  (zcbor_union_start_code(state) &&
++		   (int_res = ((((zcbor_int64_decode(state, (&(*result).record_bt_int))) &&
++				 ((((*result).record_bt_int >= INT64_MIN) &&
++				   ((*result).record_bt_int <= INT64_MAX)) ||
++				  (zcbor_error(state, ZCBOR_ERR_WRONG_RANGE), false))) &&
++				(((*result).record_bt_choice = record_bt_int_c), true)) ||
++			       (((zcbor_float_decode(state, (&(*result).record_bt_float)))) &&
++				(((*result).record_bt_choice = record_bt_float_c), true))),
++		    zcbor_union_end_code(state), int_res))));
+ 
+ 	if (!tmp_result) {
+ 		zcbor_trace_file(state);
+diff --git a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_decode.h b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_decode.h
+index 4e1fdeb66a2..f987e805a5f 100644
+--- a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_decode.h
++++ b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_decode.h
+@@ -3,7 +3,7 @@
+  *
+  * SPDX-License-Identifier: Apache-2.0
+  *
+- * Generated using zcbor version 0.8.1
++ * Generated using zcbor version 0.8.99
+  * https://github.com/zephyrproject-rtos/zcbor
+  * Generated with a --default-max-qty of 99
+  */
+diff --git a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_encode.c b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_encode.c
+index 14ec7431e5b..e6b5bade55b 100644
+--- a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_encode.c
++++ b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_encode.c
+@@ -3,7 +3,7 @@
+  *
+  * SPDX-License-Identifier: Apache-2.0
+  *
+- * Generated using zcbor version 0.8.1
++ * Generated using zcbor version 0.8.99
+  * https://github.com/zephyrproject-rtos/zcbor
+  * Generated with a --default-max-qty of 99
+  */
+@@ -17,7 +17,7 @@
+ #include "zcbor_print.h"
+ 
+ static bool encode_repeated_record_bn(zcbor_state_t *state, const struct record_bn *input);
+-static bool encode_repeated_record_bt(zcbor_state_t *state, const struct record_bt *input);
++static bool encode_repeated_record_bt(zcbor_state_t *state, const struct record_bt_r *input);
+ static bool encode_repeated_record_n(zcbor_state_t *state, const struct record_n *input);
+ static bool encode_repeated_record_t(zcbor_state_t *state, const struct record_t *input);
+ static bool encode_repeated_record_union(zcbor_state_t *state, const struct record_union_r *input);
+@@ -45,15 +45,20 @@ static bool encode_repeated_record_bn(zcbor_state_t *state, const struct record_
+ 	return tmp_result;
+ }
+ 
+-static bool encode_repeated_record_bt(zcbor_state_t *state, const struct record_bt *input)
++static bool encode_repeated_record_bt(zcbor_state_t *state, const struct record_bt_r *input)
+ {
+ 	zcbor_log("%s\r\n", __func__);
+ 
+ 	bool tmp_result =
+ 		((((zcbor_int32_put(state, (-3)))) &&
+-		  ((((*input).record_bt >= INT64_MIN) && ((*input).record_bt <= INT64_MAX)) ||
+-		   (zcbor_error(state, ZCBOR_ERR_WRONG_RANGE), false)) &&
+-		  (zcbor_int64_encode(state, (&(*input).record_bt)))));
++		  (((*input).record_bt_choice == record_bt_int_c)
++			   ? (((((*input).record_bt_int >= INT64_MIN) &&
++				((*input).record_bt_int <= INT64_MAX)) ||
++			       (zcbor_error(state, ZCBOR_ERR_WRONG_RANGE), false)) &&
++			      (zcbor_int64_encode(state, (&(*input).record_bt_int))))
++			   : (((*input).record_bt_choice == record_bt_float_c)
++				      ? ((zcbor_float64_encode(state, (&(*input).record_bt_float))))
++				      : false))));
+ 
+ 	if (!tmp_result) {
+ 		zcbor_trace_file(state);
+@@ -115,27 +120,36 @@ static bool encode_repeated_record_union(zcbor_state_t *state, const struct reco
+ 			    (zcbor_error(state, ZCBOR_ERR_WRONG_RANGE), false)) &&
+ 			   (zcbor_int64_encode(state, (&(*input).union_vi))))
+ 			: (((*input).record_union_choice == union_vf_c)
+-			   ? (((zcbor_uint32_put(state, (2)))) &&
+-			      (zcbor_float64_encode(state, (&(*input).union_vf))))
+-			   : (((*input).record_union_choice == union_vs_c)
+-			      ? (((zcbor_uint32_put(state, (3)))) &&
+-				 (zcbor_tstr_encode(state, (&(*input).union_vs))))
+-			      : (((*input).record_union_choice == union_vb_c)
+-				 ? (((zcbor_uint32_put(state, (4)))) &&
+-				    (zcbor_bool_encode(state, (&(*input).union_vb))))
+-				 : (((*input).record_union_choice == union_vd_c)
+-				    ? (((zcbor_uint32_put(state, (8)))) &&
+-				       (zcbor_bstr_encode(state, (&(*input).union_vd))))
+-				    : (((*input).record_union_choice == union_vlo_c)
+-				       ? (((zcbor_tstr_encode(
+-						  state,
+-						  ((tmp_str.value = (uint8_t *)"vlo",
+-						    tmp_str.len = sizeof("vlo") - 1,
+-						    &tmp_str))))) &&
+-					  (zcbor_tstr_encode(
+-						  state,
+-						  (&(*input).union_vlo))))
+-				       : false))))))));
++				   ? (((zcbor_uint32_put(state, (2)))) &&
++				      (zcbor_float64_encode(state, (&(*input).union_vf))))
++				   : (((*input).record_union_choice == union_vs_c)
++					      ? (((zcbor_uint32_put(state, (3)))) &&
++						 (zcbor_tstr_encode(state, (&(*input).union_vs))))
++					      : (((*input).record_union_choice == union_vb_c)
++							 ? (((zcbor_uint32_put(state, (4)))) &&
++							    (zcbor_bool_encode(
++								    state, (&(*input).union_vb))))
++							 : (((*input).record_union_choice ==
++							     union_vd_c)
++								    ? (((zcbor_uint32_put(state,
++											  (8)))) &&
++								       (zcbor_bstr_encode(
++									       state,
++									       (&(*input).union_vd))))
++								    : (((*input).record_union_choice ==
++									union_vlo_c)
++									       ? (((zcbor_tstr_encode(
++											  state,
++											  ((tmp_str.value =
++												    (uint8_t *)"vlo",
++											    tmp_str.len =
++												    sizeof("vlo") -
++												    1,
++											    &tmp_str))))) &&
++										  (zcbor_tstr_encode(
++											  state,
++											  (&(*input).union_vlo))))
++									       : false))))))));
+ 
+ 	if (!tmp_result) {
+ 		zcbor_trace_file(state);
+@@ -157,19 +171,19 @@ static bool encode_value(zcbor_state_t *state, const struct value_r *input)
+ 			: (((*input).value_choice == value_bstr_c)
+ 				   ? ((zcbor_bstr_encode(state, (&(*input).value_bstr))))
+ 				   : (((*input).value_choice == value_int_c)
+-				      ? (((((*input).value_int >= INT64_MIN) &&
+-					   ((*input).value_int <= INT64_MAX)) ||
+-					  (zcbor_error(state, ZCBOR_ERR_WRONG_RANGE),
+-					   false)) &&
+-					 (zcbor_int64_encode(state, (&(*input).value_int))))
+-				      : (((*input).value_choice == value_float_c)
+-						 ? ((zcbor_float64_encode(
+-							   state, (&(*input).value_float))))
+-						 : (((*input).value_choice == value_bool_c)
+-							    ? ((zcbor_bool_encode(
+-								      state,
+-								      (&(*input).value_bool))))
+-							    : false)))))));
++					      ? (((((*input).value_int >= INT64_MIN) &&
++						   ((*input).value_int <= INT64_MAX)) ||
++						  (zcbor_error(state, ZCBOR_ERR_WRONG_RANGE),
++						   false)) &&
++						 (zcbor_int64_encode(state, (&(*input).value_int))))
++					      : (((*input).value_choice == value_float_c)
++							 ? ((zcbor_float64_encode(
++								   state, (&(*input).value_float))))
++							 : (((*input).value_choice == value_bool_c)
++								    ? ((zcbor_bool_encode(
++									      state,
++									      (&(*input).value_bool))))
++								    : false)))))));
+ 
+ 	if (!tmp_result) {
+ 		zcbor_trace_file(state);
+diff --git a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_encode.h b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_encode.h
+index fc08ead18d4..2457eaa467c 100644
+--- a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_encode.h
++++ b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_encode.h
+@@ -3,7 +3,7 @@
+  *
+  * SPDX-License-Identifier: Apache-2.0
+  *
+- * Generated using zcbor version 0.8.1
++ * Generated using zcbor version 0.8.99
+  * https://github.com/zephyrproject-rtos/zcbor
+  * Generated with a --default-max-qty of 99
+  */
+diff --git a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_types.h b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_types.h
+index 662329d1680..58542dc84d4 100644
+--- a/subsys/net/lib/lwm2m/lwm2m_senml_cbor_types.h
++++ b/subsys/net/lib/lwm2m/lwm2m_senml_cbor_types.h
+@@ -3,7 +3,7 @@
+  *
+  * SPDX-License-Identifier: Apache-2.0
+  *
+- * Generated using zcbor version 0.8.1
++ * Generated using zcbor version 0.8.99
+  * https://github.com/zephyrproject-rtos/zcbor
+  * Generated with a --default-max-qty of 99
+  */
+@@ -36,8 +36,15 @@ struct record_bn {
+ 	struct zcbor_string record_bn;
+ };
+ 
+-struct record_bt {
+-	int64_t record_bt;
++struct record_bt_r {
++	union {
++		int64_t record_bt_int;
++		double record_bt_float;
++	};
++	enum {
++		record_bt_int_c,
++		record_bt_float_c,
++	} record_bt_choice;
+ };
+ 
+ struct record_n {
+@@ -107,7 +114,7 @@ struct record_key_value_pair_m {
+ 
+ struct record {
+ 	struct record_bn record_bn;
+-	struct record_bt record_bt;
++	struct record_bt_r record_bt;
+ 	struct record_n record_n;
+ 	struct record_t record_t;
+ 	struct record_union_r record_union;
+-- 
+2.53.0
+

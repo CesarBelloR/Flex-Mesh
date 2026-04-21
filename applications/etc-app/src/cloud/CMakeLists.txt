@@ -17,8 +17,9 @@ target_sources_ifdef(CONFIG_AWS_IOT app
 
 if(CONFIG_LWM2M)
         target_sources(app
-                       PRIVATE 
+                       PRIVATE
                        ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/lwm2m_integration.c
+                       ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/lwm2m_senml_cbor_time.c
         )
         add_subdirectory(lwm2m/exact_objects)
 endif()
