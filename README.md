@@ -33,7 +33,7 @@
 * Step 1: Initialize new Zephyr with Nordic SDK from new location with command
 
 ```
-west init -m git@bitbucket.org:etcengineering/etc-core-fw.git
+west init -m git@github.com:exact-technology/etc-flex-firmware.git
 
 west update
 ```
@@ -65,7 +65,7 @@ pip3 install -r {ROOT}\bootloader\mcuboot\scripts\requirements.txt
     * Build with LwM2M support with logging over RTT
         ```
         cd {ROOT}
-        west build -b etc@0.3.0 -s etc-firmware/applications/etc-app -- -DOVERLAY_CONFIG="rtt.conf overlay-memfault.conf debug.conf"
+        west build -b etc_flex/nrf52840 -- -DEXTRA_CONF_FILE="rtt.conf overlay-memfault.conf debug.conf"
         ```
 
 <a name="Flash"></a>
