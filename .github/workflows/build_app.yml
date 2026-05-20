@@ -260,10 +260,16 @@ jobs:
             for key in dev production; do
               build_dir=build_${type}_${key}
               pubkey_id=$(python scripts/imgtools/etc_imgtool.py pubkeyid $build_dir/app_update.bin)
-              cp $build_dir/merged.hex "out/flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.hex"
+              if [ "$key" = "dev" ]; then
+                # dev-keyed merged.hex (older signing key) is for internal/debug use — keep it out of the top-level release dir
+                merged_dest="out/misc/flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.hex"
+              else
+                merged_dest="out/flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.hex"
+              fi
+              cp $build_dir/merged.hex     "$merged_dest"
               cp $build_dir/app_update.bin "out/update/update_flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.bin"
               cp $build_dir/app_signed.hex "out/misc/update_test_flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.hex"
-              cp $build_dir/zephyr.elf "out/misc/flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.elf"
+              cp $build_dir/zephyr.elf     "out/misc/flex_${carrier_file_prefix}${version}_pubkey-${pubkey_id}.elf"
             done
           done
           echo "APP_VERSION=${version}" >> $GITHUB_ENV
