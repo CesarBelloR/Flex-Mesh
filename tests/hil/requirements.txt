@@ -1,2 +1,3 @@
 pytest_embedded==2.1.0
 pytest-embedded-serial==2.1.0
+requests
