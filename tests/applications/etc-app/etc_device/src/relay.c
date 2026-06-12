@@ -7,6 +7,7 @@
 #include <zephyr/ztest.h>
 
 #include "etc_device.h"
+#include "etc_relay_reclaim.h"
 #include "etc_util.h"
 #include "common.h"
 #include <zephyr/logging/log.h>
@@ -188,6 +189,106 @@ ZTEST(etc_device_relay_test, test_relay_write_full_read_empty)
 	}
 	ret = etc_device_read_relay_data_packet(&p);
 	zassert_not_ok(ret);
+}
+
+/* --- FW-991: reclaim buffer query / clear / iterate APIs ---------------- */
+
+static void reclaim_reset(void)
+{
+	(void)etc_relay_reclaim_clear_all();
+}
+
+ZTEST(etc_device_relay_test, test_reclaim_count_empty)
+{
+	reclaim_reset();
+	zassert_equal(etc_relay_reclaim_count(), 0);
+}
+
+ZTEST(etc_device_relay_test, test_reclaim_add_and_count)
+{
+	reclaim_reset();
+	char id_a[] = "10000100";
+	char id_b[] = "10000200";
+	zassert_ok(etc_relay_reclaim_set(id_a, 1000, 2000));
+	zassert_ok(etc_relay_reclaim_set(id_b, 3000, 4000));
+	zassert_equal(etc_relay_reclaim_count(), 2);
+}
+
+ZTEST(etc_device_relay_test, test_reclaim_get_by_index_bounds)
+{
+	reclaim_reset();
+	struct etc_device_reclaim_request out;
+	zassert_equal(etc_relay_reclaim_get_by_index(-1, &out), -EINVAL);
+	zassert_equal(etc_relay_reclaim_get_by_index(ETC_RECLAIM_RELAY_MAX_ELEMENT, &out), -EINVAL);
+	zassert_equal(etc_relay_reclaim_get_by_index(0, &out), -ENOENT);
+}
+
+ZTEST(etc_device_relay_test, test_reclaim_get_by_index_active)
+{
+	reclaim_reset();
+	char id[] = "10000101";
+	zassert_ok(etc_relay_reclaim_set(id, 1111, 2222));
+
+	struct etc_device_reclaim_request out;
+	zassert_ok(etc_relay_reclaim_get_by_index(0, &out));
+	zassert_equal(out.start_time, 1111);
+	zassert_equal(out.stop_time, 2222);
+	zassert_ok(strcmp(out.logger_id, id));
+}
+
+ZTEST(etc_device_relay_test, test_reclaim_clear_all_returns_prior_count)
+{
+	reclaim_reset();
+	char id[] = "10000102";
+	zassert_ok(etc_relay_reclaim_set(id, 1, 2));
+	zassert_ok(etc_relay_reclaim_set(id, 3, 4));
+	zassert_ok(etc_relay_reclaim_set(id, 5, 6));
+	zassert_equal(etc_relay_reclaim_clear_all(), 3);
+	zassert_equal(etc_relay_reclaim_count(), 0);
+}
+
+struct logger_match_ctx {
+	const char *target;
+	int matches;
+};
+
+static void count_logger_matches(int idx, const struct etc_device_reclaim_request *req, void *ctx_v)
+{
+	struct logger_match_ctx *ctx = ctx_v;
+	ARG_UNUSED(idx);
+	if (strcmp(req->logger_id, ctx->target) == 0) {
+		ctx->matches++;
+	}
+}
+
+ZTEST(etc_device_relay_test, test_reclaim_for_each_filters_logger)
+{
+	reclaim_reset();
+	char id_a[] = "10000301";
+	char id_b[] = "10000302";
+	zassert_ok(etc_relay_reclaim_set(id_a, 1, 2));
+	zassert_ok(etc_relay_reclaim_set(id_b, 3, 4));
+	zassert_ok(etc_relay_reclaim_set(id_a, 5, 6));
+
+	struct logger_match_ctx ctx = {.target = id_a, .matches = 0};
+	int visited = etc_relay_reclaim_for_each(count_logger_matches, &ctx);
+	zassert_equal(visited, 3);
+	zassert_equal(ctx.matches, 2);
+}
+
+ZTEST(etc_device_relay_test, test_reclaim_full_returns_enomem)
+{
+	reclaim_reset();
+	char id[] = "10000400";
+	/* Fill every slot with fresh requests so no stale eviction is possible. */
+	for (int i = 0; i < ETC_RECLAIM_RELAY_MAX_ELEMENT; i++) {
+		zassert_ok(etc_relay_reclaim_set(id, i * 10, i * 10 + 5));
+	}
+	zassert_equal(etc_relay_reclaim_count(), ETC_RECLAIM_RELAY_MAX_ELEMENT);
+
+	int rc = etc_relay_reclaim_set(id, 9999, 10000);
+	zassert_equal(rc, -ENOMEM,
+		      "Expected -ENOMEM when buffer full with no stale entries, got %d", rc);
 }
 
 ZTEST_SUITE(etc_device_relay_test, NULL, test_setup, NULL, NULL, NULL);

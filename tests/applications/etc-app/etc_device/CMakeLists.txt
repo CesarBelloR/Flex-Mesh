@@ -17,6 +17,7 @@ target_sources(app PRIVATE
                 ${APP_SRC_DIR}/exact/etc_devices/etc_device.c
                 ${APP_SRC_DIR}/exact/etc_devices/etc_device_record.c
                 ${APP_SRC_DIR}/exact/etc_devices/etc_device_helper.c
+                ${APP_SRC_DIR}/exact/etc_devices/etc_relay_reclaim.c
                 ${APP_SRC_DIR}/exact/etc_memfault/etc_memfault_dummy.c
                 ${APP_SRC_DIR}/exact/etc_util/etc_util.c
                 ${APP_SRC_DIR}/common.c
@@ -37,5 +38,6 @@ target_include_directories(app PRIVATE
 
 zephyr_compile_definitions(IMAGE_HASH_LEN=32)
 zephyr_compile_definitions(CONFIG_ETC_APP_LOG_LEVEL=3)
+zephyr_compile_definitions(CONFIG_ETC_RELAY_RECLAIM_LOG_LEVEL=3)
 zephyr_compile_definitions(CONFIG_ETC_DEVICE_RELAY_MAX_RECORD_HISTORY=64)
 zephyr_compile_definitions(CONFIG_ETC_DEVICE_SAVE_RECORD_SEC=1)

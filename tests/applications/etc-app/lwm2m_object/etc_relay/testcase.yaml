@@ -1,0 +1,6 @@
+tests:
+  tests.applications.etc-app.lwm2m_object.etc_relay:
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim
