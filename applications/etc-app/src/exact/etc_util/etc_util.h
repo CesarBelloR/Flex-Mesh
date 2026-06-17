@@ -24,11 +24,24 @@
 
 #define UTIL_LOGGER_ID_SIZE (sizeof("FFFFFFFFFFFFFFFF"))
 
-/* Structure for request reclaim */
+/* Subcommand kinds carried in struct relay_reclaim_request after parsing. */
+enum relay_reclaim_subcmd {
+	RELAY_RECLAIM_SUBCMD_ADD,	  /* RECLAIM:<logger>,<start>,<stop> */
+	RELAY_RECLAIM_SUBCMD_LIST_LOGGER, /* RECLAIM:<logger>                */
+	RELAY_RECLAIM_SUBCMD_COUNT,	  /* RECLAIM:count                   */
+	RELAY_RECLAIM_SUBCMD_GET_IDX,	  /* RECLAIM:i,<index>               */
+	RELAY_RECLAIM_SUBCMD_CLEAR,	  /* RECLAIM:clear                   */
+};
+
+/* Structure for request reclaim. `logger_id` is populated for ADD and
+ * LIST_LOGGER; `start_time`/`stop_time` only for ADD; `index` only for
+ * GET_IDX. */
 struct relay_reclaim_request {
+	enum relay_reclaim_subcmd subcmd;
 	char logger_id[UTIL_LOGGER_ID_SIZE];
 	int start_time;
 	int stop_time;
+	int index;
 };
 
 /**

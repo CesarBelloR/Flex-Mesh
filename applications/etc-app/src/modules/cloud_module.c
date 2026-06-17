@@ -411,12 +411,6 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		SEND_EVENT(cloud, CLOUD_EVT_LOCATION_REQUEST);
 		break;
 	}
-	case CLOUD_WRAP_EVT_COMMAND_RELAY_REQUEST:
-	{
-		LOG_DBG("CLOUD_WRAP_EVT_COMMAND_RELAY_REQUEST");
-		etc_common_export_relay_command(evt->data.buf, evt->data.len);
-		break;
-	}
 	default:
 		LOG_DBG("Unknown Cloud Wrap event type: %d", evt->type);
 		break;

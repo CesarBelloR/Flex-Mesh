@@ -23,6 +23,7 @@
 #include "etc_location_obj_48938.h"
 #include "etc_relay_obj_48935.h"
 #include "cloud/cloud_wrapper.h"
+#include "etc_relay_command.h"
 
 #define MODULE lwm2m_integration
 
@@ -267,21 +268,14 @@ static int location_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_l
 	return 0;
 }
 
-/* Callback handler triggered when lwm2m object resource 48935/0/4
- * (EXACT Relay/Command) is executed. */
+/* Callback handler triggered when lwm2m object resource 48935/0/3
+ * (EXACT Relay/Command) is executed. Dispatch synchronously so the dispatcher's
+ * return value becomes the CoAP Execute response code — letting failures like a
+ * full reclaim buffer (-ENOMEM) surface to the cloud as a failed Execute. */
 static int relay_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_len)
 {
 	ARG_UNUSED(obj_inst_id);
-	int err;
-
-	struct cloud_wrap_event cloud_wrap_evt = {
-		.type = CLOUD_WRAP_EVT_COMMAND_RELAY_REQUEST,
-		.data.buf = args,
-		.data.len = args_len
-	};
-
-	cloud_wrapper_notify_event(&cloud_wrap_evt);
-	return 0;
+	return etc_relay_command_dispatch((const char *)args, args_len);
 }
 
 static void send_cb(enum lwm2m_send_status status)

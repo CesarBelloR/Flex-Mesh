@@ -80,4 +80,8 @@ module = ETC_DEVICE
 module-str = device
 source "subsys/logging/Kconfig.template.log_config"
 
+module = ETC_RELAY_RECLAIM
+module-str = relay_reclaim
+source "subsys/logging/Kconfig.template.log_config"
+
 endif

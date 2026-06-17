@@ -4,9 +4,9 @@
 		<Name>EXACT Relay</Name>
 		<Description1 />
 		<ObjectID>48935</ObjectID>
-		<ObjectURN>urn:oma:lwm2m:x:48935:1.1</ObjectURN>
+		<ObjectURN>urn:oma:lwm2m:x:48935:1.2</ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.1</ObjectVersion>
+		<ObjectVersion>1.2</ObjectVersion>
 		<MultipleInstances>Multiple</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -39,6 +39,25 @@
 				<RangeEnumeration></RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[Command(s) that need to be sent to individual loggers connected through LoRa.]]></Description>
+			</Item>
+			<Item ID="4">
+				<Name>Response</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration>0..512</RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Textual response produced by the most recent RECLAIM command issued through this object's Command resource. Used by troubleshooting subcommands (RECLAIM:count, RECLAIM:<logger>, RECLAIM:i,<idx>, RECLAIM:clear) to return their results, and by RECLAIM:<logger>,<start>,<stop> to report success or error.
+
+Formats (plain text, key=value):
+ - count=<n>
+ - idx=<i>,logger=<id>,start=<u>,stop=<u>,created=<u>
+ - count=<m>\nidx=<i>,start=<u>,stop=<u>,created=<u>\n... (list per logger)
+ - OK / OK,evicted=1 / OK,cleared=<n>
+ - ERR:<errno-name> (e.g. ERR:EINVAL, ERR:ENOENT, ERR:ENOMEM)
+
+Output is truncated to 511 characters with a trailing "..." marker if it would exceed the buffer.]]></Description>
 			</Item>
 		</Resources>
 		<Description2 />

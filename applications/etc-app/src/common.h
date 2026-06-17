@@ -76,16 +76,6 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 #endif
 
 /**
- * @brief Export the relay command from lwM2M to Flex action
- * 
- * @param buf The input command from LwM2M
- * @param len The length of input command.
- * 
- * @return 0 on success
- */
-int etc_common_export_relay_command(const char* buf, const size_t len);
-
-/**
  * @brief Add a sensor value to the decoded buffer when assembling a legacy
  * LoRa packet.
  * 

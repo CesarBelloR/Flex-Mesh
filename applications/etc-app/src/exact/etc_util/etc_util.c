@@ -219,12 +219,14 @@ static int extract_field(const char **buf, char delimiter, char *output,
 	return 0;
 }
 
-int etc_common_parser_reclaim_replay_command(const char* buf, const size_t len, 
-	struct relay_reclaim_request* request) 
+int etc_common_parser_reclaim_replay_command(const char *buf, const size_t len,
+					     struct relay_reclaim_request *request)
 {
 	if (request == NULL) {
 		return -EINVAL;
 	}
+
+	memset(request, 0, sizeof(*request));
 
 	char command[10];
 
@@ -233,40 +235,94 @@ int etc_common_parser_reclaim_replay_command(const char* buf, const size_t len,
 		return -EINVAL;
 	}
 
-	if ((strcmp(command, "RECLAIM") != 0) || 
-	    (strlen(command) != strlen("RECLAIM"))) {
+	if ((strcmp(command, "RECLAIM") != 0) || (strlen(command) != strlen("RECLAIM"))) {
 		return -EINVAL;
 	}
-	
+
 	// Move the pointer to after the command and delimiter
 	const char *current_position = strchr(buf, ':') + 1;
 
-	// Extract logger id
-	if (extract_field(&current_position, ',', request->logger_id, 
-	    UTIL_LOGGER_ID_SIZE) != 0) {
+	/* Peek the first sub-field (up to ',' or terminating quote) without
+	 * consuming it, so we can branch on the keyword. */
+	const char *next_comma = strchr(current_position, ',');
+	const char *next_quote = strchr(current_position, '\'');
+	const char *next_end = next_quote;
+	if (next_end == NULL || (next_comma != NULL && next_comma < next_end)) {
+		next_end = next_comma;
+	}
+	if (next_end == NULL) {
+		return -EINVAL;
+	}
+	size_t first_len = next_end - current_position;
+
+	/* RECLAIM:count */
+	if (first_len == strlen("count") && strncmp(current_position, "count", first_len) == 0) {
+		if (next_end != next_quote) {
+			return -EINVAL;
+		}
+		request->subcmd = RELAY_RECLAIM_SUBCMD_COUNT;
+		return 0;
+	}
+
+	/* RECLAIM:clear */
+	if (first_len == strlen("clear") && strncmp(current_position, "clear", first_len) == 0) {
+		if (next_end != next_quote) {
+			return -EINVAL;
+		}
+		request->subcmd = RELAY_RECLAIM_SUBCMD_CLEAR;
+		return 0;
+	}
+
+	/* RECLAIM:i,<idx> — only matches when followed by a comma; a bare "i"
+	 * (no comma) falls through and is treated as a (short) logger id below. */
+	if (first_len == 1 && current_position[0] == 'i' && next_end == next_comma) {
+		current_position = next_comma + 1;
+		char idx_str[12];
+		if (extract_field(&current_position, '\'', idx_str, sizeof(idx_str)) != 0) {
+			return -EINVAL;
+		}
+		if (parse_for_int(idx_str, &request->index) != 0) {
+			return -EINVAL;
+		}
+		request->subcmd = RELAY_RECLAIM_SUBCMD_GET_IDX;
+		return 0;
+	}
+
+	/* From here on the first field is treated as a logger id. */
+	if (first_len == 0 || first_len >= UTIL_LOGGER_ID_SIZE) {
 		return -EINVAL;
 	}
 
-	// Extract start time
-	char time_str[16];
-	if (extract_field(&current_position, ',', time_str, 
-	    sizeof(time_str)) != 0) {
+	/* RECLAIM:<logger> — list reclaims for one logger id */
+	if (next_end == next_quote) {
+		if (extract_field(&current_position, '\'', request->logger_id,
+				  UTIL_LOGGER_ID_SIZE) != 0) {
+			return -EINVAL;
+		}
+		request->subcmd = RELAY_RECLAIM_SUBCMD_LIST_LOGGER;
+		return 0;
+	}
+
+	/* RECLAIM:<logger>,<start>,<stop> — add a reclaim request. */
+	if (extract_field(&current_position, ',', request->logger_id, UTIL_LOGGER_ID_SIZE) != 0) {
 		return -EINVAL;
 	}
-	
+
+	char time_str[16];
+	if (extract_field(&current_position, ',', time_str, sizeof(time_str)) != 0) {
+		return -EINVAL;
+	}
 	if (parse_for_int(time_str, &request->start_time) != 0) {
 		return -EINVAL;
 	}
 
-	// Extract stop time
-	if (extract_field(&current_position, '\'', time_str, 
-	    sizeof(time_str)) != 0) {
+	if (extract_field(&current_position, '\'', time_str, sizeof(time_str)) != 0) {
 		return -EINVAL;
 	}
-
 	if (parse_for_int(time_str, &request->stop_time) != 0) {
 		return -EINVAL;
 	}
-	
+
+	request->subcmd = RELAY_RECLAIM_SUBCMD_ADD;
 	return 0;
 }

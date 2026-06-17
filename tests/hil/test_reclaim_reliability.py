@@ -66,7 +66,7 @@ def test_reclaim_request_survives_reboot(dut):
 
 
 def test_reclaim_cleared_when_data_arrives(dut):
-    """Verify etc_clear_reclaim_request_if_satisfied() removes a request when
+    """Verify etc_relay_reclaim_clear_if_satisfied() removes a request when
     a matching timestamp arrives.
 
     Uses 'relay_reclaim satisfy' to simulate an incoming reclaim data packet

@@ -3,7 +3,7 @@
 Directly re-triggers the two original bugs in a loop:
 
   Bug 1 — Request destroyed on first ACK:
-    etc_get_reclaim_request_for_relay_with_logger_id() used to clear the
+    etc_relay_reclaim_get_by_logger_id() used to clear the
     request flag the moment the ACK was prepared. With real LoRa traffic,
     this silently lost the request after one packet exchange. The fix keeps
     the request alive until confirmed in-window data arrives.

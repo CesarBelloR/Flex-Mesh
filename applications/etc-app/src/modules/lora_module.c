@@ -8,6 +8,7 @@
 #include "common.h"
 #include "etc_date_time.h"
 #include "etc_device.h"
+#include "etc_relay_reclaim.h"
 #include "etc_device_record.h"
 #include "etc_settings.h"
 #include "app_version.h"
@@ -548,7 +549,7 @@ static int module_lora_prepare_packet(const char *logger_id, const char *relay_i
 	struct etc_device_reclaim_request reclaim_request;
 	int tx_interval_mins = etc_get_tx_interval_secs() / 60;
 	int now = date_time_now_second();
-	int rc = etc_get_reclaim_request_for_relay_with_logger_id(logger_id, &reclaim_request);
+	int rc = etc_relay_reclaim_get_by_logger_id(logger_id, &reclaim_request);
 	if (rc == 0) {
 		decoded_buf_len += snprintf(decoded_buf, sizeof(decoded_buf), "%s,%d,%s,%d,%d,%d",
 					    logger_id, tx_interval_mins, relay_iccid, now,
@@ -658,7 +659,7 @@ retry_recv:
 								   relay_iccid);
 					lora_data_send();
 					if (message.record.is_reclaim) {
-						etc_clear_reclaim_request_if_satisfied(
+						etc_relay_reclaim_clear_if_satisfied(
 							message.record.logger_id,
 							(int)message.record.timestamp);
 					}

@@ -7,7 +7,7 @@ listen, and waits for the full reclaim cycle to complete:
   2. Logger sends normal data -> relay receives and sends reclaim ACK with
      [start_time, stop_time] back to the logger
   3. Logger retransmits historical samples from the requested window
-  4. Relay receives retransmitted data, calls etc_clear_reclaim_request_if_satisfied
+  4. Relay receives retransmitted data, calls etc_relay_reclaim_clear_if_satisfied
   5. Request is cleared when a record timestamp falls within [start, stop]
 
 No LTE required — the relay communicates with the logger entirely over LoRa.

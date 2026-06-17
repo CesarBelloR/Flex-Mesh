@@ -20,6 +20,7 @@ if(CONFIG_LWM2M)
                        PRIVATE
                        ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/lwm2m_integration.c
                        ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/lwm2m_senml_cbor_time.c
+                       ${CMAKE_CURRENT_SOURCE_DIR}/lwm2m/etc_relay_command.c
         )
         add_subdirectory(lwm2m/exact_objects)
 endif()
