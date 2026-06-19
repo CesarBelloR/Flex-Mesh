@@ -21,9 +21,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define OBJECT_ID ETC_RECLAIM_OBJECT_ID
 #define OBJECT_VERSION_MAJOR 1
-#define OBJECT_VERSION_MINOR 0
+#define OBJECT_VERSION_MINOR 1
 
-#define RESOURCES_MAX_ID			4
+#define RESOURCES_MAX_ID			5
 #define RESOURCE_INSTANCE_COUNT			(RESOURCES_MAX_ID)
 
 /* Storage variables to hold reclaim values. */
@@ -37,6 +37,7 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(ETC_RECLAIM_OBJ_R_END_TIME, RW, S32),
 	OBJ_FIELD_EXECUTE(ETC_RECLAIM_OBJ_R_RECLAIM),
 	OBJ_FIELD_DATA(ETC_RECLAIM_OBJ_R_STATUS, R, U8),
+	OBJ_FIELD_EXECUTE(ETC_RECLAIM_OBJ_R_CANCEL),
 };
 
 static struct lwm2m_engine_obj_inst inst;
@@ -57,6 +58,7 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 	INIT_OBJ_RES_EXECUTE(ETC_RECLAIM_OBJ_R_RECLAIM, res, i, NULL);
 	INIT_OBJ_RES_DATA(ETC_RECLAIM_OBJ_R_STATUS, res, i, res_inst, j,
 			  &status, sizeof(status));
+	INIT_OBJ_RES_EXECUTE(ETC_RECLAIM_OBJ_R_CANCEL, res, i, NULL);
 
 	inst.resources = res;
 	inst.resource_count = i;

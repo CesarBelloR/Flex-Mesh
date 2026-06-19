@@ -1045,6 +1045,26 @@ done:
 	return rc;
 }
 
+int etc_device_record_reclaim_cancel(void)
+{
+	/* Clear in-progress reclaim state so etc_device_reclaim_data() stops
+	 * re-emitting historical records, then persist the cleared state.
+	 * Called from the data_module thread, which also drains records, so no
+	 * additional locking is needed against the drain. */
+	etc_device_record_reset_reclaim();
+	atomic_set(&etc_reclaim_status, false);
+
+	int rc = etc_device_write_setting(ETC_RECORD_RECLAIM, &etc_reclaim_info,
+					  sizeof(etc_reclaim_info));
+	if (rc != 0) {
+		LOG_ERR("Failed to write reclaim info on cancel");
+		return rc;
+	}
+
+	LOG_INF("Reclaim cancelled");
+	return 0;
+}
+
 struct etc_device_record_table *etc_device_record_get_status(void)
 {
 	return p_etc_device_record_table;

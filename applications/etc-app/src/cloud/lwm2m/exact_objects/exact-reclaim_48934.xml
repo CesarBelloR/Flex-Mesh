@@ -5,9 +5,9 @@
 		<Description1><![CDATA[LwM2M object to configure, execute and report the status of a sample reclaim on a device. The reclaim is executed through a direct (cellular) LwM2M connection only. Reclaimed data is reported through the EXACT Temperature object (ID 48932).
 For reclaims through LoRa, see EXACT Relay object (ID 48935).]]></Description1>
 		<ObjectID>48934</ObjectID>
-		<ObjectURN>urn:oma:lwm2m:x:48934:1.0</ObjectURN>
+		<ObjectURN>urn:oma:lwm2m:x:48934:1.1</ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.0</ObjectVersion>
+		<ObjectVersion>1.1</ObjectVersion>
 		<MultipleInstances>Single</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -47,13 +47,24 @@ For reclaims through LoRa, see EXACT Relay object (ID 48935).]]></Description1>
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>0..3</RangeEnumeration>
+				<RangeEnumeration>0..4</RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[Reclaim status:
  - 0: Idle or not in progress
  - 1: Reclaim started and in progress
  - 2: Reclaim finished successfully
- - 3: Reclaim error]]></Description>
+ - 3: Reclaim error
+ - 4: Reclaim cancelled]]></Description>
+			</Item>
+			<Item ID="5">
+				<Name>Cancel</Name>
+				<Operations>E</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type></Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Cancel an active reclaim. Immediately stops the device re-transmitting reclaimed data and sets the status to cancelled.]]></Description>
 			</Item>
 		</Resources>
 		<Description2 />

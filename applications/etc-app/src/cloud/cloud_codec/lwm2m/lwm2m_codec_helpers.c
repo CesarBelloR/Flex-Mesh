@@ -1352,7 +1352,11 @@ bool lwm2m_codec_helpers_update_reclaim_state(struct cloud_codec_data *cloud_dat
 	case RECLAIM_ERROR:
 		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_ERROR;
 		break;
-	
+
+	case RECLAIM_CANCELLED:
+		lwm2m_reclaim_state = ETC_RECLAIM_STATUS_CANCELLED;
+		break;
+
 	default:
 		return false;
 	}

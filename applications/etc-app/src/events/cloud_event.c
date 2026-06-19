@@ -26,6 +26,8 @@ static char *get_evt_type_str(enum cloud_event_type type)
 		return "CLOUD_EVT_REBOOT_REQUEST";
 	case CLOUD_EVT_RECLAIM_REQUEST:
 		return "CLOUD_EVT_RECLAIM_REQUEST";
+	case CLOUD_EVT_RECLAIM_CANCEL:
+		return "CLOUD_EVT_RECLAIM_CANCEL";
 	case CLOUD_EVT_LOCATION_REQUEST:
 		return "CLOUD_EVT_LOCATION_REQUEST";
 	case CLOUD_EVT_CONFIG_RECEIVED:

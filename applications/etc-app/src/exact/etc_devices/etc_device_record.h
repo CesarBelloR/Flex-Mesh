@@ -290,6 +290,17 @@ int etc_device_record_read_data(off_t addr, void* data, int data_len);
 int etc_device_record_reclaim(int start_time, int stop_time, bool dry_run);
 
 /**
+ * @brief Cancel an active reclaim.
+ *
+ * Clears any in-progress reclaim state so the device stops re-emitting
+ * historical records, and persists the cleared state. Safe to call when no
+ * reclaim is active (no-op).
+ *
+ * @return 0 if successful, otherwise an error code.
+ */
+int etc_device_record_reclaim_cancel(void);
+
+/**
  * @brief Get the status of records in the ETC device.
  *
  * @return	A structure containing the status of records.

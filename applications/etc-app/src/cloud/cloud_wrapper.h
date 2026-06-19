@@ -66,6 +66,8 @@ enum cloud_wrap_event_type {
 	CLOUD_WRAP_EVT_REBOOT_REQUEST,
 	/** Reclaim request received from cloud */
 	CLOUD_WRAP_EVT_RECLAIM_REQUEST,
+	/** Reclaim cancel request received from cloud */
+	CLOUD_WRAP_EVT_RECLAIM_CANCEL,
 	/** Location request received from cloud. */
 	CLOUD_WRAP_EVT_LOCATION_REQUEST,
 	/** Request to connect to LTE. */

@@ -45,6 +45,9 @@ enum cloud_event_type {
 	/** Reclaim request received from cloud */
 	CLOUD_EVT_RECLAIM_REQUEST,
 
+	/** Reclaim cancel request received from cloud */
+	CLOUD_EVT_RECLAIM_CANCEL,
+
 	/** Location request received from cloud */
 	CLOUD_EVT_LOCATION_REQUEST,
 

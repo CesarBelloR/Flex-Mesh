@@ -250,7 +250,21 @@ static int reclaim_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_le
 	return 0;
 }
 
-/* Callback handler triggered when lwm2m object resource 48938/0/3 
+/* Callback handler triggered when lwm2m object resource 48934/0/5
+ * (EXACT Reclaim/cancel) is executed. */
+static int reclaim_cancel_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_len)
+{
+	ARG_UNUSED(args);
+	ARG_UNUSED(args_len);
+	ARG_UNUSED(obj_inst_id);
+
+	struct cloud_wrap_event cloud_wrap_evt = {.type = CLOUD_WRAP_EVT_RECLAIM_CANCEL};
+
+	cloud_wrapper_notify_event(&cloud_wrap_evt);
+	return 0;
+}
+
+/* Callback handler triggered when lwm2m object resource 48938/0/3
  * (EXACT Location/request) is executed. */
 static int location_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_len)
 {
@@ -414,6 +428,14 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 					   reclaim_exec_cb);
 	if (err) {
 		LOG_ERR("register reclaim exec callback, error: %d", err);
+		return err;
+	}
+
+	err = lwm2m_register_exec_callback(
+		&LWM2M_OBJ(ETC_RECLAIM_OBJECT_ID, 0, ETC_RECLAIM_OBJ_R_CANCEL),
+		reclaim_cancel_exec_cb);
+	if (err) {
+		LOG_ERR("register reclaim cancel exec callback, error: %d", err);
 		return err;
 	}
 

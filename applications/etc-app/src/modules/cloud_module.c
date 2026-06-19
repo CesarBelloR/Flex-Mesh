@@ -405,6 +405,11 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		APP_EVENT_SUBMIT(cloud_evt);
 		break;
 	}
+	case CLOUD_WRAP_EVT_RECLAIM_CANCEL: {
+		LOG_DBG("CLOUD_WRAP_EVT_RECLAIM_CANCEL");
+		SEND_EVENT(cloud, CLOUD_EVT_RECLAIM_CANCEL);
+		break;
+	}
 	case CLOUD_WRAP_EVT_LOCATION_REQUEST:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_LOCATION_REQUEST");

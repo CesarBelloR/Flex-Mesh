@@ -122,6 +122,12 @@ static struct k_work_delayable data_send_work;
  */
 static bool reclaim_active;
 
+/* Set when a reclaim cancel has been requested. Consumed by data_encode_for_logger()
+ * so the CANCELLED status is emitted as part of building a send — like the other
+ * reclaim status transitions — rather than added out-of-band where a concurrent
+ * send's ACK would clear it from the codec before it is transmitted. */
+static bool reclaim_cancel_pending;
+
 static atomic_t calibration_process;
 static bool calibration_success;
 /* Define a buffer to save data encoded*/
@@ -481,6 +487,16 @@ static int data_encode_for_logger() {
 		if (ret != 0) {
 			LOG_WRN("Error populating data codec");
 		}
+	}
+
+	/* A cancel takes precedence over the natural reclaim status transition
+	 * (which would otherwise report SUCCESS once the reclaim is no longer
+	 * active). Emit CANCELLED here so it is carried by this send. */
+	if (reclaim_cancel_pending) {
+		data_codec_update_reclaim_state(&codec, RECLAIM_CANCELLED);
+		reclaim_active = false;
+		reclaim_cancel_pending = false;
+		return STATUS_IN_PROCESS;
 	}
 
 	/* Update reclaim status */
@@ -931,6 +947,19 @@ static void on_all_states(struct data_msg_data *msg)
 							RECLAIM_ERROR);
 			reclaim_active = false;
 		}
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_RECLAIM_CANCEL)) {
+		int ret = etc_device_record_reclaim_cancel();
+		if (ret != 0) {
+			LOG_ERR("Reclaim cancel failed, %d", ret);
+		}
+
+		/* Emit the CANCELLED status from the send builder so it is not
+		 * cleared by a concurrent send's ACK. If a send is already in
+		 * flight, the pending flag is consumed on the next send. */
+		reclaim_cancel_pending = true;
+		data_encode_for_cloud(false, false);
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_LOCATION_REQUEST) ||

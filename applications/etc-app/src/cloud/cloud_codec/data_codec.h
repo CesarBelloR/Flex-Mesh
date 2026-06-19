@@ -138,7 +138,8 @@ enum data_reclaim_state {
 	RECLAIM_IDLE,
 	RECLAIM_IN_PROGRESS,
 	RECLAIM_SUCCESS,
-	RECLAIM_ERROR
+	RECLAIM_ERROR,
+	RECLAIM_CANCELLED
 };
 
 typedef union {
