@@ -1186,22 +1186,15 @@ int etc_device_record_find_nack(etc_device_record_reading_callback reading_callb
 	int newest_id = etc_device_record_get_latest_id();
 	int oldest_id = etc_device_record_get_oldest_id();
 
-	if (etc_reclaim_info.flag_in_process == 1) {
-		if (active_reclaim != NULL) {
-			*active_reclaim = true;
-		}
-		rc = etc_device_reclaim_data(reading_callback, data);
-		if (rc >= 0) {
-			/* Return the record ID with offset to follow old structure */
-			return ETC_RECORD_ID_HEADER(rc);
-		} else {
-			/* Otherwise, return error */
-			return rc;
-		}
-	}
-
+	/* FW-954: current (non-ack'd) readings always take precedence over an
+	 * active reclaim. The reclaim is paused while new readings are pending
+	 * and resumes once they are drained. The reclaim status reported back
+	 * tracks whether a reclaim is still in process (not the type of the
+	 * record served), so the cloud stays IN_PROGRESS across the preemption
+	 * and only sees SUCCESS once the whole reclaim range completes.
+	 */
 	if (active_reclaim != NULL) {
-		*active_reclaim = false;
+		*active_reclaim = (etc_reclaim_info.flag_in_process == 1);
 	}
 
 	rc = etc_device_record_get_nack(newest_id, oldest_id, p_etc_device_record_table->total);
@@ -1214,7 +1207,21 @@ int etc_device_record_find_nack(etc_device_record_reading_callback reading_callb
 				return ETC_RECORD_ID_HEADER(rc);
 			}
 		}
+		return rc;
 	}
+
+	/* No new readings pending: serve the next reclaim record, if any. */
+	if (etc_reclaim_info.flag_in_process == 1) {
+		rc = etc_device_reclaim_data(reading_callback, data);
+		if (rc >= 0) {
+			/* Return the record ID with offset to follow old structure */
+			return ETC_RECORD_ID_HEADER(rc);
+		} else {
+			/* Otherwise, return error */
+			return rc;
+		}
+	}
+
 	return rc;
 }
 
