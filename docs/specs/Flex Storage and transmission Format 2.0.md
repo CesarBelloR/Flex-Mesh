@@ -371,7 +371,7 @@ lora-relay-portal = {
 | 1     | Temperature      | Yes (default, omitted) | Yes (°C)           | Optional          | Temperature probe reading            |
 | 2     | Humidity         | Yes                    | Yes (%RH)          | Optional          | Humidity sensor reading              |
 | 3     | Splitter         | No                     | No                 | Yes (required)    | Splitter node, defines port hierarchy|
-| 5     | Particulate Matter | Yes (per reading)    | Yes (8 readings)   | Optional          | Sensirion SEN5x (PM1.0/2.5/4.0/10, RH, temp, VOC/NOx index) |
+| 5     | Particulate Matter | Yes (per reading)    | Yes (6 readings)   | Optional          | Sensirion SEN5x (PM1.0/2.5/4.0/10, VOC/NOx index) |
 | 6     | Air Quality      | Yes (per reading)      | Yes (6 readings)   | Optional          | Bosch BME680 (temp, pressure, humidity, IAQ, CO2, b-VOC) |
 | 99    | Dual-temperature | No (temperature, omitted) | Yes (°C)        | Optional          | Dual-temperature probe (position required) |
 
@@ -447,7 +447,7 @@ value type, so the samples below omit it.
 | Key 4 | Name | Default unit | Used by |
 |-------|------|--------------|---------|
 | 1  | Temperature | °C    | all |
-| 2  | Humidity    | %RH   | humidity, PM, air-quality |
+| 2  | Humidity    | %RH   | humidity, air-quality |
 | 3  | PM1.0       | µg/m³ | PM (type 5) |
 | 4  | PM2.5       | µg/m³ | PM (type 5) |
 | 5  | PM4.0       | µg/m³ | PM (type 5) |
@@ -464,15 +464,12 @@ value type, so the samples below omit it.
 
 ### Particulate Matter Sensor (type 5 — Sensirion SEN5x)
 
-Eight readings on one port: PM1.0, PM2.5, PM4.0, PM10, humidity, temperature,
-VOC Index, NOx Index.
+Six readings on one port: PM1.0, PM2.5, PM4.0, PM10, VOC Index, NOx Index.
 
 ```cbor-diag
 {
   1: 1745262000,
   2: [
-    {3: 1, 5: 22.5, 7: 5},
-    {3: 1, 4: 2, 5: 45.5, 7: 5},
     {3: 1, 4: 3, 5: 5.0, 7: 5},
     {3: 1, 4: 4, 5: 7.5, 7: 5},
     {3: 1, 4: 5, 5: 9.0, 7: 5},
@@ -490,8 +487,6 @@ JSON equivalent:
 {
   "timestamp": 1745262000,
   "samples": [
-    {"port": 1, "value": 22.5, "sensorType": 5},
-    {"port": 1, "valueType": 2, "value": 45.5, "sensorType": 5},
     {"port": 1, "valueType": 3, "value": 5.0, "sensorType": 5},
     {"port": 1, "valueType": 4, "value": 7.5, "sensorType": 5},
     {"port": 1, "valueType": 5, "value": 9.0, "sensorType": 5},
@@ -507,16 +502,14 @@ JSON equivalent:
 
 | Index | Value type | Reading      | Unit (derived) |
 |-------|-----------|--------------|----------------|
-| 0     | 1 (omitted) | Temperature | °C |
-| 1     | 2         | Humidity     | %RH |
-| 2     | 3         | PM1.0        | µg/m³ |
-| 3     | 4         | PM2.5        | µg/m³ |
-| 4     | 5         | PM4.0        | µg/m³ |
-| 5     | 6         | PM10         | µg/m³ |
-| 6     | 7         | VOC Index    | idx |
-| 7     | 8         | NOx Index    | idx |
+| 0     | 3         | PM1.0        | µg/m³ |
+| 1     | 4         | PM2.5        | µg/m³ |
+| 2     | 5         | PM4.0        | µg/m³ |
+| 3     | 6         | PM10         | µg/m³ |
+| 4     | 7         | VOC Index    | idx |
+| 5     | 8         | NOx Index    | idx |
 
-Encoded size (float16): ~99 bytes — fits the 120-byte storage record. See
+Encoded size (float16): ~79 bytes — fits the 120-byte storage record. See
 `docs/specs/cbor-validation/samples/storage-pm-sensor.diag`.
 
 ### Air Quality Sensor (type 6 — Bosch BME680)
@@ -582,8 +575,6 @@ the readings exceed one 120-byte record and split into two chunks (see
   1: 1745262000,
   2: [
     {3: 0, 5: 21.0},
-    {3: 1, 5: 22.5, 7: 5},
-    {3: 1, 4: 2, 5: 45.5, 7: 5},
     {3: 1, 4: 3, 5: 5.0, 7: 5},
     {3: 1, 4: 4, 5: 7.5, 7: 5},
     {3: 1, 4: 5, 5: 9.0, 7: 5},

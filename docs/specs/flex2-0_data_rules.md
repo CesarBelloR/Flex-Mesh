@@ -126,7 +126,7 @@ All values are JSON strings for consistency with the Coiote/LTE shadow format.
 | `"2"` | Humidity | Temperature + humidity sensor | Multi (temp + RH) |
 | `"3"` | Splitter | Port splitter node, no readings | None |
 | _TBD_ | Rope | Daisy-chained temperature sensor rope (see section 7.2) | Multi (temp × N) |
-| `"5"` | Particulate Matter | Sensirion SEN5x (see section 7.2) | Multi (8: PM1.0/2.5/4.0/10, RH, temp, VOC/NOx index) |
+| `"5"` | Particulate Matter | Sensirion SEN5x (see section 7.2) | Multi (6: PM1.0/2.5/4.0/10, VOC/NOx index) |
 | `"6"` | Air Quality | Bosch BME680 (see section 7.2) | Multi (6: temp, pressure, humidity, IAQ, CO2, b-VOC) |
 | `"99"` | Dual-temperature | Probe with 2 temperature readings | Multi (temp + temp) |
 
@@ -232,18 +232,16 @@ No specific Sensor Type number is reserved for rope sensors yet. Different rope 
 
 #### Particulate Matter sensor (Sensor Type 5)
 
-Sensirion SEN5x. Produces eight value entries on the same port, distinguished by
-`Type`: PM1.0 (`"3"`), PM2.5 (`"4"`), PM4.0 (`"5"`), PM10 (`"6"`), humidity
-(`"2"`), temperature (omit/`"1"`), VOC Index (`"7"`), NOx Index (`"8"`).
+Sensirion SEN5x. Produces six value entries on the same port, distinguished by
+`Type`: PM1.0 (`"3"`), PM2.5 (`"4"`), PM4.0 (`"5"`), PM10 (`"6"`), VOC Index
+(`"7"`), NOx Index (`"8"`).
 
 | Entry | Sensor Type | Type | Units |
 |-------|-------------|------|-------|
-| Temperature | `"5"` | Omit (inferable) | Omit (default `"cel"`) |
-| Humidity | `"5"` | `"2"` | Omit (default `"%RH"`) |
 | PM1.0 / PM2.5 / PM4.0 / PM10 | `"5"` | `"3"`/`"4"`/`"5"`/`"6"` | Omit (default `"ug/m3"`) |
 | VOC Index / NOx Index | `"5"` | `"7"`/`"8"` | Omit (default `"idx"`) |
 
-**Receiver rule**: `Sensor Type = "5"` identifies the physical sensor. The eight
+**Receiver rule**: `Sensor Type = "5"` identifies the physical sensor. The six
 values are distinguished by `Type`. `Units` may be omitted; the default unit
 follows from `Type` (section 6.2).
 
@@ -286,8 +284,7 @@ Multiple temperature readings from a single physical sensor, distinguished by po
 | Splitter (3) | `"3"` | Absent | Absent | Absent |
 | Rope (_TBD_) — parent | _TBD_ | Absent | Absent | Absent |
 | Rope (_TBD_) — each child value | Omit | Omit | Omit | Absent (port hierarchy provides position) |
-| Particulate Matter (5) — temp value | `"5"` | Omit | Omit | Absent |
-| Particulate Matter (5) — other values | `"5"` | `"2"`–`"8"` | Omit | Absent |
+| Particulate Matter (5) — each value | `"5"` | `"3"`–`"8"` | Omit | Absent |
 | Air Quality (6) — temp value | `"6"` | Omit | Omit | Absent |
 | Air Quality (6) — other values | `"6"` | `"2"`/`"9"`–`"12"` | Omit | Absent |
 | Dual-temp (99) — each value | `"99"` | Omit | Omit | Required |
@@ -639,7 +636,7 @@ A rope sensor on port `3.8` with 4 temperature readings:
 
 ### 8.4 Particulate Matter sensor example (LoRa path)
 
-A Sensirion SEN5x on port `1`, emitting all eight readings. This is the JSON
+A Sensirion SEN5x on port `1`, emitting all six readings. This is the JSON
 equivalent of `cbor-validation/samples/storage-pm-sensor.diag`. `Units` is
 omitted; each value's unit follows from `Type` (section 6.2).
 
@@ -649,53 +646,40 @@ omitted; each value's unit follows from `Type` (section 6.2).
     "EXACT Sensor": {
         "0": {
             "Port": "1",
-            "Value": "22.5",
-            "Timestamp": "2025-04-21T19:00:00Z",
-            "Sensor Type": "5"
-        },
-        "1": {
-            "Port": "1",
-            "Value": "45.5",
-            "Timestamp": "2025-04-21T19:00:00Z",
-            "Type": "2",
-            "Sensor Type": "5"
-        },
-        "2": {
-            "Port": "1",
             "Value": "5.0",
             "Timestamp": "2025-04-21T19:00:00Z",
             "Type": "3",
             "Sensor Type": "5"
         },
-        "3": {
+        "1": {
             "Port": "1",
             "Value": "7.5",
             "Timestamp": "2025-04-21T19:00:00Z",
             "Type": "4",
             "Sensor Type": "5"
         },
-        "4": {
+        "2": {
             "Port": "1",
             "Value": "9.0",
             "Timestamp": "2025-04-21T19:00:00Z",
             "Type": "5",
             "Sensor Type": "5"
         },
-        "5": {
+        "3": {
             "Port": "1",
             "Value": "10.5",
             "Timestamp": "2025-04-21T19:00:00Z",
             "Type": "6",
             "Sensor Type": "5"
         },
-        "6": {
+        "4": {
             "Port": "1",
             "Value": "120.0",
             "Timestamp": "2025-04-21T19:00:00Z",
             "Type": "7",
             "Sensor Type": "5"
         },
-        "7": {
+        "5": {
             "Port": "1",
             "Value": "1.0",
             "Timestamp": "2025-04-21T19:00:00Z",
@@ -717,14 +701,12 @@ omitted; each value's unit follows from `Type` (section 6.2).
 
 | Index | Port | Type | Reading | Unit (derived) |
 |-------|------|------|---------|----------------|
-| 0 | `1` | — (default 1) | Temperature | cel |
-| 1 | `1` | `"2"` | Humidity | %RH |
-| 2 | `1` | `"3"` | PM1.0 | ug/m3 |
-| 3 | `1` | `"4"` | PM2.5 | ug/m3 |
-| 4 | `1` | `"5"` | PM4.0 | ug/m3 |
-| 5 | `1` | `"6"` | PM10 | ug/m3 |
-| 6 | `1` | `"7"` | VOC Index | idx |
-| 7 | `1` | `"8"` | NOx Index | idx |
+| 0 | `1` | `"3"` | PM1.0 | ug/m3 |
+| 1 | `1` | `"4"` | PM2.5 | ug/m3 |
+| 2 | `1` | `"5"` | PM4.0 | ug/m3 |
+| 3 | `1` | `"6"` | PM10 | ug/m3 |
+| 4 | `1` | `"7"` | VOC Index | idx |
+| 5 | `1` | `"8"` | NOx Index | idx |
 
 ### 8.5 Air Quality sensor example (LoRa path)
 
