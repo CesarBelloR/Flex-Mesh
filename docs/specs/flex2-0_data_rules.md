@@ -126,6 +126,8 @@ All values are JSON strings for consistency with the Coiote/LTE shadow format.
 | `"2"` | Humidity | Temperature + humidity sensor | Multi (temp + RH) |
 | `"3"` | Splitter | Port splitter node, no readings | None |
 | _TBD_ | Rope | Daisy-chained temperature sensor rope (see section 7.2) | Multi (temp × N) |
+| `"5"` | Particulate Matter | Sensirion SEN5x (see section 7.2) | Multi (8: PM1.0/2.5/4.0/10, RH, temp, VOC/NOx index) |
+| `"6"` | Air Quality | Bosch BME680 (see section 7.2) | Multi (6: temp, pressure, humidity, IAQ, CO2, b-VOC) |
 | `"99"` | Dual-temperature | Probe with 2 temperature readings | Multi (temp + temp) |
 
 ### 6.2 Value Type (individual reading)
@@ -134,6 +136,20 @@ All values are JSON strings for consistency with the Coiote/LTE shadow format.
 |-------|------|--------------|
 | `"1"` | Temperature | `"cel"` |
 | `"2"` | Humidity | `"%RH"` |
+| `"3"` | PM1.0 | `"ug/m3"` |
+| `"4"` | PM2.5 | `"ug/m3"` |
+| `"5"` | PM4.0 | `"ug/m3"` |
+| `"6"` | PM10 | `"ug/m3"` |
+| `"7"` | VOC Index | `"idx"` |
+| `"8"` | NOx Index | `"idx"` |
+| `"9"` | Pressure | `"hPa"` |
+| `"10"` | IAQ | `"idx"` |
+| `"11"` | CO2 | `"ppm"` |
+| `"12"` | b-VOC | `"ppm"` |
+
+> **Pressure** is reported in hectopascals (`"hPa"`), not pascals, because the
+> binary wire value is a float16 (max 65504) and atmospheric pressure in Pa
+> (~101325) does not fit. Multiply by 100 to obtain Pa.
 
 ## 7. Field Presence Rules
 
@@ -214,6 +230,41 @@ No specific Sensor Type number is reserved for rope sensors yet. Different rope 
 
 **Receiver rule**: A parent entry with a rope Sensor Type groups all child sub-port entries as readings from a single rope. The sub-port index (1, 2, 3, ...) determines the physical position along the rope. Unlike the dual-temperature sensor (which uses the `Position` field), rope sensors rely on port hierarchy to order values — this is consistent with how splitters work.
 
+#### Particulate Matter sensor (Sensor Type 5)
+
+Sensirion SEN5x. Produces eight value entries on the same port, distinguished by
+`Type`: PM1.0 (`"3"`), PM2.5 (`"4"`), PM4.0 (`"5"`), PM10 (`"6"`), humidity
+(`"2"`), temperature (omit/`"1"`), VOC Index (`"7"`), NOx Index (`"8"`).
+
+| Entry | Sensor Type | Type | Units |
+|-------|-------------|------|-------|
+| Temperature | `"5"` | Omit (inferable) | Omit (default `"cel"`) |
+| Humidity | `"5"` | `"2"` | Omit (default `"%RH"`) |
+| PM1.0 / PM2.5 / PM4.0 / PM10 | `"5"` | `"3"`/`"4"`/`"5"`/`"6"` | Omit (default `"ug/m3"`) |
+| VOC Index / NOx Index | `"5"` | `"7"`/`"8"` | Omit (default `"idx"`) |
+
+**Receiver rule**: `Sensor Type = "5"` identifies the physical sensor. The eight
+values are distinguished by `Type`. `Units` may be omitted; the default unit
+follows from `Type` (section 6.2).
+
+#### Air Quality sensor (Sensor Type 6)
+
+Bosch BME680. Produces six value entries on the same port, distinguished by
+`Type`: temperature (omit/`"1"`), pressure (`"9"`), humidity (`"2"`), IAQ
+(`"10"`), CO2 (`"11"`), b-VOC (`"12"`).
+
+| Entry | Sensor Type | Type | Units |
+|-------|-------------|------|-------|
+| Temperature | `"6"` | Omit (inferable) | Omit (default `"cel"`) |
+| Pressure | `"6"` | `"9"` | Omit (default `"hPa"`) |
+| Humidity | `"6"` | `"2"` | Omit (default `"%RH"`) |
+| IAQ | `"6"` | `"10"` | Omit (default `"idx"`) |
+| CO2 | `"6"` | `"11"` | Omit (default `"ppm"`) |
+| b-VOC | `"6"` | `"12"` | Omit (default `"ppm"`) |
+
+**Receiver rule**: `Sensor Type = "6"` identifies the physical sensor; `Type`
+distinguishes the six values. Pressure is in hPa — multiply by 100 for Pa.
+
 #### Dual-temperature sensor (Sensor Type 99)
 
 Multiple temperature readings from a single physical sensor, distinguished by position.
@@ -235,6 +286,10 @@ Multiple temperature readings from a single physical sensor, distinguished by po
 | Splitter (3) | `"3"` | Absent | Absent | Absent |
 | Rope (_TBD_) — parent | _TBD_ | Absent | Absent | Absent |
 | Rope (_TBD_) — each child value | Omit | Omit | Omit | Absent (port hierarchy provides position) |
+| Particulate Matter (5) — temp value | `"5"` | Omit | Omit | Absent |
+| Particulate Matter (5) — other values | `"5"` | `"2"`–`"8"` | Omit | Absent |
+| Air Quality (6) — temp value | `"6"` | Omit | Omit | Absent |
+| Air Quality (6) — other values | `"6"` | `"2"`/`"9"`–`"12"` | Omit | Absent |
 | Dual-temp (99) — each value | `"99"` | Omit | Omit | Required |
 
 ### 7.4 Fallback rule (exception)
@@ -581,3 +636,164 @@ A rope sensor on port `3.8` with 4 temperature readings:
 | 5 | `3.8.4` | Temperature | Sub-port of rope parent → position 4 along the rope |
 
 > **Note:** Sensor Type `"4"` is used as a placeholder in this example. The actual Sensor Type for each rope type will be assigned when the hardware is selected. Different rope types may receive different Sensor Type values.
+
+### 8.4 Particulate Matter sensor example (LoRa path)
+
+A Sensirion SEN5x on port `1`, emitting all eight readings. This is the JSON
+equivalent of `cbor-validation/samples/storage-pm-sensor.diag`. `Units` is
+omitted; each value's unit follows from `Type` (section 6.2).
+
+```json
+{
+    "thingName": "urn:dev:mac:129B6A594D679D87",
+    "EXACT Sensor": {
+        "0": {
+            "Port": "1",
+            "Value": "22.5",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Sensor Type": "5"
+        },
+        "1": {
+            "Port": "1",
+            "Value": "45.5",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "2",
+            "Sensor Type": "5"
+        },
+        "2": {
+            "Port": "1",
+            "Value": "5.0",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "3",
+            "Sensor Type": "5"
+        },
+        "3": {
+            "Port": "1",
+            "Value": "7.5",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "4",
+            "Sensor Type": "5"
+        },
+        "4": {
+            "Port": "1",
+            "Value": "9.0",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "5",
+            "Sensor Type": "5"
+        },
+        "5": {
+            "Port": "1",
+            "Value": "10.5",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "6",
+            "Sensor Type": "5"
+        },
+        "6": {
+            "Port": "1",
+            "Value": "120.0",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "7",
+            "Sensor Type": "5"
+        },
+        "7": {
+            "Port": "1",
+            "Value": "1.0",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "8",
+            "Sensor Type": "5"
+        }
+    },
+    "EXACT Chunks": {
+        "0": {
+            "Sample ID": "1745262000",
+            "Total Chunks": "1",
+            "Chunk Number": "1"
+        }
+    }
+}
+```
+
+**Entry breakdown:**
+
+| Index | Port | Type | Reading | Unit (derived) |
+|-------|------|------|---------|----------------|
+| 0 | `1` | — (default 1) | Temperature | cel |
+| 1 | `1` | `"2"` | Humidity | %RH |
+| 2 | `1` | `"3"` | PM1.0 | ug/m3 |
+| 3 | `1` | `"4"` | PM2.5 | ug/m3 |
+| 4 | `1` | `"5"` | PM4.0 | ug/m3 |
+| 5 | `1` | `"6"` | PM10 | ug/m3 |
+| 6 | `1` | `"7"` | VOC Index | idx |
+| 7 | `1` | `"8"` | NOx Index | idx |
+
+### 8.5 Air Quality sensor example (LoRa path)
+
+A Bosch BME680 on port `2`, emitting all six readings. JSON equivalent of
+`cbor-validation/samples/storage-air-quality.diag`. Pressure is in hPa.
+
+```json
+{
+    "thingName": "urn:dev:mac:129B6A594D679D87",
+    "EXACT Sensor": {
+        "0": {
+            "Port": "2",
+            "Value": "22.5",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Sensor Type": "6"
+        },
+        "1": {
+            "Port": "2",
+            "Value": "1013.0",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "9",
+            "Sensor Type": "6"
+        },
+        "2": {
+            "Port": "2",
+            "Value": "48.5",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "2",
+            "Sensor Type": "6"
+        },
+        "3": {
+            "Port": "2",
+            "Value": "75.0",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "10",
+            "Sensor Type": "6"
+        },
+        "4": {
+            "Port": "2",
+            "Value": "650.0",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "11",
+            "Sensor Type": "6"
+        },
+        "5": {
+            "Port": "2",
+            "Value": "0.5",
+            "Timestamp": "2025-04-21T19:00:00Z",
+            "Type": "12",
+            "Sensor Type": "6"
+        }
+    },
+    "EXACT Chunks": {
+        "0": {
+            "Sample ID": "1745262000",
+            "Total Chunks": "1",
+            "Chunk Number": "1"
+        }
+    }
+}
+```
+
+**Entry breakdown:**
+
+| Index | Port | Type | Reading | Unit (derived) |
+|-------|------|------|---------|----------------|
+| 0 | `2` | — (default 1) | Temperature | cel |
+| 1 | `2` | `"9"` | Pressure | hPa |
+| 2 | `2` | `"2"` | Humidity | %RH |
+| 3 | `2` | `"10"` | IAQ | idx |
+| 4 | `2` | `"11"` | CO2 | ppm |
+| 5 | `2` | `"12"` | b-VOC | ppm |

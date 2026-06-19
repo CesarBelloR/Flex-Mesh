@@ -19,6 +19,7 @@ This document specifies the CBOR-based binary format used for sensor data storag
 - LoRa Logger->Relay switched from ASCII to CBOR
 - Physical sensor type ("Sensor Type") included per entry for all non-temperature sensor types
 - Dual-temperature sensors (type 99) with position field for multi-value probes
+- Multi-value environmental sensors: particulate matter (type 5, Sensirion SEN5x) and air quality (type 6, Bosch BME680)
 - Optional units field (key 22) for explicit measurement unit annotation
 
 ## 2. Map Key Registry
@@ -48,12 +49,12 @@ This document specifies the CBOR-based binary format used for sensor data storag
 | Key | Type          | Description                                              | Required                            |
 |-----|---------------|----------------------------------------------------------|-------------------------------------|
 | 3   | uint / [+uint]| Port (integer for flat, array for hierarchical)          | Yes                                 |
-| 4   | uint8         | Value type: 1=temp, 2=humidity (omit if 1)               | No (default=1)                      |
+| 4   | uint8         | Value type: 1=temp, 2=humidity, 3..12 environmental (see value-type enum; omit if 1) | No (default=1)                      |
 | 5   | float16       | Sensor value                                             | Yes, except splitters               |
-| 7   | uint8         | Sensor type: 1=temp, 2=humidity, 3=splitter, 99=dual-temp| Omit only for temperature (1); required otherwise |
+| 7   | uint8         | Sensor type: 1=temp, 2=humidity, 3=splitter, 5=PM, 6=air-quality, 99=dual-temp | Omit only for temperature (1); required otherwise |
 | 20  | uint64        | Sensor/splitter UID (64-bit 1-Wire ROM)                  | Splitters: required; sensors: optional |
 | 21  | uint8         | Position within multi-value sensor (1-based)             | Only for dual-temperature (type 99) |
-| 22  | uint8         | Units: 1=°C, 2=%RH (see units enum)                     | No (optional)                       |
+| 22  | uint8         | Units: 1=°C, 2=%RH, 3=µg/m³, 4=hPa, 5=ppm, 6=idx (see units enum) | No (optional)                       |
 
 ## 3. Shared CDDL Prelude
 
@@ -71,13 +72,25 @@ port       = flat-port / hier-port
 value-type = &(
   temperature: 1,
   humidity:    2,
+  pm1p0:       3,            ; PM1.0  (SEN5x)
+  pm2p5:       4,            ; PM2.5  (SEN5x)
+  pm4p0:       5,            ; PM4.0  (SEN5x)
+  pm10:        6,            ; PM10   (SEN5x)
+  voc-index:   7,            ; VOC Index (SEN5x)
+  nox-index:   8,            ; NOx Index (SEN5x)
+  pressure:    9,            ; barometric pressure, hPa (BME680)
+  iaq:         10,           ; air quality index (BME680)
+  co2:         11,           ; CO2, ppm (BME680)
+  bvoc:        12,           ; breath-VOC equivalent, ppm (BME680)
 )
 
 sensor-type = &(
-  temperature:      1,
-  humidity:         2,
-  splitter:         3,
-  dual-temperature: 99,
+  temperature:        1,
+  humidity:           2,
+  splitter:           3,
+  particulate-matter: 5,     ; Sensirion SEN5x
+  air-quality:        6,     ; Bosch BME680
+  dual-temperature:   99,
 )
 
 sensor-value = float16
@@ -85,6 +98,10 @@ sensor-value = float16
 units = &(
   celsius:    1,              ; °C
   percent-rh: 2,              ; %RH
+  ug-per-m3:  3,              ; µg/m³  (particulate matter)
+  hpa:        4,              ; hPa    (pressure)
+  ppm:        5,              ; ppm    (CO2, b-VOC)
+  index:      6,              ; idx    (dimensionless: VOC/NOx/IAQ index)
 )
 
 sensor-sample = {
@@ -354,6 +371,8 @@ lora-relay-portal = {
 | 1     | Temperature      | Yes (default, omitted) | Yes (°C)           | Optional          | Temperature probe reading            |
 | 2     | Humidity         | Yes                    | Yes (%RH)          | Optional          | Humidity sensor reading              |
 | 3     | Splitter         | No                     | No                 | Yes (required)    | Splitter node, defines port hierarchy|
+| 5     | Particulate Matter | Yes (per reading)    | Yes (8 readings)   | Optional          | Sensirion SEN5x (PM1.0/2.5/4.0/10, RH, temp, VOC/NOx index) |
+| 6     | Air Quality      | Yes (per reading)      | Yes (6 readings)   | Optional          | Bosch BME680 (temp, pressure, humidity, IAQ, CO2, b-VOC) |
 | 99    | Dual-temperature | No (temperature, omitted) | Yes (°C)        | Optional          | Dual-temperature probe (position required) |
 
 ### Rules
@@ -414,7 +433,189 @@ JSON equivalent:
 | 4     | 4         | Temp     | Temperature reading from humidity sensor (sensor-type=2 via key 7) |
 | 5     | 4         | Humidity | Humidity reading from same sensor (value-type=2 via key 4, sensor-type=2 via key 7) |
 
-## 8. Chunking
+## 8. Multi-Value Environmental Sensors
+
+Some physical sensors emit several readings of different value types from a single
+port. They follow the same pattern as the humidity sensor (type 2): each reading
+is its own entry sharing the same `port` (key 3) and `sensor-type` (key 7),
+distinguished by `value-type` (key 4). The temperature reading omits key 4
+(default = 1). `units` (key 22) is optional — the default unit is implied by the
+value type, so the samples below omit it.
+
+### Value Types
+
+| Key 4 | Name | Default unit | Used by |
+|-------|------|--------------|---------|
+| 1  | Temperature | °C    | all |
+| 2  | Humidity    | %RH   | humidity, PM, air-quality |
+| 3  | PM1.0       | µg/m³ | PM (type 5) |
+| 4  | PM2.5       | µg/m³ | PM (type 5) |
+| 5  | PM4.0       | µg/m³ | PM (type 5) |
+| 6  | PM10        | µg/m³ | PM (type 5) |
+| 7  | VOC Index   | idx   | PM (type 5) |
+| 8  | NOx Index   | idx   | PM (type 5) |
+| 9  | Pressure    | hPa   | air-quality (type 6) |
+| 10 | IAQ         | idx   | air-quality (type 6) |
+| 11 | CO2         | ppm   | air-quality (type 6) |
+| 12 | b-VOC       | ppm   | air-quality (type 6) |
+
+> **Pressure encoding:** barometric pressure is carried in **hPa** (~1013), not Pa,
+> so it fits the float16 wire value (max 65504). Receivers multiply by 100 for Pa.
+
+### Particulate Matter Sensor (type 5 — Sensirion SEN5x)
+
+Eight readings on one port: PM1.0, PM2.5, PM4.0, PM10, humidity, temperature,
+VOC Index, NOx Index.
+
+```cbor-diag
+{
+  1: 1745262000,
+  2: [
+    {3: 1, 5: 22.5, 7: 5},
+    {3: 1, 4: 2, 5: 45.5, 7: 5},
+    {3: 1, 4: 3, 5: 5.0, 7: 5},
+    {3: 1, 4: 4, 5: 7.5, 7: 5},
+    {3: 1, 4: 5, 5: 9.0, 7: 5},
+    {3: 1, 4: 6, 5: 10.5, 7: 5},
+    {3: 1, 4: 7, 5: 120.0, 7: 5},
+    {3: 1, 4: 8, 5: 1.0, 7: 5}
+  ],
+  6: 3800
+}
+```
+
+JSON equivalent:
+
+```json
+{
+  "timestamp": 1745262000,
+  "samples": [
+    {"port": 1, "value": 22.5, "sensorType": 5},
+    {"port": 1, "valueType": 2, "value": 45.5, "sensorType": 5},
+    {"port": 1, "valueType": 3, "value": 5.0, "sensorType": 5},
+    {"port": 1, "valueType": 4, "value": 7.5, "sensorType": 5},
+    {"port": 1, "valueType": 5, "value": 9.0, "sensorType": 5},
+    {"port": 1, "valueType": 6, "value": 10.5, "sensorType": 5},
+    {"port": 1, "valueType": 7, "value": 120.0, "sensorType": 5},
+    {"port": 1, "valueType": 8, "value": 1.0, "sensorType": 5}
+  ],
+  "batteryMv": 3800
+}
+```
+
+**Entry breakdown:**
+
+| Index | Value type | Reading      | Unit (derived) |
+|-------|-----------|--------------|----------------|
+| 0     | 1 (omitted) | Temperature | °C |
+| 1     | 2         | Humidity     | %RH |
+| 2     | 3         | PM1.0        | µg/m³ |
+| 3     | 4         | PM2.5        | µg/m³ |
+| 4     | 5         | PM4.0        | µg/m³ |
+| 5     | 6         | PM10         | µg/m³ |
+| 6     | 7         | VOC Index    | idx |
+| 7     | 8         | NOx Index    | idx |
+
+Encoded size (float16): ~99 bytes — fits the 120-byte storage record. See
+`docs/specs/cbor-validation/samples/storage-pm-sensor.diag`.
+
+### Air Quality Sensor (type 6 — Bosch BME680)
+
+Six readings on one port: temperature, pressure (hPa), humidity, IAQ, CO2, b-VOC.
+
+```cbor-diag
+{
+  1: 1745262000,
+  2: [
+    {3: 2, 5: 22.5, 7: 6},
+    {3: 2, 4: 9, 5: 1013.0, 7: 6},
+    {3: 2, 4: 2, 5: 48.5, 7: 6},
+    {3: 2, 4: 10, 5: 75.0, 7: 6},
+    {3: 2, 4: 11, 5: 650.0, 7: 6},
+    {3: 2, 4: 12, 5: 0.5, 7: 6}
+  ],
+  6: 3800
+}
+```
+
+JSON equivalent:
+
+```json
+{
+  "timestamp": 1745262000,
+  "samples": [
+    {"port": 2, "value": 22.5, "sensorType": 6},
+    {"port": 2, "valueType": 9, "value": 1013.0, "sensorType": 6},
+    {"port": 2, "valueType": 2, "value": 48.5, "sensorType": 6},
+    {"port": 2, "valueType": 10, "value": 75.0, "sensorType": 6},
+    {"port": 2, "valueType": 11, "value": 650.0, "sensorType": 6},
+    {"port": 2, "valueType": 12, "value": 0.5, "sensorType": 6}
+  ],
+  "batteryMv": 3800
+}
+```
+
+**Entry breakdown:**
+
+| Index | Value type | Reading     | Unit (derived) |
+|-------|-----------|-------------|----------------|
+| 0     | 1 (omitted) | Temperature | °C |
+| 1     | 9         | Pressure    | hPa |
+| 2     | 2         | Humidity    | %RH |
+| 3     | 10        | IAQ         | idx |
+| 4     | 11        | CO2         | ppm |
+| 5     | 12        | b-VOC       | ppm |
+
+Encoded size (float16): ~77 bytes. See
+`docs/specs/cbor-validation/samples/storage-air-quality.diag`.
+
+### Chunked Combined Example
+
+When an ambient probe plus a full PM sensor and air-quality sensor are present,
+the readings exceed one 120-byte record and split into two chunks (see
+`storage-combined-0.diag` / `storage-combined-1.diag`).
+
+**Chunk 0 of 2** (ambient temp + PM sensor, with battery):
+
+```cbor-diag
+{
+  1: 1745262000,
+  2: [
+    {3: 0, 5: 21.0},
+    {3: 1, 5: 22.5, 7: 5},
+    {3: 1, 4: 2, 5: 45.5, 7: 5},
+    {3: 1, 4: 3, 5: 5.0, 7: 5},
+    {3: 1, 4: 4, 5: 7.5, 7: 5},
+    {3: 1, 4: 5, 5: 9.0, 7: 5},
+    {3: 1, 4: 6, 5: 10.5, 7: 5},
+    {3: 1, 4: 7, 5: 120.0, 7: 5},
+    {3: 1, 4: 8, 5: 1.0, 7: 5}
+  ],
+  6: 3800,
+  8: 2,
+  9: 0
+}
+```
+
+**Chunk 1 of 2** (air-quality sensor, no battery):
+
+```cbor-diag
+{
+  1: 1745262000,
+  2: [
+    {3: 2, 5: 22.5, 7: 6},
+    {3: 2, 4: 9, 5: 1013.0, 7: 6},
+    {3: 2, 4: 2, 5: 48.5, 7: 6},
+    {3: 2, 4: 10, 5: 75.0, 7: 6},
+    {3: 2, 4: 11, 5: 650.0, 7: 6},
+    {3: 2, 4: 12, 5: 0.5, 7: 6}
+  ],
+  8: 2,
+  9: 1
+}
+```
+
+## 9. Chunking
 
 When a sample's CBOR exceeds 120 bytes (the storage record limit), it is split into multiple chunks. The Relay→Portal format carries whatever chunks the storage format produced, plus relay metadata.
 
@@ -580,7 +781,7 @@ Chunk 1 — ~120 bytes (within 120-byte limit):
 
 If two different samples happen to share the same timestamp, key 10 (chunk sequence) differentiates them. The first sample uses sequence 0 (omitted), the second uses sequence 1, etc.
 
-## 9. Port Encoding Reference
+## 10. Port Encoding Reference
 
 | Physical Location     | Encoding       | CBOR Diagnostic |
 |-----------------------|----------------|-----------------|
@@ -595,7 +796,7 @@ If two different samples happen to share the same timestamp, key 10 (chunk seque
 - Hierarchical ports (splitter chains): CBOR array of unsigned integers, one per level.
 - Supports n >= 8 levels of nesting.
 
-## 10. Design Rationale
+## 11. Design Rationale
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
@@ -608,6 +809,8 @@ If two different samples happen to share the same timestamp, key 10 (chunk seque
 | Value type default | 1 (temperature) | Temperature is the most common reading. Omitting key 4 saves 2 bytes per entry for the majority of samples. |
 | Sensor type field | Omit only for temperature (1); required otherwise | Temperature is the most common sensor type, so omitting saves bytes for the majority case. All non-temperature sensor types (humidity, splitter, dual-temp) must be explicit. |
 | CBOR over ASCII for LoRa | CBOR | Structured data with no parsing ambiguity. More compact for binary values (UIDs, integers). |
+| Multi-value sensors (PM, air-quality) | One entry per reading, shared port + sensor type, distinguished by value type | Reuses the existing humidity-sensor pattern (type 2) — no new container structure. Each reading is independently omittable when invalid. |
+| Pressure units | hPa instead of Pa | Atmospheric pressure in Pa (~101325) exceeds the float16 max (65504). hPa (~1013) fits and preserves ~0.5 hPa resolution; receivers ×100 for Pa. |
 
 ## Appendix A. Current (v1) Format Samples
 
