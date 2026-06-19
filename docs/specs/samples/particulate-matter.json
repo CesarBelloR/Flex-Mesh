@@ -1,0 +1,72 @@
+// A sensor based on a Sensirion SEN5x on port 1, emitting all eight values. 
+// Units is omitted; each value's unit follows from Type (data rules section 6.2).
+{
+	"state": {
+		"reported": {
+			"EXACT Sensor": {
+				"0": {
+					"Port": "1",
+					"Value": "22.5",
+					"Timestamp": "2025-04-21T19:00:00Z",
+					"Sensor Type": "5"
+				},
+				"1": {
+					"Port": "1",
+					"Value": "45.5",
+					"Timestamp": "2025-04-21T19:00:00Z",
+					"Type": "2",
+					"Sensor Type": "5"
+				},
+				"2": {
+					"Port": "1",
+					"Value": "5.0",
+					"Timestamp": "2025-04-21T19:00:00Z",
+					"Type": "3",
+					"Sensor Type": "5"
+				},
+				"3": {
+					"Port": "1",
+					"Value": "7.5",
+					"Timestamp": "2025-04-21T19:00:00Z",
+					"Type": "4",
+					"Sensor Type": "5"
+				},
+				"4": {
+					"Port": "1",
+					"Value": "9.0",
+					"Timestamp": "2025-04-21T19:00:00Z",
+					"Type": "5",
+					"Sensor Type": "5"
+				},
+				"5": {
+					"Port": "1",
+					"Value": "10.5",
+					"Timestamp": "2025-04-21T19:00:00Z",
+					"Type": "6",
+					"Sensor Type": "5"
+				},
+				"6": {
+					"Port": "1",
+					"Value": "120.0",
+					"Timestamp": "2025-04-21T19:00:00Z",
+					"Type": "7",
+					"Sensor Type": "5"
+				},
+				"7": {
+					"Port": "1",
+					"Value": "1.0",
+					"Timestamp": "2025-04-21T19:00:00Z",
+					"Type": "8",
+					"Sensor Type": "5"
+				}
+			},
+			"EXACT Chunks": {
+				"0": {
+					"Sample ID": "1745262000",
+					"Total Chunks": "1",
+					"Chunk Number": "1"
+				}
+			}
+		}
+	}
+}
