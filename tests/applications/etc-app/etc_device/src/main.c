@@ -289,4 +289,165 @@ ZTEST(etc_device_record_test, test_09_repeat_rand)
 	}
 }
 
+/*
+ * FW-954: current (non-ack'd) readings must always take precedence over an
+ * active reclaim. The helpers below build a store of historical, already-sent
+ * (ACK'd) records, then a reclaim is scheduled over a sub-window of them while
+ * fresh readings are injected.
+ */
+#define RECLAIM_HIST_COUNT 20 /* historical records to seed and ACK */
+#define RECLAIM_WIN_START  5  /* reclaim window, by record offset (inclusive) */
+#define RECLAIM_WIN_STOP   14
+
+static int64_t reclaim_ts_offset(const union etc_device_record *rec)
+{
+	return (int64_t)rec->timestamp - (int64_t)record_sample.timestamp;
+}
+
+/* Read one record (NACK or reclaim), ACK it as the TX path would, and report
+ * its timestamp offset and the reclaim-in-progress flag. Returns the record id.
+ */
+static int reclaim_read_one(int64_t *offset, bool *reclaim)
+{
+	union etc_device_record rec;
+	bool r = false;
+	int id = etc_device_read_record(&rec, &r);
+	if (id > 0) {
+		if (offset != NULL) {
+			*offset = reclaim_ts_offset(&rec);
+		}
+		etc_device_set_ack_record(id);
+	}
+	if (reclaim != NULL) {
+		*reclaim = r;
+	}
+	return id;
+}
+
+/* Reset to a clean store holding `count` historical records, all ACK'd. */
+static void reclaim_seed_history(uint16_t count)
+{
+	etc_device_nvs_init();
+	etc_device_record_clean_up();
+	etc_device_record_erase_record_flash();
+
+	for (uint16_t i = 0; i < count; i++) {
+		zassert_ok(etc_device_write_record_sensor(&records[i]));
+	}
+
+	/* Drain and ACK everything so no NACK records remain. */
+	while (reclaim_read_one(NULL, NULL) > 0) {
+		/* keep draining */
+	}
+	zassert_equal(0, etc_device_nack_count(), "history not fully drained");
+}
+
+/* New readings queued before the reclaim starts serving must all be sent
+ * before any reclaim record, and no readings may be lost.
+ */
+ZTEST(etc_device_record_test, test_10_new_readings_precede_reclaim)
+{
+	const int kNew = 6;
+	const int new_base = RECLAIM_HIST_COUNT; /* offsets 20..25 */
+
+	reclaim_seed_history(RECLAIM_HIST_COUNT);
+
+	int rc = etc_device_record_reclaim(record_sample.timestamp + RECLAIM_WIN_START,
+					   record_sample.timestamp + RECLAIM_WIN_STOP, false);
+	zassert_true(rc >= 0, "reclaim schedule failed %d", rc);
+	int win = etc_device_record_num_reclaim_records();
+	zassert_true(win > 0, "no reclaim window scheduled");
+
+	/* Fresh readings arrive while the reclaim is pending. */
+	for (int i = 0; i < kNew; i++) {
+		zassert_ok(etc_device_write_record_sensor(&records[new_base + i]));
+	}
+
+	bool seen_reclaim_record = false;
+	int new_count = 0;
+	int reclaim_count = 0;
+	int64_t off;
+	bool reclaim;
+
+	while (reclaim_read_one(&off, &reclaim) > 0) {
+		zassert_true(reclaim, "reclaim should stay in progress (offset %lld)", off);
+		if (off >= new_base) {
+			zassert_false(seen_reclaim_record,
+				      "new reading %lld served after a reclaim record", off);
+			new_count++;
+		} else {
+			zassert_true(off >= RECLAIM_WIN_START && off <= RECLAIM_WIN_STOP,
+				     "unexpected record offset %lld", off);
+			seen_reclaim_record = true;
+			reclaim_count++;
+		}
+	}
+
+	zassert_equal(kNew, new_count, "served new readings %d", new_count);
+	zassert_equal(win, reclaim_count, "served reclaim records %d/%d", reclaim_count, win);
+	zassert_equal(0, etc_device_nack_count(), "NACK remained after drain");
+
+	/* The record that completes the reclaim still reports in-progress (the
+	 * cloud sees SUCCESS on the following cycle); the next read confirms the
+	 * reclaim is finished.
+	 */
+	zassert_true(reclaim_read_one(&off, &reclaim) <= 0, "store should be empty");
+	zassert_false(reclaim, "reclaim should be inactive after completion");
+}
+
+/* A reading that arrives mid-reclaim must preempt the remaining reclaim
+ * records, and the reclaim must resume and complete afterwards.
+ */
+ZTEST(etc_device_record_test, test_11_new_reading_preempts_active_reclaim)
+{
+	const int new_off = RECLAIM_HIST_COUNT; /* offset 20 */
+
+	reclaim_seed_history(RECLAIM_HIST_COUNT);
+
+	int rc = etc_device_record_reclaim(record_sample.timestamp + RECLAIM_WIN_START,
+					   record_sample.timestamp + RECLAIM_WIN_STOP, false);
+	zassert_true(rc >= 0, "reclaim schedule failed %d", rc);
+	int win = etc_device_record_num_reclaim_records();
+	zassert_true(win >= 2, "need a multi-record window, got %d", win);
+
+	int64_t off;
+	bool reclaim;
+
+	/* No new data pending yet: the first record served is a reclaim record. */
+	zassert_true(reclaim_read_one(&off, &reclaim) > 0, "expected a reclaim record");
+	zassert_true(reclaim, "reclaim flag should be set");
+	zassert_true(off >= RECLAIM_WIN_START && off <= RECLAIM_WIN_STOP,
+		     "expected reclaim-window record, got %lld", off);
+	int reclaim_count = 1;
+
+	/* A fresh reading arrives in the middle of the reclaim... */
+	zassert_ok(etc_device_write_record_sensor(&records[new_off]));
+
+	/* ...and must be served before the rest of the reclaim window. */
+	zassert_true(reclaim_read_one(&off, &reclaim) > 0, "expected the new reading");
+	zassert_true(reclaim, "reclaim still in progress");
+	zassert_equal(new_off, off, "new reading did not preempt reclaim (got %lld)", off);
+
+	/* Drain the remainder: only reclaim-window records should follow. */
+	int new_count = 1;
+	while (reclaim_read_one(&off, &reclaim) > 0) {
+		zassert_true(reclaim, "reclaim active until fully drained");
+		if (off == new_off) {
+			new_count++;
+		} else {
+			zassert_true(off >= RECLAIM_WIN_START && off <= RECLAIM_WIN_STOP,
+				     "unexpected record offset %lld", off);
+			reclaim_count++;
+		}
+	}
+
+	zassert_equal(1, new_count, "new reading served exactly once");
+	zassert_equal(win, reclaim_count, "all reclaim records served once (%d/%d)", reclaim_count,
+		      win);
+	zassert_equal(0, etc_device_nack_count(), "NACK remained after drain");
+
+	zassert_true(reclaim_read_one(&off, &reclaim) <= 0, "store should be empty");
+	zassert_false(reclaim, "reclaim should be inactive after completion");
+}
+
 ZTEST_SUITE(etc_device_record_test, NULL, test_setup, NULL, NULL, test_teardown);
