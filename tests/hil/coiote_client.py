@@ -87,10 +87,12 @@ class CoioteClient:
 
     # -- tasks --------------------------------------------------------------
 
-    def configure_execute_read(self, device_id, command_key, argument,
-                               response_key, name="hil-relay-cmd"):
-        """Create a configure task that executes ``command_key`` with ``argument``
-        then reads ``response_key``. Returns the new task id.
+    def configure_task(self, device_id, operations, name="hil-task"):
+        """Create a configure task from a list of operation dicts.
+
+        ``operations`` is a list of LwM2M operation objects, e.g.
+        ``[{"execute": {"key": "..."}}, {"read": {"key": "..."}}]``. Returns the
+        new task id.
 
         ``executeImmediately`` is intentionally left at its default (false) so
         the task is queued and delivered on the device's next registration. The
@@ -99,15 +101,7 @@ class CoioteClient:
         """
         body = {
             "taskDefinition": {
-                "operations": [
-                    {
-                        "execute": {
-                            "key": command_key,
-                            "argumentList": [{"digit": "0", "argument": argument}],
-                        }
-                    },
-                    {"read": {"key": response_key}},
-                ],
+                "operations": operations,
                 "name": name,
                 "taskExecutionLog": "All",
             }
@@ -120,6 +114,25 @@ class CoioteClient:
         # object with an "id" field, depending on tenant config).
         data = resp.json()
         return data["id"] if isinstance(data, dict) else data
+
+    def configure_execute_read(self, device_id, command_key, argument,
+                               response_key, name="hil-relay-cmd"):
+        """Create a configure task that executes ``command_key`` with ``argument``
+        then reads ``response_key``. Returns the new task id.
+        """
+        return self.configure_task(
+            device_id,
+            [
+                {
+                    "execute": {
+                        "key": command_key,
+                        "argumentList": [{"digit": "0", "argument": argument}],
+                    }
+                },
+                {"read": {"key": response_key}},
+            ],
+            name=name,
+        )
 
     def get_task_report(self, task_id, device_id):
         """Return the TaskReportDTO dict for a task on a device (or None)."""
