@@ -11,13 +11,25 @@ port       = flat-port / hier-port
 value-type = &(
   temperature: 1,
   humidity:    2,
+  pm1p0:       3,            ; PM1.0  (SEN5x)
+  pm2p5:       4,            ; PM2.5  (SEN5x)
+  pm4p0:       5,            ; PM4.0  (SEN5x)
+  pm10:        6,            ; PM10   (SEN5x)
+  voc-index:   7,            ; VOC Index (SEN5x)
+  nox-index:   8,            ; NOx Index (SEN5x)
+  pressure:    9,            ; barometric pressure, hPa (BME680)
+  iaq:         10,           ; air quality index (BME680)
+  co2:         11,           ; CO2, ppm (BME680)
+  bvoc:        12,           ; breath-VOC equivalent, ppm (BME680)
 )
 
 sensor-type = &(
-  temperature:      1,
-  humidity:         2,
-  splitter:         3,
-  dual-temperature: 99,
+  temperature:        1,
+  humidity:           2,
+  splitter:           3,
+  particulate-matter: 5,     ; Sensirion SEN5x
+  air-quality:        6,     ; Bosch BME680
+  dual-temperature:   99,
 )
 
 sensor-value = float        ; float16 on wire, but accept any float for validation
@@ -25,6 +37,10 @@ sensor-value = float        ; float16 on wire, but accept any float for validati
 units = &(
   celsius:    1,              ; °C
   percent-rh: 2,              ; %RH
+  ug-per-m3:  3,              ; µg/m³  (particulate matter)
+  hpa:        4,              ; hPa    (pressure)
+  ppm:        5,              ; ppm    (CO2, b-VOC)
+  index:      6,              ; idx    (dimensionless: VOC/NOx/IAQ index)
 )
 
 sensor-sample = {

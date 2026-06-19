@@ -30,6 +30,10 @@ cbor-validation/
     storage-chunked-1.diag  Chunk 1 of 2 (no battery)
     storage-multi-chunk-0.diag  Multi-chunk 0: splitters, humidity, dual-temp
     storage-multi-chunk-1.diag  Multi-chunk 1: splitters, humidity, dual-temp
+    storage-pm-sensor.diag      Particulate-matter sensor (SEN5x), 8 readings
+    storage-air-quality.diag    Air-quality sensor (BME680), 6 readings
+    storage-combined-0.diag     Combined chunk 0: ambient + PM sensor
+    storage-combined-1.diag     Combined chunk 1: air-quality sensor
     lora-logger-relay.diag  Logger->Relay sample
     lora-relay-portal.diag  Relay->Portal sample
   validate.sh               Validation runner
