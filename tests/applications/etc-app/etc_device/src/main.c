@@ -2,6 +2,7 @@
  * Copyright (c) 2024 EXACT Technology Corporation
  */
 
+#include <errno.h>
 #include <stdbool.h>
 #include <string.h>
 #include <zephyr/ztest.h>
@@ -448,6 +449,49 @@ ZTEST(etc_device_record_test, test_11_new_reading_preempts_active_reclaim)
 
 	zassert_true(reclaim_read_one(&off, &reclaim) <= 0, "store should be empty");
 	zassert_false(reclaim, "reclaim should be inactive after completion");
+}
+
+/* FW-966: read-only existence check used by the LwM2M reclaim Execute handler to
+ * decide whether any record falls within the requested period.
+ */
+ZTEST(etc_device_record_test, test_12_reclaim_available)
+{
+	const int64_t base = record_sample.timestamp;
+
+	reclaim_seed_history(RECLAIM_HIST_COUNT); /* timestamps base+0 .. base+19 */
+
+	/* Window covering seeded records -> available. */
+	zassert_equal(1,
+		      etc_device_record_reclaim_available(base + RECLAIM_WIN_START,
+							  base + RECLAIM_WIN_STOP),
+		      "records in window should be available");
+
+	/* A single in-range instant (the oldest record). */
+	zassert_equal(1, etc_device_record_reclaim_available(base, base),
+		      "first record should be available");
+
+	/* Window entirely before the seeded records -> none. */
+	zassert_equal(0, etc_device_record_reclaim_available(base - 100, base - 1),
+		      "window before records should be empty");
+
+	/* Window entirely after the seeded records -> none. */
+	zassert_equal(0,
+		      etc_device_record_reclaim_available(base + RECLAIM_HIST_COUNT,
+							  base + RECLAIM_HIST_COUNT + 100),
+		      "window after records should be empty");
+
+	/* Invalid range (start > stop) -> error. */
+	zassert_equal(-EINVAL,
+		      etc_device_record_reclaim_available(base + RECLAIM_WIN_STOP,
+							  base + RECLAIM_WIN_START),
+		      "start > stop should be rejected");
+
+	/* The check is side-effect free: a real reclaim still schedules afterwards. */
+	int rc =
+		etc_device_record_reclaim(base + RECLAIM_WIN_START, base + RECLAIM_WIN_STOP, false);
+	zassert_true(rc >= 0, "reclaim schedule failed %d", rc);
+	zassert_true(etc_device_record_num_reclaim_records() > 0,
+		     "reclaim window not scheduled after availability check");
 }
 
 ZTEST_SUITE(etc_device_record_test, NULL, test_setup, NULL, NULL, test_teardown);
