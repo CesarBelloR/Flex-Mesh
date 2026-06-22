@@ -128,6 +128,11 @@ static bool reclaim_active;
  * send's ACK would clear it from the codec before it is transmitted. */
 static bool reclaim_cancel_pending;
 
+/* Set when a reclaim is requested over a period with no records. Consumed by
+ * data_encode_for_logger() so the NO_RECORDS status is emitted (and sent) the
+ * same way as the other reclaim status transitions — see reclaim_cancel_pending. */
+static bool reclaim_no_records_pending;
+
 static atomic_t calibration_process;
 static bool calibration_success;
 /* Define a buffer to save data encoded*/
@@ -496,6 +501,15 @@ static int data_encode_for_logger() {
 		data_codec_update_reclaim_state(&codec, RECLAIM_CANCELLED);
 		reclaim_active = false;
 		reclaim_cancel_pending = false;
+		return STATUS_IN_PROCESS;
+	}
+
+	/* A reclaim over an empty period emits NO_RECORDS here for the same
+	 * reason as the cancel case above. */
+	if (reclaim_no_records_pending) {
+		data_codec_update_reclaim_state(&codec, RECLAIM_NO_RECORDS);
+		reclaim_active = false;
+		reclaim_no_records_pending = false;
 		return STATUS_IN_PROCESS;
 	}
 
@@ -959,6 +973,14 @@ static void on_all_states(struct data_msg_data *msg)
 		 * cleared by a concurrent send's ACK. If a send is already in
 		 * flight, the pending flag is consumed on the next send. */
 		reclaim_cancel_pending = true;
+		data_encode_for_cloud(false, false);
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_RECLAIM_NO_RECORDS)) {
+		/* The Execute already failed on the call channel; emit the
+		 * NO_RECORDS status from the send builder (see cancel above) so
+		 * the device sends it rather than relying on a server read. */
+		reclaim_no_records_pending = true;
 		data_encode_for_cloud(false, false);
 	}
 

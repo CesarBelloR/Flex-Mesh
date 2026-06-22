@@ -410,6 +410,11 @@ void cloud_wrap_event_handler(const struct cloud_wrap_event *evt)
 		SEND_EVENT(cloud, CLOUD_EVT_RECLAIM_CANCEL);
 		break;
 	}
+	case CLOUD_WRAP_EVT_RECLAIM_NO_RECORDS: {
+		LOG_DBG("CLOUD_WRAP_EVT_RECLAIM_NO_RECORDS");
+		SEND_EVENT(cloud, CLOUD_EVT_RECLAIM_NO_RECORDS);
+		break;
+	}
 	case CLOUD_WRAP_EVT_LOCATION_REQUEST:
 	{
 		LOG_DBG("CLOUD_WRAP_EVT_LOCATION_REQUEST");

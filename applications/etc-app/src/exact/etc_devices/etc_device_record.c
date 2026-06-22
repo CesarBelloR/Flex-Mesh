@@ -1045,6 +1045,82 @@ done:
 	return rc;
 }
 
+/* Check a single record against the reclaim period. Returns 1 if the record's
+ * timestamp falls within [start_time, stop_time], 2 if it is past the period
+ * (records are time-ordered, so the caller can stop), 0 if it is before the
+ * period (or could not be unpacked), and -EINVAL if the record cannot be read. */
+static int etc_device_record_in_period(uint16_t record_id, int start_time, int stop_time)
+{
+	union etc_device_record record;
+	int rc = etc_device_record_reading(record_id, record.data);
+	if (rc != record_id) {
+		return -EINVAL;
+	}
+	rc = etc_device_unpack_sensor_data(&record);
+	if (rc < 0) {
+		LOG_WRN("Failed to unpack sensor data %d", rc);
+		return 0;
+	}
+	/* Only the timestamp is needed here; skip mapping the sensor channels. */
+	if ((start_time <= record.timestamp) && (record.timestamp <= stop_time)) {
+		return 1;
+	}
+	if (record.timestamp > stop_time) {
+		return 2;
+	}
+	return 0;
+}
+
+int etc_device_record_reclaim_available(int start_time, int stop_time)
+{
+	if (!atomic_cas(&etc_reclaim_status, false, true)) {
+		LOG_ERR("Reclaim already in progress");
+		return -EINPROGRESS;
+	}
+
+	int rc = 0;
+	if (start_time > stop_time) {
+		rc = -EINVAL;
+		goto done;
+	}
+
+	uint16_t oldest_id = etc_device_record_get_oldest_id();
+	uint16_t newest_id = etc_device_record_get_latest_id();
+
+	/* Scan oldest -> newest and stop at the first record in the period (rc == 1)
+	 * or once we move past it (rc == 2). Mirrors the wrap-around walk in
+	 * etc_device_record_reclaim() but touches no shared reclaim state. */
+	if (oldest_id < newest_id) {
+		for (int i = oldest_id; i < newest_id; i++) {
+			rc = etc_device_record_in_period(i, start_time, stop_time);
+			if (rc != 0) {
+				goto done;
+			}
+		}
+	} else {
+		for (int i = oldest_id; i < MAX_RECORD_NO_OFFSET_ID; i++) {
+			rc = etc_device_record_in_period(i, start_time, stop_time);
+			if (rc != 0) {
+				goto done;
+			}
+		}
+		for (int i = MIN_RECORD_NO_OFFSET_ID; i < newest_id; i++) {
+			rc = etc_device_record_in_period(i, start_time, stop_time);
+			if (rc != 0) {
+				goto done;
+			}
+		}
+	}
+
+done:
+	atomic_set(&etc_reclaim_status, false);
+	if (rc < 0) {
+		return rc;
+	}
+	/* rc == 1 -> found a record in the period; rc == 2 (past) or 0 -> none. */
+	return (rc == 1) ? 1 : 0;
+}
+
 int etc_device_record_reclaim_cancel(void)
 {
 	/* Clear in-progress reclaim state so etc_device_reclaim_data() stops

@@ -290,6 +290,20 @@ int etc_device_record_read_data(off_t addr, void* data, int data_len);
 int etc_device_record_reclaim(int start_time, int stop_time, bool dry_run);
 
 /**
+ * @brief Check whether any record falls within a reclaim period.
+ *
+ * Read-only, early-exit check: scans stored records and returns as soon as the
+ * first record within [start_time, stop_time] is found, without modifying any
+ * reclaim state.
+ *
+ * @param start_time	The start time of the reclaim range.
+ * @param stop_time	The stop time of the reclaim range.
+ * @return	1 if at least one record falls within the range, 0 if none,
+ * 		-EINVAL for an invalid range, -EINPROGRESS if a reclaim is active.
+ */
+int etc_device_record_reclaim_available(int start_time, int stop_time);
+
+/**
  * @brief Cancel an active reclaim.
  *
  * Clears any in-progress reclaim state so the device stops re-emitting

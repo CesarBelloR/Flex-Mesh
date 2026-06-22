@@ -24,6 +24,7 @@
 #include "etc_relay_obj_48935.h"
 #include "cloud/cloud_wrapper.h"
 #include "etc_relay_command.h"
+#include "etc_device_record.h"
 
 #define MODULE lwm2m_integration
 
@@ -240,10 +241,27 @@ static int reclaim_exec_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_le
 		return -ENOENT;
 	}
 
-	if (cloud_wrap_evt.reclaim.start_time_s > 
-	    cloud_wrap_evt.reclaim.end_time_s) {
+	if (cloud_wrap_evt.reclaim.start_time_s > cloud_wrap_evt.reclaim.end_time_s) {
 		LOG_ERR("start time < end time");
 		return -EINVAL;
+	}
+
+	/* Synchronously check that at least one record falls within the period so
+	 * the Execute response code reflects the outcome. If none exist, fail the
+	 * Execute and notify the no-records event; the data module then sends the
+	 * NO_RECORDS status (a started reclaim would otherwise never complete). */
+	int avail = etc_device_record_reclaim_available(cloud_wrap_evt.reclaim.start_time_s,
+							cloud_wrap_evt.reclaim.end_time_s);
+	if (avail < 0) {
+		LOG_ERR("reclaim availability check failed, err %d", avail);
+		return avail;
+	}
+	if (avail == 0) {
+		LOG_WRN("No records in reclaim period");
+		struct cloud_wrap_event no_records_evt = {
+			.type = CLOUD_WRAP_EVT_RECLAIM_NO_RECORDS};
+		cloud_wrapper_notify_event(&no_records_evt);
+		return -ENOENT;
 	}
 
 	cloud_wrapper_notify_event(&cloud_wrap_evt);
