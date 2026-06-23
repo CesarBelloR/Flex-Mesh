@@ -22,6 +22,12 @@ void etc_interface_enable_rtc_event(void);
 void etc_interface_disable_rtc_event(void);
 void etc_interface_register_event_handler(etc_interface_event_handler handler);
 
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+/* Inject a HALL (magnet swipe) event immediately, bypassing the GPIO debounce.
+ * HIL/test use only (gated by CONFIG_ETC_INTERFACE_TEST_SHELL). */
+void etc_interface_test_inject_hall(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

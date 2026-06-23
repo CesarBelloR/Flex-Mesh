@@ -117,8 +117,19 @@ void etc_interface_enable_rtc_event(void)
 	gpio_add_callback(rtc_dt.port, &rtc_int_event_data.callback);
 }
 
-void etc_interface_disable_rtc_event(void) 
+void etc_interface_disable_rtc_event(void)
 {
 	gpio_pin_interrupt_configure_dt(&rtc_dt, GPIO_INT_DISABLE);
 	gpio_remove_callback(rtc_dt.port, &rtc_int_event_data.callback);
 }
+
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+void etc_interface_test_inject_hall(void)
+{
+	/* Fire a HALL event immediately, bypassing the GPIO debounce, so HIL tests
+	 * can drive the magnet-swipe path with precise timing. Mirrors
+	 * etc_interface_hall_sensor_work_handler(). */
+	hall_sensor_event_data.event_type = ETC_INTERFACE_EVENT_HALL;
+	k_work_submit(&hall_sensor_event_data.work);
+}
+#endif /* CONFIG_ETC_INTERFACE_TEST_SHELL */

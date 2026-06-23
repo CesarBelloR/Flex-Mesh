@@ -5,6 +5,13 @@ menuconfig ETC_INTERFACE
 	
 if ETC_INTERFACE
 
+config ETC_INTERFACE_TEST_SHELL
+	bool "ETC interface test shell commands"
+	depends on SHELL
+	help
+	  Adds shell commands to inject interface events (e.g. a HALL/magnet
+	  swipe) for hardware-in-the-loop testing. Test/diagnostic use only.
+
 module = ETC_INTERFACE
 module-str = etc interface
 source "subsys/logging/Kconfig.template.log_config"

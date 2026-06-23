@@ -674,6 +674,13 @@ static void send_calibration_result(enum app_event_type type, int result)
 	APP_EVENT_SUBMIT(app_event);
 }
 
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+/* Count of magnet-swipe HALL events that skipped the calibrator scan because the
+ * analog rail was still settling. Exposed via the `magnet status` shell command
+ * so HIL tests can verify the FW-492 gate deterministically. */
+static uint32_t hall_scan_skipped_count;
+#endif
+
 static void app_input_handler(enum etc_interface_event_type type)
 {
 	if (type == ETC_INTERFACE_EVENT_RTC) {
@@ -695,6 +702,9 @@ static void app_input_handler(enum etc_interface_event_type type)
 			}
 		} else {
 			LOG_INF("Skipping calibrator scan: analog rail still settling");
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+			hall_scan_skipped_count++;
+#endif
 		}
 		app_set_tx_work_type(APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK);
 		etc_ble_start_adv_with_timeout();
@@ -1021,6 +1031,35 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_app_module,
 					 cmd_trigger_tx),
 			       SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(app_module, &sub_app_module, "App module commands", NULL);
+
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+static int cmd_magnet_swipe(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	etc_interface_test_inject_hall();
+	shell_print(sh, "Magnet swipe (HALL) injected");
+	return 0;
+}
+
+static int cmd_magnet_status(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	shell_print(sh, "settling=%s skips=%u", etc_sensor_power_settling() ? "yes" : "no",
+		    hall_scan_skipped_count);
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_magnet, SHELL_CMD(swipe, NULL, "Inject a magnet swipe (HALL) event.", cmd_magnet_swipe),
+	SHELL_CMD(status, NULL, "Print rail-settling state and skipped-scan count.",
+		  cmd_magnet_status),
+	SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(magnet, &sub_magnet, "Magnet-swipe HIL test commands (FW-492)", NULL);
+#endif /* CONFIG_ETC_INTERFACE_TEST_SHELL */
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, cloud_event);
