@@ -49,8 +49,6 @@ enum sensor_sample_type {
 
 static struct sensor_data static_sensor_data;
 
-int64_t last_poll_complete_time_ms = 0;
-
 /* Sensor module message queue. */
 #define SENSOR_QUEUE_ENTRY_COUNT	10
 #define SENSOR_QUEUE_BYTE_ALIGNMENT	4
@@ -58,8 +56,6 @@ int64_t last_poll_complete_time_ms = 0;
 #define SENSOR_BATTERY_MAX_VOLTAGE_MS 40
 
 #define SENSOR_HANDLER_MAX_WAIT_S 10
-/* The minimum interval that needs to pass between two sensor readings */
-#define SENSOR_MIN_INTERVAL_MS 2000
 
 K_MSGQ_DEFINE(msgq_sensor, sizeof(struct sensor_msg_data),
 	      SENSOR_QUEUE_ENTRY_COUNT, SENSOR_QUEUE_BYTE_ALIGNMENT);
@@ -186,8 +182,6 @@ static void sensor_module_exit_functional_test(void)
 	}
 	struct sensor_event *sensor_event = new_sensor_event();
 
-	last_poll_complete_time_ms = k_uptime_get();
-
 	etc_sensor_exit_functional_test();
 	state_set(STATE_RUNNING);
 
@@ -276,19 +270,17 @@ static bool is_enter_functional_test(void)
 static int sensor_poll_handler(enum sensor_sample_type sample_type)
 {
 	int64_t now_ms = k_uptime_get();
-	if ((sample_type != SENSOR_SAMPLE_TEST) &&
-	    (now_ms - last_poll_complete_time_ms) < SENSOR_MIN_INTERVAL_MS) {
-		/* Ignore sample request if last reading finished
-		 * < SENSOR_MIN_INTERVAL_MS ago. Re-enabling VCC_SENS within
-		 * quick succession causes issues with the linear regulator
-		 * supplying VCC_A (voltage for analog sensors)
+	if ((sample_type != SENSOR_SAMPLE_TEST) && etc_sensor_power_settling()) {
+		/* Ignore sample request while the analog rail is still settling.
+		 * Re-enabling VCC_SENS too soon after it was turned off causes the
+		 * linear regulator supplying VCC_A (voltage for analog sensors) to
+		 * take seconds to settle, yielding invalid readings.
 		 */
 		/* Ensure power to the analog circuitry is disabled. If a previous
 		 * calibration check failed, it is possible that the analog circuitry
 		 * is still powered on, which can lead to increased power draw. */
 		if (etc_sensor_disable_power()) {
 			LOG_DBG("Sensor power disabled");
-			last_poll_complete_time_ms = now_ms;
 		}
 		return 0;
 	}
@@ -332,8 +324,7 @@ static int sensor_poll_handler(enum sensor_sample_type sample_type)
 		sensor_module_send_sensor(data, sample_type);
 	}
 	etc_ble_set_current_sensor(data);
-	last_poll_complete_time_ms = k_uptime_get();
-	LOG_DBG("Sample total time: %lld", (last_poll_complete_time_ms - now_ms));
+	LOG_DBG("Sample total time: %lld", (k_uptime_get() - now_ms));
 #if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	watchdog_sens_sel0_wdt_sem_give();
 #endif

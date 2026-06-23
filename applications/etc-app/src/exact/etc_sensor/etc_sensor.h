@@ -128,6 +128,18 @@ enum etc_sensor_status etc_sensor_get_status(void);
  */
 bool etc_sensor_disable_power(void);
 
+/**
+ * @brief Check whether the analog sensor rail is still settling.
+ *
+ * The linear regulator supplying the rail must not be re-energised too soon
+ * after being turned off (see VSEN_MIN_OFF_MS). Every path that powers the rail
+ * on must consult this first and skip powering on while it returns true.
+ *
+ * @return true if the rail was turned off less than VSEN_MIN_OFF_MS ago and must
+ *         not be re-enabled yet, false otherwise.
+ */
+bool etc_sensor_power_settling(void);
+
 /** Get the enter functional test status. This will return true if all four
  * sensor ports report a connected analog sensor and a low level on the 1-wire
  * sensor line.

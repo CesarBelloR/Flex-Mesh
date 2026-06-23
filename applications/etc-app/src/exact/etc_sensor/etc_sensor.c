@@ -49,6 +49,20 @@ static const struct gpio_dt_spec s1_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sens_s
 static const struct gpio_dt_spec vsen_en_dt =
 	GPIO_DT_SPEC_GET_OR(DT_NODELABEL(vsens_enable), control_gpios, 0);
 
+/* The linear regulator supplying the analog sensor rail (VCC_A) misbehaves when
+ * switched off and back on within a few hundred ms: its settling time grows to
+ * several seconds, producing invalid readings. Enforce a minimum off-time before
+ * the rail may be re-energised. This is a property of the rail, so it lives here
+ * (the rail owner) and every power-on path must honour it via
+ * etc_sensor_power_settling(). */
+#define VSEN_MIN_OFF_MS 2000
+/* 32-bit so reads/writes are atomic on this Cortex-M4: the timestamp is touched
+ * from the sensor poll thread, the calibration-timeout workqueue, and read from
+ * several threads, so a 64-bit value could be torn. The 2000 ms window is far
+ * below the 32-bit millisecond wrap, so unsigned wraparound arithmetic is
+ * exact. 0 doubles as the "rail never turned off" sentinel. */
+static uint32_t vsen_last_off_ms;
+
 static enum sensor_type list_sensor_type[SENSOR_INPUT_IN8 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN8 + 1];
 static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
@@ -164,10 +178,16 @@ static void etc_sensor_gpios_one_wire_enable(void)
 #endif
 }
 
+bool etc_sensor_power_settling(void)
+{
+	return vsen_last_off_ms != 0 && (k_uptime_get_32() - vsen_last_off_ms) < VSEN_MIN_OFF_MS;
+}
+
 bool etc_sensor_disable_power(void)
 {
 	if (gpio_pin_get_dt(&vsen_en_dt)) {
 		gpio_pin_set_dt(&vsen_en_dt, 0U);
+		vsen_last_off_ms = k_uptime_get_32();
 		return true;
 	}
 	return false;
@@ -175,7 +195,10 @@ bool etc_sensor_disable_power(void)
 
 static void etc_sensor_gpios_disable(void)
 {
-	gpio_pin_set_dt(&vsen_en_dt, 0U);
+	if (gpio_pin_get_dt(&vsen_en_dt)) {
+		gpio_pin_set_dt(&vsen_en_dt, 0U);
+		vsen_last_off_ms = k_uptime_get_32();
+	}
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 	gpio_pin_configure_dt(&sense_dt, GPIO_DISCONNECTED);
 #endif
