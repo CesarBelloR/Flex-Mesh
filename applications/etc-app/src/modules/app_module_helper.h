@@ -15,6 +15,21 @@
 bool app_module_is_aligned_interval(int interval_s);
 
 /**
+ * @brief Check whether @p now falls inside the regular transmit/receive window.
+ *
+ * The regular window is [interval boundary, boundary + rx_duration] for the
+ * aligned transmit interval (e.g. 12:00, 12:15 ... plus the rendezvous
+ * duration). It is used to decide whether the standard tx delay applies or a
+ * shorter reclaim-burst delay may be used outside the window. Intervals that
+ * are not aligned to an absolute boundary have no well-defined window and are
+ * reported as in-window (standard delay).
+ *
+ * @param now The current time.
+ * @return true if @p now is within the regular transmit window, false otherwise.
+ */
+bool app_module_in_regular_tx_window(time_t now);
+
+/**
  * @brief Aligns the wakeup time to the nearest interval based on the current time and job type.
  * 
  * @param now The current time.

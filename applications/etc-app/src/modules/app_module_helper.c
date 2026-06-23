@@ -15,6 +15,20 @@ bool app_module_is_aligned_interval(int interval_s)
 	       (interval_s % DEFAULT_PUBLISH_INTERVAL_S) == 0;
 }
 
+bool app_module_in_regular_tx_window(time_t now)
+{
+	int interval_s = etc_device_get_tx_interval_second();
+	int duration_s = etc_device_get_rx_duration();
+
+	/* Without an absolute interval boundary the window is undefined; treat as
+	 * in-window so the standard tx delay is used. */
+	if (interval_s <= 0 || !app_module_is_aligned_interval(interval_s)) {
+		return true;
+	}
+
+	return (now % interval_s) <= duration_s;
+}
+
 time_t app_module_align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 {
 	time_t wakeup_time;
