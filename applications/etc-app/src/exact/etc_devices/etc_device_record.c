@@ -977,35 +977,38 @@ int etc_device_record_reclaim(int start_time, int stop_time, bool dry_run)
 	LOG_DBG("Request to reclaim %d %d %d %d", start_time, stop_time, oldest_id, newest_id);
 
 	if (oldest_id < newest_id) {
-		for (int i = oldest_id; i < newest_id; i++) {
+		for (int i = oldest_id; i <= newest_id; i++) {
 			rc = etc_device_update_reclaim(i, start_time, stop_time);
 			if (rc < 0) {
-				LOG_ERR("Failed to find and update ACK based on reclaim "
-					"information");
-				goto done;
+				/* A single unreadable slot must not abort the whole
+				 * reclaim; skip it and keep scanning. */
+				rc = 0;
+				continue;
 			} else if (rc == 1) {
 				LOG_DBG("Found the range data for current request");
 				goto update;
 			}
 		}
 	} else {
-		for (int i = oldest_id; i < MAX_RECORD_NO_OFFSET_ID; i++) {
+		for (int i = oldest_id; i <= MAX_RECORD_NO_OFFSET_ID; i++) {
 			rc = etc_device_update_reclaim(i, start_time, stop_time);
 			if (rc < 0) {
-				LOG_ERR("Failed to find and update ACK based on reclaim "
-					"information");
-				goto done;
+				/* A single unreadable slot must not abort the whole
+				 * reclaim; skip it and keep scanning. */
+				rc = 0;
+				continue;
 			} else if (rc == 1) {
 				LOG_DBG("Found the range data for current request");
 				goto update;
 			}
 		}
-		for (int i = MIN_RECORD_NO_OFFSET_ID; i < newest_id; i++) {
+		for (int i = MIN_RECORD_NO_OFFSET_ID; i <= newest_id; i++) {
 			rc = etc_device_update_reclaim(i, start_time, stop_time);
 			if (rc < 0) {
-				LOG_ERR("Failed to find and update ACK based on reclaim "
-					"information");
-				goto done;
+				/* A single unreadable slot must not abort the whole
+				 * reclaim; skip it and keep scanning. */
+				rc = 0;
+				continue;
 			} else if (rc == 1) {
 				LOG_DBG("Found the range data for current request");
 				goto update;
@@ -1091,22 +1094,34 @@ int etc_device_record_reclaim_available(int start_time, int stop_time)
 	 * or once we move past it (rc == 2). Mirrors the wrap-around walk in
 	 * etc_device_record_reclaim() but touches no shared reclaim state. */
 	if (oldest_id < newest_id) {
-		for (int i = oldest_id; i < newest_id; i++) {
+		for (int i = oldest_id; i <= newest_id; i++) {
 			rc = etc_device_record_in_period(i, start_time, stop_time);
-			if (rc != 0) {
+			if (rc < 0) {
+				/* Skip an unreadable slot rather than abort the check. */
+				rc = 0;
+				continue;
+			} else if (rc != 0) {
 				goto done;
 			}
 		}
 	} else {
-		for (int i = oldest_id; i < MAX_RECORD_NO_OFFSET_ID; i++) {
+		for (int i = oldest_id; i <= MAX_RECORD_NO_OFFSET_ID; i++) {
 			rc = etc_device_record_in_period(i, start_time, stop_time);
-			if (rc != 0) {
+			if (rc < 0) {
+				/* Skip an unreadable slot rather than abort the check. */
+				rc = 0;
+				continue;
+			} else if (rc != 0) {
 				goto done;
 			}
 		}
-		for (int i = MIN_RECORD_NO_OFFSET_ID; i < newest_id; i++) {
+		for (int i = MIN_RECORD_NO_OFFSET_ID; i <= newest_id; i++) {
 			rc = etc_device_record_in_period(i, start_time, stop_time);
-			if (rc != 0) {
+			if (rc < 0) {
+				/* Skip an unreadable slot rather than abort the check. */
+				rc = 0;
+				continue;
+			} else if (rc != 0) {
 				goto done;
 			}
 		}
