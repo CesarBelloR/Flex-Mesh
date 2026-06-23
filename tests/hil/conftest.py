@@ -19,6 +19,11 @@ def pytest_addoption(parser):
                      help="Coiote device endpoint id for the relay-command E2E test")
     parser.addoption("--coiote-op-timeout", type=int, default=240,
                      help="Per-operation Coiote task poll timeout in seconds (default 240)")
+    parser.addoption("--logger-port", type=str, default=None,
+                     help="Serial port of the LoRa logger console, for the two-device "
+                          "end-to-end reclaim test (relay is the primary --port DUT).")
+    parser.addoption("--logger-id", type=str, default=None,
+                     help="LoRa logger device id used in the end-to-end reclaim test.")
 
 
 # Default config path: the etc-tools coiote_api repo sitting next to this
