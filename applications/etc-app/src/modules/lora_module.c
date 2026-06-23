@@ -19,6 +19,7 @@
 #define MODULE lora_module
 
 #include "modules_common.h"
+#include "app_module_helper.h"
 #include "events/app_event.h"
 #include "events/data_event.h"
 #include "events/lora_event.h"
@@ -34,6 +35,14 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #define LORA_SYNC_TIME_DIFF_SEC	      30
 #define LORA_LOGGER_ON_RECV_MODE_MSEC 1500
 #define LORA_LOGGER_ID_LEN	      ETC_DEVICE_LORA_LOGGER_ID_SIZE
+/* FW-965: while a reclaim is active and we are outside the regular transmit
+ * window, retries use this shorter random tx delay cap so reclaim records keep
+ * streaming within the relay's listening window. This does not overwrite the
+ * standard (persisted) tx delay. */
+#define LORA_TX_DELAY_RECLAIM_MSEC_MAX 20000
+/* FW-965: relay extends its listening window by this many seconds (instead of
+ * the default rx timeout) while it has an active reclaim queued. */
+#define LORA_RX_TIMEOUT_RECLAIM_SECS   20
 
 struct lora_msg_data {
 	union {
@@ -109,6 +118,9 @@ static char encoded_buffer[LORA_ACKCRYPT_LEN] = {0};
 static uint8_t lora_rx_buf[LORA_ACKUNCRYPT_LEN] = {0x00};
 static int lora_parent_id = -1;
 static uint8_t lora_pkt_counter = 0;
+/* FW-965: set once the logger has logged that it entered the shorter reclaim tx
+ * delay regime for the current send burst. Reset at the start of each burst. */
+static bool reclaim_tx_delay_logged;
 static struct lora_modem_config etc_lora_rx_config = {
 	.frequency = CONFIG_ETC_LORA_MODULE_RX_FREQUENCY,
 	.bandwidth = BW_125_KHZ,
@@ -610,7 +622,12 @@ static int module_lora_relay_wait_packet(int64_t uptime_start_ms)
 	relay_iccid[ETC_SETTING_RELAY_ICCID_LEN] = '\0';
 
 	start_waiting_time_ms = uptime_start_ms;
-	uint32_t extra_waiting_time_ms = etc_get_rx_timeout_secs() * 1000;
+	/* FW-965: extend the listening window while a reclaim is queued so the burst
+	 * can drain in one rendezvous. Latched at entry because the reclaim entry is
+	 * cleared once the logger sends its first reclaimed reading. */
+	uint32_t rx_timeout_secs = etc_relay_reclaim_count() > 0 ? LORA_RX_TIMEOUT_RECLAIM_SECS
+								 : etc_get_rx_timeout_secs();
+	uint32_t extra_waiting_time_ms = rx_timeout_secs * 1000;
 	uint32_t rx_duration_time_ms = etc_device_get_rx_duration() * 1000;
 	/* FW-125: Point 1 (Increase a RX Timeout by default ) */
 	max_waiting_time_ms = rx_duration_time_ms + extra_waiting_time_ms;
@@ -736,6 +753,16 @@ static int module_lora_process_packet(union etc_device_record record)
 	int rc = 0;
 	uint8_t cnt = 0;
 	char ack_id[sizeof("XXXX")];
+	/* FW-965: announce the shorter reclaim tx delay regime once per burst (the
+	 * shorter delay itself is applied on retries below). Logged here, at the
+	 * first send that meets the condition, so the regime is observable even
+	 * when no ACK retry occurs. */
+	if (!reclaim_tx_delay_logged && etc_device_record_num_reclaim_records() > 0 &&
+	    !app_module_in_regular_tx_window(date_time_now_second())) {
+		LOG_INF("Reclaim active: using shorter tx delay (<=%u ms)",
+			LORA_TX_DELAY_RECLAIM_MSEC_MAX);
+		reclaim_tx_delay_logged = true;
+	}
 retry:
 	if (lora_parent_id == -1 || cnt != 0) {
 		/* Reset parent ID on retry (or if it is already invalid) */
@@ -752,10 +779,20 @@ retry:
 	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
 
 	if (cnt != 0) {
-		/* Generate new TX_DELAY */
-		uint16_t new_tx_delay_msec =
-			(uint16_t)(sys_rand32_get() % ETC_SETTING_TX_DELAY_MSEC_MAX);
-		etc_set_tx_delay_msec(new_tx_delay_msec);
+		/* Generate new TX_DELAY. FW-965: during an active reclaim that has run
+		 * past the regular transmit window, use a shorter random delay so reclaim
+		 * records keep streaming within the relay's listening window, and do not
+		 * overwrite the standard (persisted) tx delay. */
+		bool short_delay = (etc_device_record_num_reclaim_records() > 0) &&
+				   !app_module_in_regular_tx_window(date_time_now_second());
+		uint16_t tx_delay_max = short_delay ? LORA_TX_DELAY_RECLAIM_MSEC_MAX
+						    : ETC_SETTING_TX_DELAY_MSEC_MAX;
+		uint16_t new_tx_delay_msec = (uint16_t)(sys_rand32_get() % tx_delay_max);
+		LOG_INF("Using %s TX delay %u ms", short_delay ? "reclaim" : "standard",
+			new_tx_delay_msec);
+		if (!short_delay) {
+			etc_set_tx_delay_msec(new_tx_delay_msec);
+		}
 		k_msleep(new_tx_delay_msec);
 	} else {
 		/* On first try, reload the tx delay and sleep the remaining ms that
@@ -874,6 +911,7 @@ static void module_lora_rx_thread_fn(void)
 			case LORA_REQUEST_IN_RUN_LOGGER: {
 				LOG_INF("Logger sending data");
 				int rc = 0;
+				reclaim_tx_delay_logged = false;
 				do {
 					union etc_device_record record;
 					int record_id;
