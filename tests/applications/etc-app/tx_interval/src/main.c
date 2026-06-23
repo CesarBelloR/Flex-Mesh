@@ -272,4 +272,27 @@ ZTEST(etc_interval_time_test, test_logger_lora_probe_no_sensor)
 		now = (now + sys_rand32_get() % 900);
 	} while (now < next_now);
 }
+/* FW-965: the regular transmit window spans [interval boundary, boundary +
+ * rx_duration]. Inside it the standard tx delay applies; outside it (with a
+ * reclaim active) a shorter reclaim-burst delay may be used. */
+ZTEST(etc_interval_time_test, test_in_regular_tx_window)
+{
+	int interval = etc_device_get_tx_interval_second();
+	int duration = etc_device_get_rx_duration();
+
+	/* The default interval is aligned to an absolute boundary. */
+	zassert_true(app_module_is_aligned_interval(interval));
+
+	time_t boundary = (APP_UNIT_TIMESTAMP / interval) * interval;
+
+	/* At and just inside the window edge -> in window. */
+	zassert_true(app_module_in_regular_tx_window(boundary));
+	zassert_true(app_module_in_regular_tx_window(boundary + duration));
+	/* Just past the window and right before the next boundary -> outside. */
+	zassert_false(app_module_in_regular_tx_window(boundary + duration + 1));
+	zassert_false(app_module_in_regular_tx_window(boundary + interval - 1));
+	/* The next boundary opens a fresh window again. */
+	zassert_true(app_module_in_regular_tx_window(boundary + interval));
+}
+
 ZTEST_SUITE(etc_interval_time_test, NULL, test_setup, NULL, NULL, NULL);
