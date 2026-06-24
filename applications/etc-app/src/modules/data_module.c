@@ -1011,11 +1011,13 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
 		bool device_id_is_default = etc_device_id_is_default();
+		bool battery_connected = etc_battery_is_connected();
 		functional_test_start(functional_test_event_handler);
 		SEND_EVENT(data, DATA_EVT_FUNCTIONAL_TEST_START);
 
 		track_functional_test(DATA_TYPE_SENSOR, (void *)msg->module.sensor.data.sensors);
 		track_functional_test(DATA_TYPE_DEVICE_ID_DEFAULT, (void *)&device_id_is_default);
+		track_functional_test(DATA_TYPE_BATTERY_CONNECTED, (void *)&battery_connected);
 	}
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_END)) {

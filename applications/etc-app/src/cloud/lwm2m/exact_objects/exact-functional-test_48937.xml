@@ -20,11 +20,13 @@
 				<Units></Units>
 				<Description><![CDATA[Result of the device's functional test.
 - 0: success
+- 1: ACK error
 - 2: Sensor error
 - 3: Battery error
 - 4: Modem error
 - 5: Device ID error
 - 6: Unknown error
+- 7: Battery not connected
 - 99: not started]]></Description>
 			</Item>
 		</Resources>

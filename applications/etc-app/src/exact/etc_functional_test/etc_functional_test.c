@@ -91,13 +91,14 @@ static enum functional_test_result evaluate_functional_test_result(void)
 		result = FUNC_TEST_FAIL_SENSOR;
 	} else if (test_data.lte_rsrp < etc_get_functional_test_rsrp_value()) {
 		result = FUNC_TEST_FAIL_MODEM;
+	} else if (!test_data.battery_connected) {
+		result = FUNC_TEST_FAIL_BAT_DISCONNECTED;
 	} else if (test_data.sensor_data.battery_mV < FUNC_TEST_MIN_BAT_VOLTAGE_MV) {
 		result = FUNC_TEST_FAIL_BAT;
 	/* Fail functional test if the device ID hasn't been set */
 	} else if (test_data.unset_device_id) {
 		result = FUNC_TEST_FAIL_DEVICE_ID;
-	} else if (!test_data.ack &&
-		   test_data.state >= FUNC_TEST_STATE_WAITING_FOR_ACK) {
+	} else if (!test_data.ack && test_data.state >= FUNC_TEST_STATE_WAITING_FOR_ACK) {
 		result = FUNC_TEST_FAIL_ACK;
 	} else {
 		result = FUNC_TEST_SUCCESS;
@@ -165,6 +166,10 @@ int track_functional_test(enum functional_test_data_type type,
 	case DATA_TYPE_DEVICE_ID_DEFAULT:
 		bool default_id = *((bool *)data);
 		test_data.unset_device_id = default_id;
+		break;
+	case DATA_TYPE_BATTERY_CONNECTED:
+		bool battery_connected = *((bool *)data);
+		test_data.battery_connected = battery_connected;
 		break;
 	default:
 	}

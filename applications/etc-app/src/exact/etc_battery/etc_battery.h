@@ -2,6 +2,7 @@
 #define ETC_BATTERY_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 enum battery_level {
 	/* Battery low level from 0 to < 6 */
@@ -62,5 +63,20 @@ uint16_t etc_battery_get_voltage_mV(void);
  * @return Percentage value from 0 to 100.
 */
 uint8_t etc_battery_percentage_from_voltage(uint16_t voltage_mv);
+
+/**
+ * @brief Check whether a battery is physically connected.
+ *
+ * Performs an active measurement: charging is briefly disabled so the BAT pin
+ * is no longer held at the charge voltage, the battery voltage is sampled, and
+ * charging is re-enabled. A voltage that collapses below
+ * CONFIG_BATTERY_NOT_INSTALL_MV indicates no battery is installed. This is
+ * required because, while a charger is attached, the PMIC holds the BAT pin
+ * near the charge voltage and a missing battery cannot be detected passively.
+ *
+ * @retval true A battery is connected.
+ * @retval false No battery is connected (or the PMIC is not ready).
+ */
+bool etc_battery_is_connected(void);
 
 #endif /* ETC_BATTERY_H_ */

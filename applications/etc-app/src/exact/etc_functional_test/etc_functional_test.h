@@ -7,7 +7,8 @@ enum functional_test_data_type {
 	DATA_TYPE_SENSOR,
 	DATA_TYPE_MODEM,
 	DATA_TYPE_ACK,
-	DATA_TYPE_DEVICE_ID_DEFAULT
+	DATA_TYPE_DEVICE_ID_DEFAULT,
+	DATA_TYPE_BATTERY_CONNECTED
 };
 
 enum functional_test_state {
@@ -25,7 +26,10 @@ enum functional_test_result {
 	FUNC_TEST_FAIL_BAT,
 	FUNC_TEST_FAIL_MODEM,
 	FUNC_TEST_FAIL_DEVICE_ID,
-	FUNC_TEST_FAIL_UNKNOWN
+	FUNC_TEST_FAIL_UNKNOWN,
+	/* Appended to keep the existing values stable, as the result is sent
+	 * directly as the LwM2M status code. */
+	FUNC_TEST_FAIL_BAT_DISCONNECTED
 };
 
 enum functional_test_evt {
@@ -38,6 +42,7 @@ struct functional_test_data {
 	int16_t lte_rsrp;
 	bool ack;
 	bool unset_device_id;
+	bool battery_connected;
 	enum functional_test_state state;
 	/* Result of the test (pass/fail) */
 	enum functional_test_result result;

@@ -8,6 +8,12 @@ LOG_MODULE_REGISTER(etc_battery, CONFIG_ETC_BATTERY_LOG_LEVEL);
 #include "etc_sensor.h"
 #include "bq25618.h"
 
+/* Time for the BAT pin to collapse below CONFIG_BATTERY_NOT_INSTALL_MV when no
+ * cell is present, after charging is disabled. Characterised on hardware
+ * (FW-169): with no battery the BAT node falls from ~4060 mV to ~1300 mV within
+ * ~1.5 s of disabling charging; an installed cell holds the node up. */
+#define BATTERY_DETECT_SETTLE_MS 1500
+
 const struct device* battery_dev = DEVICE_DT_GET_ANY(ti_bq25618);
 static enum battery_status last_battery_status = BATTERY_UNKNOWN;
 static etc_battery_evt_handler_t etc_battery_cb = NULL;
@@ -99,6 +105,25 @@ static void etc_battery_charger_handler(uint8_t bus_status,
 uint16_t etc_battery_get_voltage_mV(void)
 {
 	return etc_sensor_get_battery();
+}
+
+bool etc_battery_is_connected(void)
+{
+	if (!device_is_ready(battery_dev)) {
+		LOG_ERR("Battery device is not ready");
+		return false;
+	}
+
+	/* Disable charging so the charger stops holding the BAT pin at the
+	 * charge voltage, then sample. Charging is always re-enabled. */
+	bq25618_disable_charging(battery_dev);
+	k_msleep(BATTERY_DETECT_SETTLE_MS);
+	uint16_t battery_mV = etc_sensor_sample_and_get_battery();
+	bq25618_enable_charging(battery_dev);
+
+	LOG_DBG("Battery presence check: %u mV", battery_mV);
+
+	return battery_mV >= CONFIG_BATTERY_NOT_INSTALL_MV;
 }
 
 uint8_t etc_battery_percentage_from_voltage(uint16_t voltage_mv)
