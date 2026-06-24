@@ -92,6 +92,12 @@ static struct data_modem_dynamic modem_dynamic;
 
 static bool first_send = true;
 static bool need_interval_tx_send = true;
+/* One-shot: flag the next record sent as a priority reading so the Portal
+ * processes it immediately. Initialised true so the first reading after boot is
+ * priority; set again whenever a magnet/button (user-triggered) reading is
+ * taken. Consumed by data_encode_for_logger() on the first record actually sent.
+ */
+static bool priority_reading_pending = true;
 /* Size of the static modem (modem_stat) data structure.
  * Used to provide an array size when encoding batch data.
  */
@@ -491,6 +497,12 @@ static int data_encode_for_logger() {
 		ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
 		if (ret != 0) {
 			LOG_WRN("Error populating data codec");
+		} else if (priority_reading_pending) {
+			/* Flag this reading as priority so the Portal processes it
+			 * immediately. One-shot: consume so only one record is flagged.
+			 */
+			data_codec_add_priority(&codec);
+			priority_reading_pending = false;
 		}
 	}
 
@@ -844,6 +856,10 @@ static void on_all_states(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_USER_TRIGGERED_DATA_READY)) {
 		save_new_sensor_data(msg->module.sensor.data.sensors);
+		/* A magnet swipe / button press is a priority reading: flag the
+		 * next record sent so the Portal processes it immediately.
+		 */
+		priority_reading_pending = true;
 		int64_t time_now = k_uptime_get();
 		/* Save current device record stat when a sample is triggered by a user.
 		 * This ensures that data can be recovered properly after a magnet hard
@@ -879,15 +895,19 @@ static void on_all_states(struct data_msg_data *msg)
 		}
 		reset_send_status(&send_status);
 		data_codec_clear_data(&codec);
+		/* The flag (if any) was carried by the send just acknowledged; clear it
+		 * so it is not reported on later whole-Info-object sends.
+		 */
+		data_codec_reset_priority();
 		if (state == STATE_CLOUD_CONNECTED) {
 			if (etc_device_is_relay()) {
-				if (state_relay_send == STATE_RELAY_SEND_META_MODEL || 
+				if (state_relay_send == STATE_RELAY_SEND_META_MODEL ||
 				    state_relay_send == STATE_RELAY_SEND_SENSOR) {
 					state_relay_send = STATE_RELAY_SEND_RECORD_READY;
 				} else if (state_relay_send == STATE_RELAY_SEND_RECORD_DONE) {
 					etc_device_sync_relay_data();
 					state_relay_send = STATE_RELAY_SEND_RECORD_READY;
-				} 
+				}
 			}
 			data_encode_for_cloud(false, etc_device_is_relay());
 		}

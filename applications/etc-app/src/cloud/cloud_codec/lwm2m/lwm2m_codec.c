@@ -388,6 +388,45 @@ int data_codec_prepare_next_tx_transmit_info(struct cloud_codec_data *cloud_data
 	return err;
 }
 
+int data_codec_add_priority(struct cloud_codec_data *cloud_data)
+{
+	int err;
+
+	if (cloud_data == NULL) {
+		LOG_ERR("Null cloud data");
+		return -ENOMEM;
+	}
+
+	err = lwm2m_set_bool(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_PRIORITY), true);
+	if (err == 0) {
+		static const struct lwm2m_obj_path path_list[] = {
+			LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_PRIORITY),
+		};
+
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data, path_list,
+							       ARRAY_SIZE(path_list));
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			return err;
+		}
+	}
+
+	return err;
+}
+
+void data_codec_reset_priority(void)
+{
+	/* Clear the Priority flag so it is not reported on subsequent sends that
+	 * carry the whole EXACT Info object (e.g. the update / modem-static
+	 * packets). Only updates the on-device value; no path is added so nothing
+	 * is sent until the resource is part of a future send.
+	 */
+	int err = lwm2m_set_bool(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_PRIORITY), false);
+	if (err) {
+		LOG_ERR("Failed clearing priority flag, error: %d", err);
+	}
+}
+
 int data_codec_has_data(struct cloud_codec_data *cloud_data)
 {
 	__ASSERT_NO_MSG(cloud_data != NULL);

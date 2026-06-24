@@ -193,6 +193,27 @@ int data_codec_prepare_ble_packet(struct cloud_codec_data *cloud_data,
 
 int data_codec_prepare_next_tx_transmit_info(struct cloud_codec_data *cloud_data);
 
+/**
+ * @brief Flag the current record send as a priority reading.
+ *
+ * Sets the EXACT Info object Priority resource (48933/0/7) to true and adds it
+ * to the send so the Portal processes the reading immediately instead of waiting
+ * for the periodic batch. Only called for priority readings (magnet swipe, first
+ * reading after boot); the resource is omitted for normal readings.
+ *
+ * @param cloud_data Pointer to the cloud_data struct.
+ * @return 0 on success, negative error code otherwise.
+ */
+int data_codec_add_priority(struct cloud_codec_data *cloud_data);
+
+/**
+ * @brief Clear the EXACT Info Priority flag (48933/0/7) on the device.
+ *
+ * Call after a send completes so the flag is not reported on later sends that
+ * carry the whole EXACT Info object. Does not add a path / does not send.
+ */
+void data_codec_reset_priority(void);
+
 int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_static *modem_data);
 

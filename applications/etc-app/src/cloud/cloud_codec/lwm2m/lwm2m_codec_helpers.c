@@ -1563,6 +1563,24 @@ static inline bool is_path_measurement(struct lwm2m_obj_path *path)
 	return false;
 }
 
+/**
+ * Check if the path is the EXACT Info Priority resource (48933/0/7).
+ * The Priority flag must stay grouped with the temperature reading it
+ * accompanies, so it is kept in the primary send during a split. It is
+ * intentionally distinct from is_path_measurement() so reclaim/measurement
+ * detection semantics are unaffected.
+ *
+ * @param path Path to check.
+ * @return True if the path is the Priority resource, false otherwise.
+ */
+static inline bool is_path_priority(struct lwm2m_obj_path *path)
+{
+	__ASSERT_NO_MSG(path != NULL);
+
+	return (path->level == 3) && (path->obj_id == ETC_INFO_OBJECT_ID) &&
+	       (path->res_id == ETC_INFO_OBJ_R_PRIORITY);
+}
+
 bool lwm2m_codec_helpers_object_path_list_contains_measurement(struct cloud_codec_data *cloud_data)
 {
 	__ASSERT_NO_MSG(cloud_data != NULL);
@@ -1606,7 +1624,8 @@ int lwm2m_codec_helpers_object_path_list_split(struct cloud_codec_data *cloud_da
 	 * measurement data, copy them into the temporary path list, and invalidate
 	   them by setting the level to 0. */
 	for (int i = 0; i < cloud_data->valid_object_paths; i++) {
-		if (!is_path_measurement(&cloud_data->paths[i])) {
+		if (!is_path_measurement(&cloud_data->paths[i]) &&
+		    !is_path_priority(&cloud_data->paths[i])) {
 			path_list[path_size].obj_id = cloud_data->paths[i].obj_id;
 			path_list[path_size].obj_inst_id = cloud_data->paths[i].obj_inst_id;
 			path_list[path_size].res_id = cloud_data->paths[i].res_id;
