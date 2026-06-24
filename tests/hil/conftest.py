@@ -24,6 +24,10 @@ def pytest_addoption(parser):
                           "end-to-end reclaim test (relay is the primary --port DUT).")
     parser.addoption("--logger-id", type=str, default=None,
                      help="LoRa logger device id used in the end-to-end reclaim test.")
+    parser.addoption("--functional-test-expect", type=int, default=7,
+                     help="Expected functional-test Result code (48937/0/1) for the "
+                          "no-battery HIL test (default 7 = battery not connected; "
+                          "use 0 for the battery-installed positive case)")
 
 
 # Default config path: the etc-tools coiote_api repo sitting next to this
