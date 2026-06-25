@@ -27,5 +27,6 @@ manifest:
       remote: exact
     - name: etc-common-firmware
       remote: exact-ssh
-      revision: f53f55a0fb0624a4824a38e839de00523f645e4e
+      # FW-707: EXACT Info Priority resource (etc-common-firmware#149, merged to main).
+      revision: 81c452fcbd8f063e47551e5a83f71ad95471bf14
       path: modules/exact
