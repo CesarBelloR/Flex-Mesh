@@ -66,25 +66,28 @@ static uint8_t msg_id_cnt = 0;
 static struct sensor_data last_sensor_data;
 static struct flex_ble_frame flex_frame;
 static etc_ble_evt_handler_t ble_evt_handler;
-static bool flex_ble_is_adversting = false;
-static bool flex_ble_is_magnet_trigger = false;
 static char device_id[ETC_SETTINGS_DEVICE_ID_LEN];
 
-static uint8_t adv_data[] = {
-	0x00, 0x00, 0x00, 0x00, // Probe 1
-	0x00, 0x00, 0x00, 0x00, // Probe 2
-	0x00, 0x00, 0x00, 0x00, // Probe 3
-	0x00, 0x00, 0x00, 0x00, // Probe 4
-	0x00, 0x00, 0x00, 0x00, // Ambient
-	0x00, 0x00, 0x00, 0x00, // Humid 
-	0x00, // Battery status
-	0x00, // Battery
-};
+/* Advertisement manufacturer data, built in advertise(). Layout:
+ *   Probe 1-4 (4x float), Ambient (float), Humidity (float),
+ *   [splitter 1.B-4.B (4x float), only when a splitter is attached],
+ *   Battery status (1 byte), Battery (1 byte).
+ * The splitter block is all-or-nothing, so the used length is either 26 bytes
+ * (no splitter) or 42 bytes (splitter); the battery bytes are always last.
+ */
+#define ADV_DATA_MAX_LEN 42
+static uint8_t adv_data[ADV_DATA_MAX_LEN] = {0x00};
 
-static const struct bt_data ad[] = {
-	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-	BT_DATA(BT_DATA_MANUFACTURER_DATA, adv_data, sizeof(adv_data)),
-};
+/* Advertising state. The set is created lazily in advertise() and recreated only
+ * when the PDU type must change: legacy (ADV_IND) when there is no splitter block,
+ * extended advertising when the splitter block pushes the payload past the 31-byte
+ * legacy limit. */
+static struct {
+	struct bt_le_ext_adv *set; /* active set, NULL until first advertise() */
+	bool set_is_ext;	   /* true: extended PDUs (splitter); false: legacy PDUs */
+	bool is_advertising;	   /* advertising is currently enabled */
+	bool is_magnet_trigger;	   /* advertising was started by a magnet trigger */
+} adv_state;
 
 static ssize_t flex_sensor_on_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
 				   uint16_t len, uint16_t offset);
@@ -405,21 +408,90 @@ static void advertise(struct k_work *work)
 	offset += sizeof(float);
 	memcpy(&adv_data[offset], &last_sensor_data.sensor[SENSOR_INPUT_HUMID], sizeof(float));
 	offset += sizeof(float);
+
+	/* Splitter sub-port temperatures (1.B..4.B = IN5..IN8), inserted before
+	 * the battery fields. All-or-nothing: include all four when a splitter is
+	 * attached (any sub-port valid), otherwise omit the block. Interior gaps
+	 * carry the raw sentinel float, like the probe/ambient channels.
+	 */
+	bool has_splitter = false;
+	for (int i = SENSOR_INPUT_IN5; i <= SENSOR_INPUT_IN8; i++) {
+		if (sensor_temperature_is_valid(last_sensor_data.sensor[i])) {
+			has_splitter = true;
+			break;
+		}
+	}
+	if (has_splitter) {
+		for (int i = SENSOR_INPUT_IN5; i <= SENSOR_INPUT_IN8; i++) {
+			memcpy(&adv_data[offset], &last_sensor_data.sensor[i], sizeof(float));
+			offset += sizeof(float);
+		}
+	}
+
 	memcpy(&adv_data[offset], &bat_status, sizeof(enum battery_status));
 	offset += sizeof(enum battery_status);
 	battery = etc_battery_percentage_from_voltage(last_sensor_data.battery_mV);
 	memcpy(&adv_data[offset], &battery, sizeof(uint8_t));
-	LOG_HEXDUMP_INF(adv_data, sizeof(adv_data), "ADV-DATA");
+	offset += sizeof(uint8_t);
+	LOG_HEXDUMP_INF(adv_data, offset, "ADV-DATA");
 
-	bt_le_adv_stop();
+	/* A splitter pushes the manufacturer data past the 31-byte legacy limit and
+	 * needs extended advertising (whose connectable form is not scannable, so the
+	 * name rides in the adv data). Without a splitter we use legacy ADV_IND so
+	 * BT-4.x-only centrals can still discover the device, with the name in the
+	 * scan response. The bt_data is built per call since the length varies. */
+	bool want_ext = has_splitter;
 
-	rc = bt_le_adv_start(BT_LE_ADV_CONN_NAME, ad, ARRAY_SIZE(ad), NULL, 0);
+	struct bt_data ad[] = {
+		BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+		BT_DATA(BT_DATA_MANUFACTURER_DATA, adv_data, offset),
+		BT_DATA(BT_DATA_NAME_COMPLETE, flex_device_name, strlen(flex_device_name)),
+	};
+	struct bt_data sd[] = {
+		BT_DATA(BT_DATA_NAME_COMPLETE, flex_device_name, strlen(flex_device_name)),
+	};
+
+	/* Recreate the set if the required PDU type changed (a splitter was attached
+	 * or removed since the last advertisement). Rare - not per-sample. */
+	if (adv_state.set != NULL && adv_state.set_is_ext != want_ext) {
+		bt_le_ext_adv_stop(adv_state.set);
+		bt_le_ext_adv_delete(adv_state.set);
+		adv_state.set = NULL;
+	}
+
+	if (adv_state.set == NULL) {
+		const struct bt_le_adv_param *param =
+			want_ext ? BT_LE_EXT_ADV_CONN : BT_LE_ADV_CONN;
+		rc = bt_le_ext_adv_create(param, NULL, &adv_state.set);
+		if (rc) {
+			LOG_ERR("Failed to create advertising set (rc %d)", rc);
+			return;
+		}
+		adv_state.set_is_ext = want_ext;
+	} else {
+		bt_le_ext_adv_stop(adv_state.set);
+	}
+
+	if (want_ext) {
+		rc = bt_le_ext_adv_set_data(adv_state.set, ad, ARRAY_SIZE(ad), NULL, 0);
+	} else {
+		/* Legacy: flags + manufacturer data in the advertisement (<=31 B); the
+		 * trailing name element is omitted here and carried in the scan response. */
+		rc = bt_le_ext_adv_set_data(adv_state.set, ad, ARRAY_SIZE(ad) - 1, sd,
+					    ARRAY_SIZE(sd));
+	}
+	if (rc) {
+		LOG_ERR("Failed to set advertising data (rc %d)", rc);
+		return;
+	}
+
+	rc = bt_le_ext_adv_start(adv_state.set, BT_LE_EXT_ADV_START_DEFAULT);
 	if (rc) {
 		LOG_ERR("Advertising failed to start (rc %d)", rc);
 		return;
 	}
 
-	LOG_INF("Advertising successfully started");
+	LOG_INF("Advertising successfully started (%s)", want_ext ? "extended" : "legacy");
 }
 
 static void flex_ble_sensor_work_handler(struct k_work *work)
@@ -429,10 +501,12 @@ static void flex_ble_sensor_work_handler(struct k_work *work)
 
 static void flex_ble_adv_magnet_work_handler(struct k_work *work)
 {
-	flex_ble_is_magnet_trigger = false;
-	flex_ble_is_adversting = false;
+	adv_state.is_magnet_trigger = false;
+	adv_state.is_advertising = false;
 	/* Stop adv */
-	bt_le_adv_stop();
+	if (adv_state.set != NULL) {
+		bt_le_ext_adv_stop(adv_state.set);
+	}
 }
 
 static void mtu_exchange_cb(struct bt_conn *conn, uint8_t err,
@@ -457,7 +531,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		}
 
 		/* Cancel work scheduler for stop advertising */
-		if (flex_ble_is_magnet_trigger) {
+		if (adv_state.is_magnet_trigger) {
 			k_work_cancel_delayable(&flex_ble_adv_magnet_work);
 		}
 
@@ -479,7 +553,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	/* Submit work for advertise */
 	k_work_submit(&advertise_work);
 	/* Restart the scheduler for magnet advertising */
-	if (flex_ble_is_magnet_trigger) {
+	if (adv_state.is_magnet_trigger) {
 		k_work_reschedule(&flex_ble_adv_magnet_work,
 				  K_SECONDS(CONFIG_ETC_BLE_ADV_MAGNET_TIMEOUT_SEC));
 	}
@@ -659,10 +733,15 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler)
 	etc_ble_set_bt_name();
 
 	LOG_INF("Bluetooth initialized");
-	memset(last_sensor_data.sensor, 0, sizeof(last_sensor_data.sensor));
+	/* Mark every channel disconnected until the first real sample. 0.0 reads as a
+	 * valid temperature, which would make the first advertisement (before any
+	 * sample) look like it carries a splitter and pick extended advertising. */
+	for (int i = 0; i < ARRAY_SIZE(last_sensor_data.sensor); i++) {
+		last_sensor_data.sensor[i] = SENSOR_TEMP_NO_CONNECTED;
+	}
 	k_work_init(&advertise_work, advertise);
 	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
-	flex_ble_is_adversting = false;
+	adv_state.is_advertising = false;
 	return 0;
 }
 
@@ -670,18 +749,18 @@ void etc_ble_start_adv(void)
 {
 	/* Force to cancel this work. Since BLE mode always advertise */
 	k_work_cancel_delayable(&flex_ble_adv_magnet_work);
-	flex_ble_is_magnet_trigger = false;
-	flex_ble_is_adversting = true;
+	adv_state.is_magnet_trigger = false;
+	adv_state.is_advertising = true;
 	k_work_submit(&advertise_work);
 }
 
 void etc_ble_stop_adv(void)
 {
 	if (current_conn != NULL) {
-		bt_le_adv_stop();
-	} else {
 		bt_conn_disconnect(current_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-		bt_le_adv_stop();
+	}
+	if (adv_state.set != NULL) {
+		bt_le_ext_adv_stop(adv_state.set);
 	}
 }
 
@@ -691,10 +770,10 @@ void etc_ble_start_adv_with_timeout(void)
 		return;
 	}
 
-	flex_ble_is_adversting = true;
+	adv_state.is_advertising = true;
 
 	if (etc_get_device_mode() != ETC_DEVICE_MODE_BLE) {
-		flex_ble_is_magnet_trigger = true;
+		adv_state.is_magnet_trigger = true;
 		k_work_schedule(&flex_ble_adv_magnet_work,
 				K_SECONDS(CONFIG_ETC_BLE_ADV_MAGNET_TIMEOUT_SEC));
 	}
@@ -703,7 +782,7 @@ void etc_ble_start_adv_with_timeout(void)
 
 void etc_ble_set_current_sensor(struct sensor_data *data)
 {
-	if (!flex_ble_is_adversting) {
+	if (!adv_state.is_advertising) {
 		return;
 	}
 

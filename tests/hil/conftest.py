@@ -28,6 +28,10 @@ def pytest_addoption(parser):
                      help="Expected functional-test Result code (48937/0/1) for the "
                           "no-battery HIL test (default 7 = battery not connected; "
                           "use 0 for the battery-installed positive case)")
+    parser.addoption("--ble-name", type=str, default=None,
+                     help="BLE advertised name of the DUT (e.g. 'Flex_10000199') for the "
+                          "BLE splitter test. Defaults to the first device advertising with "
+                          "the 'Flex_' prefix.")
 
 
 # Default config path: the etc-tools coiote_api repo sitting next to this

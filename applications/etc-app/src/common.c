@@ -9,7 +9,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(common, CONFIG_ETC_APP_LOG_LEVEL);
 
-#define PAYLOAD_LOGGER_LEGACY_LEN 110
+#define PAYLOAD_LOGGER_LEGACY_LEN 128
 
 static char decoded_buf[PAYLOAD_LOGGER_LEGACY_LEN] = {0x00};
 
@@ -194,7 +194,12 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 		<Firmware version>,<ID/Serial number>,<Battery voltage>,
 		<packet #>,<timestamp>,
 		<temp 1>,<temp 2>,<temp 3>,<temp 4>,<temp 5>,<humidity>,
-		<isReclaimed>
+		<isReclaimed>[,<temp 1.B>[,<temp 2.B>[,<temp 3.B>[,<temp 4.B>]]]]
+
+	   The splitter sub-port temperatures (1.B..4.B = IN5..IN8) are appended
+	   after isReclaimed. Trailing disconnected sub-ports are omitted: the
+	   fields run from 1.B up to the highest sub-port with a valid reading, so
+	   interior gaps appear as "*" but nothing is sent past the last valid port.
 	 */
 	decoded_buf_len +=
 		snprintf(decoded_buf, sizeof(decoded_buf), "%s,%s,%1.2f,%d,%d,", APP_VERSION_STRING,
@@ -224,6 +229,29 @@ int etc_common_prepare_logger_legacy_data(union etc_device_record record, bool i
 	decoded_buf_len +=
 		snprintf(decoded_buf + decoded_buf_len, sizeof(decoded_buf) - decoded_buf_len, "%d",
 			 is_reclaim ? 1 : 0);
+
+	/* Splitter sub-port temperatures (1.B..4.B = IN5..IN8), appended after
+	 * isReclaimed. Emit IN5 up through the highest sub-port with a valid
+	 * reading; trailing disconnected sub-ports are omitted (interior gaps
+	 * become "*").
+	 */
+	int last_b = -1;
+	for (int i = SENSOR_INPUT_IN5; i <= SENSOR_INPUT_IN8; i++) {
+		if (sensor_temperature_is_valid(record.sensor[i])) {
+			last_b = i;
+		}
+	}
+	if (last_b >= 0) {
+		decoded_buf_len += snprintf(decoded_buf + decoded_buf_len,
+					    sizeof(decoded_buf) - decoded_buf_len, ",");
+		for (int i = SENSOR_INPUT_IN5; i <= last_b; i++) {
+			etc_common_add_sensor_value(decoded_buf, &decoded_buf_len,
+						    sizeof(decoded_buf), record.sensor[i]);
+		}
+		/* Drop the helper's trailing comma so the string ends cleanly. */
+		decoded_buf_len--;
+	}
+
 	decoded_buf[decoded_buf_len] = '\0';
 	/* Include null terminator. Do not increment decodec_buf_len, as this
 	 * would also modify out_len. */

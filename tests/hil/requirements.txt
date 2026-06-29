@@ -1,3 +1,7 @@
 pytest_embedded==2.1.0
 pytest-embedded-serial==2.1.0
 requests
+bleak>=0.20.0
+# BlueZ pairing agent for the BLE notification test (Just Works auto-confirm).
+# Pulled in transitively by bleak on Linux, pinned here as it is used directly.
+dbus-fast>=2.0.0
