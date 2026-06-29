@@ -11,9 +11,16 @@ int etc_get_relay_iccid(char *buf, int buf_len)
 	return copy_size;
 }
 
+static enum etc_device_type mock_device_type = ETC_DEVICE_TYPE_LOGGER;
+
+void mock_set_device_type(enum etc_device_type type)
+{
+	mock_device_type = type;
+}
+
 enum etc_device_type etc_get_device_type(void)
 {
-	return ETC_DEVICE_TYPE_LOGGER;
+	return mock_device_type;
 }
 
 /* Tests for the reclaim-request APIs need the device to look like a relay
