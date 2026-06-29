@@ -296,7 +296,7 @@ int etc_device_read_record(union etc_device_record *record, bool *active_reclaim
 		etc_device_set_ack_record(record_id);
 		return ret;
 	}
-	etc_device_map_embeddable_sensor_data(record);
+	etc_device_map_two_port_sensor_data(record->sensor);
 	LOG_DBG("Record ID %d", record_id);
 	return record_id;
 }

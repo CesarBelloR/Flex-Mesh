@@ -532,12 +532,19 @@ int etc_device_unpack_sensor_data(union etc_device_record *record)
 	return rc;
 }
 
-void etc_device_map_embeddable_sensor_data(union etc_device_record *record)
+void etc_device_map_two_port_sensor_data(float *sensor)
 {
-	if (etc_get_device_type() == ETC_DEVICE_TYPE_EMBEDDABLE) {
-		record->sensor[SENSOR_INPUT_IN3] = record->sensor[SENSOR_INPUT_IN5];
-		record->sensor[SENSOR_INPUT_IN4] = record->sensor[SENSOR_INPUT_IN6];
-		record->sensor[SENSOR_INPUT_IN5] = SENSOR_TEMP_NO_CONNECTED;
-		record->sensor[SENSOR_INPUT_IN6] = SENSOR_TEMP_NO_CONNECTED;
+	enum etc_device_type type = etc_get_device_type();
+
+	if (type == ETC_DEVICE_TYPE_EMBEDDABLE || type == ETC_DEVICE_TYPE_AMBIENT) {
+		sensor[SENSOR_INPUT_IN3] = sensor[SENSOR_INPUT_IN5];
+		sensor[SENSOR_INPUT_IN4] = sensor[SENSOR_INPUT_IN6];
+		sensor[SENSOR_INPUT_IN5] = SENSOR_TEMP_NO_CONNECTED;
+		sensor[SENSOR_INPUT_IN6] = SENSOR_TEMP_NO_CONNECTED;
+		/* A 2-port device has no 3.B/4.B sub-ports; clear IN7/IN8 so it
+		 * never emits a splitter block, whatever is physically wired.
+		 */
+		sensor[SENSOR_INPUT_IN7] = SENSOR_TEMP_NO_CONNECTED;
+		sensor[SENSOR_INPUT_IN8] = SENSOR_TEMP_NO_CONNECTED;
 	}
 }

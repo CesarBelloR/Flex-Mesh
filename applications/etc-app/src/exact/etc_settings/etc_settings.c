@@ -974,7 +974,12 @@ enum etc_device_type etc_get_device_type(void)
 		case 12:
 			type = ETC_DEVICE_TYPE_EMBEDDABLE;
 			break;
+		/* 13/14/15 are the same Lite hardware (Flex Lite, Climate Pro
+		 * Lite, Control Pro Sensor); all use the 2-port handling.
+		 */
 		case 13:
+		case 14:
+		case 15:
 			type = ETC_DEVICE_TYPE_AMBIENT;
 			break;
 		default:

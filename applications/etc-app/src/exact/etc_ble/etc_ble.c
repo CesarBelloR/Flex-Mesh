@@ -16,6 +16,7 @@ LOG_MODULE_REGISTER(etc_ble);
 #include <cJSON_os.h>
 #include "etc_ble.h"
 #include "etc_battery.h"
+#include "etc_device_helper.h"
 #include "etc_settings.h"
 #include "etc_util.h"
 #include "ble_helpers.h"
@@ -787,6 +788,10 @@ void etc_ble_set_current_sensor(struct sensor_data *data)
 	}
 
 	memcpy(&last_sensor_data, data, sizeof(last_sensor_data));
+	/* Lite/Embeddable: remap the 2-way splitter sub-ports so the
+	 * advertisement uses the same port layout as every other channel.
+	 */
+	etc_device_map_two_port_sensor_data(last_sensor_data.sensor);
 	if (current_conn == NULL) {
 		k_work_submit(&advertise_work);
 	}

@@ -87,15 +87,17 @@ int etc_device_pack_sensor_data(struct sensor_data *sensor, union etc_device_rec
  */
 int etc_device_unpack_sensor_data(union etc_device_record* record);
 
-
 /**
- * If device is an embeddable swap sensor data to enable LoRa communication support
- * when splitters are connected.
+ * For Lite and Embeddable devices, remap the 2-way splitter sub-ports into the
+ * unused primary ports so every channel emits the same layout
+ * (port1, port2, port1.B, port2.B, ...) without a dedicated splitter block.
  * Swap is performed as follows:
- *   Port 1.B -> Port 3
- *   Port 2.B -> Port 4
- * @param record The record to modify.
+ *   Port 1.B (IN5) -> Port 3 (IN3)
+ *   Port 2.B (IN6) -> Port 4 (IN4)
+ * IN5-IN8 are then cleared: a 2-port device has no 3.B/4.B sub-ports and must
+ * never emit a splitter block. No-op for all other device types.
+ * @param sensor The sensor value array to modify (indexed by SENSOR_INPUT_*).
  */
-void etc_device_map_embeddable_sensor_data(union etc_device_record *record);
+void etc_device_map_two_port_sensor_data(float *sensor);
 
 #endif /* ETC_DEVICE_HELPER_H */
