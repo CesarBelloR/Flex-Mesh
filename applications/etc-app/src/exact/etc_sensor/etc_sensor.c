@@ -7,6 +7,7 @@
 #include "cloud/cloud_codec/data_codec.h"
 #include "common.h"
 #include "etc_sensor.h"
+#include "etc_sensor_calibration_load.h"
 #include "etc_device.h"
 #include "etc_battery.h"
 #include "adc.h"
@@ -462,54 +463,7 @@ static void etc_sensor_run_analog_sample(void)
 
 static void etc_sensor_load_calibration(void)
 {
-	int rc = 0;
-	etc_sensor_adc_calibration_info.loaded = false;
-	rc = etc_device_read_setting(ETC_CALIBRATION_USER_OFFSET_ID,
-				     &etc_sensor_adc_calibration_info.offset,
-				     sizeof(etc_sensor_adc_calibration_info.offset));
-	if (rc) {
-		LOG_ERR("Can't load the user calibration for offset");
-		goto factory;
-	}
-	rc = etc_device_read_setting(ETC_CALIBRATION_USER_RAWHIGH_ID,
-				     &etc_sensor_adc_calibration_info.high,
-				     sizeof(etc_sensor_adc_calibration_info.high));
-	if (rc) {
-		LOG_ERR("Can't load the user calibration for raw high offset");
-		goto factory;
-	}
-	rc = etc_device_read_setting(ETC_CALIBRATION_USER_REF_ID,
-				     &etc_sensor_adc_calibration_info.ref,
-				     sizeof(etc_sensor_adc_calibration_info.ref));
-	if (rc) {
-		LOG_ERR("Can't load the user calibration for reference");
-		goto factory;
-	}
-	LOG_INF("Calibration value %f %f %f", etc_sensor_adc_calibration_info.offset,
-		etc_sensor_adc_calibration_info.high, etc_sensor_adc_calibration_info.ref);
-	etc_sensor_adc_calibration_info.loaded = true;
-factory:
-	rc = etc_device_read_setting(ETC_CALIBRATION_OFFSET_ID,
-				     &etc_sensor_adc_calibration_info.offset,
-				     sizeof(etc_sensor_adc_calibration_info.offset));
-	if (rc) {
-		LOG_ERR("Can't load the factory calibration for offset");
-		return;
-	}
-	rc = etc_device_read_setting(ETC_CALIBRATION_RAWHIGH_ID,
-				     &etc_sensor_adc_calibration_info.high,
-				     sizeof(etc_sensor_adc_calibration_info.high));
-	if (rc) {
-		LOG_ERR("Can't load the factory calibration for raw high offset");
-		return;
-	}
-	rc = etc_device_read_setting(ETC_CALIBRATION_REF_ID, &etc_sensor_adc_calibration_info.ref,
-				     sizeof(etc_sensor_adc_calibration_info.ref));
-	if (rc) {
-		LOG_ERR("Can't load the factory calibration for reference");
-		return;
-	}
-	etc_sensor_adc_calibration_info.loaded = true;
+	etc_sensor_load_calibration_info(&etc_sensor_adc_calibration_info);
 }
 
 void etc_sensor_init(etc_sensor_evt_handler_t handler)
