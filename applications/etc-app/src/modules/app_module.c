@@ -692,13 +692,23 @@ static void app_input_handler(enum etc_interface_event_type type)
 		 * subsequent readings on repeated magnet swipes (FW-492). The reading
 		 * triggered below stays debounced by sensor_poll_handler(). */
 		if (!etc_sensor_power_settling()) {
-			if (etc_calibration_check() == 0) {
+			int calib_rc = etc_calibration_check();
+			if (calib_rc == 0) {
 				SEND_EVENT(app, APP_EVT_REQUEST_CALIBRATION);
 				return;
 			}
-			int calib_result = etc_calibration_get_calibration_result();
-			if (calib_result >= ETC_SENSOR_CALIB_POST_ADJ_OUT_OF_RANGE) {
-				send_calibration_result(APP_EVT_CALIBRATION_ERROR, calib_result);
+			if (calib_rc == -EBUSY) {
+				/* A previous successful calibration is still awaiting its
+				 * cloud-upload acknowledgement; a new calibration is blocked
+				 * so the stored result is not overwritten before it is
+				 * delivered (FW-611). Leave the existing indication. */
+				LOG_INF("Calibration busy: previous result still uploading");
+			} else {
+				int calib_result = etc_calibration_get_calibration_result();
+				if (calib_result >= ETC_SENSOR_CALIB_POST_ADJ_OUT_OF_RANGE) {
+					send_calibration_result(APP_EVT_CALIBRATION_ERROR,
+								calib_result);
+				}
 			}
 		} else {
 			LOG_INF("Skipping calibrator scan: analog rail still settling");

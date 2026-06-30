@@ -140,7 +140,6 @@ static bool reclaim_cancel_pending;
 static bool reclaim_no_records_pending;
 
 static atomic_t calibration_process;
-static bool calibration_success;
 /* Define a buffer to save data encoded*/
 static struct data_module_data_buffers data_encoded_buffers;
 
@@ -658,24 +657,40 @@ static void data_encode_for_ble()
 
 static void data_do_and_send_calibration(void)
 {
-	if ((etc_calibration_get_calibration_status() != ETC_SENSOR_CALIB_IDLE)) {
-		atomic_set(&calibration_process, true);
-		/* Keep LwM2M running! */
-		lwm2m_rd_client_update();
-		etc_calibration_run();
-		if ((etc_calibration_get_calibration_status()) == ETC_SENSOR_CALIB_DATA_UPLOAD) {
-			if ((etc_calibration_get_calibration_result() !=
-			     ETC_SENSOR_CALIB_SUCCESS)) {
-				data_module_send_calibration_status(DATA_EVT_CALIBRATION_ERROR);
-			}
-			data_codec_update_calibration(&codec);
-			data_codec_update_calibration_status(&codec);
-		}
-		etc_calibration_exit();
-		atomic_set(&calibration_process, false);
-		calibration_success = true;
-		data_send(DATA_EVT_DATA_SEND, &codec);
+	int calib_status = etc_calibration_get_calibration_status();
+	if (calib_status == ETC_SENSOR_CALIB_IDLE) {
+		return;
 	}
+
+	if (calib_status == ETC_SENSOR_CALIB_DATA_UPLOAD) {
+		/* A completed calibration result is still awaiting its upload
+		 * acknowledgement (e.g. the original send was never ACKed before a
+		 * disconnect). Re-encode and re-send the stored result without
+		 * re-measuring; the status is cleared on ACK. */
+		data_codec_update_calibration(&codec);
+		data_codec_update_calibration_status(&codec);
+		data_send(DATA_EVT_DATA_SEND, &codec);
+		return;
+	}
+
+	/* Fresh calibration request: run the measurement. */
+	atomic_set(&calibration_process, true);
+	/* Keep LwM2M running! */
+	lwm2m_rd_client_update();
+	etc_calibration_run();
+	if ((etc_calibration_get_calibration_status()) == ETC_SENSOR_CALIB_DATA_UPLOAD) {
+		if ((etc_calibration_get_calibration_result() != ETC_SENSOR_CALIB_SUCCESS)) {
+			data_module_send_calibration_status(DATA_EVT_CALIBRATION_ERROR);
+		}
+		data_codec_update_calibration(&codec);
+		data_codec_update_calibration_status(&codec);
+	}
+	/* Power down the calibration hardware now, but keep the status at
+	 * DATA_UPLOAD so the result can be re-sent until the cloud acknowledges it.
+	 * etc_calibration_set_idle() is called from the data-send ACK handler. */
+	etc_calibration_teardown_hw();
+	atomic_set(&calibration_process, false);
+	data_send(DATA_EVT_DATA_SEND, &codec);
 }
 
 static void data_do_check_calibration(void)
@@ -684,7 +699,6 @@ static void data_do_check_calibration(void)
 		data_module_send_calibration_status(DATA_EVT_CALIBRATION_ERROR);
 		etc_calibration_exit();
 		atomic_set(&calibration_process, false);
-		calibration_success = false;
 	}
 }
 
@@ -885,15 +899,16 @@ static void on_all_states(struct data_msg_data *msg)
 			track_functional_test(DATA_TYPE_ACK, (void *)&ack);
 			stop_functional_test();
 		}
-		if (calibration_success) {
-			/* Only signal a successful calibration to the UI when the run
-			 * actually passed. A failed run already drove the fail LED via
-			 * DATA_EVT_CALIBRATION_ERROR; emitting COMPLETE here would
-			 * overwrite it with the success (green) indication. */
+		if (etc_calibration_get_calibration_status() == ETC_SENSOR_CALIB_DATA_UPLOAD) {
+			/* A pending calibration result has now been delivered and
+			 * acknowledged. Signal the UI success LED only on an actual pass
+			 * (a failure already drove the fail LED via
+			 * DATA_EVT_CALIBRATION_ERROR), then close the session so the
+			 * result is no longer re-uploaded on reconnect. */
 			if (etc_calibration_get_calibration_result() == ETC_SENSOR_CALIB_SUCCESS) {
 				data_module_send_calibration_status(DATA_EVT_CALIBRATION_COMPLETE);
 			}
-			calibration_success = false;
+			etc_calibration_set_idle();
 		}
 		if (send_status.record_id > 0) {
 			/* Acknowledge record and encode more data, if connected to cloud */

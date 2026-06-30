@@ -102,6 +102,19 @@ void etc_calibration_init(void)
 int etc_calibration_check(void)
 {
 	etc_calibration_lock();
+	/* A previous calibration result may still be awaiting its cloud upload
+	 * acknowledgement (status left at DATA_UPLOAD). Starting a new run would
+	 * re-init and discard it. A pending SUCCESS must be protected: its new
+	 * coefficients are already stored in NVS but not yet confirmed uploaded,
+	 * and a fresh run could overwrite them before the success is delivered.
+	 * Block that case. A pending failure stored nothing, so allow it to be
+	 * superseded cleanly (the re-init below moves the status off DATA_UPLOAD,
+	 * so the prior failed send's stale ACK is harmlessly ignored). */
+	if (calibration_status.status == ETC_SENSOR_CALIB_DATA_UPLOAD &&
+	    calibration_status.result == ETC_SENSOR_CALIB_SUCCESS) {
+		etc_calibration_unlock();
+		return -EBUSY;
+	}
 	if (!etc_calibration_ready) {
 		etc_calibration_ready = true;
 		etc_calibration_init();
@@ -452,13 +465,29 @@ int etc_calibration_get_calibration_result(void)
 	return current_result;
 }
 
-void etc_calibration_exit(void)
+void etc_calibration_teardown_hw(void)
 {
 	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
-	calibration_status.status = ETC_SENSOR_CALIB_IDLE;
 	etc_calibration_ready = false;
 	etc_sensor_calibration_exit();
 	k_mutex_unlock(&etc_calibration_mutex);
+}
+
+void etc_calibration_set_idle(void)
+{
+	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
+	calibration_status.status = ETC_SENSOR_CALIB_IDLE;
+	k_mutex_unlock(&etc_calibration_mutex);
+}
+
+void etc_calibration_exit(void)
+{
+	/* Power down the calibration hardware and clear the status in one step.
+	 * Callers that need the result to survive until its cloud upload is
+	 * acknowledged should instead call etc_calibration_teardown_hw() now and
+	 * etc_calibration_set_idle() once the upload is confirmed. */
+	etc_calibration_teardown_hw();
+	etc_calibration_set_idle();
 }
 
 #ifdef CONFIG_CALIBRATION_MODULE_SHELL

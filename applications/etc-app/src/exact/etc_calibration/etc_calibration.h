@@ -78,8 +78,28 @@ void etc_calibration_init(void);
 /**
  * @brief Exit the calibration to reset the status
  *
+ * Convenience wrapper that powers down the calibration hardware and resets the
+ * status to IDLE. Equivalent to @ref etc_calibration_teardown_hw followed by
+ * @ref etc_calibration_set_idle.
  */
 void etc_calibration_exit(void);
+
+/**
+ * @brief Power down the calibration hardware without clearing the status.
+ *
+ * Use after a calibration run when the result must remain re-encodable (status
+ * left at DATA_UPLOAD) until its cloud upload is acknowledged. Pair with
+ * @ref etc_calibration_set_idle once delivery is confirmed.
+ */
+void etc_calibration_teardown_hw(void);
+
+/**
+ * @brief Reset the calibration status to IDLE.
+ *
+ * Call once a pending calibration result has been delivered (its data send was
+ * acknowledged) to close the calibration session.
+ */
+void etc_calibration_set_idle(void);
 
 /**
  * @brief Check the calibration condition
