@@ -641,10 +641,14 @@ int etc_sensor_calibration_scan(void)
 		if (rc == 0) {
 			continue;
 		}
-		/* Probe slaves */
-		etc_sensor_scan_probe_slaves();
-		if (!device_is_ready(tmp1826_dev)) {
-			LOG_ERR("TMP1826 is not ready in I2C bus");
+		/* Probe slaves. Only treat this channel as the calibrator port when a
+		 * TMP1826 was actually found here: etc_sensor_scan_probe_slaves()
+		 * programs the active 1-wire ROM only on a successful find, so keying
+		 * off its return value (rather than the always-true device_is_ready())
+		 * keeps the selected mux channel and the active ROM pointed at the same
+		 * sensor regardless of calibrator orientation. */
+		rc = etc_sensor_scan_probe_slaves();
+		if (rc <= 0) {
 			continue;
 		}
 		sensor_calibration_port_1_wire = i;
