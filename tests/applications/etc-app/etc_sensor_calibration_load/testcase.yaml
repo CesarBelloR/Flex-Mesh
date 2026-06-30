@@ -1,0 +1,6 @@
+tests:
+  tests.applications.etc-app.etc_sensor_calibration_load:
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim
