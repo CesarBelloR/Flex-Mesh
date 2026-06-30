@@ -886,7 +886,13 @@ static void on_all_states(struct data_msg_data *msg)
 			stop_functional_test();
 		}
 		if (calibration_success) {
-			data_module_send_calibration_status(DATA_EVT_CALIBRATION_COMPLETE);
+			/* Only signal a successful calibration to the UI when the run
+			 * actually passed. A failed run already drove the fail LED via
+			 * DATA_EVT_CALIBRATION_ERROR; emitting COMPLETE here would
+			 * overwrite it with the success (green) indication. */
+			if (etc_calibration_get_calibration_result() == ETC_SENSOR_CALIB_SUCCESS) {
+				data_module_send_calibration_status(DATA_EVT_CALIBRATION_COMPLETE);
+			}
 			calibration_success = false;
 		}
 		if (send_status.record_id > 0) {
