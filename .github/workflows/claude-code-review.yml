@@ -36,4 +36,15 @@ jobs:
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment'
-          claude_args: '--allowedTools "Bash(gh:*)" "Bash(git:*)"'
+          claude_args: '--model opus --allowedTools "Bash(gh:*)" "Bash(git:*)"'
+
+      # Fail the job if the review did not actually complete: the action step
+      # errored (e.g. Claude authentication failed), no execution log was
+      # produced, Claude reported an error, or any tool call was denied
+      # (permission_denials_count > 0 means findings could not be posted).
+      - name: Verify review completed
+        if: always()
+        env:
+          STEP_OUTCOME: ${{ steps.claude-review.outcome }}
+          EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
+        run: ./.github/scripts/verify-claude-review.sh
