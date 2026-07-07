@@ -37,14 +37,73 @@ _DEFAULT_COIOTE_CONFIG = os.path.abspath(
                  "../../../../etc-tools/coiote_api/config.json"))
 
 
+# The device is only FULLY booted once etc_settings has loaded its NVS-backed
+# settings (main.c runs etc_settings_init() before starting the application
+# threads). Waiting on the shell prompt alone races ahead of this, so a test that
+# reboots and immediately drives the device can act before it is ready.
+_BOOTED_SENTINEL = "Load settings successfully"
+
+
+def _wait_serial_port(port, present, timeout, poll=0.05):
+    """Block until os.path.exists(port) == present (or timeout). Returns success."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if os.path.exists(port) == present:
+            return True
+        time.sleep(poll)
+    return False
+
+
 @pytest.fixture(autouse=True)
 def add_dut_methods(dut):
+    import serial as pyserial
+
     def reboot():
-        """Reboot the device and wait for it to come back."""
-        dut.write(b"kernel reboot\r\n")
-        time.sleep(5)
-        dut.write(b"\r\n")
-        dut.expect(r"uart:~\$", timeout=20)
+        """Cold-reboot the device and block until it is FULLY booted.
+
+        A cold reboot re-enumerates the USB CDC-ACM console, so the open serial fd
+        goes stale and further reads/writes raise [Errno 5]. Reopen the port once
+        it re-enumerates, then wait for the settings/NVS load marker rather than
+        the shell prompt (the prompt appears before etc_settings has loaded)."""
+        ser = dut.serial
+        port = ser.port
+
+        # The write can race the USB drop; a failure here just means the reset
+        # already took the console down.
+        try:
+            ser.proc.write(b"kernel reboot cold\r\n")
+        except Exception:
+            pass
+
+        # Stop reading the stale fd, then follow the console down and back up on
+        # the same (by-id) path.
+        ser.stop_redirect_thread()
+        try:
+            ser.proc.close()
+        except Exception:
+            pass
+        _wait_serial_port(port, present=False, timeout=12)
+        if not _wait_serial_port(port, present=True, timeout=45, poll=0.1):
+            raise RuntimeError(f"serial port {port} did not re-enumerate after reboot")
+        time.sleep(1.5)  # let the tty settle before reopening
+
+        # Reopen on the same port and resume the redirect reader.
+        port_config = dict(ser.DEFAULT_PORT_CONFIG)
+        port_config["baudrate"] = ser.baud
+        last_err = None
+        for _ in range(20):
+            try:
+                ser.proc = pyserial.serial_for_url(port, **port_config)
+                break
+            except Exception as e:  # transient failure while the tty enumerates
+                last_err = e
+                time.sleep(0.5)
+        else:
+            raise RuntimeError(f"could not reopen {port} after reboot: {last_err}")
+        ser.start_redirect_thread()
+
+        # Fully booted only once settings/NVS have loaded.
+        dut.expect(_BOOTED_SENTINEL, timeout=45)
 
     setattr(dut, "reboot", reboot)
 
@@ -72,3 +131,73 @@ def coiote(request):
     )
     client.authenticate()
     return client
+
+
+@pytest.fixture
+def coiote_optional(request):
+    """Like `coiote`, but returns None instead of skipping when no creds/config
+    are available. Lets a test still run its device-side (shell/LED/log)
+    assertions and only skip the portal cross-checks."""
+    from coiote_client import CoioteClient
+
+    path = (request.config.getoption("--coiote-config")
+            or os.environ.get("COIOTE_CONFIG")
+            or _DEFAULT_COIOTE_CONFIG)
+    if not path or not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        cfg = json.load(f)
+    if not cfg.get("username") or not cfg.get("password"):
+        return None
+    client = CoioteClient(
+        api_host=cfg.get("api_host", "https://us.iot.avsystem.cloud:8087/api"),
+        username=cfg["username"],
+        password=cfg["password"],
+    )
+    client.authenticate()
+    return client
+
+
+@pytest.fixture
+def operator(request):
+    """Prompt a human operator to perform a physical action (attach/orient the
+    calibrator, observe the LED, ...) and read their response.
+
+    Output capture is suspended around the prompt so it is visible and stdin
+    works; run pytest with `-s` for the smoothest experience. Returns an object
+    with `prompt()`, `ask()` and `confirm()` helpers."""
+    capman = request.config.pluginmanager.getplugin("capturemanager")
+
+    class _Operator:
+        def _io(self, render):
+            if capman is not None:
+                with capman.global_and_fixture_disabled():
+                    return render()
+            return render()
+
+        def prompt(self, message):
+            """Show an instruction; return the operator's typed reply (stripped,
+            lowercased). An empty reply means 'done'."""
+            def render():
+                print("\n" + "=" * 72)
+                print("OPERATOR ACTION REQUIRED")
+                for line in message.strip().splitlines():
+                    print("  " + line.rstrip())
+                return input("  >>> press ENTER when ready (or type 'skip'): ")
+            return self._io(render).strip().lower()
+
+        def ask(self, question):
+            """Ask a free-form question; return the reply (stripped, lowercased)."""
+            def render():
+                print("\n" + "-" * 72)
+                return input(f"  ?? {question}\n  >>> ")
+            return self._io(render).strip().lower()
+
+        def confirm(self, question):
+            """Ask a yes/no question; return True only on an explicit yes."""
+            def render():
+                print("\n" + "-" * 72)
+                return input(f"  ?? {question} [y/N]: ")
+            return self._io(render).strip().lower().startswith("y")
+
+    return _Operator()

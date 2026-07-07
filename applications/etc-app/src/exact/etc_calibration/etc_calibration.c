@@ -355,7 +355,52 @@ int etc_calibration_run(void)
 	etc_device_write_setting(ETC_CALIBRATOR_USER_ID, calibration_info.id, sizeof(calibration_info.id));
 	calibration_status.result = ETC_SENSOR_CALIB_SUCCESS;
 done:
-	calibration_status.status = ETC_SENSOR_CALIB_DATA_UPLOAD;
+	calibration_status_set(ETC_SENSOR_CALIB_DATA_UPLOAD);
+	/* Single completion marker for both the shell (`calibration run`) and the
+	 * magnet-swipe paths, success or failure. HIL tests wait on this instead of a
+	 * fixed capture window. */
+	LOG_INF("Calibration run complete (rc %d)", rc);
+	return rc;
+}
+
+/* Powers down the calibration hardware. The caller must hold the front-end
+ * mutex.
+ */
+static void calibration_teardown_hw_locked(void)
+{
+	etc_calibration_ready = false;
+	etc_sensor_calibration_exit();
+}
+
+int etc_calibration_run(void)
+{
+	int rc;
+
+	/* Cancel the timeout before taking the mutex: the handler wants the same
+	 * mutex, so cancelling while holding it could stall this thread until the
+	 * handler's next retry.
+	 */
+	k_work_cancel_delayable_sync(&etc_calibration_timeout, &etc_calibration_timeout_sync);
+
+	etc_calibration_lock();
+	rc = calibration_run_locked();
+	etc_calibration_unlock();
+	return rc;
+}
+
+int etc_calibration_run_and_teardown(void)
+{
+	int rc;
+
+	k_work_cancel_delayable_sync(&etc_calibration_timeout, &etc_calibration_timeout_sync);
+
+	/* Measurement and hardware teardown must be one continuous hold. Dropping
+	 * the mutex in between let a queued sensor acquisition run against a
+	 * still-powered calibrator.
+	 */
+	etc_calibration_lock();
+	rc = calibration_run_locked();
+	calibration_teardown_hw_locked();
 	etc_calibration_unlock();
 	return rc;
 }
@@ -566,6 +611,22 @@ static int cmd_calibration_sensor_dump_status(const struct shell *shell, size_t 
 	return 0;
 }
 
+/**
+ * @brief Abort/clear a pending calibration.
+ *
+ * A calibration result may be left awaiting its cloud upload (status at
+ * DATA_UPLOAD); the FW-611 re-entry guard then blocks a fresh run. Power the
+ * front-end down, release its ownership and reset the status/result so a new
+ * calibration can start immediately.
+ */
+static int cmd_calibration_abort(const struct shell *shell, size_t argc, char **argv)
+{
+	etc_calibration_exit();
+	etc_calibration_init();
+	shell_print(shell, "Calibration aborted");
+	return 0;
+}
+
 /* Define shell commands and their descriptions */
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_calibration,
@@ -578,6 +639,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		  cmd_calibration_sensor_dump_status),
 	SHELL_CMD(sensor, NULL, "Read temperature from the sensor using OneWire.",
 		  cmd_calibration_sensor_onewire),
+	SHELL_CMD(abort, NULL, "Abort/clear a pending calibration.", cmd_calibration_abort),
 	SHELL_SUBCMD_SET_END);
 
 /* Register the shell command set */
