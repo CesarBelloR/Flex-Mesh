@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# The real Kconfig (applications/etc-app/src/exact/etc_calibration/Kconfig) puts
+# these behind "menuconfig ETC_CALIBRATION ... depends on TMP1826", and TMP1826
+# has no native_sim driver, so it cannot be sourced here. The values below must
+# be kept in step with it; the mocks answer with the switch references it
+# defines.
+
+config CALIBRATION_TIMEOUT
+    int
+    default 30
+
+config TEMP_RANGE_SPECIFIC_MIN
+    int
+    default 1800
+
+config TEMP_RANGE_SPECIFIC_MAX
+    int
+    default 2800
+
+config TEMP_RANGE_SWITCH2_REF
+    int
+    default 20
+
+config TEMP_RANGE_SWITCH3_REF
+    int
+    default 2500
+
+config TEMP_RANGE_SWITCH4_REF
+    int
+    default 4460
+
+config TEMP_RANGE_SWITCH5_REF
+    int
+    default 7040
+
+config TEMP_TOLERANCE
+    int
+    default 24
+
+source "Kconfig.zephyr"
