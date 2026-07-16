@@ -139,7 +139,6 @@ static bool reclaim_cancel_pending;
  * same way as the other reclaim status transitions — see reclaim_cancel_pending. */
 static bool reclaim_no_records_pending;
 
-static atomic_t calibration_process;
 /* Define a buffer to save data encoded*/
 static struct data_module_data_buffers data_encoded_buffers;
 
@@ -673,11 +672,13 @@ static void data_do_and_send_calibration(void)
 		return;
 	}
 
-	/* Fresh calibration request: run the measurement. */
-	atomic_set(&calibration_process, true);
+	/* Fresh calibration request: run the measurement, then power the hardware
+	 * down without releasing the front-end lock in between. The status stays at
+	 * DATA_UPLOAD so the result can be re-sent until the cloud acknowledges it;
+	 * etc_calibration_set_idle() is called from the data-send ACK handler. */
 	/* Keep LwM2M running! */
 	lwm2m_rd_client_update();
-	etc_calibration_run();
+	etc_calibration_run_and_teardown();
 	if ((etc_calibration_get_calibration_status()) == ETC_SENSOR_CALIB_DATA_UPLOAD) {
 		if ((etc_calibration_get_calibration_result() != ETC_SENSOR_CALIB_SUCCESS)) {
 			data_module_send_calibration_status(DATA_EVT_CALIBRATION_ERROR);
@@ -685,20 +686,20 @@ static void data_do_and_send_calibration(void)
 		data_codec_update_calibration(&codec);
 		data_codec_update_calibration_status(&codec);
 	}
-	/* Power down the calibration hardware now, but keep the status at
-	 * DATA_UPLOAD so the result can be re-sent until the cloud acknowledges it.
-	 * etc_calibration_set_idle() is called from the data-send ACK handler. */
-	etc_calibration_teardown_hw();
-	atomic_set(&calibration_process, false);
 	data_send(DATA_EVT_DATA_SEND, &codec);
 }
 
 static void data_do_check_calibration(void)
 {
-	if (atomic_get(&calibration_process)) {
+	int status = etc_calibration_get_calibration_status();
+
+	/* Abort a session that was armed by a magnet swipe but never reached its
+	 * upload. DATA_UPLOAD is deliberately left alone: that result is complete
+	 * and must survive a disconnect so it can be re-sent on reconnect (FW-611).
+	 */
+	if (status > ETC_SENSOR_CALIB_IDLE && status < ETC_SENSOR_CALIB_DATA_UPLOAD) {
 		data_module_send_calibration_status(DATA_EVT_CALIBRATION_ERROR);
 		etc_calibration_exit();
-		atomic_set(&calibration_process, false);
 	}
 }
 

@@ -100,11 +100,33 @@ uint16_t etc_sensor_get_battery(void);
 uint16_t etc_sensor_sample_and_get_battery(void);
 
 /**
- * @brief Run or start a new data acquisition cycle.
- * 
- * This function initiates a new round of data collection from the sensors.
+ * @brief Owner of the shared analog front-end.
  */
-void etc_sensor_run_acquisition(void);
+enum etc_sensor_hw_owner {
+	HW_OWNER_NONE = 0,
+	HW_OWNER_CALIBRATION,
+};
+
+/**
+ * @brief Check whether a calibration session currently owns the front-end.
+ *
+ * @return true while a calibration session is armed or running.
+ */
+bool etc_sensor_calibration_owns_hw(void);
+
+/**
+ * @brief Run or start a new data acquisition cycle.
+ *
+ * This function initiates a new round of data collection from the sensors.
+ *
+ * Skipped while a calibration session owns the front-end: the calibrator drives
+ * its own reference network into the sensor ports, so any sample taken then is
+ * meaningless and the 1-wire stage can wedge on the calibrator.
+ *
+ * @return 0 on success, -EBUSY if calibration owns the hardware or the
+ * front-end lock could not be taken within CONFIG_ETC_SENSOR_HW_LOCK_TIMEOUT_S.
+ */
+int etc_sensor_run_acquisition(void);
 
 /**
  * @brief Get the type of probe based on a specific input.
@@ -242,4 +264,15 @@ void etc_sensor_calibration_save_temperature_compensation(uint16_t hw_raw_adc);
  * supplies and the one-wire bus.
  */
 void etc_sensor_calibration_exit(void);
+
+/**
+ * @brief Release front-end ownership without powering the rail down.
+ *
+ * Unlike etc_sensor_calibration_exit(), this leaves the sensor power supplies
+ * on. It is for the failed-calibration-check path, where the rail must stay up
+ * for the acquisition that runs immediately afterwards (toggling VSENS_EN
+ * quickly corrupts that reading) but ownership must be cleared so the
+ * acquisition is not skipped with -EBUSY.
+ */
+void etc_sensor_calibration_release_hw(void);
 #endif /*  ETC_SENSOR_H_ */

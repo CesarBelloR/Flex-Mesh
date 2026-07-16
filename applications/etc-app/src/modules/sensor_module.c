@@ -292,7 +292,17 @@ static int sensor_poll_handler(enum sensor_sample_type sample_type)
 	}
 #endif
 	SEND_EVENT(sensor, SENSOR_EVT_ENVIRONMENTAL_AQUIRING);
-	etc_sensor_run_acquisition();
+	int rc = etc_sensor_run_acquisition();
+	if (rc) {
+		/* Calibration owns the front-end, or it stayed busy. The sample would
+		 * read the calibrator's reference network rather than the probes, so
+		 * report nothing and wait for the next cycle. */
+		LOG_DBG("Acquisition skipped (err %d)", rc);
+#if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
+		watchdog_sens_sel0_wdt_sem_give();
+#endif
+		return rc;
+	}
 
 	struct sensor_data* data = &static_sensor_data;
 	int utc_timestamp = date_time_now_second();

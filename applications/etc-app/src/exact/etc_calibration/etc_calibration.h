@@ -123,9 +123,46 @@ int etc_calibration_check(void);
 int etc_calibration_run(void);
 
 /**
+ * @brief Run the calibration and power the hardware down in one atomic step.
+ *
+ * Equivalent to etc_calibration_run() immediately followed by
+ * etc_calibration_teardown_hw(), except that the front-end lock is held across
+ * both. Callers that need the result to survive until its cloud upload is
+ * acknowledged should use this and call etc_calibration_set_idle() on ACK.
+ *
+ * Prefer this over the run/teardown pair: releasing the lock in between lets a
+ * waiting sensor acquisition sample a still-powered calibrator, which both
+ * corrupts the reading and can wedge the 1-wire bus.
+ *
+ * @return int Status code indicating the result of the calibration run.
+ * A return value of 0 typically indicates success.
+ */
+int etc_calibration_run_and_teardown(void);
+
+/**
  * @brief Lock the calibration process
+ *
+ * Guards the shared analog front-end (VSEN rail, ADC mux, 1-wire bus, TMP1826
+ * GPIO mask). Held for a whole calibration hardware session, which takes
+ * several seconds.
+ *
+ * Lock ordering: this lock is taken before the internal status lock, never
+ * after. Status accessors such as etc_calibration_get_calibration_status() take
+ * only the status lock and are therefore safe to call while this is held by
+ * another thread.
  */
 void etc_calibration_lock(void);
+
+/**
+ * @brief Lock the calibration process, giving up after @p timeout.
+ *
+ * Use from threads that must not park indefinitely behind a calibration
+ * session or a wedged bus.
+ *
+ * @param timeout How long to wait for the lock.
+ * @return 0 when the lock was taken, -EAGAIN on timeout.
+ */
+int etc_calibration_lock_timeout(k_timeout_t timeout);
 
 /**
  * @brief Unlock the calibration process

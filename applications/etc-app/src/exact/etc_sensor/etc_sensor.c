@@ -77,6 +77,13 @@ static etc_sensor_evt_handler_t sensor_evt_handler;
 static enum etc_sensor_status last_sensor_status = SENSOR_CONNECTED;
 static int sensor_calibration_port_1_wire = -1;
 static struct w1_rom tmp1826_rom;
+/* Who currently owns the analog front-end. A calibration session spans two
+ * threads (the scan runs on the system workqueue, the run on the data module
+ * thread) and can sit armed for CONFIG_CALIBRATION_TIMEOUT seconds in between,
+ * so a k_mutex cannot cover it: mutexes are owned by a thread and cannot be
+ * handed over. This flag closes that window - see etc_sensor_run_acquisition().
+ */
+static enum etc_sensor_hw_owner hw_owner = HW_OWNER_NONE;
 /* Flag that signals if current connected sensors' state qualifies for functional
  * test mode. */
 static bool enter_functional_test = false;
@@ -552,9 +559,51 @@ uint16_t etc_sensor_sample_and_get_battery(void)
 	return etc_sensor_get_battery();
 }
 
-void etc_sensor_run_acquisition(void)
+bool etc_sensor_calibration_owns_hw(void)
 {
-	etc_calibration_lock();
+	enum etc_sensor_hw_owner owner;
+
+	k_mutex_lock(&etc_sensor_mtx, K_FOREVER);
+	owner = hw_owner;
+	k_mutex_unlock(&etc_sensor_mtx);
+	return owner == HW_OWNER_CALIBRATION;
+}
+
+static void etc_sensor_hw_owner_set(enum etc_sensor_hw_owner owner)
+{
+	k_mutex_lock(&etc_sensor_mtx, K_FOREVER);
+	hw_owner = owner;
+	k_mutex_unlock(&etc_sensor_mtx);
+}
+
+int etc_sensor_run_acquisition(void)
+{
+	/* Skip rather than wait. A sample taken during calibration reads the
+	 * calibrator's reference network instead of the probes, so blocking would
+	 * stall this thread for seconds only to produce a reading we must discard.
+	 */
+	if (etc_sensor_calibration_owns_hw()) {
+		/* INF, not DBG: this explains a missing reading, and etc_sensor logs at
+		 * INF by default. */
+		LOG_INF("Calibration owns the front-end, skipping acquisition");
+		return -EBUSY;
+	}
+
+	/* Never K_FOREVER: this thread must not be parked indefinitely behind a
+	 * calibration session or a wedged bus. */
+	if (etc_calibration_lock_timeout(K_SECONDS(CONFIG_ETC_SENSOR_HW_LOCK_TIMEOUT_S)) != 0) {
+		LOG_WRN("Front-end lock busy, skipping acquisition");
+		return -EBUSY;
+	}
+
+	/* Re-check: a calibration session may have claimed the hardware while we
+	 * waited for the lock. */
+	if (etc_sensor_calibration_owns_hw()) {
+		LOG_INF("Calibration claimed the front-end, skipping acquisition");
+		etc_calibration_unlock();
+		return -EBUSY;
+	}
+
 	sensor_digital_humid = SENSOR_HUMID_NO_CONNECTED;
 	/* Enable the GPIOs SEL0/SEL1 */
 	etc_sensor_gpios_enable();
@@ -591,6 +640,7 @@ void etc_sensor_run_acquisition(void)
 	}
 
 	etc_calibration_unlock();
+	return 0;
 }
 
 enum sensor_type etc_sensor_get_probe_type(enum sensor_input input)
@@ -625,6 +675,7 @@ void etc_sensor_exit_functional_test(void)
 
 void etc_sensor_calibration_enter(void)
 {
+	etc_sensor_hw_owner_set(HW_OWNER_CALIBRATION);
 	etc_sensor_gpios_enable();
 }
 
@@ -662,7 +713,7 @@ int etc_sensor_calibration_read_sn(void)
 {
 	uint32_t serial_number;
 	uint8_t buf[sizeof(sn_prefix) + sizeof(serial_number)];
-	int rc = 0;
+	int rc = -ENOENT;
 
 	if (sensor_calibration_port_1_wire == -1) {
 		return -ENOENT;
@@ -672,15 +723,17 @@ int etc_sensor_calibration_read_sn(void)
 	k_msleep(10);
 	etc_sensor_adc_switch_channel(sensor_calibration_port_1_wire);
 	k_msleep(10);
-	rc = tmp1826_read_eeprom(tmp1826_dev, 0, buf, sizeof(buf));
-	if (rc == 0) {
+	if (tmp1826_read_eeprom(tmp1826_dev, 0, buf, sizeof(buf)) == 0) {
 		if (memcmp(buf, sn_prefix, sizeof(sn_prefix)) == 0) {
 			LOG_DBG("Found the calibration code");
 			serial_number = *((uint32_t *)&buf[sizeof(sn_prefix)]);
-			return serial_number;
+			rc = serial_number;
 		}
 	}
-	return -ENOENT;
+	/* Leaving the transceiver awake lets the calibrator hold the 1-wire line
+	 * during a later acquisition, so disable it on every exit. */
+	etc_sensor_gpios_one_wire_disable();
+	return rc;
 }
 
 int etc_sensor_calibration_write_sn(uint32_t serial_number)
@@ -785,4 +838,16 @@ uint16_t etc_sensor_calibration_get_hw_version_adc(void)
 void etc_sensor_calibration_exit(void)
 {
 	etc_sensor_gpios_disable();
+	/* Released only after the hardware is actually powered down, so a sensor
+	 * acquisition can never observe HW_OWNER_NONE while the calibrator is still
+	 * driving the ports. */
+	etc_sensor_hw_owner_set(HW_OWNER_NONE);
+}
+
+void etc_sensor_calibration_release_hw(void)
+{
+	/* Deliberately leaves the rail powered (see the header): only the owner is
+	 * cleared, so the acquisition that follows a failed calibration check runs
+	 * instead of being skipped with -EBUSY. */
+	etc_sensor_hw_owner_set(HW_OWNER_NONE);
 }

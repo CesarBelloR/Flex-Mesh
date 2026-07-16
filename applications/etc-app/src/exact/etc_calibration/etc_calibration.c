@@ -78,12 +78,27 @@ static const int batt_valid_mv = 3300;
 // Macro to check if a given ADC value is within a specified ADC range index in list_adc.
 #define IS_ADC_IN_RANGE(index, adc) ((adc) >= list_adc[index].min && (adc) <= list_adc[index].max)
 
-// Mutex to block the sensor processing
+/* Guards the shared analog front-end: VSEN rail, ADC mux, 1-wire bus and the
+ * TMP1826 GPIO mask. Held for the whole calibration hardware session, which
+ * takes several seconds.
+ */
 K_MUTEX_DEFINE(etc_calibration_mutex);
+
+/* Guards calibration_status only. Kept separate from the front-end mutex so a
+ * status read never queues behind a multi-second hardware session: doing so
+ * blocked the data module thread behind the sensor thread and wedged both.
+ *
+ * Lock ordering: front-end mutex -> status mutex. Never the reverse.
+ */
+K_MUTEX_DEFINE(calibration_status_mutex);
+
+/* Retry interval for the timeout handler when the front-end mutex is busy. */
+#define CALIBRATION_TIMEOUT_RETRY_S 1
 
 // Work delayable to handle timeout
 static void etc_calibration_timeout_handler(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(etc_calibration_timeout, etc_calibration_timeout_handler);
+static struct k_work_sync etc_calibration_timeout_sync;
 
 // Boolean flag indicating whether the calibration process is ready to proceed.
 static bool etc_calibration_ready = false;
@@ -92,11 +107,30 @@ static bool etc_calibration_ready = false;
 static uint32_t etc_calibrator_sn = 0;
 static struct etc_sensor_calibration_status_info calibration_status = {0};
 
+/* calibration_status writers already run under the front-end mutex; they take
+ * the status mutex as well so readers never observe a torn struct.
+ */
+static void calibration_status_set(uint8_t status)
+{
+	k_mutex_lock(&calibration_status_mutex, K_FOREVER);
+	calibration_status.status = status;
+	k_mutex_unlock(&calibration_status_mutex);
+}
+
+static void calibration_result_set(uint8_t result)
+{
+	k_mutex_lock(&calibration_status_mutex, K_FOREVER);
+	calibration_status.result = result;
+	k_mutex_unlock(&calibration_status_mutex);
+}
+
 void etc_calibration_init(void)
 {
+	k_mutex_lock(&calibration_status_mutex, K_FOREVER);
 	memset(&calibration_status, 0, sizeof(calibration_status));
 	calibration_status.status = ETC_SENSOR_CALIB_IDLE;
 	calibration_status.result = ETC_SENSOR_CALIB_NO_STATUS;
+	k_mutex_unlock(&calibration_status_mutex);
 }
 
 int etc_calibration_check(void)
@@ -110,8 +144,8 @@ int etc_calibration_check(void)
 	 * Block that case. A pending failure stored nothing, so allow it to be
 	 * superseded cleanly (the re-init below moves the status off DATA_UPLOAD,
 	 * so the prior failed send's stale ACK is harmlessly ignored). */
-	if (calibration_status.status == ETC_SENSOR_CALIB_DATA_UPLOAD &&
-	    calibration_status.result == ETC_SENSOR_CALIB_SUCCESS) {
+	if (etc_calibration_get_calibration_status() == ETC_SENSOR_CALIB_DATA_UPLOAD &&
+	    etc_calibration_get_calibration_result() == ETC_SENSOR_CALIB_SUCCESS) {
 		etc_calibration_unlock();
 		return -EBUSY;
 	}
@@ -121,7 +155,7 @@ int etc_calibration_check(void)
 	}
 
 	etc_sensor_calibration_enter();
-	calibration_status.result = ETC_SENSOR_CALIB_NO_STATUS;
+	calibration_result_set(ETC_SENSOR_CALIB_NO_STATUS);
 	int rc = 0;
 	rc = etc_sensor_calibration_scan();
 	if (rc == 0) {
@@ -137,16 +171,20 @@ int etc_calibration_check(void)
 	}
 	LOG_DBG("Code sensor %d", rc);
 	etc_calibrator_sn = rc;
-	calibration_status.status = ETC_SENSOR_CALIB_PRECALIB_VALUE_CHECK;
+	calibration_status_set(ETC_SENSOR_CALIB_PRECALIB_VALUE_CHECK);
 	/* TODO: need to know the calibrator code */
 	rc = 0;
 	k_work_schedule(&etc_calibration_timeout, K_SECONDS(CONFIG_CALIBRATION_TIMEOUT));
 done:
 	/* Reset & exit calibration when not ready */
 	if (rc) {
-		calibration_status.status = ETC_SENSOR_CALIB_IDLE;
+		calibration_status_set(ETC_SENSOR_CALIB_IDLE);
 		/* Do not turn off power to analog circuitry, as this can cause
-		 * issues with regular sampling after the magnet swipe. */
+		 * issues with regular sampling after the magnet swipe. Release
+		 * front-end ownership all the same: etc_sensor_calibration_enter()
+		 * claimed it above, and leaving it set would make every subsequent
+		 * acquisition skip with -EBUSY. */
+		etc_sensor_calibration_release_hw();
 	}
 	etc_calibration_unlock();
 	return rc;
@@ -221,14 +259,31 @@ static int etc_calibration_packet_calibrator_sn(char *id_msg, int id_size)
 
 static void etc_calibration_timeout_handler(struct k_work *work)
 {
-	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
-	calibration_status.status = ETC_SENSOR_CALIB_IDLE;
+	/* The front-end mutex is taken because this handler runs asynchronously on
+	 * the system workqueue and can fire while a calibration run is executing on
+	 * the data_module thread; the lock serializes the hardware teardown below
+	 * against that run so both never drive the front-end at once.
+	 *
+	 * It must be K_NO_WAIT, though: the system workqueue also carries
+	 * app_event_manager dispatch, so blocking on the mutex here would stall
+	 * every module's event delivery for the length of a calibration session. A
+	 * run holding the mutex tears the hardware down itself and cancels this
+	 * work, so rescheduling and retrying later is always safe.
+	 */
+	if (k_mutex_lock(&etc_calibration_mutex, K_NO_WAIT) != 0) {
+		k_work_reschedule(&etc_calibration_timeout, K_SECONDS(CALIBRATION_TIMEOUT_RETRY_S));
+		return;
+	}
+	calibration_status_set(ETC_SENSOR_CALIB_IDLE);
 	etc_sensor_calibration_exit();
 	app_module_notify_calibration_timeout();
 	k_mutex_unlock(&etc_calibration_mutex);
 }
 
-int etc_calibration_run(void)
+/* Runs the calibration measurement. The caller must hold the front-end mutex
+ * and must already have cancelled etc_calibration_timeout.
+ */
+static int calibration_run_locked(void)
 {
 	int rc = 0;
 	uint16_t hw_raw_adc = 0;
@@ -238,10 +293,6 @@ int etc_calibration_run(void)
 	struct etc_sensor_adc_calibration_info previous_calibration_info = {0};
 	struct etc_sensor_adc_raw_data raw_data = {0};
 	uint16_t current_bat_mv = 0;
-	etc_calibration_lock();
-
-	/* Cancel timeout work */
-	k_work_cancel_delayable(&etc_calibration_timeout);
 
 	if (!etc_calibration_ready) {
 		etc_calibration_ready = true;
@@ -252,7 +303,7 @@ int etc_calibration_run(void)
 	if (current_bat_mv < batt_valid_mv) {
 		LOG_ERR("Low power to handle calibration");
 		rc = -EINVAL;
-		calibration_status.result = ETC_SENSOR_CALIB_BATTERY_LOW;
+		calibration_result_set(ETC_SENSOR_CALIB_BATTERY_LOW);
 		goto done;
 	}
 
@@ -260,7 +311,7 @@ int etc_calibration_run(void)
 	if (!IS_TEMP_IN_RANGE(TEMP_RANGE_AMBIENT, current_temp)) {
 		LOG_ERR("The current temperature is not in range");
 		rc = -EINVAL;
-		calibration_status.result = ETC_SENSOR_CALIB_AMBIENT_TEMP_OUT_OF_RANGE;
+		calibration_result_set(ETC_SENSOR_CALIB_AMBIENT_TEMP_OUT_OF_RANGE);
 		goto done;
 	}
 
@@ -269,7 +320,7 @@ int etc_calibration_run(void)
 	if (!IS_ADC_IN_RANGE(ADC_RANGE_SW1, rc)) {
 		LOG_ERR("The current adc is not in range [%d]: %d", ADC_RANGE_SW1, rc);
 		rc = -EINVAL;
-		calibration_status.result = ETC_SENSOR_CALIB_AMBIENT_TEMP_OUT_OF_RANGE;
+		calibration_result_set(ETC_SENSOR_CALIB_AMBIENT_TEMP_OUT_OF_RANGE);
 		goto done;
 	}
 	/* Save in RAM offselt */
@@ -280,7 +331,7 @@ int etc_calibration_run(void)
 	if (!IS_ADC_IN_RANGE(ADC_RANGE_SW6, rc)) {
 		LOG_ERR("The current adc is not in range [%d]: %d", ADC_RANGE_SW6, rc);
 		rc = -EINVAL;
-		calibration_status.result = ETC_SENSOR_CALIB_AMBIENT_TEMP_OUT_OF_RANGE;
+		calibration_result_set(ETC_SENSOR_CALIB_AMBIENT_TEMP_OUT_OF_RANGE);
 		goto done;
 	}
 
@@ -293,13 +344,16 @@ int etc_calibration_run(void)
 	rc = etc_calibration_load_config(&previous_calibration_info, true);
 	if (rc) {
 		rc = etc_calibration_load_config(&previous_calibration_info, false);
-		if (rc) {
-			etc_calibration_packet_no_status(calibration_status.pre_adjustment,
-							 sizeof(calibration_status.pre_adjustment));
-		}
 	}
 
-	if (rc == 0) {
+	/* Fill the report buffers under the status lock so a concurrent
+	 * etc_calibration_get_current_status() cannot copy a torn struct.
+	 */
+	k_mutex_lock(&calibration_status_mutex, K_FOREVER);
+	if (rc) {
+		etc_calibration_packet_no_status(calibration_status.pre_adjustment,
+						 sizeof(calibration_status.pre_adjustment));
+	} else {
 		/* Get pre-adjustment without calibration */
 		rc = etc_calibration_packet_status(
 			&previous_calibration_info, &hw_raw_adc,
@@ -318,12 +372,13 @@ int etc_calibration_run(void)
 	rc = etc_calibration_packet_ref(calibration_status.reference,
 		sizeof(calibration_status.reference));
 	__ASSERT_NO_MSG(rc == 0);
+	k_mutex_unlock(&calibration_status_mutex);
 
 	/* Get current calibration time to report */
 	date_time_now(&time_now);
 	calibration_info.time = time_now / 1000;
 
-	calibration_status.status = ETC_SENSOR_CALIB_IN_PROCESS;
+	calibration_status_set(ETC_SENSOR_CALIB_IN_PROCESS);
 	int msg_len = 0;
 	for (int i = TEMP_RANGE_SW2; i <= TEMP_RANGE_SW5; i++) {
 		etc_sensor_calibration_set_gpio_mask(i);
@@ -336,8 +391,8 @@ int etc_calibration_run(void)
 				LOG_ERR("The temperature %f - switch %d is not valid range",
 					temp_value, i);
 				rc = -EINVAL;
-				calibration_status.status = ETC_SENSOR_CALIB_POSTCALIB_VALUE_CHECK;
-				calibration_status.result = ETC_SENSOR_CALIB_CALIB_FAIL;
+				calibration_status_set(ETC_SENSOR_CALIB_POSTCALIB_VALUE_CHECK);
+				calibration_result_set(ETC_SENSOR_CALIB_CALIB_FAIL);
 				goto done;
 			}
 		}
@@ -353,7 +408,7 @@ int etc_calibration_run(void)
 				 sizeof(calibration_info.time));
 	etc_calibration_packet_calibrator_sn(calibration_info.id, sizeof(calibration_info.id));
 	etc_device_write_setting(ETC_CALIBRATOR_USER_ID, calibration_info.id, sizeof(calibration_info.id));
-	calibration_status.result = ETC_SENSOR_CALIB_SUCCESS;
+	calibration_result_set(ETC_SENSOR_CALIB_SUCCESS);
 done:
 	calibration_status_set(ETC_SENSOR_CALIB_DATA_UPLOAD);
 	/* Single completion marker for both the shell (`calibration run`) and the
@@ -408,6 +463,11 @@ int etc_calibration_run_and_teardown(void)
 void etc_calibration_lock(void)
 {
 	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
+}
+
+int etc_calibration_lock_timeout(k_timeout_t timeout)
+{
+	return k_mutex_lock(&etc_calibration_mutex, timeout);
 }
 
 void etc_calibration_unlock(void)
@@ -487,42 +547,41 @@ int etc_calibration_load_config(struct etc_sensor_adc_calibration_info *info, bo
 
 void etc_calibration_get_current_status(struct etc_sensor_calibration_status_info *status)
 {
-	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
+	k_mutex_lock(&calibration_status_mutex, K_FOREVER);
 	memcpy(status, &calibration_status, sizeof(calibration_status));
-	k_mutex_unlock(&etc_calibration_mutex);
+	k_mutex_unlock(&calibration_status_mutex);
 }
 
 int etc_calibration_get_calibration_status(void)
 {
 	int current_status = 0;
-	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
+	k_mutex_lock(&calibration_status_mutex, K_FOREVER);
 	current_status = calibration_status.status;
-	k_mutex_unlock(&etc_calibration_mutex);
+	k_mutex_unlock(&calibration_status_mutex);
 	return current_status;
 }
 
 int etc_calibration_get_calibration_result(void)
 {
 	int current_result = 0;
-	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
+	k_mutex_lock(&calibration_status_mutex, K_FOREVER);
 	current_result = calibration_status.result;
-	k_mutex_unlock(&etc_calibration_mutex);
+	k_mutex_unlock(&calibration_status_mutex);
 	return current_result;
 }
 
 void etc_calibration_teardown_hw(void)
 {
 	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
-	etc_calibration_ready = false;
-	etc_sensor_calibration_exit();
+	calibration_teardown_hw_locked();
 	k_mutex_unlock(&etc_calibration_mutex);
 }
 
 void etc_calibration_set_idle(void)
 {
-	k_mutex_lock(&etc_calibration_mutex, K_FOREVER);
+	k_mutex_lock(&calibration_status_mutex, K_FOREVER);
 	calibration_status.status = ETC_SENSOR_CALIB_IDLE;
-	k_mutex_unlock(&etc_calibration_mutex);
+	k_mutex_unlock(&calibration_status_mutex);
 }
 
 void etc_calibration_exit(void)
@@ -559,7 +618,13 @@ static int cmd_calibration_init(const struct shell *shell, size_t argc, char **a
 static int cmd_calibration_run(const struct shell *shell, size_t argc, char **argv)
 {
 	shell_print(shell, "Run!");
-	etc_calibration_run();
+	/* Mirror the data module: run and power the hardware down in one hold.
+	 * Plain etc_calibration_run() would leave the session owning the front-end
+	 * with nothing to release it (it cancels the timeout), which would skip
+	 * every later sensor acquisition. The status stays at DATA_UPLOAD, so the
+	 * FW-611 re-entry guard is still reachable from the shell.
+	 */
+	etc_calibration_run_and_teardown();
 	return 0;
 }
 

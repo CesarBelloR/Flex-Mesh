@@ -26,6 +26,16 @@ config ETC_SENSOR_TMP1826_GPIO_RETRIES
 	help
 	  Number of retries to set GPIO for TMP1826.
 
+config ETC_SENSOR_HW_LOCK_TIMEOUT_S
+	int "Timeout acquiring the analog front-end lock, in seconds"
+	default 15
+	help
+	  How long etc_sensor_run_acquisition() waits for the front-end lock before
+	  skipping the sample and returning -EBUSY. Must exceed the longest normal
+	  calibration run, otherwise samples are dropped whenever a calibration
+	  happens to overlap. Waiting forever here allowed a stuck acquisition to
+	  park the sensor thread indefinitely.
+
 module = ETC_SENSOR
 module-str = etc sensor
 source "subsys/logging/Kconfig.template.log_config"
