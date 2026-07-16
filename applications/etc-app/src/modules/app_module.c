@@ -1063,10 +1063,25 @@ static int cmd_magnet_status(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+/* Requests a sensor acquisition on demand, so a test can collide one with a
+ * calibration deterministically instead of waiting for the RTC to schedule it.
+ */
+static int cmd_magnet_sample(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	SEND_EVENT(app, APP_EVT_DATA_GET);
+	shell_print(sh, "Sensor acquisition requested");
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_magnet, SHELL_CMD(swipe, NULL, "Inject a magnet swipe (HALL) event.", cmd_magnet_swipe),
 	SHELL_CMD(status, NULL, "Print rail-settling state and skipped-scan count.",
 		  cmd_magnet_status),
+	SHELL_CMD(sample, NULL, "Request a sensor acquisition (APP_EVT_DATA_GET).",
+		  cmd_magnet_sample),
 	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(magnet, &sub_magnet, "Magnet-swipe HIL test commands (FW-492)", NULL);
 #endif /* CONFIG_ETC_INTERFACE_TEST_SHELL */
