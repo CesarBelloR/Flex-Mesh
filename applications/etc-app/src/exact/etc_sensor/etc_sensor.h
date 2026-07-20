@@ -233,6 +233,19 @@ int etc_sensor_calibration_set_gpio_mask(int8_t mask);
 float etc_sensor_calibration_read_temperature_from_sensor(void);
 
 /**
+ * @brief Reads the device's own onboard ambient temperature, sampled fresh.
+ *
+ * Unlike @ref etc_sensor_get_ambient_temp, which converts the sample cached by
+ * the last regular acquisition, this takes a new one — acquisition is skipped
+ * while calibration owns the front-end. Expects the analog rail to be up
+ * already (see @ref etc_sensor_calibration_enter).
+ *
+ * @return float The ambient temperature in Celsius, or SENSOR_TEMP_NO_CONNECTED
+ * if the sensor could not be read.
+ */
+float etc_sensor_calibration_read_device_ambient(void);
+
+/**
  * @brief Converts the raw ADC temperature reading to a calibrated temperature value.
  *
  * @param raw_adc The raw ADC value representing the temperature.

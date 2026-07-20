@@ -505,7 +505,7 @@ float etc_sensor_get_ambient_temp(void)
 #elif IS_ENABLED(CONFIG_ETC_AMBIENT_I2C_SENSOR)
 	int rc = sensor_sample_fetch(ambient_i2c_dev);
 	if (rc) {
-		LOG_ERR("Failed to sample the sensor (err %d), rc");
+		LOG_ERR("Failed to sample the sensor (err %d)", rc);
 		return SENSOR_TEMP_NO_CONNECTED;
 	}
 
@@ -827,6 +827,28 @@ float etc_sensor_calibration_read_temperature_from_sensor(void)
 done:
 	etc_sensor_gpios_one_wire_disable();
 	return out;
+}
+
+float etc_sensor_calibration_read_device_ambient(void)
+{
+#if IS_ENABLED(CONFIG_ETC_AMBIENT_NTC_SENSOR)
+	int raw_adc;
+
+	/* Prime the cached sample that etc_sensor_get_ambient_temp() converts:
+	 * only the regular acquisition path refreshes it, and that path is skipped
+	 * while calibration owns the front-end.
+	 */
+	raw_adc = adc_get_channel(ETC_ADC_CHANNEL_AMB);
+	if (raw_adc < 0) {
+		LOG_ERR("Failed to sample the ambient ADC (err %d)", raw_adc);
+		return SENSOR_TEMP_NO_CONNECTED;
+	}
+	sensor_r_hw_raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_HW_VER);
+	sensor_ambient_raw_adc = etc_sensor_helper_get_calibrated_adc(
+		raw_adc, &sensor_r_hw_raw_adc, &etc_sensor_adc_calibration_info);
+#endif
+	/* The I2C ambient sensor is read live, so it needs no priming. */
+	return etc_sensor_get_ambient_temp();
 }
 
 void etc_sensor_calibration_save_temperature_compensation(uint16_t hw_raw_adc)

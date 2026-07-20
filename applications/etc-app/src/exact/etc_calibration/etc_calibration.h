@@ -11,6 +11,11 @@
 #define ETC_CALIBRATOR_ID_MAX_SIZE	    (8)
 #define ETC_CALIBRATION_ADJUSTMENT_MAX_SIZE (128)
 #define ETC_CALIBRATION_REF_MAX_SIZE	    (32)
+/* Kept small: object 48939 already uploads two 128-byte adjustment strings plus
+ * a 32-byte reference string, and the practical Coiote string budget once SenML
+ * and CoAP overhead are accounted for is well under 1 kB.
+ */
+#define ETC_CALIBRATION_ERROR_DETAIL_MAX_SIZE (96)
 
 /**
  * @brief Structure to hold ADC calibration information for ETC sensor
@@ -34,6 +39,16 @@ struct etc_sensor_calibration_status_info {
 	char post_adjustment[ETC_CALIBRATION_ADJUSTMENT_MAX_SIZE];
 	char reference[ETC_CALIBRATION_REF_MAX_SIZE];
 	uint32_t activation;
+	/* Free-form troubleshooting text for the failure that produced @ref result:
+	 * the measured value and the range it violated. Empty on success.
+	 */
+	char error_detail[ETC_CALIBRATION_ERROR_DETAIL_MAX_SIZE];
+	/* Ambient from the calibrator's TMP1826 and from the device's own onboard
+	 * sensor. NaN when unread or not yet measured — never the
+	 * SENSOR_TEMP_NO_CONNECTED sentinel. Test with isnan(), not equality.
+	 */
+	float calibrator_ambient_c;
+	float device_ambient_c;
 };
 
 /**
@@ -56,14 +71,49 @@ enum etc_sensor_calibration_current_status {
 
 /**
  * @brief Enumration for calibration result
+ *
+ * Uploaded verbatim as LwM2M resource 48939/0/2, so values are part of the
+ * cloud-facing contract: only ever append, never renumber or repurpose.
+ * app_module.c gates its error indication on
+ * `result >= ETC_SENSOR_CALIB_POST_ADJ_OUT_OF_RANGE`, so anything added must
+ * sort above ordinal 2 to be reported at all.
+ *
+ * Keep exact-calibration-status_48939.xml (the Coiote-facing decode table) and
+ * the mirror in tests/hil/test_calibration_bugfixes.py in step with this list.
  **/
 enum etc_sensor_calibration_result {
 	ETC_SENSOR_CALIB_NO_STATUS,
 	ETC_SENSOR_CALIB_SUCCESS,
+	/* Reserved, never assigned; holds ordinal 2 for the gate described above. */
 	ETC_SENSOR_CALIB_POST_ADJ_OUT_OF_RANGE,
+	/* Calibrator ambient read fine but outside the acceptable window. */
 	ETC_SENSOR_CALIB_AMBIENT_TEMP_OUT_OF_RANGE,
 	ETC_SENSOR_CALIB_CALIB_FAIL,
 	ETC_SENSOR_CALIB_BATTERY_LOW,
+	/* Calibrator TMP1826 could not be read at all. */
+	ETC_SENSOR_CALIB_CALIBRATOR_AMBIENT_SENSOR_FAIL,
+	/* Device's own onboard ambient, checked only when the sensor reads: not
+	 * every board carries a working NTC, and an absent one is reported as
+	 * SENSOR_TEMP_NO_CONNECTED in 48939/0/9 rather than failing the run.
+	 */
+	ETC_SENSOR_CALIB_DEVICE_AMBIENT_OUT_OF_RANGE,
+	/* Calibrator reference network: zero/offset (SW1) and high (SW6). */
+	ETC_SENSOR_CALIB_CALIBRATOR_OFFSET_OUT_OF_RANGE,
+	ETC_SENSOR_CALIB_CALIBRATOR_HIGH_OUT_OF_RANGE,
+	/* Calibrator switch would not actuate (TMP1826 GPIO write failed). There
+	 * is no separate ADC-read-error code: adc_get_channel() returns -1 both
+	 * for a failure and as a valid sample, so the two cannot be told apart.
+	 */
+	ETC_SENSOR_CALIB_CALIBRATOR_SWITCH_FAIL,
+	/* Pre-run checks: no calibrator on the bus, or one whose EEPROM could not
+	 * be read / carries no valid serial number.
+	 */
+	ETC_SENSOR_CALIB_CALIBRATOR_NOT_FOUND,
+	ETC_SENSOR_CALIB_CALIBRATOR_ID_INVALID,
+	/* New coefficients could not be persisted to NVS. */
+	ETC_SENSOR_CALIB_SETTINGS_WRITE_FAIL,
+	/* Session timed out before the result could be uploaded. */
+	ETC_SENSOR_CALIB_TIMEOUT,
 };
 
 /**
