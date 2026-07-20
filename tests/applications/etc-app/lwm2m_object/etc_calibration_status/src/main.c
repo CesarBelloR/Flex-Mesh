@@ -26,7 +26,7 @@ ZTEST(lwm2m_etc_calibration_status_obj, test_resource_initialization)
 	lwm2m_create_obj_inst(ETC_CALIBRATION_STATUS_OBJ_ID, 0, &obj_inst);
 
 	zassert_not_null(obj_inst->resources, "Resources not initialized");
-	zassert_equal(obj_inst->resource_count, 6, "Resource count mismatch");
+	zassert_equal(obj_inst->resource_count, 9, "Resource count mismatch");
 
 	/* Verify specific resource data */
 	zassert_equal(obj_inst->resources[0].res_id, ETC_CALIBRATION_STATUS_R_STATUS);
@@ -35,6 +35,9 @@ ZTEST(lwm2m_etc_calibration_status_obj, test_resource_initialization)
 	zassert_equal(obj_inst->resources[3].res_id, ETC_CALIBRATION_STATUS_R_POST_VALUES);
 	zassert_equal(obj_inst->resources[4].res_id, ETC_CALIBRATION_STATUS_R_REF_VALUES);
 	zassert_equal(obj_inst->resources[5].res_id, ETC_CALIBRATION_STATUS_R_ACTIVE_CALIB);
+	zassert_equal(obj_inst->resources[6].res_id, ETC_CALIBRATION_STATUS_R_ERROR_DETAIL);
+	zassert_equal(obj_inst->resources[7].res_id, ETC_CALIBRATION_STATUS_R_CALIBRATOR_AMBIENT);
+	zassert_equal(obj_inst->resources[8].res_id, ETC_CALIBRATION_STATUS_R_DEVICE_AMBIENT);
 
 	ret = lwm2m_delete_obj_inst(ETC_CALIBRATION_STATUS_OBJ_ID, 0);
 	zassert_ok(ret, "Failed to delete object instance");

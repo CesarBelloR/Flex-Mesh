@@ -72,13 +72,20 @@ int etc_sensor_calibration_read_sn(void)
 
 int etc_sensor_calibration_set_gpio_mask(int8_t mask)
 {
+	if (mock.gpio_mask_result) {
+		return mock.gpio_mask_result;
+	}
 	mock.last_gpio_mask = mask;
 	return 0;
 }
 
 int etc_sensor_calibration_read_adc(struct etc_sensor_adc_raw_data *raw_adc)
 {
-	int value = mock.last_gpio_mask == MOCK_SW_ADC_HIGH ? MOCK_ADC_HIGH : MOCK_ADC_OFFSET;
+	/* A failing ADC reports -1 per port, matching real hardware. */
+	int value = mock.adc_fails
+			    ? -1
+			    : (mock.last_gpio_mask == MOCK_SW_ADC_HIGH ? MOCK_ADC_HIGH
+								       : mock.adc_offset_value);
 
 	if (raw_adc) {
 		for (int i = 0; i <= SENSOR_INPUT_IN4; i++) {
@@ -91,6 +98,11 @@ int etc_sensor_calibration_read_adc(struct etc_sensor_adc_raw_data *raw_adc)
 float etc_sensor_calibration_read_temperature_from_sensor(void)
 {
 	return mock.ambient_temp;
+}
+
+float etc_sensor_calibration_read_device_ambient(void)
+{
+	return mock.device_ambient_temp;
 }
 
 uint16_t etc_sensor_calibration_get_hw_version_adc(void)
@@ -139,7 +151,7 @@ int etc_device_write_setting(uint16_t setting_id, const void *setting, int setti
 	ARG_UNUSED(setting_id);
 	ARG_UNUSED(setting);
 	ARG_UNUSED(setting_size);
-	return 0;
+	return mock.write_setting_result;
 }
 
 /* No stored calibration: the run then reports "no previous adjustment", which

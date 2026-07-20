@@ -27,7 +27,20 @@ struct mock_state {
 	int scan_result;
 	int read_sn_result;
 	uint16_t battery_mv;
+	/* Calibrator TMP1826 ambient, and the device's own onboard ambient. Kept
+	 * separate so a test can fault one without disturbing the other. */
 	float ambient_temp;
+	float device_ambient_temp;
+	/* Fault injection: non-zero makes the calibrator switch refuse to actuate;
+	 * adc_fails makes the sensor ADC report a hard error on every port;
+	 * write_setting_result fails the NVS store of the new coefficients. */
+	int gpio_mask_result;
+	bool adc_fails;
+	int write_setting_result;
+	/* Value the offset switch reads back. Defaults to MOCK_ADC_OFFSET; set it
+	 * negative to reproduce a real board, which reads slightly below zero
+	 * there. */
+	int adc_offset_value;
 };
 
 extern struct mock_state mock;
