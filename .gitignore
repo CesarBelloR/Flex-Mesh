@@ -6,3 +6,6 @@ __pycache__
 *.jdebug.user
 .claude/
 .log/
+
+# Coiote API credentials for the HIL tests. Local to each bench; never commit.
+tests/hil/coiote_config.json
