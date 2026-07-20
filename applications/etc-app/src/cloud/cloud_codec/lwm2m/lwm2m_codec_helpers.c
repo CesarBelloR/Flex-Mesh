@@ -24,6 +24,17 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lwm2m_codec_helpers, CONFIG_CLOUD_CODEC_LOG_LEVEL);
 
+/* This file copies the calibration status struct into the object 48939
+ * resource buffers, so the two sets of sizes must agree or the strings are
+ * silently truncated on the way to the cloud.
+ */
+BUILD_ASSERT(ETC_CALIBRATION_ERROR_DETAIL_MAX_SIZE == ETC_ERROR_DETAIL_MAX_STR_SIZE,
+	     "48939/0/7 buffer must match calibration_status.error_detail");
+BUILD_ASSERT(ETC_CALIBRATION_ADJUSTMENT_MAX_SIZE == ETC_ADJUSTMENT_MAX_STR_SIZE,
+	     "48939/0/3 and /4 buffers must match calibration_status.pre/post_adjustment");
+BUILD_ASSERT(ETC_CALIBRATION_REF_MAX_SIZE == ETC_REFERENCE_MAX_STR_SIZE,
+	     "48939/0/5 buffer must match calibration_status.reference");
+
 /* Some resources does not have designated buffers. Therefore we define those in here. */
 static uint8_t bearers[2] = { LTE_FDD_BEARER, NB_IOT_BEARER };
 static int battery_voltage;
@@ -974,6 +985,28 @@ int lwm2m_codec_helpers_update_calibration_status(struct cloud_codec_data *cloud
 		return err;
 	}
 
+	err = lwm2m_set_string(
+		&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0, ETC_CALIBRATION_STATUS_R_ERROR_DETAIL),
+		info.error_detail);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0,
+				       ETC_CALIBRATION_STATUS_R_CALIBRATOR_AMBIENT),
+			    (double)info.calibrator_ambient_c);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_f64(&LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0,
+				       ETC_CALIBRATION_STATUS_R_DEVICE_AMBIENT),
+			    (double)info.device_ambient_c);
+	if (err) {
+		return err;
+	}
+
+	/* An object-instance path, so resources added to 48939 need no change here. */
 	if (cloud_data != NULL) {
 		err = lwm2m_codec_helpers_object_path_list_add(
 			cloud_data, &LWM2M_OBJ(ETC_CALIBRATION_STATUS_OBJ_ID, 0), 1);

@@ -6,7 +6,7 @@
 		<ObjectID>48939</ObjectID>
 		<ObjectURN></ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.1</ObjectVersion>
+		<ObjectVersion>1.2</ObjectVersion>
 		<MultipleInstances>Single</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -16,7 +16,7 @@
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>0-4</RangeEnumeration>
+				<RangeEnumeration>0-5</RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[Status of the current calibration. Non-idle while the calibration is ongoing. Possible values: 0: Idle, 1: Pre-calibration value check, 2: Calibration in progress, 3: Post-calibration value check, 4: Data upload]]></Description>
 			</Item>
@@ -26,9 +26,9 @@
 				<MultipleInstances>Single</MultipleInstances>
 				<Mandatory>Mandatory</Mandatory>
 				<Type>Integer</Type>
-				<RangeEnumeration>0-5</RangeEnumeration>
+				<RangeEnumeration>0-14</RangeEnumeration>
 				<Units></Units>
-				<Description><![CDATA[Result of the last performed calibration. Possible values: 0: Initial value/no status, 1: Calibration success, 2: Post-adjustment out of range, 3: Ambient temperature out of range, 4: Calibration unsuccessful, 5: Battery low, N: error n]]></Description>
+				<Description><![CDATA[Result of the last performed calibration. Possible values: 0: Initial value/no status, 1: Calibration success, 2: Reserved (unused), 3: Calibrator ambient temperature out of range, 4: Calibration unsuccessful (post-calibration reference temperature out of tolerance), 5: Battery low, 6: Calibrator ambient sensor could not be read, 7: Device ambient temperature out of range, 8: Calibrator offset/zero resistor out of range, 9: Calibrator high reference resistor out of range, 10: Calibrator switch would not actuate, 11: No calibrator detected, 12: Calibrator serial number missing or invalid, 13: Failed to store calibration coefficients, 14: Calibration session timed out. See resource 7 for the measured value and violated range. Two conditions deliberately have no code of their own: an unreadable device ambient sensor (reported as NaN in resource 9, since not every board has one) and a sensor ADC read error (indistinguishable from a valid negative reading; it surfaces as code 9 instead).]]></Description>
 			</Item>
 			<Item ID="3">
 				<Name>Pre-adjustment values</Name>
@@ -69,6 +69,36 @@
 				<RangeEnumeration></RangeEnumeration>
 				<Units></Units>
 				<Description><![CDATA[Index of the calibration that is currently in use]]></Description>
+			</Item>
+			<Item ID="7">
+				<Name>Error detail</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Free-form troubleshooting detail for the result in resource 2: the value measured and the range it violated. Empty when the calibration succeeded. Examples: "CAL_AMB t=32.10 range=18.00..28.00", "SW6 adc=3200 range=3914..4114 ports=[3201,3199,3205,3198]", "NVS write 'offset' err=-5". Intended for human diagnosis; resource 2 remains the authoritative result.]]></Description>
+			</Item>
+			<Item ID="8">
+				<Name>Calibrator ambient temperature</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>Float</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units>Cel</Units>
+				<Description><![CDATA[Ambient temperature measured by the calibrator's onboard sensor at the time of the calibration run. NaN if the sensor could not be read.]]></Description>
+			</Item>
+			<Item ID="9">
+				<Name>Device ambient temperature</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>Float</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units>Cel</Units>
+				<Description><![CDATA[Ambient temperature measured by the device's own onboard sensor at the time of the calibration run. Reported alongside resource 8 so a drifting device sensor can be told apart from a drifting calibrator. NaN if the sensor could not be read, which is informational only: not every board carries a working ambient sensor, so an unreadable one does not fail the calibration.]]></Description>
 			</Item>
 		</Resources>
 		<Description2 />

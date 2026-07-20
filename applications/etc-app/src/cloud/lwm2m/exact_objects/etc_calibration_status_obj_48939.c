@@ -19,8 +19,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define OBJECT_ID     ETC_CALIBRATION_STATUS_OBJ_ID
 #define VERSION_MAJOR 1
-#define VERSION_MINOR 1
-#define MAX_ID	      6
+#define VERSION_MINOR 2
+#define MAX_ID	      9
 
 #define RESOURCE_INSTANCE_COUNT (MAX_ID)
 
@@ -31,6 +31,9 @@ static char pre_adjustment_values[ETC_ADJUSTMENT_MAX_STR_SIZE];
 static char post_adjustment_values[ETC_ADJUSTMENT_MAX_STR_SIZE];
 static char reference_values[ETC_REFERENCE_MAX_STR_SIZE];
 static uint32_t active_calibration;
+static char error_detail[ETC_ERROR_DETAIL_MAX_STR_SIZE];
+static double calibrator_ambient;
+static double device_ambient;
 
 static struct lwm2m_engine_obj etc_calibration_status;
 static struct lwm2m_engine_obj_field fields[] = {
@@ -40,6 +43,9 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(ETC_CALIBRATION_STATUS_R_POST_VALUES, R, STRING),
 	OBJ_FIELD_DATA(ETC_CALIBRATION_STATUS_R_REF_VALUES, R, STRING),
 	OBJ_FIELD_DATA(ETC_CALIBRATION_STATUS_R_ACTIVE_CALIB, R, U32),
+	OBJ_FIELD_DATA(ETC_CALIBRATION_STATUS_R_ERROR_DETAIL, R, STRING),
+	OBJ_FIELD_DATA(ETC_CALIBRATION_STATUS_R_CALIBRATOR_AMBIENT, R, FLOAT),
+	OBJ_FIELD_DATA(ETC_CALIBRATION_STATUS_R_DEVICE_AMBIENT, R, FLOAT),
 };
 
 static struct lwm2m_engine_obj_inst inst;
@@ -62,6 +68,9 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 	memset(post_adjustment_values, 0, ETC_ADJUSTMENT_MAX_STR_SIZE);
 	memset(reference_values, 0, ETC_REFERENCE_MAX_STR_SIZE);
 	active_calibration = 0;
+	memset(error_detail, 0, ETC_ERROR_DETAIL_MAX_STR_SIZE);
+	calibrator_ambient = 0;
+	device_ambient = 0;
 
 	init_res_instance(res_inst, ARRAY_SIZE(res_inst));
 
@@ -81,6 +90,12 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 			      strlen(reference_values));
 	INIT_OBJ_RES_DATA(ETC_CALIBRATION_STATUS_R_ACTIVE_CALIB, res, i, res_inst, j,
 			  		  &active_calibration, sizeof(active_calibration));
+	INIT_OBJ_RES_DATA_LEN(ETC_CALIBRATION_STATUS_R_ERROR_DETAIL, res, i, res_inst, j,
+			      error_detail, ETC_ERROR_DETAIL_MAX_STR_SIZE, strlen(error_detail));
+	INIT_OBJ_RES_DATA(ETC_CALIBRATION_STATUS_R_CALIBRATOR_AMBIENT, res, i, res_inst, j,
+			  &calibrator_ambient, sizeof(calibrator_ambient));
+	INIT_OBJ_RES_DATA(ETC_CALIBRATION_STATUS_R_DEVICE_AMBIENT, res, i, res_inst, j,
+			  &device_ambient, sizeof(device_ambient));
 
 	inst.resources = res;
 	inst.resource_count = i;
