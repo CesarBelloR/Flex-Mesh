@@ -64,6 +64,7 @@ pytest tests/hil/soak_reclaim_reliability.py -v -s --port /dev/ttyACM0 --soak-ho
 | `test_relay_command_coiote.py` | Cloud E2E: executes the EXACT Relay Command (48935/0/3) `RECLAIM:*` subcommands via Coiote and asserts the reply read back from the Response resource (48935/0/4) |
 | `test_magnet_swipe_settling.py` | FW-492: repeated magnet swipes must not re-power the analog rail while it is settling. Needs the `overlay-hil.conf` overlay (adds `magnet swipe` / `magnet status` shell commands) |
 | `test_functional_test_no_battery_coiote.py` | FW-169: operator-assisted cloud check that the functional test reports Result (48937/0/1) `7` (battery not connected) with the battery removed. Run the functional test on the jig first; pass `--functional-test-expect 0` for the battery-installed positive case |
+| `test_calibration.py` | FW-588/611/612/613/614: operator-attended calibration suite (LED vs result, portal 48939/48950 cross-checks, reboot persistence, sensor/calibration concurrency). Needs `overlay-hil.conf`; Coiote creds optional. Tests share their calibrations, so run the file in order and follow the five setup prompts |
 
 ## Cloud E2E test (Coiote)
 
