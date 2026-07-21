@@ -250,3 +250,45 @@ void app_module_notify_calibration_timeout(void)
 {
 	SEND_EVENT(app, APP_EVT_TIMEOUT_CALIBRATION);
 }
+
+enum app_upload_reason app_module_upload_reason_merge(enum app_upload_reason a,
+						      enum app_upload_reason b)
+{
+	/* Rank is explicit so the enum declaration order is not load-bearing. */
+	static const uint8_t rank[] = {
+		[APP_UPLOAD_NONE] = 0,
+		[APP_UPLOAD_NORMAL] = 1,
+		[APP_UPLOAD_LORA_SYNC] = 2,
+		[APP_UPLOAD_MAGNET] = 3,
+	};
+
+	return rank[a] >= rank[b] ? a : b;
+}
+
+enum app_upload_reason app_module_upload_reason_from_schedule(enum app_wakeup_tx_work_type sched)
+{
+	switch (sched) {
+	case APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK:
+		return APP_UPLOAD_LORA_SYNC;
+	case APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK:
+		return APP_UPLOAD_MAGNET;
+	case APP_WAKEUP_TX_INTERVAL_WORK:
+	case APP_WAKEUP_TX_PROBE_WORK:
+	default:
+		return APP_UPLOAD_NORMAL;
+	}
+}
+
+enum etc_transmit_sub_job app_module_sub_job_for_reason(enum app_upload_reason reason)
+{
+	switch (reason) {
+	case APP_UPLOAD_LORA_SYNC:
+		return ETC_TRANSMIT_SYNC_CLOUD_LORA;
+	case APP_UPLOAD_MAGNET:
+		return ETC_TRANSMIT_SYNC_MAGNET;
+	case APP_UPLOAD_NONE:
+	case APP_UPLOAD_NORMAL:
+	default:
+		return ETC_TRANSMIT_NORMAL;
+	}
+}

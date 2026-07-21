@@ -41,13 +41,6 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #include <zephyr/shell/shell.h>
 #include "app_module_helper.h"
 
-enum app_wakeup_tx_work_type {
-	APP_WAKEUP_TX_INTERVAL_WORK,
-	APP_WAKEUP_TX_PROBE_WORK,
-	APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK,
-	APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK,
-};
-
 struct app_msg_data {
 	union {
 		struct cloud_event cloud;
@@ -107,30 +100,70 @@ static int next_wakeup = 0;
 static int app_backoff_multiple = 1;
 static int app_backoff_last_multiple = -1;
 
-static enum app_wakeup_tx_work_type wakeup_tx_type = APP_WAKEUP_TX_INTERVAL_WORK;
+/* Why the next alarm-1 (transmit) RTC wakeup was scheduled. Owned exclusively
+ * by app_set_next_wakeup_time_for_job(); read non-destructively at RTC wakeup. */
+static enum app_wakeup_tx_work_type scheduled_tx_reason = APP_WAKEUP_TX_INTERVAL_WORK;
+/* A pending upload request, merged by rank. Armed by the magnet path and by
+ * translating scheduled_tx_reason at RTC wakeup; taken-and-cleared only by
+ * app_dispatch_upload(). APP_UPLOAD_NONE means no request armed. */
+static enum app_upload_reason pending_upload_reason = APP_UPLOAD_NONE;
 static void app_soft_watchdog_work_handler(struct k_work* work);
 
 K_MUTEX_DEFINE(app_module_lock);
 K_WORK_DELAYABLE_DEFINE(app_soft_watchdog_work, app_soft_watchdog_work_handler);
 
-static void app_set_tx_work_type(enum app_wakeup_tx_work_type work_type)
+static void app_set_scheduled_tx_reason(enum app_wakeup_tx_work_type reason)
 {
 	k_mutex_lock(&app_module_lock, K_FOREVER);
-	if (wakeup_tx_type >= APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
-		LOG_WRN("Wakeup tx work type already set to %d", wakeup_tx_type);
-		k_mutex_unlock(&app_module_lock);
-		return;
-	}
-	wakeup_tx_type = work_type;
+	scheduled_tx_reason = reason;
 	k_mutex_unlock(&app_module_lock);
 }
 
+static enum app_wakeup_tx_work_type app_get_scheduled_tx_reason(void)
+{
+	enum app_wakeup_tx_work_type reason;
+	k_mutex_lock(&app_module_lock, K_FOREVER);
+	reason = scheduled_tx_reason;
+	k_mutex_unlock(&app_module_lock);
+	return reason;
+}
+
+static void app_request_upload(enum app_upload_reason reason)
+{
+	k_mutex_lock(&app_module_lock, K_FOREVER);
+	pending_upload_reason = app_module_upload_reason_merge(pending_upload_reason, reason);
+	k_mutex_unlock(&app_module_lock);
+}
+
+static enum app_upload_reason app_take_upload_reason(void)
+{
+	enum app_upload_reason reason;
+	k_mutex_lock(&app_module_lock, K_FOREVER);
+	reason = pending_upload_reason;
+	pending_upload_reason = APP_UPLOAD_NONE;
+	k_mutex_unlock(&app_module_lock);
+	return reason;
+}
+
+static enum app_upload_reason app_peek_upload_reason(void)
+{
+	enum app_upload_reason reason;
+	k_mutex_lock(&app_module_lock, K_FOREVER);
+	reason = pending_upload_reason;
+	k_mutex_unlock(&app_module_lock);
+	return reason;
+}
+
+static bool app_upload_pending(void)
+{
+	return app_peek_upload_reason() != APP_UPLOAD_NONE;
+}
+
 /* Defind functions for set/get next wake up */
-static void app_set_next_wakeup(int wakeup, enum app_wakeup_tx_work_type work_type)
+static void app_set_next_wakeup(int wakeup)
 {
 	k_mutex_lock(&app_module_lock, K_FOREVER);
 	next_wakeup = wakeup;
-	app_set_tx_work_type(work_type);
 	k_mutex_unlock(&app_module_lock);
 }
 
@@ -141,25 +174,6 @@ static int app_get_next_wakeup(void)
 	wakeup = next_wakeup;
 	k_mutex_unlock(&app_module_lock);
 	return wakeup;
-}
-
-static enum app_wakeup_tx_work_type app_get_and_reset_wakeup_tx_work_type(void)
-{
-	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
-	k_mutex_lock(&app_module_lock, K_FOREVER);
-	type = wakeup_tx_type;
-	wakeup_tx_type = APP_WAKEUP_TX_INTERVAL_WORK;
-	k_mutex_unlock(&app_module_lock);
-	return type;
-}
-
-static enum app_wakeup_tx_work_type app_get_wakeup_tx_work_type(void)
-{
-	enum app_wakeup_tx_work_type type = APP_WAKEUP_TX_INTERVAL_WORK;
-	k_mutex_lock(&app_module_lock, K_FOREVER);
-	type = wakeup_tx_type;
-	k_mutex_unlock(&app_module_lock);
-	return type;
 }
 
 static void app_soft_watchdog_work_handler(struct k_work* work) 
@@ -405,7 +419,6 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 	time_t next_transmit_logger_lora_sync_cloud = 0;
 	time_t next_transmit_no_probe = 0;
 	time_t next_transmit = 0;
-	enum app_wakeup_tx_work_type type = app_get_wakeup_tx_work_type();
 	enum etc_sensor_status sensor_status = etc_sensor_get_status();
 	LOG_DBG("Mode %d %d %d", etc_device_get_mode(), etc_get_power_mode(), sensor_status);
 	int wakeup = 0;
@@ -527,6 +540,10 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 
 		pcf85263a_alarm_config_type_1(config_1);
 		pcf85263a_alarm_enable_type_1(flag_1);
+		/* The reason is written only when alarm 1 is actually (re)programmed.
+		 * A LOG-only reschedule leaves alarm 1 armed from a previous round,
+		 * and must not overwrite why it was scheduled. */
+		enum app_wakeup_tx_work_type type;
 		if (next_transmit == next_transmit_logger_lora_sync_cloud) {
 			type = APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK;
 		} else if (next_transmit == next_transmit_no_probe) {
@@ -542,14 +559,15 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 
 		/* Sync the next transmit data */
 		etc_device_set_next_transmit(next_transmit);
+		app_set_scheduled_tx_reason(type);
 
 		if ((wakeup == 0) || (wakeup > next_transmit)) {
 			wakeup = next_transmit;
 		}
 	}
 
-	app_set_next_wakeup(wakeup, type);
-	
+	app_set_next_wakeup(wakeup);
+
 	LOG_DBG("Now at: %02d:%02d:%02d", tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
 	LOG_DBG("Log %u - Transmit/Receive %u", (uint32_t)next_log, (uint32_t)next_transmit);
 
@@ -568,6 +586,47 @@ static void app_set_next_wakeup_time_for_job(enum etc_device_job job)
 	pcf85263a_set_interrupt_io(true);
 #endif
 	k_mutex_unlock(&app_module_lock);
+}
+
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+/* Count of dispatched uploads. Exposed via the `magnet status` shell command
+ * so HIL tests can assert exactly-once dispatch deterministically. */
+static uint32_t upload_dispatch_count;
+#endif
+
+/* Single dispatch point for pending upload requests: consumes the request,
+ * sets the transmit sub-job and emits exactly one data event.
+ *
+ * NONE is a no-op, not a default to NORMAL. Two consumers can race for one
+ * armed request (the app-module thread via DATA_EVT_DATA_READY and the system
+ * workqueue via the RTC branch); pending == NONE itself encodes "already
+ * dispatched", so every interleaving collapses to exactly-once. Defaulting to
+ * NORMAL here would let the losing consumer reset the sub-job and emit a
+ * spurious transmit while the modem is still connecting. */
+static void app_dispatch_upload(void)
+{
+	enum app_upload_reason reason = app_take_upload_reason();
+
+	if (reason == APP_UPLOAD_NONE) {
+		LOG_DBG("Upload already dispatched");
+		return;
+	}
+
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+	upload_dispatch_count++;
+#endif
+	etc_device_set_transmit_sub_job(app_module_sub_job_for_reason(reason));
+
+	if ((reason == APP_UPLOAD_LORA_SYNC) || (reason == APP_UPLOAD_MAGNET)) {
+		LOG_DBG("Dispatch upload (%d) -> APP_EVT_DATA_SYNC_CLOUD", reason);
+		SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
+	} else if (etc_device_is_relay()) {
+		LOG_DBG("Dispatch upload -> APP_EVT_DATA_RECEIVE");
+		SEND_EVENT(app, APP_EVT_DATA_RECEIVE);
+	} else {
+		LOG_DBG("Dispatch upload -> APP_EVT_DATA_TRANSMIT");
+		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
+	}
 }
 
 static void app_peripheral_on(bool is_rtc)
@@ -625,36 +684,28 @@ static void app_peripheral_on(bool is_rtc)
 			break;
 		}
 		case ETC_DEVICE_JOB_TX_RX: {
+			LOG_DBG("Doing transmit/receive");
 			etc_device_set_job(ETC_DEVICE_JOB_TX_RX);
 			app_module_backoff_check_multiple_value();
-			if (app_get_and_reset_wakeup_tx_work_type() ==
-			    APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
-				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
-				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
-			} else {
-				if (etc_device_is_relay()) {
-					LOG_DBG("Doing receive");
-					SEND_EVENT(app, APP_EVT_DATA_RECEIVE);
-				} else {
-					LOG_DBG("Doing transmit");
-					SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
-				}
-			}
+			/* Merge before rescheduling so the reschedule below cannot
+			 * overwrite the reason this wakeup fired for. */
+			app_request_upload(app_module_upload_reason_from_schedule(
+				app_get_scheduled_tx_reason()));
 			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_TX_RX);
-
+			/* No sample to wait for; dispatch directly. */
+			app_dispatch_upload();
 			break;
 		}
 		case ETC_DEVICE_JOB_BOTH: {
 			LOG_DBG("Doing both job");
-			app_module_backoff_check_multiple_value();
 			etc_device_set_job(ETC_DEVICE_JOB_BOTH);
-			SEND_EVENT(app, APP_EVT_DATA_GET);
-			if (app_get_and_reset_wakeup_tx_work_type() ==
-			    APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
-				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
-				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
-			}
+			app_module_backoff_check_multiple_value();
+			app_request_upload(app_module_upload_reason_from_schedule(
+				app_get_scheduled_tx_reason()));
 			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_BOTH);
+			/* Dispatch is deferred to DATA_EVT_DATA_READY (or
+			 * SENSOR_EVT_ENVIRONMENTAL_SAMPLE_SKIPPED). */
+			SEND_EVENT(app, APP_EVT_DATA_GET);
 			break;
 		}
 		}
@@ -716,7 +767,7 @@ static void app_input_handler(enum etc_interface_event_type type)
 			hall_scan_skipped_count++;
 #endif
 		}
-		app_set_tx_work_type(APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK);
+		app_request_upload(APP_UPLOAD_MAGNET);
 		etc_ble_start_adv_with_timeout();
 		app_peripheral_on(false);
 	} else {
@@ -876,29 +927,14 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-		enum etc_device_job job = etc_device_get_job();
-		if ((job == ETC_DEVICE_JOB_BOTH) || (job == ETC_DEVICE_JOB_TX_RX)) {
-			enum app_wakeup_tx_work_type type = app_get_and_reset_wakeup_tx_work_type();
-			if (type == APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK) {
-				LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_SYNC_CLOUD");
-				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_CLOUD_LORA);
-				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
-			} else if (type == APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK) {
-				LOG_DBG("DATA_EVT_DATA_READY -> "
-					"APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK");
-				etc_device_set_transmit_sub_job(ETC_TRANSMIT_SYNC_MAGNET);
-				SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
-			} else {
-				etc_device_set_transmit_sub_job(ETC_TRANSMIT_NORMAL);
-				if (etc_device_is_relay()) {
-					LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_RECEIVE");
-					SEND_EVENT(app, APP_EVT_DATA_RECEIVE);
-				} else {
-					LOG_DBG("DATA_EVT_DATA_READY -> APP_EVT_DATA_TRANSMIT");
-					SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
-				}
-			}
-		} else if (job == ETC_DEVICE_JOB_LOG) {
+		/* Dispatch on any job when a request is pending: a magnet request
+		 * whose own sample was dropped must still go out on a later LOG
+		 * wake, and app_peripheral_off() must not suspend spi2/spi3 under
+		 * an in-flight upload. A stray DATA_READY with nothing pending
+		 * lands in app_dispatch_upload()'s NONE no-op. */
+		if (etc_device_get_job() != ETC_DEVICE_JOB_LOG || app_upload_pending()) {
+			app_dispatch_upload();
+		} else {
 			app_peripheral_off();
 		}
 		return;
@@ -920,6 +956,14 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		/* The sensor module polls a first sample on the first cloud
+		 * connection after boot; arm the request its DATA_READY delivers. */
+		static bool first_sample_armed = false;
+		if (!first_sample_armed) {
+			first_sample_armed = true;
+			app_request_upload(APP_UPLOAD_NORMAL);
+		}
+
 		int soft_watchdog_timeout_secs = etc_get_soft_watchdog_timeout_secs();
 		if (soft_watchdog_timeout_secs != -1) {
 			k_work_reschedule(&app_soft_watchdog_work, 
@@ -1017,6 +1061,7 @@ static int cmd_trigger_tx(const struct shell *sh, size_t argc, char **argv)
 
 	shell_print(sh, "Triggering sample + LoRa TX (interval)");
 	etc_device_set_job(ETC_DEVICE_JOB_BOTH);
+	app_request_upload(APP_UPLOAD_NORMAL);
 	SEND_EVENT(app, APP_EVT_DATA_GET);
 	return 0;
 }
@@ -1053,13 +1098,43 @@ static int cmd_magnet_swipe(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+static const char *upload_reason_str(enum app_upload_reason reason)
+{
+	switch (reason) {
+	case APP_UPLOAD_NORMAL:
+		return "normal";
+	case APP_UPLOAD_LORA_SYNC:
+		return "lora";
+	case APP_UPLOAD_MAGNET:
+		return "magnet";
+	case APP_UPLOAD_NONE:
+	default:
+		return "none";
+	}
+}
+
+static const char *sub_job_str(enum etc_transmit_sub_job sub_job)
+{
+	switch (sub_job) {
+	case ETC_TRANSMIT_SYNC_CLOUD_LORA:
+		return "lora";
+	case ETC_TRANSMIT_SYNC_MAGNET:
+		return "magnet";
+	case ETC_TRANSMIT_NORMAL:
+	default:
+		return "normal";
+	}
+}
+
 static int cmd_magnet_status(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
 
-	shell_print(sh, "settling=%s skips=%u", etc_sensor_power_settling() ? "yes" : "no",
-		    hall_scan_skipped_count);
+	shell_print(sh, "settling=%s skips=%u pending=%s dispatches=%u subjob=%s",
+		    etc_sensor_power_settling() ? "yes" : "no", hall_scan_skipped_count,
+		    upload_reason_str(app_peek_upload_reason()), upload_dispatch_count,
+		    sub_job_str(etc_device_get_transmit_sub_job()));
 	return 0;
 }
 

@@ -16,6 +16,8 @@ static char *get_evt_type_str(enum sensor_event_type type)
 		return "SENSOR_EVT_ENVIRONMENTAL_NO_CONNECT";
 	case SENSOR_EVT_ENVIRONMENTAL_CONNECTED:
 		return "SENSOR_EVT_ENVIRONMENTAL_CONNECTED";
+	case SENSOR_EVT_ENVIRONMENTAL_SAMPLE_SKIPPED:
+		return "SENSOR_EVT_ENVIRONMENTAL_SAMPLE_SKIPPED";
 	case SENSOR_EVT_BATTERY_ERROR:
 		return "SENSOR_EVT_BATTERY_ERROR";
 	case SENSOR_EVT_BATTERY_IN_CHARGING:
@@ -49,7 +51,8 @@ static void log_sensor_event(const struct app_event_header *aeh)
 {
 	const struct sensor_event *event = cast_sensor_event(aeh);
 
-	if (event->type == SENSOR_EVT_ERROR) {
+	if (event->type == SENSOR_EVT_ERROR ||
+	    event->type == SENSOR_EVT_ENVIRONMENTAL_SAMPLE_SKIPPED) {
 		APP_EVENT_MANAGER_LOG(aeh, "%s - Error code %d",
 				get_evt_type_str(event->type), event->data.err);
 	} else {

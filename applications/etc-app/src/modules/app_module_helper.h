@@ -6,6 +6,49 @@
 
 #define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
 #define MINIMUM_TIME_TO_WAKEUP_S   (3)
+
+/** @brief Why the next alarm-1 (transmit) RTC wakeup was scheduled. */
+enum app_wakeup_tx_work_type {
+	APP_WAKEUP_TX_INTERVAL_WORK,
+	APP_WAKEUP_TX_PROBE_WORK,
+	APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK,
+	APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK,
+};
+
+/** @brief A pending upload request and its cause. */
+enum app_upload_reason {
+	APP_UPLOAD_NONE,
+	APP_UPLOAD_NORMAL,
+	APP_UPLOAD_LORA_SYNC,
+	APP_UPLOAD_MAGNET,
+};
+
+/**
+ * @brief Merge two upload requests into the one that must win.
+ *
+ * @param a First upload reason.
+ * @param b Second upload reason.
+ * @return The higher-ranked reason (MAGNET > LORA_SYNC > NORMAL > NONE).
+ */
+enum app_upload_reason app_module_upload_reason_merge(enum app_upload_reason a,
+						      enum app_upload_reason b);
+
+/**
+ * @brief Translate a scheduled-wakeup reason into an upload request.
+ *
+ * @param sched The reason the transmit wakeup was scheduled.
+ * @return The upload reason to arm for this wakeup.
+ */
+enum app_upload_reason app_module_upload_reason_from_schedule(enum app_wakeup_tx_work_type sched);
+
+/**
+ * @brief Map an upload reason to the transmit sub-job it must run as.
+ *
+ * @param reason The upload reason being dispatched.
+ * @return The matching transmit sub-job.
+ */
+enum etc_transmit_sub_job app_module_sub_job_for_reason(enum app_upload_reason reason);
+
 /**
  * @brief Checks if the given interval is aligned with @ref DEFAULT_PUBLISH_INTERVAL_S.
  * 
