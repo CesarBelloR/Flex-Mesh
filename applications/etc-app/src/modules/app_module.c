@@ -97,8 +97,6 @@ static struct module_data self = {
 
 /* Store the next wakup */
 static int next_wakeup = 0;
-static int app_backoff_multiple = 1;
-static int app_backoff_last_multiple = -1;
 
 /* Why the next alarm-1 (transmit) RTC wakeup was scheduled. Owned exclusively
  * by app_set_next_wakeup_time_for_job(); read non-destructively at RTC wakeup. */
