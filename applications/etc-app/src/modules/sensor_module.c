@@ -164,6 +164,18 @@ static void sensor_module_send_sensor(struct sensor_data *sensor,
 	APP_EVENT_SUBMIT(sensor_event);
 }
 
+/* Report a sample request that produced no reading, so the app module can
+ * still deliver a pending upload from the records already on flash instead
+ * of silently dropping it. */
+static void sensor_module_send_skipped(int err)
+{
+	struct sensor_event *sensor_event = new_sensor_event();
+
+	sensor_event->type = SENSOR_EVT_ENVIRONMENTAL_SAMPLE_SKIPPED;
+	sensor_event->data.err = err;
+	APP_EVENT_SUBMIT(sensor_event);
+}
+
 static void sensor_module_enter_functional_test(struct sensor_data *sensor)
 {
 	struct sensor_event *sensor_event = new_sensor_event();
@@ -282,12 +294,18 @@ static int sensor_poll_handler(enum sensor_sample_type sample_type)
 		if (etc_sensor_disable_power()) {
 			LOG_DBG("Sensor power disabled");
 		}
+		/* -EBUSY, not 0: a success code would be indistinguishable from a
+		 * real reading in logs and HIL asserts. */
+		sensor_module_send_skipped(-EBUSY);
 		return 0;
 	}
 
 #if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 	if (watchdog_sens_sel0_wdt_sem_take(K_SECONDS(SENSOR_HANDLER_MAX_WAIT_S)) != 0) {
 		LOG_WRN("Could not take watchdog_sens_sel0 semaphore");
+		if (sample_type != SENSOR_SAMPLE_TEST) {
+			sensor_module_send_skipped(-EAGAIN);
+		}
 		return -EAGAIN;
 	}
 #endif
@@ -301,6 +319,9 @@ static int sensor_poll_handler(enum sensor_sample_type sample_type)
 #if !DT_NODE_EXISTS(DT_NODELABEL(hw_wdt))
 		watchdog_sens_sel0_wdt_sem_give();
 #endif
+		if (sample_type != SENSOR_SAMPLE_TEST) {
+			sensor_module_send_skipped(rc);
+		}
 		return rc;
 	}
 

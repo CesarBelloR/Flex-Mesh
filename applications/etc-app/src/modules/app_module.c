@@ -940,6 +940,30 @@ static void on_all_events(struct app_msg_data *msg)
 		return;
 	}
 
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_ENVIRONMENTAL_SAMPLE_SKIPPED)) {
+		LOG_WRN("Sensor sample skipped (err %d)", msg->module.sensor.data.err);
+		if (app_upload_pending()) {
+			/* Deliver the pending upload anyway; the records already on
+			 * flash are transmitted and the dropped reading ships next
+			 * interval. */
+			app_dispatch_upload();
+		} else if (etc_device_get_job() == ETC_DEVICE_JOB_LOG) {
+			app_peripheral_off();
+		}
+		return;
+	}
+
+	if (IS_EVENT(msg, sensor, SENSOR_EVT_FUNCTIONAL_TEST_START)) {
+		/* The sample entered functional test instead of producing a
+		 * reading. Drop any pending request: the device is on a charger
+		 * and functional test drives its own cloud sends. */
+		enum app_upload_reason reason = app_take_upload_reason();
+		if (reason != APP_UPLOAD_NONE) {
+			LOG_WRN("Dropping pending upload request (%d): functional test", reason);
+		}
+		return;
+	}
+
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_DATA_READY) || IS_EVENT(msg, cloud, CLOUD_EVT_PAUSED)) {
 		app_peripheral_off();
 		return;
