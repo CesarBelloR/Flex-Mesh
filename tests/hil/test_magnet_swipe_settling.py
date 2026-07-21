@@ -12,7 +12,8 @@ test works regardless of whether application logs are routed to RTT or the seria
 console:
 
   magnet swipe   -> inject a HALL (magnet swipe) event, bypassing the GPIO debounce
-  magnet status  -> "settling=<yes|no> skips=<count>"
+  magnet status  -> "settling=<yes|no> skips=<count> pending=<reason>
+                     dispatches=<count> subjob=<sub-job>"
 
 `skips` counts magnet swipes that skipped the calibrator scan because the rail was
 still settling. Both commands require a build with CONFIG_ETC_INTERFACE_TEST_SHELL=y;
@@ -23,7 +24,6 @@ debug.conf so normal debug builds don't carry the test-only command overhead), e
       -DEXTRA_CONF_FILE="debug.conf;rtt.conf;overlay-memfault.conf;overlay-hil.conf"
 """
 
-import re
 import time
 
 
@@ -51,12 +51,41 @@ def _flush_and_wait(dut, seconds=2):
         pass
 
 
+def _grp(match, index):
+    value = match.group(index)
+    return value.decode('utf-8', 'replace') if isinstance(value, bytes) else value
+
+
+def _magnet_status(dut, timeout=15):
+    """Return the parsed `magnet status` fields.
+
+    Anchored on the command's own unique output rather than the shell prompt:
+    application logs share this console and constantly redraw the prompt, so a
+    prompt-anchored read returns before the command's output has arrived."""
+    dut.write(b'magnet status\r\n')
+    try:
+        m = dut.expect(r'settling=(yes|no)\s+skips=(\d+)\s+pending=(\w+)\s+'
+                       r'dispatches=(\d+)\s+subjob=(\w+)', timeout=timeout)
+    except Exception as exc:
+        raise AssertionError(f"Timed out reading `magnet status` ({timeout}s): {exc}") from None
+    return {
+        'settling': _grp(m, 1) == 'yes',
+        'skips': int(_grp(m, 2)),
+        'pending': _grp(m, 3),
+        'dispatches': int(_grp(m, 4)),
+        'subjob': _grp(m, 5),
+    }
+
+
 def _status(dut):
     """Return (settling: bool, skips: int) parsed from `magnet status`."""
-    text = _shell_cmd_output(dut, 'magnet status')
-    m = re.search(r'settling=(yes|no)\s+skips=(\d+)', text)
-    assert m, f"Could not parse magnet status.\nOutput: {text}"
-    return m.group(1) == 'yes', int(m.group(2))
+    st = _magnet_status(dut)
+    return st['settling'], st['skips']
+
+
+def _dispatch_count(dut):
+    """Return the upload dispatch counter from `magnet status` (FW-1113)."""
+    return _magnet_status(dut)['dispatches']
 
 
 def _wait_for_settling(dut, want, timeout_s=20):
@@ -111,3 +140,37 @@ def test_repeated_swipe_skips_scan_while_rail_settling(dut):
     assert skips_after_3 == skips_after_2, \
         (f"Swipe after the settling window must not skip the scan: "
          f"before={skips_after_2}, after={skips_after_3}")
+
+
+def test_swipe_during_settling_still_dispatches_upload(dut):
+    """FW-1113: a swipe whose own sample is dropped by the settling window must
+    still produce an upload (from the records already on flash) instead of the
+    request silently waiting for the next log interval."""
+    dut.reboot()
+    _flush_and_wait(dut)
+    _wait_for_settling(dut, want=False)
+
+    # Swipe #1 on a settled rail: full acquisition, DATA_READY dispatches the
+    # magnet upload.
+    d0 = _dispatch_count(dut)
+    _shell_cmd_output(dut, 'magnet swipe')
+    deadline = time.time() + 20
+    d1 = d0
+    while d1 == d0 and time.time() < deadline:
+        time.sleep(0.5)
+        d1 = _dispatch_count(dut)
+    assert d1 == d0 + 1, \
+        f"Swipe #1 (settled rail) should dispatch exactly once: {d0} -> {d1}"
+
+    # Swipe #2 inside the settling window: the sample is dropped, but the
+    # skipped-sample event must still deliver the pending upload.
+    _wait_for_settling(dut, want=True)
+    _shell_cmd_output(dut, 'magnet swipe')
+    deadline = time.time() + 20
+    d2 = d1
+    while d2 == d1 and time.time() < deadline:
+        time.sleep(0.5)
+        d2 = _dispatch_count(dut)
+    assert d2 == d1 + 1, \
+        (f"Swipe during settling must still dispatch its upload exactly once: "
+         f"before={d1}, after={d2}")
