@@ -1124,12 +1124,21 @@ void app_module_thread_fn(void)
 
 static int cmd_trigger_tx(const struct shell *sh, size_t argc, char **argv)
 {
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
+	bool opportunistic = (argc == 2) && (strcmp(argv[1], "lte") == 0);
 
-	shell_print(sh, "Triggering sample + LoRa TX (interval)");
+	shell_print(sh, "Triggering sample + LoRa TX (interval)%s",
+		    opportunistic ? " + FW-788 LTE arm" : "");
 	etc_device_set_job(ETC_DEVICE_JOB_BOTH);
 	app_request_upload(APP_UPLOAD_NORMAL);
+	if (opportunistic) {
+		/* Exercise the FW-788 opportunistic-LTE arm exactly as an RTC
+		 * transmit wake would, so HIL can drive it deterministically. */
+		time_t now = 0;
+#if defined(CONFIG_PCF85263)
+		pcf85263a_rtc_get_time(&now);
+#endif
+		app_arm_opportunistic_lte(now);
+	}
 	SEND_EVENT(app, APP_EVT_DATA_GET);
 	return 0;
 }
@@ -1145,13 +1154,31 @@ static int cmd_trigger_rx(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+static int cmd_lte_sync_reset(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	etc_lte_sync_store_reset();
+	shell_print(sh, "FW-789 LTE backoff state reset");
+	return 0;
+}
+#endif
+
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_app_module,
 			       SHELL_CMD(trigger_rx, NULL,
 					 "Trigger relay LoRa RX listen (interval-based)",
 					 cmd_trigger_rx),
 			       SHELL_CMD(trigger_tx, NULL,
-					 "Trigger sample read and LoRa TX (interval-based)",
+					 "Trigger sample read and LoRa TX (interval-based); "
+					 "append 'lte' to also arm the FW-788 opportunistic upload",
 					 cmd_trigger_tx),
+#ifdef CONFIG_ETC_INTERFACE_TEST_SHELL
+			       SHELL_CMD(lte_sync_reset, NULL,
+					 "Reset the FW-789 LTE backoff state (HIL)",
+					 cmd_lte_sync_reset),
+#endif
 			       SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(app_module, &sub_app_module, "App module commands", NULL);
 

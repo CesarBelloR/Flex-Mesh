@@ -37,4 +37,7 @@ void etc_lte_sync_record_success(void);
 /** @brief Record a failed LTE bring-up; grows the failure count (saturating). */
 void etc_lte_sync_record_failure(void);
 
+/** @brief Clear the backoff state (last attempt and failures). For HIL tests. */
+void etc_lte_sync_store_reset(void);
+
 #endif /* ETC_LTE_SYNC_STORE_H_ */

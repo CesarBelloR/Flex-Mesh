@@ -159,3 +159,11 @@ void etc_lte_sync_record_failure(void)
 	}
 	k_mutex_unlock(&lte_sync_mtx);
 }
+
+void etc_lte_sync_store_reset(void)
+{
+	k_mutex_lock(&lte_sync_mtx, K_FOREVER);
+	memset(&state, 0, sizeof(state));
+	lte_sync_persist();
+	k_mutex_unlock(&lte_sync_mtx);
+}
