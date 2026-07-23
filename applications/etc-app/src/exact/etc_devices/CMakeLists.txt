@@ -4,4 +4,5 @@ target_sources(app PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/etc_device_record.c
         ${CMAKE_CURRENT_SOURCE_DIR}/etc_device_helper.c
         ${CMAKE_CURRENT_SOURCE_DIR}/etc_relay_reclaim.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/etc_lte_sync_store.c
 )

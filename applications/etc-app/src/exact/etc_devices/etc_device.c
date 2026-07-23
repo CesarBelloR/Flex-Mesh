@@ -17,6 +17,7 @@
 #include "etc_memfault_metrics.h"
 #include "etc_device_helper.h"
 #include "etc_relay_reclaim.h"
+#include "etc_lte_sync_store.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(etc_device, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -110,6 +111,8 @@ void etc_device_nvs_init(void)
 	etc_device_sync_record_on_ram();
 	/* Restore reclaim request list from retained RAM */
 	etc_relay_reclaim_init();
+	/* Restore the opportunistic-LTE backoff state from retained RAM */
+	etc_lte_sync_store_init();
 }
 
 static int etc_nvs_write(uint16_t element_id, const void *data, size_t len)

@@ -84,4 +84,8 @@ module = ETC_RELAY_RECLAIM
 module-str = relay_reclaim
 source "subsys/logging/Kconfig.template.log_config"
 
+module = ETC_LTE_SYNC_STORE
+module-str = lte_sync_store
+source "subsys/logging/Kconfig.template.log_config"
+
 endif

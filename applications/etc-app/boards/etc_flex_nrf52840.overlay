@@ -26,7 +26,7 @@
 
 	sram@2003FC00 {
 		compatible = "zephyr,memory-region", "mmio-sram";
-		reg = <0x2003FC00 0x400>;
+		reg = <0x2003FC00 0x380>;
 		zephyr,memory-region = "ReclaimRetainedMem";
 		status = "okay";
 
@@ -36,9 +36,22 @@
 		};
 	};
 
+	sram@2003FF80 {
+		compatible = "zephyr,memory-region", "mmio-sram";
+		reg = <0x2003FF80 0x80>;
+		zephyr,memory-region = "LteSyncRetainedMem";
+		status = "okay";
+
+		retainedmem2: retainedmem2 {
+			compatible = "zephyr,retained-ram";
+			status = "okay";
+		};
+	};
+
 	aliases {
 		reclaim-request-ram = &retainedmem1;
 		record-header-ram = &retainedmem0;
+		lte-sync-ram = &retainedmem2;
 	};
 };
 

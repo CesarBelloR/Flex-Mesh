@@ -38,6 +38,12 @@ struct etc_reclaim_request_ram {
 }; /* = 32 bytes */
 #pragma pack(pop)
 
+/* The ReclaimRetainedMem region was shrunk to carve out LteSyncRetainedMem from
+ * its tail; ensure the reclaim payload still fits what remains. */
+BUILD_ASSERT(RECLAIM_RAM_CRC_OFFSET + sizeof(uint32_t) <=
+		     DT_REG_SIZE(DT_PARENT(DT_ALIAS(reclaim_request_ram))),
+	     "Reclaim retained data exceeds its retained-RAM region");
+
 static void reclaim_list_zero(void)
 {
 	for (int i = 0; i < ETC_RECLAIM_RELAY_MAX_ELEMENT; i++) {
