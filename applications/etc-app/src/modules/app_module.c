@@ -1009,6 +1009,10 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		/* FW-789: a successful connection means the radio is usable again;
+		 * relax the exponential backoff to its floor. */
+		etc_lte_sync_record_success();
+
 		/* The sensor module polls a first sample on the first cloud
 		 * connection after boot; arm the request its DATA_READY delivers. */
 		static bool first_sample_armed = false;
@@ -1022,6 +1026,17 @@ static void on_all_events(struct app_msg_data *msg)
 			k_work_reschedule(&app_soft_watchdog_work,
 					  K_SECONDS(soft_watchdog_timeout_secs));
 		}
+		return;
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT) ||
+	    IS_EVENT(msg, modem, MODEM_EVT_CONNECT_TIMEOUT)) {
+		/* FW-789: the modem/cloud gave up bringing up LTE. Grow the
+		 * exponential backoff so repeated failures stop draining the
+		 * battery; a later success resets it. */
+		etc_lte_sync_record_failure();
+		LOG_INF("FW-789: LTE bring-up failed, backoff now %u s",
+			app_module_lte_sync_backoff_s(etc_lte_sync_get_failures()));
 		return;
 	}
 
