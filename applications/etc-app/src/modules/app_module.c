@@ -16,6 +16,7 @@
 #include "etc_sensor.h"
 #include "etc_ble.h"
 #include "etc_calibration.h"
+#include "etc_lte_sync_store.h"
 #if IS_ENABLED(CONFIG_ETC_DATE_TIME)
 #include "etc_date_time.h"
 #endif
@@ -601,6 +602,27 @@ static uint32_t upload_dispatch_count;
  * dispatched", so every interleaving collapses to exactly-once. Defaulting to
  * NORMAL here would let the losing consumer reset the sub-job and emit a
  * spurious transmit while the modem is still connecting. */
+/* FW-788: a LoRa logger with too many unacked readings also brings up LTE. The
+ * rank-merge upgrades an already-armed NORMAL upload to a LoRa->cloud sync; the
+ * FW-789 backoff (in etc_lte_sync_store) gates how often this fires. Called at a
+ * transmit wakeup with the current RTC time. */
+static void app_arm_opportunistic_lte(time_t now)
+{
+	uint16_t nacks = etc_device_nack_count(); /* O(total) scan, once per decision */
+
+	if (!app_module_lte_sync_over_threshold(nacks)) {
+		return;
+	}
+
+	if (app_module_lte_sync_due(now, etc_lte_sync_get_last_attempt(),
+				    etc_lte_sync_get_failures())) {
+		LOG_INF("FW-788: %u unacked readings, adding LTE upload", nacks);
+		app_request_upload(APP_UPLOAD_LORA_SYNC);
+	} else {
+		LOG_INF("FW-789: LTE upload suppressed, backoff active (%u unacked)", nacks);
+	}
+}
+
 static void app_dispatch_upload(void)
 {
 	enum app_upload_reason reason = app_take_upload_reason();
@@ -616,6 +638,13 @@ static void app_dispatch_upload(void)
 	etc_device_set_transmit_sub_job(app_module_sub_job_for_reason(reason));
 
 	if ((reason == APP_UPLOAD_LORA_SYNC) || (reason == APP_UPLOAD_MAGNET)) {
+		/* FW-789: every LTE bring-up charges the backoff clock, whatever
+		 * triggered it (scheduled sync, magnet swipe, or opportunistic). */
+		time_t now = 0;
+#if defined(CONFIG_PCF85263)
+		pcf85263a_rtc_get_time(&now);
+#endif
+		etc_lte_sync_record_attempt(now);
 		LOG_DBG("Dispatch upload (%d) -> APP_EVT_DATA_SYNC_CLOUD", reason);
 		SEND_EVENT(app, APP_EVT_DATA_SYNC_CLOUD);
 	} else if (etc_device_is_relay()) {
@@ -689,6 +718,7 @@ static void app_peripheral_on(bool is_rtc)
 			 * overwrite the reason this wakeup fired for. */
 			app_request_upload(app_module_upload_reason_from_schedule(
 				app_get_scheduled_tx_reason()));
+			app_arm_opportunistic_lte(now);
 			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_TX_RX);
 			/* No sample to wait for; dispatch directly. */
 			app_dispatch_upload();
@@ -700,6 +730,7 @@ static void app_peripheral_on(bool is_rtc)
 			app_module_backoff_check_multiple_value();
 			app_request_upload(app_module_upload_reason_from_schedule(
 				app_get_scheduled_tx_reason()));
+			app_arm_opportunistic_lte(now);
 			app_set_next_wakeup_time_for_job(ETC_DEVICE_JOB_BOTH);
 			/* Dispatch is deferred to DATA_EVT_DATA_READY (or
 			 * SENSOR_EVT_ENVIRONMENTAL_SAMPLE_SKIPPED). */
@@ -988,8 +1019,8 @@ static void on_all_events(struct app_msg_data *msg)
 
 		int soft_watchdog_timeout_secs = etc_get_soft_watchdog_timeout_secs();
 		if (soft_watchdog_timeout_secs != -1) {
-			k_work_reschedule(&app_soft_watchdog_work, 
-					  K_SECONDS(soft_watchdog_timeout_secs));	
+			k_work_reschedule(&app_soft_watchdog_work,
+					  K_SECONDS(soft_watchdog_timeout_secs));
 		}
 		return;
 	}

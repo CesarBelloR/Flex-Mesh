@@ -7,6 +7,11 @@
 #define DEFAULT_PUBLISH_INTERVAL_S (60 * 15)
 #define MINIMUM_TIME_TO_WAKEUP_S   (3)
 
+/* Absorbs RTC second-level rounding so an opportunistic LTE bring-up due exactly
+ * on a window boundary is not deferred a whole window. Must stay well below the
+ * minimum tx interval (60 s). */
+#define APP_LTE_SYNC_SLACK_S (5)
+
 /** @brief Why the next alarm-1 (transmit) RTC wakeup was scheduled. */
 enum app_wakeup_tx_work_type {
 	APP_WAKEUP_TX_INTERVAL_WORK,
@@ -48,6 +53,40 @@ enum app_upload_reason app_module_upload_reason_from_schedule(enum app_wakeup_tx
  * @return The matching transmit sub-job.
  */
 enum etc_transmit_sub_job app_module_sub_job_for_reason(enum app_upload_reason reason);
+
+/**
+ * @brief Current opportunistic-LTE backoff window (FW-789).
+ *
+ * The window is the transmit interval times @ref CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE,
+ * doubled once per consecutive failure and clamped to
+ * @ref CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MAX_S. Computed from the live tx interval
+ * each call so a cloud config change takes effect immediately.
+ *
+ * @param failures Consecutive failed LTE bring-ups since the last success.
+ * @return The minimum spacing to the next LTE bring-up, in seconds.
+ */
+uint32_t app_module_lte_sync_backoff_s(uint32_t failures);
+
+/**
+ * @brief Whether a LoRa logger has enough unacked readings to also upload over LTE (FW-788).
+ *
+ * @param nack_count Unacknowledged reading count for this interval.
+ * @return true if the device is a LoRa logger with more than
+ *         @ref CONFIG_ETC_APP_LTE_SYNC_NACK_THRESHOLD unacked readings.
+ */
+bool app_module_lte_sync_over_threshold(uint16_t nack_count);
+
+/**
+ * @brief Whether an opportunistic LTE bring-up is due given the backoff clock (FW-789).
+ *
+ * Pure timing check; the caller gates it behind @ref app_module_lte_sync_over_threshold.
+ *
+ * @param now          Current time (unix seconds); <= 0 means the RTC is not valid yet.
+ * @param last_attempt Time of the last LTE bring-up, or 0 if none.
+ * @param failures     Consecutive failed LTE bring-ups since the last success.
+ * @return true if the backoff window has elapsed (or no prior attempt / clock stepped back).
+ */
+bool app_module_lte_sync_due(time_t now, time_t last_attempt, uint32_t failures);
 
 /**
  * @brief Checks if the given interval is aligned with @ref DEFAULT_PUBLISH_INTERVAL_S.

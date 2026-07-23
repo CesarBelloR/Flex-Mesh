@@ -29,6 +29,42 @@ bool app_module_in_regular_tx_window(time_t now)
 	return (now % interval_s) <= duration_s;
 }
 
+uint32_t app_module_lte_sync_backoff_s(uint32_t failures)
+{
+	uint64_t base = (uint64_t)etc_device_get_tx_interval_second() *
+			CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE;
+	unsigned int shift = (failures > 31) ? 31 : failures; /* double per failure, saturate */
+	uint64_t window = base << shift;
+
+	if (window > CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MAX_S) {
+		window = CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MAX_S;
+	}
+	if (window < base) {
+		window = base; /* ceiling below the floor: honour the floor */
+	}
+	return (uint32_t)window;
+}
+
+bool app_module_lte_sync_over_threshold(uint16_t nack_count)
+{
+	return etc_device_get_mode() == ETC_DEVICE_MODE_LORA_LOGGER &&
+	       nack_count > CONFIG_ETC_APP_LTE_SYNC_NACK_THRESHOLD;
+}
+
+bool app_module_lte_sync_due(time_t now, time_t last_attempt, uint32_t failures)
+{
+	if (now <= 0) { /* RTC not valid yet */
+		return false;
+	}
+	if (last_attempt == 0 || now < last_attempt) { /* never attempted, or clock stepped back */
+		return true;
+	}
+
+	time_t window = (time_t)app_module_lte_sync_backoff_s(failures);
+
+	return (now - last_attempt) >= (window - APP_LTE_SYNC_SLACK_S);
+}
+
 time_t app_module_align_wakeup(time_t now, int interval_s, enum etc_device_job job)
 {
 	time_t wakeup_time;

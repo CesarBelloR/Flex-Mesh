@@ -1,0 +1,21 @@
+config ETC_APP_LTE_SYNC_NACK_THRESHOLD
+	int "Unacknowledged readings above which a LoRa logger also uploads over LTE"
+	default 3
+	help
+	  FW-788. A LoRa logger with strictly more than this many unacknowledged
+	  readings at a transmit interval brings up LTE in addition to its normal
+	  LoRa attempt. Set very large to disable the behaviour.
+
+config ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE
+	int "Minimum spacing between LTE bring-ups, in transmit intervals"
+	default 4
+	help
+	  FW-789 floor. Opportunistic LTE bring-ups are attempted at most once per
+	  this many tx intervals (default 4 x 900 s = 1 h).
+
+config ETC_APP_LTE_SYNC_BACKOFF_MAX_S
+	int "Ceiling for the exponential LTE backoff, in seconds"
+	default 86400
+	help
+	  FW-789 ceiling. After consecutive failed bring-ups the spacing doubles
+	  from the floor but never exceeds this (default once per day).
