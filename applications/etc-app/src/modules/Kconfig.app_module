@@ -1,6 +1,6 @@
 config ETC_APP_LTE_SYNC_NACK_THRESHOLD
 	int "Unacknowledged readings above which a LoRa logger also uploads over LTE"
-	default 3
+	default 4
 	help
 	  FW-788. A LoRa logger with strictly more than this many unacknowledged
 	  readings at a transmit interval brings up LTE in addition to its normal

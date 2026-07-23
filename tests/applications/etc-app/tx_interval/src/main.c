@@ -295,4 +295,111 @@ ZTEST(etc_interval_time_test, test_in_regular_tx_window)
 	zassert_true(app_module_in_regular_tx_window(boundary + interval));
 }
 
+/* FW-788/789: opportunistic LTE upload policy. The backoff window is
+ * tx_interval x CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE (the floor), doubled
+ * once per consecutive failure and clamped to CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MAX_S. */
+
+/* FW-788: only strictly more than the threshold triggers the LTE upload. */
+ZTEST(etc_interval_time_test, test_lte_sync_threshold)
+{
+	etc_set_device_mode(ETC_DEVICE_MODE_LORA_LOGGER);
+	zassert_false(app_module_lte_sync_over_threshold(0));
+	zassert_false(app_module_lte_sync_over_threshold(1));
+	zassert_false(app_module_lte_sync_over_threshold(2));
+	zassert_false(app_module_lte_sync_over_threshold(CONFIG_ETC_APP_LTE_SYNC_NACK_THRESHOLD));
+	zassert_true(
+		app_module_lte_sync_over_threshold(CONFIG_ETC_APP_LTE_SYNC_NACK_THRESHOLD + 1));
+	zassert_true(app_module_lte_sync_over_threshold(100));
+}
+
+/* FW-788: the policy applies only to LoRa loggers. */
+ZTEST(etc_interval_time_test, test_lte_sync_wrong_mode)
+{
+	etc_set_device_mode(ETC_DEVICE_MODE_LTE_LOGGER);
+	zassert_false(app_module_lte_sync_over_threshold(10));
+	etc_set_device_mode(ETC_DEVICE_MODE_RELAY);
+	zassert_false(app_module_lte_sync_over_threshold(10));
+	etc_set_device_mode(ETC_DEVICE_MODE_BLE);
+	zassert_false(app_module_lte_sync_over_threshold(10));
+}
+
+/* FW-789: the very first bring-up (no prior attempt) is always due. */
+ZTEST(etc_interval_time_test, test_lte_sync_first_attempt)
+{
+	time_t now = APP_UNIT_TIMESTAMP;
+	zassert_true(app_module_lte_sync_due(now, 0, 0));
+	zassert_true(app_module_lte_sync_due(now, 0, 5));
+}
+
+/* FW-789 floor: with no failures the window is 4x tx_interval. */
+ZTEST(etc_interval_time_test, test_lte_sync_floor)
+{
+	time_t now = APP_UNIT_TIMESTAMP;
+	int interval = etc_device_get_tx_interval_second();
+	time_t base = (time_t)interval * CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE;
+
+	zassert_equal(app_module_lte_sync_backoff_s(0), (uint32_t)base);
+	zassert_false(app_module_lte_sync_due(now, now - interval, 0));
+	zassert_false(app_module_lte_sync_due(now, now - 2 * interval, 0));
+	zassert_false(app_module_lte_sync_due(now, now - (base - 60), 0));
+	zassert_true(app_module_lte_sync_due(now, now - base, 0));
+}
+
+/* FW-789: doubling begins on the first failure ("double immediately"). */
+ZTEST(etc_interval_time_test, test_lte_sync_exponential)
+{
+	int interval = etc_device_get_tx_interval_second();
+	uint32_t base = (uint32_t)interval * CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE;
+
+	zassert_equal(app_module_lte_sync_backoff_s(0), base);
+	zassert_equal(app_module_lte_sync_backoff_s(1), base * 2);
+	zassert_equal(app_module_lte_sync_backoff_s(2), base * 4);
+	zassert_equal(app_module_lte_sync_backoff_s(3), base * 8);
+}
+
+/* FW-789 ceiling: the window never exceeds the configured maximum (once a day). */
+ZTEST(etc_interval_time_test, test_lte_sync_ceiling)
+{
+	etc_set_tx_interval_secs(60);
+	/* 60 x 4 = 240 s base; doubling many times must clamp, not overflow. */
+	zassert_equal(app_module_lte_sync_backoff_s(31),
+		      (uint32_t)CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MAX_S);
+	zassert_equal(app_module_lte_sync_backoff_s(100),
+		      (uint32_t)CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MAX_S);
+	etc_set_tx_interval_secs(tx_normal_secs);
+}
+
+/* FW-789: the window scales with tx_interval, not a hardcoded hour. */
+ZTEST(etc_interval_time_test, test_lte_sync_scales_with_tx_interval)
+{
+	etc_set_tx_interval_secs(300);
+	zassert_equal(app_module_lte_sync_backoff_s(0),
+		      300U * CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE);
+	etc_set_tx_interval_secs(900);
+	zassert_equal(app_module_lte_sync_backoff_s(0),
+		      900U * CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE);
+	etc_set_tx_interval_secs(tx_normal_secs);
+}
+
+/* FW-789: the slack absorbs RTC rounding at the window boundary. */
+ZTEST(etc_interval_time_test, test_lte_sync_slack_boundary)
+{
+	time_t now = APP_UNIT_TIMESTAMP;
+	time_t base = (time_t)etc_device_get_tx_interval_second() *
+		      CONFIG_ETC_APP_LTE_SYNC_BACKOFF_MULTIPLE;
+
+	zassert_true(app_module_lte_sync_due(now, now - (base - APP_LTE_SYNC_SLACK_S), 0));
+	zassert_false(app_module_lte_sync_due(now, now - (base - APP_LTE_SYNC_SLACK_S - 1), 0));
+}
+
+/* FW-789: an invalid or backwards clock never blocks an upload for a whole window. */
+ZTEST(etc_interval_time_test, test_lte_sync_invalid_clock)
+{
+	time_t now = APP_UNIT_TIMESTAMP;
+	zassert_false(app_module_lte_sync_due(0, now - 100000, 0));
+	zassert_false(app_module_lte_sync_due(-1, now - 100000, 0));
+	/* last_attempt in the future (clock stepped back) -> allow and re-stamp. */
+	zassert_true(app_module_lte_sync_due(now, now + 3600, 0));
+}
+
 ZTEST_SUITE(etc_interval_time_test, NULL, test_setup, NULL, NULL, NULL);
