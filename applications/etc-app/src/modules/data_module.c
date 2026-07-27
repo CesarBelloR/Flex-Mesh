@@ -10,6 +10,7 @@
 #include <app_event_manager.h>
 #include <zephyr/settings/settings.h>
 #include "cloud/cloud_codec/data_codec.h"
+#include "cloud/cloud_codec/data_codec_signal.h"
 #include "etc_date_time.h"
 #include "etc_settings.h"
 #include "etc_device.h"
@@ -42,6 +43,9 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 #define DEVICE_SETTINGS_KEY			"data_module"
 #define DEVICE_SETTINGS_CONFIG_KEY		"config"
 #define DEVICE_PAYLOAD_LEGACY_LEN	128
+
+/* Oldest signal measurement still worth reporting to the cloud. */
+#define DATA_SIGNAL_MAX_AGE_MS (6 * 60 * 60 * (int64_t)MSEC_PER_SEC)
 
 struct data_msg_data {
 	union {
@@ -422,11 +426,22 @@ static void data_send_buf(enum data_event_type event, uint8_t* buf, uint8_t buf_
 	APP_EVENT_SUBMIT(module_event);
 }
 #endif
-static void data_encode_prepare_modem_info(struct data_modem_dynamic *modem_info) 
+static void data_encode_prepare_modem_info(struct data_modem_dynamic *modem_info)
 {
-	modem_info->rsrp = quectel_bg95_get_rsrp();
-	modem_info->qual = quectel_bg95_get_rsrq();
+	struct modem_signal_sample sample;
+	int err = quectel_bg95_get_signal(&sample);
+
+	modem_info->signal_valid =
+		data_codec_signal_is_reportable(err, &sample, DATA_SIGNAL_MAX_AGE_MS);
+	if (modem_info->signal_valid) {
+		modem_info->rsrp = sample.rsrp;
+		modem_info->qual = sample.rsrq;
+	}
 	modem_info->queued = 1;
+
+	LOG_INF("Signal report rsrp=%d rsrq=%d age_s=%lld valid=%d", modem_info->rsrp,
+		modem_info->qual, err ? -1LL : sample.age_ms / MSEC_PER_SEC,
+		modem_info->signal_valid);
 }
 
 /*
@@ -798,8 +813,17 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 
 	if (IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_START) ||
 	    IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_SEND_DATA)) {
-		int rsrp = quectel_bg95_get_rsrp();
-		track_functional_test(DATA_TYPE_MODEM, &rsrp);
+		struct modem_signal_sample sample;
+		int err = quectel_bg95_get_signal(&sample);
+
+		/* Leave the test's own invalid marker in place when there is no
+		 * measurement worth reporting.
+		 */
+		if (data_codec_signal_is_reportable(err, &sample, DATA_SIGNAL_MAX_AGE_MS)) {
+			int rsrp = sample.rsrp;
+
+			track_functional_test(DATA_TYPE_MODEM, &rsrp);
+		}
 		functional_test_set_state(FUNC_TEST_STATE_SENDING_DATA);
 		data_encode_for_cloud(false, false);
 	}
@@ -864,6 +888,11 @@ static void on_all_states(struct data_msg_data *msg)
 		modem_dynamic.mnc = msg->module.modem.data.modem_dynamic.mnc;
 		modem_dynamic.psm_active_time_s = msg->module.modem.data.modem_dynamic.active_time_s;
 		modem_dynamic.psm_periodic_atu_s = msg->module.modem.data.modem_dynamic.periodic_tau_s;
+
+		/* This event carries no signal data, so refresh it here rather
+		 * than publishing whatever the last send left behind.
+		 */
+		data_encode_prepare_modem_info(&modem_dynamic);
 
 		data_codec_prepare_modem_dynamic_packet(&codec, &modem_dynamic);
 	}

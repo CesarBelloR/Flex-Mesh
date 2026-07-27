@@ -158,6 +158,7 @@ int track_functional_test(enum functional_test_data_type type,
 	case DATA_TYPE_MODEM:
 		int rsrp = *((int16_t *)data);
 		test_data.lte_rsrp = rsrp;
+		test_data.rsrp_valid = true;
 		break;
 	case DATA_TYPE_ACK:
 		bool ack = *((bool *)data);
@@ -184,6 +185,7 @@ void functional_test_start(functional_test_evt_handler event_handler)
 	/* Reset functional test data. */
 	memset(&test_data, 0, sizeof(test_data));
 	test_data.lte_rsrp = RSRP_INVALID;
+	test_data.rsrp_valid = false;
 	test_data.result = FUNC_TEST_FAIL_UNKNOWN;
 
 	functional_test_set_state(FUNC_TEST_STATE_COLLECTING_DATA);

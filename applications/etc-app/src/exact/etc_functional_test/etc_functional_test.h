@@ -40,6 +40,8 @@ enum functional_test_evt {
 struct functional_test_data {
 	struct sensor_data sensor_data;
 	int16_t lte_rsrp;
+	/** lte_rsrp holds a real measurement rather than the invalid marker. */
+	bool rsrp_valid;
 	bool ack;
 	bool unset_device_id;
 	bool battery_connected;

@@ -702,14 +702,22 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 		return err;
 	}
 
-	err = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
-			    modem_dynamic->rsrp);
-	if (err) {
-		return err;
+	/* Leave the resources untouched when there is no measurement worth
+	 * reporting; the caller omits them from the path list.
+	 */
+	if (modem_dynamic->signal_valid) {
+		err = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+				    modem_dynamic->rsrp);
+		if (err) {
+			return err;
+		}
+
+		err = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, QUAL),
+				    modem_dynamic->qual);
+		if (err) {
+			return err;
+		}
 	}
-	
-	err = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, QUAL),
-			   modem_dynamic->qual);
 
 	err = date_time_now(&current_time);
 	if (err) {
@@ -1307,9 +1315,8 @@ int lwm2m_codec_helpers_set_sensor_data(struct cloud_codec_data *cloud_data,
 }
 
 int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_data,
-					       struct sensor_data *sensor_data,
-					       int modem_rsrp,
-					       enum functional_test_result result)
+					       struct sensor_data *sensor_data, int modem_rsrp,
+					       bool rsrp_valid, enum functional_test_result result)
 {
 	int ret;
 
@@ -1332,10 +1339,12 @@ int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_da
 	}
 
 	const struct lwm2m_obj_path path_list[] = {
-		LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
 		LWM2M_OBJ(ETC_FUNCTIONAL_TEST_OBJECT_ID, 0, ETC_FUNCTIONAL_TEST_OBJ_R_STATUS),
 		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, DEVICE_SERIAL_NUMBER_ID),
 		LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0, POWER_SOURCE_VOLTAGE_RID)
+	};
+	const struct lwm2m_obj_path rss_path[] = {
+		LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
 	};
 
 	/* Set battery voltage in mV (required by resource spec) */
@@ -1346,11 +1355,16 @@ int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_da
 		return ret;
 	}
 
-	ret = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
-			    modem_rsrp);
-	if (ret) {
-		return ret;
+	if (rsrp_valid) {
+		ret = lwm2m_set_s16(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
+				    modem_rsrp);
+		if (ret) {
+			return ret;
+		}
+		lwm2m_codec_helpers_object_path_list_add(cloud_data, rss_path,
+							 ARRAY_SIZE(rss_path));
 	}
+
 	ret = lwm2m_set_u8(&LWM2M_OBJ(ETC_FUNCTIONAL_TEST_OBJECT_ID, 0, ETC_FUNCTIONAL_TEST_OBJ_R_STATUS),
 			   result);
 	if (ret) {

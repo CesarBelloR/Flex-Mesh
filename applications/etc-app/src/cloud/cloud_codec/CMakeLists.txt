@@ -4,8 +4,9 @@
 
 target_include_directories(app PRIVATE .)
 
-target_sources(app PRIVATE 
-               ${CMAKE_CURRENT_SOURCE_DIR}/data_codec_ringbuffer.c)
+target_sources(app PRIVATE
+               ${CMAKE_CURRENT_SOURCE_DIR}/data_codec_ringbuffer.c
+               ${CMAKE_CURRENT_SOURCE_DIR}/data_codec_signal.c)
 
 target_sources_ifdef(CONFIG_LWM2M app
                      PRIVATE

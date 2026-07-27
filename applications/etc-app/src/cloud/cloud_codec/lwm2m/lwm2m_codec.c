@@ -201,12 +201,26 @@ int data_codec_prepare_modem_dynamic_packet(struct cloud_codec_data *cloud_data,
 
 	err = lwm2m_codec_helpers_set_modem_dynamic_data(modem_data);
 	if (err == 0) {
-		static const struct lwm2m_obj_path path_list[] = {
+		static const struct lwm2m_obj_path object_path[] = {
 			LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID),
 		};
-		err = lwm2m_codec_helpers_object_path_list_add(cloud_data,
-							       path_list,
-							       ARRAY_SIZE(path_list));
+		/* Sending the whole object would serialise the engine's own
+		 * zeroed RSS/QUAL, so name the populated resources instead when
+		 * there is no measurement to report.
+		 */
+		static const struct lwm2m_obj_path resource_paths[] = {
+			LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, NETWORK_BEARER_ID),
+			LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, CELLID),
+			LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, SMNC),
+			LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, SMCC),
+			LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, LAC),
+		};
+		const struct lwm2m_obj_path *path_list =
+			modem_data->signal_valid ? object_path : resource_paths;
+		size_t path_count = modem_data->signal_valid ? ARRAY_SIZE(object_path)
+							     : ARRAY_SIZE(resource_paths);
+
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data, path_list, path_count);
 		if (err) {
 			LOG_ERR("Failed populating object path list, error: %d", err);
 			return err;
@@ -285,7 +299,7 @@ int data_codec_prepare_cloud_packet(struct cloud_codec_data *cloud_data,
 	
 	if (modem_data != NULL) {
 		err = lwm2m_codec_helpers_set_modem_dynamic_data(modem_data);
-		if (err == 0) {
+		if ((err == 0) && modem_data->signal_valid) {
 			static const struct lwm2m_obj_path path_list[] = {
 				LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, RSS),
 				LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, QUAL),
@@ -315,10 +329,9 @@ int data_codec_prepare_functional_test_data(struct cloud_codec_data *cloud_data,
 					    struct functional_test_data *test_data)
 {
 	int err;
-	
-	err = lwm2m_codec_helpers_update_functional_test(cloud_data,
-							 &test_data->sensor_data,
-							 test_data->lte_rsrp,
+
+	err = lwm2m_codec_helpers_update_functional_test(cloud_data, &test_data->sensor_data,
+							 test_data->lte_rsrp, test_data->rsrp_valid,
 							 test_data->result);
 	return err;
 }

@@ -93,20 +93,22 @@ int lwm2m_codec_helpers_set_modem_dynamic_data(struct data_modem_dynamic *modem_
 int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_static);
 
 /** Update data codec with the functional test results.
- * 
+ *
  * @param cloud_data Pointer to struct cloud_codec_data_instance
- * @param sensor_data Pointer to struct sensor_data instance containing the 
+ * @param sensor_data Pointer to struct sensor_data instance containing the
  *                    sensor data collected during test.
  * @param modem_rsrp Modem RSRP collected during test
+ * @param rsrp_valid Whether modem_rsrp is a real measurement. When false the
+ * 		     RSRP resource is left untouched and omitted from the path
+ * 		     list.
  * @param result Functional test result (pass: true, fail: false)
- * 
+ *
  * @retval 0 successful
  * @retval <0 error
-*/
+ */
 int lwm2m_codec_helpers_update_functional_test(struct cloud_codec_data *cloud_data,
-					       struct sensor_data *sensor_data,
-					       int modem_rsrp,
-					       enum functional_test_result result);
+					       struct sensor_data *sensor_data, int modem_rsrp,
+					       bool rsrp_valid, enum functional_test_result result);
 
 /** @brief Clear the LwM2M path list from the provided struct cloud_codec_data.
  * 

@@ -28,6 +28,12 @@
 #include "events/ui_event.h"
 #include "events/debug_event.h"
 #include "etc_settings.h"
+#include "cloud/cloud_codec/data_codec_signal.h"
+
+/* Memfault averages the signal metrics, so only a fresh measurement is worth
+ * feeding it.
+ */
+#define DEBUG_SIGNAL_MAX_AGE_MS (5 * 60 * (int64_t)MSEC_PER_SEC)
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_DEBUG_MODULE_LOG_LEVEL);
@@ -274,10 +280,14 @@ static void memfault_handle_event(struct debug_msg_data *msg)
 
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_DYNAMIC_DATA_READY)) {
-		etc_mflt_metrics_modem_network(msg->module.modem.data.modem_dynamic.mcc,
-					       msg->module.modem.data.modem_dynamic.mnc,
-					       quectel_bg95_get_rsrp(),
-					       quectel_bg95_get_rsrq());
+		struct modem_signal_sample sample;
+		int err = quectel_bg95_get_signal(&sample);
+
+		if (data_codec_signal_is_reportable(err, &sample, DEBUG_SIGNAL_MAX_AGE_MS)) {
+			etc_mflt_metrics_modem_network(msg->module.modem.data.modem_dynamic.mcc,
+						       msg->module.modem.data.modem_dynamic.mnc,
+						       sample.rsrp, sample.rsrq);
+		}
 	}
 
 

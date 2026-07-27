@@ -21,10 +21,18 @@
 extern "C" {
 #endif
 
-/* RSRP network min range */
-#define RSRP_MIN_RANGE_VALUE (-140)
+/* RSRP network min range. Below this the modem reports its floor, not a
+ * signal level.
+ */
+#define RSRP_MIN_RANGE_VALUE (-130)
 /* RSRP network max range */
 #define RSRP_MAX_RANGE_VALUE (-40)
+/* RSRQ network min range */
+#define RSRQ_MIN_RANGE_VALUE (-34)
+/* RSRQ network max range. RSRQ is negative by definition; 0 means the modem
+ * has not measured it.
+ */
+#define RSRQ_MAX_RANGE_VALUE (-1)
 
 /** @brief Modem event types submitted by Modem module. */
 enum modem_event_type {

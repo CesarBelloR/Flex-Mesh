@@ -71,6 +71,8 @@ struct data_modem_dynamic {
 	int16_t rsrp;
 	/** Signal quality, RSRQ */
 	int16_t qual;
+	/** rsrp/qual hold a measurement recent enough to publish. */
+	bool signal_valid: 1;
 	/* Access technology (NB-IoT or LTE-M) */
 	enum access_technology nw_mode;
 	/* PSM Active timer value in s */
