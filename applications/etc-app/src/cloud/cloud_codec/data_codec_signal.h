@@ -14,6 +14,16 @@
 extern "C" {
 #endif
 
+/* Reportable ranges. Outside these the modem has no usable reading, rather
+ * than a weak one.
+ */
+/* Below -130 dBm the modem reports its floor, not a signal level. */
+#define RSRP_MIN_RANGE_VALUE (-130)
+#define RSRP_MAX_RANGE_VALUE (-40)
+#define RSRQ_MIN_RANGE_VALUE (-34)
+/* RSRQ is negative by definition; 0 means the modem has not measured it. */
+#define RSRQ_MAX_RANGE_VALUE (-1)
+
 /**
  * @brief Decide whether a modem signal sample may be reported to the cloud.
  *

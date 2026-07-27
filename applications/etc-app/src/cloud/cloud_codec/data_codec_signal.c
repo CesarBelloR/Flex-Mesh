@@ -5,7 +5,6 @@
 #include <stddef.h>
 
 #include "data_codec_signal.h"
-#include "events/modem_event.h"
 
 bool data_codec_signal_is_reportable(int err, const struct modem_signal_sample *sample,
 				     int64_t max_age_ms)

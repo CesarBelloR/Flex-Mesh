@@ -16,6 +16,7 @@
 #include "etc_settings.h"
 #include "modem_api.h"
 #include "etc_functional_test.h"
+#include "data_codec_signal.h"
 
 #if defined(CONFIG_LWM2M)
 #include <zephyr/net/lwm2m.h>
