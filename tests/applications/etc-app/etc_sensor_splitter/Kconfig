@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# The real symbols live under "if BOARD_ETC" in the board Kconfig and under
+# "menuconfig ETC_SENSOR" in applications/etc-app/src/exact/etc_sensor/Kconfig,
+# neither of which can be sourced for native_sim. Keep these in step with them.
+
+config BOARD_ETC_0_3_0
+	bool
+	default y
+
+config ETC_SENSOR_TMP1826_GPIO_RETRIES
+	int
+	default 3
+
+config ETC_SENSOR_HW_LOCK_TIMEOUT_S
+	int
+	default 15
+
+config CALIBRATION_TIMEOUT
+	int
+	default 30
+
+# Referenced by etc_settings.h, whose real providers (LwM2M, the settings
+# subsystem) are not part of this suite.
+config LWM2M_SECURITY_KEY_SIZE
+	int
+	default 32
+
+config SERIAL_NUMBER_TYPE
+	int
+	default 0
+
+source "Kconfig.zephyr"

@@ -1,0 +1,64 @@
+/*
+ * Copyright (c) 2026 EXACT Technology Corporation
+ */
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+
+/ {
+	vbatt {
+		compatible = "voltage-divider";
+		output-ohms = <2000000>;
+		full-ohms = <4000000>;
+		io-channels = <&adc0 1>;
+	};
+
+	board-control {
+		vsens_enable: vsens-enable {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
+		sens_sel0: sens-sel0 {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		sens_sel1: sens-sel1 {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+		onewire_slpz: onewire-slpz {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 3 GPIO_ACTIVE_LOW>;
+			status = "okay";
+		};
+		/* Present on board 0.3.0. etc_sensor_gpios_enable() only configures
+		 * sens_sel0 as an output when this node exists. */
+		hw_wdt: hw-wdt {
+			compatible = "etc,output";
+			control-gpios = <&gpio0 4 GPIO_ACTIVE_HIGH>;
+			status = "okay";
+		};
+	};
+
+	zephyr,user {
+		io-channels = <&adc0 0>, <&adc0 1>, <&adc0 2>, <&adc0 3>;
+	};
+};
+
+&i2c0 {
+	status = "okay";
+
+	w1: w1@18 {
+		compatible = "exact,ds2484";
+		reg = <0x18>;
+
+		w1_tmp1826: w1_tmp1826 {
+			compatible = "ti,tmp1826";
+			family-code = <0x26>;
+			resolution = <12>;
+			status = "okay";
+		};
+	};
+};
