@@ -57,6 +57,9 @@ static const struct gpio_dt_spec vsen_en_dt =
  * (the rail owner) and every power-on path must honour it via
  * etc_sensor_power_settling(). */
 #define VSEN_MIN_OFF_MS 2000
+/* Settling time of the analog switch inside a splitter after its TMP1826 GPIOs have
+ * selected a branch. Without it the ADC can still see the previous branch. */
+#define SPLITTER_SETTLE_MS 50
 /* 32-bit so reads/writes are atomic on this Cortex-M4: the timestamp is touched
  * from the sensor poll thread, the calibration-timeout workqueue, and read from
  * several threads, so a 64-bit value could be torn. The 2000 ms window is far
@@ -67,6 +70,10 @@ static uint32_t vsen_last_off_ms;
 static enum sensor_type list_sensor_type[SENSOR_INPUT_IN8 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN8 + 1];
 static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
+/* Whether a splitter answered on each physical port during the current acquisition.
+ * Re-evaluated by etc_sensor_run_detection(): a port without a splitter has no B
+ * branch, so inputs 5..8 must not be published for it. */
+static bool splitter_present[SENSOR_INPUT_IN5];
 static float sensor_digital_humid;
 static int8_t sensor_digital_humid_port_index;
 static int sensor_ambient_raw_adc = 0;
@@ -260,8 +267,22 @@ static int etc_sensor_scan_probe_slaves(void)
 	return num_devices;
 }
 
-static int etc_sensor_set_splitter_switch(int8_t channel)
+/**
+ * @brief Point the splitter on the currently selected port at a branch.
+ *
+ * @param channel Sensor input. Inputs 1..4 select the A branch, 5..8 the B branch.
+ * @param[out] found Whether a splitter answered on this port, which is a separate
+ *		     question from whether its branch could be selected. May be NULL.
+ *
+ * @retval 0 the requested branch is selected
+ * @retval -ENODEV no splitter answered
+ * @retval -EIO a splitter answered but would not actuate
+ */
+static int etc_sensor_set_splitter_switch(int8_t channel, bool *found)
 {
+	if (found != NULL) {
+		*found = false;
+	}
 	etc_sensor_gpios_one_wire_enable();
 	k_msleep(1);
 	int ret = ds2484_get_logic_level(ds2484_dev);
@@ -275,9 +296,12 @@ static int etc_sensor_set_splitter_switch(int8_t channel)
 		ret = -ENODEV;
 		goto exit;
 	}
+	if (found != NULL) {
+		*found = true;
+	}
 	if (!device_is_ready(tmp1826_dev)) {
 		LOG_ERR("TMP1826 is not ready in I2C bus");
-		ret = -ENODEV;
+		ret = -EIO;
 		goto exit;
 	}
 	struct sensor_value val;
@@ -291,6 +315,7 @@ static int etc_sensor_set_splitter_switch(int8_t channel)
 	} while (ret != 0 && retries < CONFIG_ETC_SENSOR_TMP1826_GPIO_RETRIES);
 	if (ret != 0) {
 		LOG_ERR("Failed to set GPIO (err %d)", ret);
+		ret = -EIO;
 	}
 exit:
 	etc_sensor_gpios_one_wire_disable();
@@ -317,18 +342,42 @@ static void etc_sensor_run_detection(void)
 {
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		bool found;
+
+		/* Classify both branches from scratch every acquisition: a splitter that
+		 * has been unplugged must not leave its B branch behind. */
+		list_sensor_type[i] = SENSOR_TYPE_UNDEF;
+		list_sensor_type[i + SENSOR_INPUT_IN5] = SENSOR_TYPE_UNDEF;
+
 		etc_sensor_adc_switch_channel(i);
 		k_msleep(50);
-		int rc = etc_sensor_set_splitter_switch(i);
-		int raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
-		etc_sensor_set_type(i, raw_adc);
-		/* Only process the second splitter channel if there is a splitter connected. */
-		if (rc == 0) {
-			etc_sensor_set_splitter_switch(i + SENSOR_INPUT_IN5);
-			raw_adc = adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR);
-			etc_sensor_set_type(i + SENSOR_INPUT_IN5, raw_adc);
+		int rc = etc_sensor_set_splitter_switch(i, &found);
+		splitter_present[i] = found;
+		if (found) {
+			/* A splitter that will not actuate leaves the branch position
+			 * unknown, so no reading from this port can be attributed to a
+			 * branch. Skip it and retry on the next acquisition. */
+			if (rc != 0) {
+				LOG_WRN("Splitter on port %d unreachable (err %d)", i + 1, rc);
+				continue;
+			}
+			k_msleep(SPLITTER_SETTLE_MS);
+		}
+		etc_sensor_set_type(i, adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR));
+		/* Only process the second splitter channel if there is a splitter connected
+		 * and its branch switch actually took effect. */
+		if (found && etc_sensor_set_splitter_switch(i + SENSOR_INPUT_IN5, NULL) == 0) {
+			k_msleep(SPLITTER_SETTLE_MS);
+			etc_sensor_set_type(i + SENSOR_INPUT_IN5,
+					    adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR));
 		}
 	}
+	LOG_INF("detect: splitter %d%d%d%d type %d%d%d%d/%d%d%d%d", splitter_present[0],
+		splitter_present[1], splitter_present[2], splitter_present[3],
+		list_sensor_type[SENSOR_INPUT_IN1], list_sensor_type[SENSOR_INPUT_IN2],
+		list_sensor_type[SENSOR_INPUT_IN3], list_sensor_type[SENSOR_INPUT_IN4],
+		list_sensor_type[SENSOR_INPUT_IN5], list_sensor_type[SENSOR_INPUT_IN6],
+		list_sensor_type[SENSOR_INPUT_IN7], list_sensor_type[SENSOR_INPUT_IN8]);
 #endif
 }
 
@@ -449,15 +498,28 @@ static void etc_sensor_run_digital_sample(void)
  */
 static void read_analog_sample(int8_t channel)
 {
-	if (list_sensor_type[channel] == SENSOR_TYPE_ANALOG) {
-		etc_sensor_set_splitter_switch(channel);
-		list_sensor_raw_adc[channel] = etc_sensor_helper_get_calibrated_adc(
-			adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR),
-			&sensor_r_hw_raw_adc, &etc_sensor_adc_calibration_info);
-		LOG_INF("ADC[%d] %d", channel, list_sensor_raw_adc[channel]);
-	} else {
+	int8_t port = channel <= SENSOR_INPUT_IN4 ? channel : channel - SENSOR_INPUT_IN5;
+
+	if (list_sensor_type[channel] != SENSOR_TYPE_ANALOG) {
 		list_sensor_raw_adc[channel] = -1;
+		return;
 	}
+	/* A port without a splitter has a single branch and needs no switching. One with
+	 * a splitter may be pointing at the other branch, so sampling after a failed
+	 * switch would publish that branch's reading under this channel. */
+	if (splitter_present[port]) {
+		if (etc_sensor_set_splitter_switch(channel, NULL) != 0) {
+			LOG_WRN("Branch switch failed on input %d, dropping sample", channel + 1);
+			list_sensor_type[channel] = SENSOR_TYPE_UNDEF;
+			list_sensor_raw_adc[channel] = -1;
+			return;
+		}
+		k_msleep(SPLITTER_SETTLE_MS);
+	}
+	list_sensor_raw_adc[channel] = etc_sensor_helper_get_calibrated_adc(
+		adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR), &sensor_r_hw_raw_adc,
+		&etc_sensor_adc_calibration_info);
+	LOG_INF("ADC[%d] %d", channel, list_sensor_raw_adc[channel]);
 }
 
 static void etc_sensor_run_analog_sample(void)
@@ -491,7 +553,9 @@ void etc_sensor_init(etc_sensor_evt_handler_t handler)
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
 		list_sensor_type[i] = SENSOR_TYPE_UNDEF;
 #else
-		list_sensor_type[i] = SENSOR_TYPE_ANALOG;
+		/* Without splitter detection there is no basis for a B branch. */
+		list_sensor_type[i] =
+			i <= SENSOR_INPUT_IN4 ? SENSOR_TYPE_ANALOG : SENSOR_TYPE_UNDEF;
 #endif
 	}
 
