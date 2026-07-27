@@ -4,11 +4,11 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 #include "events/sensor_event.h"
-#include "cloud/cloud_codec/data_codec.h"
 #include "common.h"
 #include "etc_sensor.h"
 #include "etc_sensor_calibration_load.h"
 #include "etc_device.h"
+#include "etc_settings.h"
 #include "etc_battery.h"
 #include "adc.h"
 #include "tmp1826.h"
