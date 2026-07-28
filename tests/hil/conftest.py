@@ -47,6 +47,10 @@ _DEFAULT_COIOTE_CONFIG = os.path.abspath(
 # reboots and immediately drives the device can act before it is ready.
 _BOOTED_SENTINEL = "Load settings successfully"
 
+# Time to let the CDC-ACM console settle after it re-enumerates. Reopening while
+# enumeration is still in flight leaves a reader that never delivers anything.
+_USB_SETTLE_S = 3.0
+
 
 def _wait_serial_port(port, present, timeout, poll=0.05):
     """Block until os.path.exists(port) == present (or timeout). Returns success."""
@@ -109,7 +113,63 @@ def add_dut_methods(dut):
         # Fully booted only once settings/NVS have loaded.
         dut.expect(_BOOTED_SENTINEL, timeout=45)
 
+    def _reopen_console():
+        """Drop and re-establish the serial reader on the same by-id path."""
+        ser = dut.serial
+        port = ser.port
+
+        for stop in (ser.stop_redirect_thread, ser.proc.close):
+            try:
+                stop()
+            except Exception:
+                pass
+
+        if not _wait_serial_port(port, present=True, timeout=45, poll=0.1):
+            raise RuntimeError(f"serial port {port} did not re-enumerate")
+        time.sleep(_USB_SETTLE_S)
+
+        port_config = dict(ser.DEFAULT_PORT_CONFIG)
+        port_config["baudrate"] = ser.baud
+        last_err = None
+        for _ in range(20):
+            try:
+                ser.proc = pyserial.serial_for_url(port, **port_config)
+                break
+            except Exception as e:  # transient while the tty enumerates
+                last_err = e
+                time.sleep(0.5)
+        else:
+            raise RuntimeError(f"could not reopen {port}: {last_err}")
+        ser.start_redirect_thread()
+
+    def cold_boot(attempts=3):
+        """Cold-boot and return with a console reader that is known to be alive.
+
+        `reboot()` reopens the port as soon as it re-enumerates, and the reader
+        does not always survive that — leaving a live device looking silent,
+        which surfaces as a spurious firmware failure. This waits longer for USB
+        to settle and retries the whole cycle until the boot marker is seen.
+        """
+        for _ in range(attempts):
+            # The write can race the USB drop; a failure here just means the
+            # reset already took the console down.
+            try:
+                dut.write(b"kernel reboot cold\r\n")
+            except Exception:
+                pass
+
+            try:
+                _reopen_console()
+                dut.expect(_BOOTED_SENTINEL, timeout=90)
+                return
+            except Exception:
+                continue
+
+        raise RuntimeError("console did not recover after reboot")
+
     setattr(dut, "reboot", reboot)
+    setattr(dut, "cold_boot", cold_boot)
+    setattr(dut, "reopen_console", _reopen_console)
 
 
 @pytest.fixture
