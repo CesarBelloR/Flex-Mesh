@@ -90,7 +90,6 @@ static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
 
 static const struct device *tmp1826 = DEVICE_DT_GET(DT_NODELABEL(w1_tmp1826));
 
-const uint8_t tmp1826_family = DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
 const uint8_t ds28e18_family = 0x56;
 
 struct w1_search_data {
@@ -838,7 +837,7 @@ static void w1_search_callback(struct w1_rom val, void *user_data)
 static void assign_tmp1826_rom(struct w1_search_data *data)
 {
 	for (int i = 0; i < data->num_devices; i++) {
-		if (data->roms[i].family == tmp1826_family) {
+		if (tmp1826_family_is_supported(data->roms[i].family)) {
 			struct sensor_value val;
 			w1_rom_to_sensor_value(&data->roms[i], &val);
 			sensor_attr_set(tmp1826, SENSOR_CHAN_ALL, SENSOR_ATTR_W1_ROM, &val);
@@ -928,10 +927,8 @@ static int cmd_ds2484_search(const struct shell *shell, size_t argc, char **argv
 	if (ret > 0) {
 		assign_tmp1826_rom(&data);
 		for (int i = 0; i < data.num_devices; i++) {
-			char *family_name = "";
-			if (data.roms[i].family == tmp1826_family) {
-				family_name = "TMP1826";
-			} else if (data.roms[i].family == ds28e18_family) {
+			const char *family_name = tmp1826_family_name(data.roms[i].family);
+			if (data.roms[i].family == ds28e18_family) {
 				family_name = "DS28E18";
 			}
 			shell_fprintf(shell, SHELL_NORMAL, "Found %s with id 0x%016llx\n",

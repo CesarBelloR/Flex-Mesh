@@ -36,7 +36,6 @@ const struct device *const ambient_i2c_dev = DEVICE_DT_GET_ANY(ti_tmp1075);
 const struct device *const sht31_i2c_dev = DEVICE_DT_GET_ANY(sensirion_sht31);
 const struct device *ds2484_dev = DEVICE_DT_GET_ANY(exact_ds2484);
 const struct device *tmp1826_dev = DEVICE_DT_GET(DT_NODELABEL(w1_tmp1826));
-const uint8_t tmp1826_family = (uint8_t)DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
 
 #if DT_NODE_EXISTS(DT_NODELABEL(sense_enable))
 static const struct gpio_dt_spec sense_dt = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sense_enable), control_gpios, 0);
@@ -70,10 +69,11 @@ static uint32_t vsen_last_off_ms;
 static enum sensor_type list_sensor_type[SENSOR_INPUT_IN8 + 1];
 static int list_sensor_raw_adc[SENSOR_INPUT_IN8 + 1];
 static float list_sensor_digital_temp[SENSOR_INPUT_IN4 + 1];
-/* Whether a splitter answered on each physical port during the current acquisition.
- * Re-evaluated by etc_sensor_run_detection(): a port without a splitter has no B
- * branch, so inputs 5..8 must not be published for it. */
-static bool splitter_present[SENSOR_INPUT_IN5];
+/* 1-Wire family code of the splitter that answered on each physical port during the
+ * current acquisition, or 0 if none did. Re-evaluated by etc_sensor_run_detection():
+ * a port without a splitter has no B branch, so inputs 5..8 must not be published
+ * for it. */
+static uint8_t splitter_family[SENSOR_INPUT_IN5];
 static float sensor_digital_humid;
 static int8_t sensor_digital_humid_port_index;
 static int sensor_ambient_raw_adc = 0;
@@ -236,30 +236,29 @@ static void etc_sensor_gpios_one_wire_disable(void)
 static void w1_search_callback(struct w1_rom val, void *user_data)
 {
 	int *devices_on_bus = (int *)user_data;
-	char *family_name = "1w";
 
 	*devices_on_bus = *devices_on_bus + 1;
-	if (val.family == tmp1826_family) {
+	if (tmp1826_family_is_supported(val.family)) {
 		tmp1826_rom = val;
-		family_name = "TMP1826";
-		return;
 	}
-	LOG_DBG("found %s sensor with id 0x%016llx", family_name, w1_rom_to_uint64(&val));
+	LOG_DBG("found %s sensor with id 0x%016llx", tmp1826_family_name(val.family),
+		w1_rom_to_uint64(&val));
 }
 
 static int etc_sensor_scan_probe_slaves(void)
 {
 	const struct device *const w1 = DEVICE_DT_GET(DT_NODELABEL(w1));
-	uint8_t family_code;
 	int num_devices = 0;
-	family_code = DT_PROP(DT_NODELABEL(w1_tmp1826), family_code);
+
 	memset(&tmp1826_rom, 0, sizeof(tmp1826_rom));
-	w1_search_bus(w1, W1_CMD_SEARCH_ROM, family_code, w1_search_callback, &num_devices);
+	/* Zephyr discards the family argument, so filtering happens in the callback. */
+	w1_search_bus(w1, W1_CMD_SEARCH_ROM, W1_SEARCH_ALL_FAMILIES, w1_search_callback,
+		      &num_devices);
 	LOG_DBG("found %d devices on one-wire bus", num_devices);
 	if (num_devices > 0) {
 		struct sensor_value val;
 		w1_rom_to_sensor_value(&tmp1826_rom, &val);
-		if (tmp1826_rom.family != tmp1826_family) {
+		if (!tmp1826_family_is_supported(tmp1826_rom.family)) {
 			return 0;
 		}
 		sensor_attr_set(tmp1826_dev, SENSOR_CHAN_ALL, SENSOR_ATTR_W1_ROM, &val);
@@ -271,17 +270,18 @@ static int etc_sensor_scan_probe_slaves(void)
  * @brief Point the splitter on the currently selected port at a branch.
  *
  * @param channel Sensor input. Inputs 1..4 select the A branch, 5..8 the B branch.
- * @param[out] found Whether a splitter answered on this port, which is a separate
- *		     question from whether its branch could be selected. May be NULL.
+ * @param[out] family 1-Wire family code of the splitter that answered on this port,
+ *		      or 0 if none did. Answering is a separate question from whether
+ *		      the branch could be selected. May be NULL.
  *
  * @retval 0 the requested branch is selected
  * @retval -ENODEV no splitter answered
  * @retval -EIO a splitter answered but would not actuate
  */
-static int etc_sensor_set_splitter_switch(int8_t channel, bool *found)
+static int etc_sensor_set_splitter_switch(int8_t channel, uint8_t *family)
 {
-	if (found != NULL) {
-		*found = false;
+	if (family != NULL) {
+		*family = 0;
 	}
 	etc_sensor_gpios_one_wire_enable();
 	k_msleep(1);
@@ -296,8 +296,8 @@ static int etc_sensor_set_splitter_switch(int8_t channel, bool *found)
 		ret = -ENODEV;
 		goto exit;
 	}
-	if (found != NULL) {
-		*found = true;
+	if (family != NULL) {
+		*family = tmp1826_rom.family;
 	}
 	if (!device_is_ready(tmp1826_dev)) {
 		LOG_ERR("TMP1826 is not ready in I2C bus");
@@ -342,7 +342,7 @@ static void etc_sensor_run_detection(void)
 {
 #if IS_ENABLED(CONFIG_BOARD_ETC_0_3_0)
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
-		bool found;
+		uint8_t family;
 
 		/* Classify both branches from scratch every acquisition: a splitter that
 		 * has been unplugged must not leave its B branch behind. */
@@ -351,9 +351,9 @@ static void etc_sensor_run_detection(void)
 
 		etc_sensor_adc_switch_channel(i);
 		k_msleep(50);
-		int rc = etc_sensor_set_splitter_switch(i, &found);
-		splitter_present[i] = found;
-		if (found) {
+		int rc = etc_sensor_set_splitter_switch(i, &family);
+		splitter_family[i] = family;
+		if (family != 0) {
 			/* A splitter that will not actuate leaves the branch position
 			 * unknown, so no reading from this port can be attributed to a
 			 * branch. Skip it and retry on the next acquisition. */
@@ -366,18 +366,21 @@ static void etc_sensor_run_detection(void)
 		etc_sensor_set_type(i, adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR));
 		/* Only process the second splitter channel if there is a splitter connected
 		 * and its branch switch actually took effect. */
-		if (found && etc_sensor_set_splitter_switch(i + SENSOR_INPUT_IN5, NULL) == 0) {
+		if (family != 0 &&
+		    etc_sensor_set_splitter_switch(i + SENSOR_INPUT_IN5, NULL) == 0) {
 			k_msleep(SPLITTER_SETTLE_MS);
 			etc_sensor_set_type(i + SENSOR_INPUT_IN5,
 					    adc_get_channel_filtered(ETC_ADC_CHANNEL_SENSOR));
 		}
 	}
-	LOG_INF("detect: splitter %d%d%d%d type %d%d%d%d/%d%d%d%d", splitter_present[0],
-		splitter_present[1], splitter_present[2], splitter_present[3],
+	LOG_INF("detect: splitter %d%d%d%d type %d%d%d%d/%d%d%d%d", splitter_family[0] != 0,
+		splitter_family[1] != 0, splitter_family[2] != 0, splitter_family[3] != 0,
 		list_sensor_type[SENSOR_INPUT_IN1], list_sensor_type[SENSOR_INPUT_IN2],
 		list_sensor_type[SENSOR_INPUT_IN3], list_sensor_type[SENSOR_INPUT_IN4],
 		list_sensor_type[SENSOR_INPUT_IN5], list_sensor_type[SENSOR_INPUT_IN6],
 		list_sensor_type[SENSOR_INPUT_IN7], list_sensor_type[SENSOR_INPUT_IN8]);
+	LOG_INF("detect: parts %02x/%02x/%02x/%02x", splitter_family[0], splitter_family[1],
+		splitter_family[2], splitter_family[3]);
 #endif
 }
 
@@ -507,7 +510,7 @@ static void read_analog_sample(int8_t channel)
 	/* A port without a splitter has a single branch and needs no switching. One with
 	 * a splitter may be pointing at the other branch, so sampling after a failed
 	 * switch would publish that branch's reading under this channel. */
-	if (splitter_present[port]) {
+	if (splitter_family[port] != 0) {
 		if (etc_sensor_set_splitter_switch(channel, NULL) != 0) {
 			LOG_WRN("Branch switch failed on input %d, dropping sample", channel + 1);
 			list_sensor_type[channel] = SENSOR_TYPE_UNDEF;
