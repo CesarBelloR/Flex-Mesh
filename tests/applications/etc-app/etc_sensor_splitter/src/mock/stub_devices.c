@@ -14,10 +14,11 @@
 #include "mock/mock_deps.h"
 #include "tmp1826.h"
 
-/* ROM of the splitter's TMP1826. Byte 0 is the family code, which must match
- * the family-code property of the w1_tmp1826 node. w1_search_bus() does not
+/* ROM of the splitter's temperature sensor, without byte 0. That byte is the
+ * family code and comes from the attached part, so a test can present a TMP1826,
+ * a TMP1827 or something the firmware must reject. w1_search_bus() does not
  * verify the CRC byte, so its value is arbitrary. */
-#define STUB_TMP1826_ROM 0xAB0102030405C326ULL
+#define STUB_ROM_BODY 0xAB0102030405C300ULL
 
 struct stub_w1_config {
 	struct w1_master_config w1_config;
@@ -25,6 +26,8 @@ struct stub_w1_config {
 
 struct stub_w1_data {
 	struct w1_master_data w1_data;
+	/* ROM of the part that answered the last presence pulse. */
+	uint64_t rom;
 	/* Position in the ROM being clocked out, and which half of the
 	 * bit/complement pair the next read_bit answers. */
 	int bit_index;
@@ -44,13 +47,14 @@ static int stub_w1_reset_bus(const struct device *dev)
 	if (port < 0 || !mock.port[port].splitter) {
 		return 0;
 	}
+	data->rom = STUB_ROM_BODY | mock.port[port].splitter_family;
 	return 1;
 }
 
 static int stub_w1_read_bit(const struct device *dev)
 {
 	struct stub_w1_data *data = dev->data;
-	bool bit = (STUB_TMP1826_ROM >> data->bit_index) & 1U;
+	bool bit = (data->rom >> data->bit_index) & 1U;
 
 	if (!data->complement_next) {
 		data->complement_next = true;

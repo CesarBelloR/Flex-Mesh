@@ -22,6 +22,8 @@ enum mock_branch {
 struct mock_port {
 	/** A splitter is attached, so the port has two switchable branches. */
 	bool splitter;
+	/** 1-Wire family code the splitter's temperature sensor answers with. */
+	uint8_t splitter_family;
 	/** Raw ADC each branch answers with. */
 	int adc[MOCK_BRANCH_COUNT];
 	/** Branch the splitter is currently pointing at. */
@@ -42,8 +44,11 @@ extern struct mock_state mock;
 /** @brief Reset to four open ports with no splitters. */
 void mock_reset(void);
 
-/** @brief Attach a splitter with the given raw ADC on each branch. */
+/** @brief Attach a TMP1826 splitter with the given raw ADC on each branch. */
 void mock_attach_splitter(int port, int adc_a, int adc_b);
+
+/** @brief Attach a splitter whose sensor answers with a specific family code. */
+void mock_attach_splitter_family(int port, int adc_a, int adc_b, uint8_t family);
 
 /** @brief Attach a plain probe with the given raw ADC, no splitter. */
 void mock_attach_probe(int port, int adc);

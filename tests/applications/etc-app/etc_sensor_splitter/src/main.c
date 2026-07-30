@@ -12,6 +12,7 @@
 
 #include "etc_sensor.h"
 #include "events/sensor_event.h"
+#include "tmp1826.h"
 
 /* Raw ADC counts chosen so every probe in a test converts to a distinct
  * temperature. */
@@ -149,6 +150,46 @@ ZTEST(etc_sensor_splitter, test_splitter_with_empty_b_branch_reports_absent)
 
 	expect_probe(SENSOR_INPUT_IN4, ADC_P4);
 	expect_absent(SENSOR_INPUT_IN8);
+}
+
+/* FW-808: a splitter built around a TMP1827 is register-compatible with the
+ * TMP1826 and differs only in its 1-Wire family code, so it must behave
+ * identically. */
+ZTEST(etc_sensor_splitter, test_tmp1827_splitter_reports_b_branch)
+{
+	mock_attach_splitter_family(0, ADC_P1_A, ADC_P1_B, TMP1827_FAMILY_CODE);
+
+	acquire();
+
+	expect_probe(SENSOR_INPUT_IN1, ADC_P1_A);
+	expect_probe(SENSOR_INPUT_IN5, ADC_P1_B);
+}
+
+/* Both parts will be in the field, so one image has to drive a mix of them. */
+ZTEST(etc_sensor_splitter, test_mixed_splitter_families_across_ports)
+{
+	mock_attach_splitter_family(0, ADC_P1_A, ADC_P1_B, TMP1826_FAMILY_CODE);
+	mock_attach_splitter_family(2, ADC_P3, ADC_P3 + 400, TMP1827_FAMILY_CODE);
+
+	acquire();
+
+	expect_probe(SENSOR_INPUT_IN1, ADC_P1_A);
+	expect_probe(SENSOR_INPUT_IN5, ADC_P1_B);
+	expect_probe(SENSOR_INPUT_IN3, ADC_P3);
+	expect_probe(SENSOR_INPUT_IN7, ADC_P3 + 400);
+}
+
+/* Widening the family match must not turn every 1-Wire part into a splitter: a
+ * DS18B20 answers the search but drives no branch switch, so its port has to be
+ * treated as having a single branch. */
+ZTEST(etc_sensor_splitter, test_unsupported_family_is_not_a_splitter)
+{
+	mock_attach_splitter_family(0, ADC_P1_A, ADC_P1_B, 0x28);
+
+	acquire();
+
+	expect_probe(SENSOR_INPUT_IN1, ADC_P1_A);
+	expect_absent(SENSOR_INPUT_IN5);
 }
 
 /* Nothing plugged in anywhere. */

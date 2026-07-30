@@ -14,6 +14,7 @@
 #include "etc_device.h"
 #include "etc_settings.h"
 #include "events/sensor_event.h"
+#include "tmp1826.h"
 
 #define MOCK_ADC_AMBIENT 2100
 #define MOCK_ADC_BATTERY 2500
@@ -39,7 +40,13 @@ void mock_reset(void)
 
 void mock_attach_splitter(int port, int adc_a, int adc_b)
 {
+	mock_attach_splitter_family(port, adc_a, adc_b, TMP1826_FAMILY_CODE);
+}
+
+void mock_attach_splitter_family(int port, int adc_a, int adc_b, uint8_t family)
+{
 	mock.port[port].splitter = true;
+	mock.port[port].splitter_family = family;
 	mock.port[port].adc[MOCK_BRANCH_A] = adc_a;
 	mock.port[port].adc[MOCK_BRANCH_B] = adc_b;
 }
