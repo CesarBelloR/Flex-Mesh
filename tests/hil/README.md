@@ -67,6 +67,8 @@ pytest tests/hil/soak_reclaim_reliability.py -v -s --port /dev/ttyACM0 --soak-ho
 | `test_calibration.py` | FW-588/611/612/613/614: operator-attended calibration suite (LED vs result, portal 48939/48950 cross-checks, reboot persistence, sensor/calibration concurrency). Needs `overlay-hil.conf`; Coiote creds optional. Tests share their calibrations, so run the file in order and follow the five setup prompts |
 | `test_splitter_detection.py` | FW-1071: operator-attended check that a port with no splitter reports no B branch, including after a splitter is removed without a reboot. Needs `overlay-hil.conf` (uses `magnet sample`); run the file in order and follow the three wiring prompts |
 | `test_modem_power_state.py` | FW-1152: modem power state unification — power off/on idempotency, the bounded power-down window, and exactly one `Modem power ON -> OFF` per power off. Needs `overlay-hil.conf` (adds `modem_module power` / `modem_module state`). The AT+QPOWD-unavailable PWRKEY fallback is GDB-verified only; see the module docstring |
+| `test_splitter_family.py` | FW-808: operator-attended check that one image detects and drives both a TMP1827 splitter (family `0x27`) and a TMP1826 one (`0x26`), branch switching included. Needs `overlay-hil.conf` and a TMP1827 splitter board (HW2-808); run the file in order and follow the three wiring prompts |
+| `acquisition.py` | Shared helpers for the two splitter suites: triggers one acquisition with `magnet sample` and parses the `detect: splitter`, `detect: parts` and `ADC[n]` log lines |
 
 ## Cloud E2E test (Coiote)
 
