@@ -156,7 +156,9 @@ enum modem_event_type {
 	/* Modem has powered down (expected or unexpected) */
 	MODEM_EVT_POWERED_DOWN,
 	/* Modem has not been able to connect within timeout */
-	MODEM_EVT_CONNECT_TIMEOUT
+	MODEM_EVT_CONNECT_TIMEOUT,
+	/* A failed modem power on is retried */
+	MODEM_EVT_POWER_ON_RETRY
 };
 
 struct modem_static_modem_data {

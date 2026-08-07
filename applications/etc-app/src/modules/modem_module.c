@@ -36,6 +36,8 @@
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
 #define MODEM_RETRY_SUSPEND_COUNT	10
+#define MODEM_RETRY_BACKOFF_MIN_S	60
+#define MODEM_RETRY_BACKOFF_MAX_S	3600
 
 struct modem_msg_data {
 	union {
@@ -102,7 +104,13 @@ static K_WORK_DELAYABLE_DEFINE(modem_work, modem_work_fn);
 static void modem_gnss_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(modem_gnss_work, modem_gnss_work_fn);
 
+static void modem_retry_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(modem_retry_work, modem_retry_work_fn);
+
 static int64_t modem_wakeup_time_ms = -1;
+
+/* Backoff before the next modem power on attempt. */
+static uint32_t modem_retry_backoff_s = MODEM_RETRY_BACKOFF_MIN_S;
 
 /* Modem module message queue. */
 #define MODEM_QUEUE_ENTRY_COUNT		20
@@ -314,6 +322,9 @@ static int modem_enter_sleep(void)
 
 	/* If the modem can't enter sleep, we have no way of recovering
 		* and risk of draining the battery. Issue an assert in this case. */
+	if ((rc != 0) && (rc != -EALREADY)) {
+		ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(modem_power_down_failed, rc);
+	}
 	__ASSERT_NO_MSG((rc == 0) || (rc == -EALREADY));
 	if ((rc == 0) || (rc == -EALREADY)) {
 		state_set(STATE_DISCONNECTED);
@@ -328,23 +339,50 @@ static int modem_enter_sleep(void)
 	return rc;
 }
 
-static int modem_enter_wakeup(void) 
+/** @brief Clear the retry state once the modem has come up.
+ *
+ * Cancels any retry still pending from an earlier failure, which would
+ * otherwise fire later and wake a modem that was since put to sleep.
+ */
+static void modem_power_on_succeeded(void)
+{
+	modem_retry_backoff_s = MODEM_RETRY_BACKOFF_MIN_S;
+	k_work_cancel_delayable(&modem_retry_work);
+}
+
+/** @brief Recover from a failed modem power on.
+ *
+ * Schedules a retry with exponential backoff. The device keeps sampling and
+ * logging while the modem is down, so only the upload window is lost.
+ *
+ * @param rc the error the power on returned
+ */
+static void modem_power_on_retry(int rc)
+{
+	LOG_WRN("Modem power on failed (%d), retry in %u s", rc, modem_retry_backoff_s);
+	ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(modem_power_on_failed, rc);
+	k_work_reschedule(&modem_retry_work, K_SECONDS(modem_retry_backoff_s));
+	modem_retry_backoff_s = MIN(modem_retry_backoff_s * 2, MODEM_RETRY_BACKOFF_MAX_S);
+	state_set(STATE_DISCONNECTED);
+}
+
+static int modem_enter_wakeup(void)
 {
 	int rc = -ENOTSUP;
 #ifdef CONFIG_PM_DEVICE
 	rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_RESUME);
 	if (rc) {
-		LOG_ERR("Failed to suspend the modem %d", rc);
+		LOG_ERR("Failed to power on the modem %d", rc);
 	}
 #endif
-	/* If we can't turn on modem, we are in an unrecoverable state.
-	 * Issue assert in this case. */
-	__ASSERT_NO_MSG(rc == 0);
 	if (rc == 0) {
+		modem_power_on_succeeded();
 		state_set(STATE_CONNECTING);
 		k_work_reschedule(&modem_work,
 				K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
 		SEND_EVENT(modem, MODEM_EVT_LTE_CONNECTING);
+	} else {
+		modem_power_on_retry(rc);
 	}
 
 	return rc;
@@ -357,6 +395,11 @@ static void modem_work_fn(struct k_work *work)
 	if (state == STATE_CONNECTING) {
 		SEND_EVENT(modem, MODEM_EVT_CONNECT_TIMEOUT);
 	}
+}
+
+static void modem_retry_work_fn(struct k_work *work)
+{
+	SEND_EVENT(modem, MODEM_EVT_POWER_ON_RETRY);
 }
 
 static void modem_gnss_work_fn(struct k_work *work)
@@ -692,7 +735,8 @@ static bool is_wakeup_modem(struct modem_msg_data *msg)
 		    IS_EVENT(msg, app, APP_EVT_REQUEST_CALIBRATION) ||
 		    IS_EVENT(msg, data, DATA_EVT_FUNCTIONAL_TEST_START) ||
 		    ((IS_EVENT(msg, app, APP_EVT_DATA_RECEIVE) &&
-		      etc_device_get_mode() == ETC_DEVICE_MODE_RELAY));
+		      etc_device_get_mode() == ETC_DEVICE_MODE_RELAY)) ||
+		    IS_EVENT(msg, modem, MODEM_EVT_POWER_ON_RETRY);
 	return is_wakeup;
 }
 
@@ -708,7 +752,11 @@ static void on_sub_state_modem_off(struct modem_msg_data *msg)
 		int ret;
 		modem_wakeup_time_ms = k_uptime_get();
 		ret = modem_cmd(modem_dev, MODEM_API_CMD_POWER_ON, NULL);
-		__ASSERT_NO_MSG(ret == 0);
+		if (ret != 0) {
+			modem_power_on_retry(ret);
+			return;
+		}
+		modem_power_on_succeeded();
 		k_work_reschedule(&modem_work,
 				K_SECONDS(CONFIG_MODEM_MODULE_MAX_CONNECTION_TIME_S));
 		state_set(STATE_CONNECTING);
