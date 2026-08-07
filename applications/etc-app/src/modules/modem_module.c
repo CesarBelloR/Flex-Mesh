@@ -305,6 +305,14 @@ static bool app_event_handler(const struct app_event_header *aeh)
 	return false;
 }
 
+/** @brief Stop all modem work timers. */
+static void modem_module_stop_work(void)
+{
+	k_work_cancel_delayable(&modem_work);
+	k_work_cancel_delayable(&modem_gnss_work);
+	k_work_cancel_delayable(&modem_retry_work);
+}
+
 static int modem_enter_sleep(void)
 {
 	int rc = -ENOTSUP;
@@ -329,7 +337,7 @@ static int modem_enter_sleep(void)
 	if ((rc == 0) || (rc == -EALREADY)) {
 		state_set(STATE_DISCONNECTED);
 		sub_state_lte_disconnected_set(SUB_STATE_MODEM_SLEEP);
-		k_work_cancel_delayable(&modem_work);
+		modem_module_stop_work();
 
 		SEND_EVENT(modem, MODEM_EVT_LTE_DISCONNECTED);
 	} else {
@@ -404,7 +412,15 @@ static void modem_retry_work_fn(struct k_work *work)
 
 static void modem_gnss_work_fn(struct k_work *work)
 {
+	struct modem_event *module_event;
 	int ret;
+
+	/* Only these two states have the modem powered on. Every disconnected
+	 * sub state means it is off, so AT+QGPSEND would go into a dead UART.
+	 */
+	if ((state != STATE_CONNECTING) && (state != STATE_CONNECTED)) {
+		return;
+	}
 
 	ret = modem_cmd(modem_dev, MODEM_API_CMD_STOP_GNSS, NULL);
 	if (ret == 0) {
@@ -412,7 +428,7 @@ static void modem_gnss_work_fn(struct k_work *work)
 	}
 
 	if (state == STATE_CONNECTED) {
-		struct modem_event *module_event = new_modem_event();
+		module_event = new_modem_event();
 		module_event->data.time_to_connect_ms = -1;
 		module_event->type = MODEM_EVT_LTE_CONNECTED_READY;
 
