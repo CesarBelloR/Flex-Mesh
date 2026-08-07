@@ -21,6 +21,7 @@
 #include "etc_sensor.h"
 #include "etc_battery.h"
 #include "etc_memfault.h"
+#include "modem_api.h"
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lwm2m_codec_helpers, CONFIG_CLOUD_CODEC_LOG_LEVEL);
 
@@ -185,12 +186,12 @@ int lwm2m_codec_helpers_create_objects_and_resources(void)
 		return err;
 	}
 
-	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0,
-					   APN, 0), 
-				CONFIG_MODEM_QUECTEL_BG95_M3_APN, 
-				sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_APN),
-				sizeof(CONFIG_MODEM_QUECTEL_BG95_M3_APN),
-				LWM2M_RES_DATA_FLAG_RO);
+	/* The APN depends on the SIM, so the resource points at the driver's
+	 * buffer and only its length is refreshed once the modem is up.
+	 */
+	err = lwm2m_set_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, APN, 0),
+				quectel_bg95_get_apn(), APN_MAX_LEN + 1,
+				strlen(quectel_bg95_get_apn()) + 1, LWM2M_RES_DATA_FLAG_RO);
 
 	err = lwm2m_create_res_inst(&LWM2M_OBJ(LWM2M_OBJECT_DEVICE_ID, 0,
 						POWER_SOURCE_VOLTAGE_RID, 0));
@@ -1051,6 +1052,12 @@ int lwm2m_codec_helpers_set_modem_static_data(struct data_modem_static *modem_st
 
 	err = lwm2m_set_string(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_ICCID),
 			       modem_static->iccid);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_set_res_data_len(&LWM2M_OBJ(LWM2M_OBJECT_CONNECTIVITY_MONITORING_ID, 0, APN, 0),
+				     strlen(quectel_bg95_get_apn()) + 1);
 	if (err) {
 		return err;
 	}
