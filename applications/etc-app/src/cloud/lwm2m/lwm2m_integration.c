@@ -322,8 +322,15 @@ static void send_cb(enum lwm2m_send_status status)
 		break;
 
 		case LWM2M_SEND_STATUS_FAILURE:
-		case LWM2M_SEND_STATUS_TIMEOUT:
 		cloud_wrap_evt.type =  CLOUD_WRAP_EVT_DATA_SEND_FAIL;
+		notify = true;
+		break;
+
+		/* A Send timeout tears down the registration and triggers
+		 * re-registration; report the connection state instead of a send
+		 * failure so no sends are attempted until registration completes. */
+		case LWM2M_SEND_STATUS_TIMEOUT:
+		cloud_wrap_evt.type = CLOUD_WRAP_EVT_CONNECTING;
 		notify = true;
 		break;
 	}
