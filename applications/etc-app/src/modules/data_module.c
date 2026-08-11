@@ -47,6 +47,11 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 /* Oldest signal measurement still worth reporting to the cloud. */
 #define DATA_SIGNAL_MAX_AGE_MS (6 * 60 * 60 * (int64_t)MSEC_PER_SEC)
 
+/* Maximum consecutive immediate retries after a failed cloud send; further
+ * retries wait for the next send trigger (transmit interval, reconnect, ACK).
+ */
+#define DATA_SEND_FAIL_RETRY_MAX 10
+
 struct data_msg_data {
 	union {
 		struct modem_event modem;
@@ -119,6 +124,9 @@ struct cloud_codec_data ble_codec = { 0 };
 struct cloud_codec_data codec_backup = { 0 };
 
 struct send_msg_status send_status;
+
+/* Consecutive failed cloud sends; bounds the immediate-retry loop. */
+static uint32_t send_fail_count;
 
 /* Initialize publish timeout for data publish as forever */
 static k_timeout_t data_publish_timeout = K_FOREVER; 
@@ -742,6 +750,7 @@ static void data_send_work_fn(struct k_work *work)
 static void on_cloud_state_disconnected(struct data_msg_data *msg)
 {
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
+		send_fail_count = 0;
 		state_set(STATE_CLOUD_CONNECTED);
 
 		/* Retry to calibration check */
@@ -807,6 +816,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 		/* Reset send status to allow future sends. */
 		data_do_check_calibration();
 		reset_send_status(&send_status);
+		send_fail_count = 0;
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
 	}
@@ -948,6 +958,7 @@ static void on_all_states(struct data_msg_data *msg)
 			/* Acknowledge record and encode more data, if connected to cloud */
 			etc_device_set_ack_record(send_status.record_id);
 		}
+		send_fail_count = 0;
 		reset_send_status(&send_status);
 		data_codec_clear_data(&codec);
 		/* The flag (if any) was carried by the send just acknowledged; clear it
@@ -998,7 +1009,13 @@ static void on_all_states(struct data_msg_data *msg)
 		/* Reset send status on fail */
 		reset_send_status(&send_status);
 		if (state == STATE_CLOUD_CONNECTED) {
-			data_encode_for_cloud(split, etc_device_is_relay());
+			if (++send_fail_count > DATA_SEND_FAIL_RETRY_MAX) {
+				LOG_WRN("Send failed %u times in a row, "
+					"waiting for next send trigger",
+					send_fail_count);
+			} else {
+				data_encode_for_cloud(split, etc_device_is_relay());
+			}
 		}
 	}
 
