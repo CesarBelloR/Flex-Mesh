@@ -158,7 +158,11 @@ enum modem_event_type {
 	/* Modem has not been able to connect within timeout */
 	MODEM_EVT_CONNECT_TIMEOUT,
 	/* A failed modem power on is retried */
-	MODEM_EVT_POWER_ON_RETRY
+	MODEM_EVT_POWER_ON_RETRY,
+	/* Test-shell request to power the modem on (CONFIG_MODEM_MODULE_SHELL) */
+	MODEM_EVT_SHELL_POWER_ON,
+	/* Test-shell request to power the modem off (CONFIG_MODEM_MODULE_SHELL) */
+	MODEM_EVT_SHELL_POWER_OFF
 };
 
 struct modem_static_modem_data {

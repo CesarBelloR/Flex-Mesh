@@ -67,6 +67,10 @@ static char *get_evt_type_str(enum modem_event_type type)
 		return "MODEM_EVT_CONNECT_TIMEOUT";
 	case MODEM_EVT_POWER_ON_RETRY:
 		return "MODEM_EVT_POWER_ON_RETRY";
+	case MODEM_EVT_SHELL_POWER_ON:
+		return "MODEM_EVT_SHELL_POWER_ON";
+	case MODEM_EVT_SHELL_POWER_OFF:
+		return "MODEM_EVT_SHELL_POWER_OFF";
 	default:
 		return "Unknown event";
 	}

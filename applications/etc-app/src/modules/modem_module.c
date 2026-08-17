@@ -875,6 +875,21 @@ static void on_all_states(struct modem_msg_data *msg)
 		SEND_SHUTDOWN_ACK(modem, MODEM_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
 	}
+
+#ifdef CONFIG_MODEM_MODULE_SHELL
+	if (IS_EVENT(msg, modem, MODEM_EVT_SHELL_POWER_ON)) {
+		/* Mirror the app: a modem that is already on or coming up is left alone. */
+		int rc = (state == STATE_DISCONNECTED) ? modem_enter_wakeup() : 0;
+
+		LOG_INF("Shell power on done (%d)", rc);
+	}
+
+	if (IS_EVENT(msg, modem, MODEM_EVT_SHELL_POWER_OFF)) {
+		int rc = modem_enter_sleep();
+
+		LOG_INF("Shell power off done (%d)", rc);
+	}
+#endif
 }
 
 void modem_module_thread_fn(void)
@@ -938,9 +953,11 @@ APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, lora_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, util_event);
 
-#ifdef CONFIG_MODEM_QUECTEL_BG95_M3_GNSS_SHELL
+#if defined(CONFIG_MODEM_QUECTEL_BG95_M3_GNSS_SHELL) || defined(CONFIG_MODEM_MODULE_SHELL)
 
 #include <zephyr/shell/shell.h>
+
+#ifdef CONFIG_MODEM_QUECTEL_BG95_M3_GNSS_SHELL
 
 static int cmd_request_location(const struct shell *shell, size_t argc, char **argv)
 {
@@ -954,12 +971,90 @@ static int cmd_get_location_request_status(const struct shell *shell, size_t arg
 	return 0;
 }
 
-SHELL_STATIC_SUBCMD_SET_CREATE(
-	sub_modem_module,
-	SHELL_CMD(rq_location, NULL, "Request location", cmd_request_location),
-	SHELL_CMD(get_location_request, NULL, "Get status of location request", 
-		  cmd_get_location_request_status),
-	SHELL_SUBCMD_SET_END);
-/* Creating root (level 0) command "demo" */
+#define GNSS_SHELL_CMDS                                                                            \
+	SHELL_CMD(rq_location, NULL, "Request location", cmd_request_location),                    \
+		SHELL_CMD(get_location_request, NULL, "Get status of location request",            \
+			  cmd_get_location_request_status),
+#else
+#define GNSS_SHELL_CMDS
+#endif /* CONFIG_MODEM_QUECTEL_BG95_M3_GNSS_SHELL */
+
+#ifdef CONFIG_MODEM_MODULE_SHELL
+
+#include <zephyr/pm/device.h>
+
+/** @brief Name a driver power state the way the driver logs it. */
+static const char *power_state2str(enum modem_power_state power_state)
+{
+	switch (power_state) {
+	case MODEM_POWER_OFF:
+		return "OFF";
+	case MODEM_POWER_WAITING_FOR_APP_RDY:
+		return "WAITING_FOR_APP_RDY";
+	case MODEM_POWER_ON:
+		return "ON";
+	case MODEM_POWER_PSM_PENDING:
+		return "PSM_PENDING";
+	case MODEM_POWER_PSM:
+		return "PSM";
+	default:
+		return "Unknown";
+	}
+}
+
+/** @brief Request a modem power on, handled on the modem module thread. */
+static int cmd_modem_power_on(const struct shell *shell, size_t argc, char **argv)
+{
+	SEND_EVENT(modem, MODEM_EVT_SHELL_POWER_ON);
+	return 0;
+}
+
+/** @brief Request a modem power off, handled on the modem module thread. */
+static int cmd_modem_power_off(const struct shell *shell, size_t argc, char **argv)
+{
+	SEND_EVENT(modem, MODEM_EVT_SHELL_POWER_OFF);
+	return 0;
+}
+
+/** @brief Print the app, driver and PM views of the modem power state. */
+static int cmd_modem_state(const struct shell *shell, size_t argc, char **argv)
+{
+	struct modem_api_data modem_data = {0};
+	enum pm_device_state pm_state;
+	int ret;
+
+	ret = modem_get_data(modem_dev, MODEM_API_DATA_REQUEST_POWER_STATE, &modem_data);
+	if (ret != 0) {
+		shell_error(shell, "Can't retrieve the modem power state: %d", ret);
+		return ret;
+	}
+
+	ret = pm_device_state_get(modem_dev, &pm_state);
+	if (ret != 0) {
+		shell_error(shell, "Can't retrieve the PM device state: %d", ret);
+		return ret;
+	}
+
+	shell_print(shell, "app: %s, driver: %s, pm: %s", state2str(state),
+		    power_state2str(modem_data.power_state), pm_device_state_str(pm_state));
+
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_modem_power,
+			       SHELL_CMD(on, NULL, "Power the modem on", cmd_modem_power_on),
+			       SHELL_CMD(off, NULL, "Power the modem off", cmd_modem_power_off),
+			       SHELL_SUBCMD_SET_END);
+
+#define POWER_SHELL_CMDS                                                                           \
+	SHELL_CMD(power, &sub_modem_power, "Change the modem power state", NULL),                  \
+		SHELL_CMD(state, NULL, "Show the app, driver and PM power state",                  \
+			  cmd_modem_state),
+#else
+#define POWER_SHELL_CMDS
+#endif /* CONFIG_MODEM_MODULE_SHELL */
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_modem_module,
+			       GNSS_SHELL_CMDS POWER_SHELL_CMDS SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(modem_module, &sub_modem_module, "ETC Modem Module", NULL);
-#endif
+#endif /* CONFIG_MODEM_QUECTEL_BG95_M3_GNSS_SHELL || CONFIG_MODEM_MODULE_SHELL */
