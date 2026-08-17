@@ -23,11 +23,6 @@
 
 #include "etc_memfault.h"
 
-#ifdef CONFIG_PM_DEVICE
-#include <zephyr/pm/pm.h>
-#include <zephyr/pm/device.h>
-#endif
-
 #ifdef CONFIG_LWM2M_CARRIER
 #include <lwm2m_carrier.h>
 #endif /* CONFIG_LWM2M_CARRIER */
@@ -35,7 +30,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_ETC_APP_LOG_LEVEL);
 
-#define MODEM_RETRY_SUSPEND_COUNT	10
 #define MODEM_RETRY_BACKOFF_MIN_S	60
 #define MODEM_RETRY_BACKOFF_MAX_S	3600
 
@@ -315,26 +309,15 @@ static void modem_module_stop_work(void)
 
 static int modem_enter_sleep(void)
 {
-	int rc = -ENOTSUP;
-#ifdef CONFIG_PM_DEVICE
-	int count = 0;
-	do {
-		rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_SUSPEND);
-		count++;
-		if (rc == -EAGAIN) {
-			LOG_WRN("Modem suspend timed out.");
-		}
-	}
-	while (rc == -EAGAIN && count < MODEM_RETRY_SUSPEND_COUNT);
-#endif
+	int rc = modem_cmd(modem_dev, MODEM_API_CMD_POWER_OFF, NULL);
 
 	/* If the modem can't enter sleep, we have no way of recovering
-		* and risk of draining the battery. Issue an assert in this case. */
-	if ((rc != 0) && (rc != -EALREADY)) {
+	 * and risk of draining the battery. Issue an assert in this case. */
+	if (rc != 0) {
 		ETC_MEMFAULT_TRACE_EVENT_WITH_STATUS(modem_power_down_failed, rc);
 	}
-	__ASSERT_NO_MSG((rc == 0) || (rc == -EALREADY));
-	if ((rc == 0) || (rc == -EALREADY)) {
+	__ASSERT_NO_MSG(rc == 0);
+	if (rc == 0) {
 		state_set(STATE_DISCONNECTED);
 		sub_state_lte_disconnected_set(SUB_STATE_MODEM_SLEEP);
 		modem_module_stop_work();
@@ -376,13 +359,11 @@ static void modem_power_on_retry(int rc)
 
 static int modem_enter_wakeup(void)
 {
-	int rc = -ENOTSUP;
-#ifdef CONFIG_PM_DEVICE
-	rc = pm_device_action_run(modem_dev, PM_DEVICE_ACTION_RESUME);
+	int rc = modem_cmd(modem_dev, MODEM_API_CMD_POWER_ON, NULL);
+
 	if (rc) {
 		LOG_ERR("Failed to power on the modem %d", rc);
 	}
-#endif
 	if (rc == 0) {
 		modem_power_on_succeeded();
 		state_set(STATE_CONNECTING);
