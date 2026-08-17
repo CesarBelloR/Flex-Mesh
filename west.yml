@@ -27,5 +27,5 @@ manifest:
       remote: exact
     - name: etc-common-firmware
       remote: exact-ssh
-      revision: 7d5ddc85059478d12d6102c40c867abd92a6dc78
+      revision: 6c6077aa43e7997f9814f705cc4c6619ea4b2b85
       path: modules/exact
