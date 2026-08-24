@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LWM2M xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.openmobilealliance.org/tech/profiles/LWM2M-v1_1.xsd">
+	<Object ObjectType="MODefinition">
+		<Name>EXACT Threshold</Name>
+		<Description1><![CDATA[LwM2M object to configure immediate report thresholds on a device. Each instance is one threshold slot. When a sensor reading of the configured value type on any input port crosses the threshold in the configured alert type direction, the device transmits its current sample immediately over its active radio (LoRa or LTE, depending on device mode) instead of waiting for the next scheduled transmission interval.
+Value types follow the Flex 2.0 value-type enumeration. The report carries the Alert flag of the threshold that breached. See docs/specs/lwm2m-immediate-report-thresholds.md for trigger semantics.]]></Description1>
+		<ObjectID>48944</ObjectID>
+		<ObjectURN>urn:oma:lwm2m:x:48944:1.0</ObjectURN>
+		<LWM2MVersion>1.1</LWM2MVersion>
+		<ObjectVersion>1.0</ObjectVersion>
+		<MultipleInstances>Multiple</MultipleInstances>
+		<Mandatory>Optional</Mandatory>
+		<Resources>
+			<Item ID="1">
+				<Name>Enabled</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Boolean</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Enables this threshold slot. Disabled slots keep their configuration but are never evaluated. Default: false.]]></Description>
+			</Item>
+			<Item ID="2">
+				<Name>Value Type</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>1..12</RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Flex 2.0 value type this threshold applies to:
+ - 1: Temperature
+ - 2: Humidity
+ - 3: PM1.0
+ - 4: PM2.5
+ - 5: PM4.0
+ - 6: PM10
+ - 7: VOC Index
+ - 8: NOx Index
+ - 9: Pressure
+ - 10: IAQ
+ - 11: CO2
+ - 12: b-VOC
+The threshold applies to all readings of this value type on all input ports. Value types without a matching connected sensor never trigger.]]></Description>
+			</Item>
+			<Item ID="3">
+				<Name>Alert Type</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>0..1</RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Alert type (trigger direction):
+ - 0: Exceeds (reading rises above the threshold value)
+ - 1: Drops below (reading falls below the threshold value)]]></Description>
+			</Item>
+			<Item ID="4">
+				<Name>Threshold Value</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Float</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Threshold value in the default unit of the configured value type (temperature: Cel, humidity: %RH, particulate matter: ug/m3, pressure: hPa, CO2/b-VOC: ppm, indices: dimensionless).]]></Description>
+			</Item>
+			<Item ID="5">
+				<Name>Alert</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Boolean</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[True while this threshold slot has a threshold-triggered report awaiting delivery. Set when the slot triggers, sent with the report so the server learns which threshold breached, and cleared once that report has been sent successfully; a failed transmission keeps it set so the retry still carries it. Volatile: false at boot, not persisted.]]></Description>
+			</Item>
+			<Item ID="6">
+				<Name>Last Triggered</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>Time</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Timestamp of the last immediate report triggered by this slot since boot. 0 if the slot has not triggered since boot. Troubleshooting value: not reported proactively by the device and not persisted across reboot; read on demand.]]></Description>
+			</Item>
+			<Item ID="7">
+				<Name>Trigger Count</Name>
+				<Operations>R</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[Number of immediate reports triggered by this slot since boot. Troubleshooting value: not reported proactively by the device and not persisted across reboot; read on demand.]]></Description>
+			</Item>
+		</Resources>
+		<Description2 />
+	</Object>
+</LWM2M>
