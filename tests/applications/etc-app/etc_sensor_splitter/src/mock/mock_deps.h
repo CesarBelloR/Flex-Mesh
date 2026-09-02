@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "etc_settings.h"
+
 #define MOCK_NUM_PORTS 4
 /* Raw ADC that etc_sensor_set_type() classifies as nothing connected. */
 #define MOCK_ADC_OPEN 4095
@@ -30,10 +32,23 @@ struct mock_port {
 	enum mock_branch branch;
 	/** Fault injection: refuse to actuate towards this branch, -1 for none. */
 	int switch_fail_branch;
+	/** The 1-Wire line is shorted to ground. */
+	bool line_low;
+};
+
+/** @brief The one SHT31 RH probe the firmware supports, wherever it is plugged. */
+struct mock_sht31 {
+	float temperature;
+	float humidity;
+	/** Counts sample fetches, i.e. how many ports were actually read. */
+	int fetches;
 };
 
 struct mock_state {
 	struct mock_port port[MOCK_NUM_PORTS];
+	struct mock_sht31 sht31;
+	/** What etc_get_device_type() answers. */
+	enum etc_device_type device_type;
 	/** Counts front-end ADC reads. Also used to jitter consecutive reads of
 	 * one probe by an LSB, the way a real median-of-N sampler does. */
 	int adc_reads;
@@ -52,6 +67,9 @@ void mock_attach_splitter_family(int port, int adc_a, int adc_b, uint8_t family)
 
 /** @brief Attach a plain probe with the given raw ADC, no splitter. */
 void mock_attach_probe(int port, int adc);
+
+/** @brief Attach the SHT31 RH probe, which the ADC classifies as digital. */
+void mock_attach_rh_probe(int port, float temperature, float humidity);
 
 /** @brief Logical port the board mux points at, read back from the emulated
  * select GPIOs. Negative if the select pins are not driven.

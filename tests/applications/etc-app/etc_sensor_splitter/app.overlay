@@ -50,6 +50,12 @@
 &i2c0 {
 	status = "okay";
 
+	sht31: sht31@44 {
+		compatible = "sensirion,sht31";
+		reg = <0x44>;
+		status = "okay";
+	};
+
 	w1: w1@18 {
 		compatible = "exact,ds2484";
 		reg = <0x18>;

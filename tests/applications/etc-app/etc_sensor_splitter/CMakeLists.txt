@@ -12,6 +12,7 @@ target_compile_options(app PRIVATE -Wno-error=double-promotion)
 
 target_sources(app PRIVATE
   src/main.c
+  src/digital.c
   src/mock/mock_deps.c
   src/mock/stub_devices.c
   ${APP_SRC_DIR}/exact/etc_sensor/etc_sensor.c

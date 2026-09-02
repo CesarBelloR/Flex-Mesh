@@ -20,6 +20,8 @@
 #define MOCK_ADC_BATTERY 2500
 /* Inside SENSOR_RR_VALID_MIN/MAX so the Rr fixup path is exercised. */
 #define MOCK_ADC_HW_VER 1000
+/* At or below SENSOR_ADC_ONE_WIRE_CONNECTED, so the port classifies as digital. */
+#define MOCK_ADC_ONE_WIRE 20
 
 struct mock_state mock;
 
@@ -36,6 +38,7 @@ void mock_reset(void)
 		mock.port[i].adc[MOCK_BRANCH_B] = MOCK_ADC_OPEN;
 		mock.port[i].switch_fail_branch = -1;
 	}
+	mock.device_type = ETC_DEVICE_TYPE_LOGGER;
 }
 
 void mock_attach_splitter(int port, int adc_a, int adc_b)
@@ -56,6 +59,13 @@ void mock_attach_probe(int port, int adc)
 	mock.port[port].splitter = false;
 	mock.port[port].adc[MOCK_BRANCH_A] = adc;
 	mock.port[port].adc[MOCK_BRANCH_B] = MOCK_ADC_OPEN;
+}
+
+void mock_attach_rh_probe(int port, float temperature, float humidity)
+{
+	mock_attach_probe(port, MOCK_ADC_ONE_WIRE);
+	mock.sht31.temperature = temperature;
+	mock.sht31.humidity = humidity;
 }
 
 int mock_selected_port(void)
@@ -156,9 +166,10 @@ int etc_sensor_load_calibration_info(struct etc_sensor_adc_calibration_info *inf
 
 int ds2484_get_logic_level(const struct device *dev)
 {
+	int port = mock_selected_port();
+
 	ARG_UNUSED(dev);
-	/* Never grounded: the shorted-1-wire guard is not what this suite covers. */
-	return 1;
+	return port >= 0 && mock.port[port].line_low ? 0 : 1;
 }
 
 void etc_battery_poll_status(void)
@@ -177,7 +188,7 @@ void etc_calibration_unlock(void)
 
 enum etc_device_type etc_get_device_type(void)
 {
-	return ETC_DEVICE_TYPE_LOGGER;
+	return mock.device_type;
 }
 
 uint16_t etc_get_rr_value(void)

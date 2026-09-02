@@ -70,7 +70,8 @@ pytest tests/hil/soak_reclaim_reliability.py -v -s --port /dev/ttyACM0 --soak-ho
 | `test_splitter_family.py` | FW-808: operator-attended check that one image detects and drives both a TMP1827 splitter (family `0x27`) and a TMP1826 one (`0x26`), branch switching included. Needs `overlay-hil.conf` and a TMP1827 splitter board (HW2-808); run the file in order and follow the three wiring prompts |
 | `test_ble_boot_swipe.py` | FW-1194: a magnet swipe injected right after a cold boot, while the BLE stack is still enabling, must be latched and replayed instead of resetting the device. Needs `overlay-hil.conf` (uses `magnet swipe`); prints whether the swipe landed before or after `Bluetooth initialized` |
 | `test_ble_adv_watchdog.py` | FW-1203: an advertising set stopped behind the app's back (`ble adv_kill`, as a connection attempt that fails to establish does) must be restarted by the advertising watchdog within one period, and a healthy advertiser must be left alone. Needs `overlay-hil.conf`; the on-air check uses `bleak` when installed |
-| `acquisition.py` | Shared helpers for the two splitter suites: triggers one acquisition with `magnet sample` and parses the `detect: splitter`, `detect: parts` and `ADC[n]` log lines |
+| `test_rh_probe.py` | FW-1195: operator-attended check that an RH probe is read on port 1, after a same-port reconnect, on port 2, and again on port 1 after a cold boot; the last test cross-checks 48936/0 on Coiote when creds are given. Needs `overlay-hil.conf` (uses `magnet sample`) and one RH probe; run the file in order and follow the wiring prompts |
+| `acquisition.py` | Shared helpers for the splitter and RH-probe suites: triggers one acquisition with `magnet sample` (anchored on the command echo) and parses the `detect: splitter`, `detect: parts`, `ADC[n]` and `digital: humid` log lines |
 
 ## Cloud E2E test (Coiote)
 

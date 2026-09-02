@@ -1,10 +1,11 @@
 /*
  * Copyright (c) 2026 EXACT Technology Corporation
  *
- * Stand-ins for the two devices etc_sensor.c talks to over 1-Wire: the DS2484
- * bus master and the TMP1826 inside a splitter. The 1-Wire master emulates the
- * ROM search protocol closely enough for Zephyr's real w1_search_bus() to run
- * against it, so the code under test takes its normal path.
+ * Stand-ins for the devices etc_sensor.c talks to over 1-Wire: the DS2484 bus
+ * master, the TMP1826 inside a splitter and the SHT31 behind an RH probe. The
+ * 1-Wire master emulates the ROM search protocol closely enough for Zephyr's
+ * real w1_search_bus() to run against it, so the code under test takes its
+ * normal path.
  */
 
 #include <zephyr/device.h>
@@ -187,3 +188,61 @@ static const struct sensor_driver_api stub_tmp1826_api = {
 
 DEVICE_DT_DEFINE(DT_NODELABEL(w1_tmp1826), stub_tmp1826_init, NULL, NULL, NULL, POST_KERNEL,
 		 CONFIG_SENSOR_INIT_PRIORITY, &stub_tmp1826_api);
+
+/* --- SHT31 ---------------------------------------------------------------- */
+
+static void stub_value_from_float(struct sensor_value *val, float f)
+{
+	val->val1 = (int32_t)f;
+	val->val2 = (int32_t)((f - (float)val->val1) * 1000000.0f);
+}
+
+static int stub_sht31_attr_set(const struct device *dev, enum sensor_channel chan,
+			       enum sensor_attribute attr, const struct sensor_value *val)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(chan);
+	ARG_UNUSED(attr);
+	ARG_UNUSED(val);
+	return 0;
+}
+
+static int stub_sht31_sample_fetch(const struct device *dev, enum sensor_channel chan)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(chan);
+	mock.sht31.fetches++;
+	return 0;
+}
+
+static int stub_sht31_channel_get(const struct device *dev, enum sensor_channel chan,
+				  struct sensor_value *val)
+{
+	ARG_UNUSED(dev);
+
+	switch (chan) {
+	case SENSOR_CHAN_AMBIENT_TEMP:
+		stub_value_from_float(val, mock.sht31.temperature);
+		return 0;
+	case SENSOR_CHAN_HUMIDITY:
+		stub_value_from_float(val, mock.sht31.humidity);
+		return 0;
+	default:
+		return -ENOTSUP;
+	}
+}
+
+static int stub_sht31_init(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	return 0;
+}
+
+static const struct sensor_driver_api stub_sht31_api = {
+	.attr_set = stub_sht31_attr_set,
+	.sample_fetch = stub_sht31_sample_fetch,
+	.channel_get = stub_sht31_channel_get,
+};
+
+DEVICE_DT_DEFINE(DT_NODELABEL(sht31), stub_sht31_init, NULL, NULL, NULL, POST_KERNEL,
+		 CONFIG_SENSOR_INIT_PRIORITY, &stub_sht31_api);

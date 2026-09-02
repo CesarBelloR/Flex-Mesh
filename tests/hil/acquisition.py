@@ -26,6 +26,14 @@ PARTS_RE = re.compile(r"detect: parts ([0-9a-f]{2})/([0-9a-f]{2})/([0-9a-f]{2})/
 # Raw calibrated count per sampled channel, 0-based: ADC[2] is input 3, ADC[6]
 # is input 7 (port 3.B). Absent inputs emit no line at all.
 ADC_RE = re.compile(r"ADC\[(\d)\] (-?\d+)")
+# One line per acquisition, emitted at the end of etc_sensor_run_digital_sample()
+# after the analog pass:
+#   digital: humid 45.3 port 0 ft 0
+# %RH from the one supported RH probe (-1.0 when none was read), the 0-based
+# input it sits on (-1 when none), and whether the functional-test jig was
+# detected (every port grounded).
+DIGITAL_RE = re.compile(r"digital: humid (-?\d+\.\d) port (-?\d+) ft (\d)")
+HUMID_ABSENT = -1.0
 
 TYPE_ABSENT = "0"
 
@@ -43,6 +51,15 @@ DETECT_TIMEOUT_S = 25
 
 def shell(dut, cmd):
     dut.write(f"{cmd}\r\n".encode())
+
+
+def _drain(dut, quiet_s=0.3):
+    """Discard everything already buffered from the device."""
+    try:
+        while True:
+            dut.expect(r".+", timeout=quiet_s)
+    except Exception:
+        pass
 
 
 def collect_acquisition(dut, timeout):
@@ -118,3 +135,25 @@ def assert_present(types, adc, input_no):
     idx = input_no - 1
     assert types[idx] != TYPE_ABSENT, f"input {input_no} absent, expected a reading"
     assert idx in adc, f"input {input_no} classified but never sampled"
+
+
+def acquire_digital(dut):
+    """Trigger one acquisition and return (humidity, input_index, functional_test)
+    from the digital pass. `input_index` is 0-based, -1 when no RH probe was
+    read; `humidity` is HUMID_ABSENT in that case."""
+    for attempt in range(3):
+        time.sleep(RAIL_SETTLE_S)
+        # Anchor on this request's own echo so a `digital:` line left in the
+        # buffer by an earlier acquisition cannot satisfy the match.
+        _drain(dut)
+        shell(dut, "magnet sample")
+        try:
+            dut.expect(re.escape("magnet sample"), timeout=10)
+            m = dut.expect(DIGITAL_RE, timeout=DETECT_TIMEOUT_S)
+        except Exception:
+            continue
+        groups = [g.decode("utf-8", "replace") if isinstance(g, bytes) else g
+                  for g in m.groups()]
+        return float(groups[0]), int(groups[1]), groups[2] == "1"
+    pytest.fail("no digital line after 3 acquisition requests; is the firmware "
+                "built with overlay-hil.conf and the shell log backend enabled?")

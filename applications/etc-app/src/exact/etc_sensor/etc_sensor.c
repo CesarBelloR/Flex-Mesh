@@ -414,12 +414,6 @@ static inline int etc_sensor_acquire_digital_sensor(float *humidity_val, int8_t 
 {
 	__ASSERT_NO_MSG(humidity_val != NULL);
 
-	if (ds2484_get_logic_level(ds2484_dev) == 0) {
-		// Do not read sensor if the 1-wire signal
-		// is GND. This will cause the thread to hang.
-		LOG_WRN("1-wire signal is GND");
-		return -1;
-	}
 	if (!device_is_ready(sht31_i2c_dev)) {
 		LOG_ERR("SHT31 is not ready in I2C bus");
 		return -1;
@@ -472,28 +466,32 @@ static void etc_sensor_run_digital_sample(void)
 
 	etc_sensor_gpios_one_wire_enable();
 	for (int8_t i = SENSOR_INPUT_IN1; i <= SENSOR_INPUT_IN4; i++) {
+		float humidity_val;
+
 		list_sensor_digital_temp[i] = SENSOR_TEMP_NO_CONNECTED;
 		etc_sensor_adc_switch_channel(i);
-		if (enter_functional_test) {
-			k_msleep(50);
-			ret = ds2484_get_logic_level(ds2484_dev);
-			LOG_DBG("LL: %d", ret);
-			if (ret != 0 && i <= input_high_index) {
-				enter_functional_test = false;
-			}
-		} else if (list_sensor_type[i] == SENSOR_TYPE_DIGITAL) {
-			float humidity_val;
+		k_msleep(50);
+		/* -1 means the level could not be read; treat it like a grounded line. */
+		int level = ds2484_get_logic_level(ds2484_dev);
+		LOG_DBG("LL: %d", level);
+		if (level == 1 && i <= input_high_index) {
 			enter_functional_test = false;
-			k_msleep(50);
-			ret = etc_sensor_acquire_digital_sensor(&humidity_val, i);
-			/* Only one humidity sensor is supported */
-			if (ret == 0 && sensor_digital_humid == SENSOR_HUMID_NO_CONNECTED) {
-				sensor_digital_humid = humidity_val;
-				sensor_digital_humid_port_index = i;
-			}
+		}
+		/* A grounded 1-wire line hangs the bus, so a sensor is only read
+		 * through a line that idles high. */
+		if (level != 1 || list_sensor_type[i] != SENSOR_TYPE_DIGITAL) {
+			continue;
+		}
+		ret = etc_sensor_acquire_digital_sensor(&humidity_val, i);
+		/* Only one humidity sensor is supported */
+		if (ret == 0 && sensor_digital_humid == SENSOR_HUMID_NO_CONNECTED) {
+			sensor_digital_humid = humidity_val;
+			sensor_digital_humid_port_index = i;
 		}
 	}
 	etc_sensor_gpios_one_wire_disable();
+	LOG_INF("digital: humid %.1f port %d ft %d", (double)sensor_digital_humid,
+		sensor_digital_humid_port_index, enter_functional_test);
 }
 
 /**
