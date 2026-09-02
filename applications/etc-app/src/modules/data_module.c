@@ -27,6 +27,7 @@
 #include "etc_functional_test.h"
 
 #include "modules_common.h"
+#include "data_send_state.h"
 #include "events/app_event.h"
 #include "events/cloud_event.h"
 #include "events/ble_event.h"
@@ -64,13 +65,6 @@ struct data_msg_data {
 		struct util_event util;
 		struct lora_event lora;
 	} module;
-};
-
-struct send_msg_status {
-	/* Current record id being sent */
-	int record_id;
-	/* Is there a send ongoing? */
-	bool active_send;
 };
 
 /* Data module super states. */
@@ -123,10 +117,14 @@ struct cloud_codec_data codec = { 0 };
 struct cloud_codec_data ble_codec = { 0 };
 struct cloud_codec_data codec_backup = { 0 };
 
-struct send_msg_status send_status;
+/* One send in flight per channel; a BLE ACK must never settle a cloud send. */
+static struct data_send_state send_status_cloud;
+static struct data_send_state send_status_ble;
 
 /* Consecutive failed cloud sends; bounds the immediate-retry loop. */
 static uint32_t send_fail_count;
+/* Consecutive failed BLE sends; bounds the retry of the current record. */
+static uint32_t ble_send_fail_count;
 
 /* Initialize publish timeout for data publish as forever */
 static k_timeout_t data_publish_timeout = K_FOREVER; 
@@ -383,12 +381,6 @@ static void data_module_send_calibration_status(enum data_event_type type)
 	APP_EVENT_SUBMIT(data_event);
 }
 
-static inline void reset_send_status(struct send_msg_status *status)
-{
-	status->active_send = false;
-	status->record_id = 0;
-}
-
 static void data_send(enum data_event_type event,
 		      struct cloud_codec_data *data)
 {
@@ -403,7 +395,7 @@ static void data_send(enum data_event_type event,
 	BUILD_ASSERT((sizeof(data->paths[0]) == sizeof(data_encoded_buffers.paths[0])),
 			"Size of an entry in the object path list does not match");
 
-	send_status.active_send = true;
+	data_send_state_begin(&send_status_cloud);
 
 	if (IS_ENABLED(CONFIG_CLOUD_CODEC_LWM2M)) {
 		memcpy(data_encoded_buffers.paths, data->paths, sizeof(data->paths));
@@ -428,6 +420,7 @@ static void data_send_buf(enum data_event_type event, uint8_t* buf, uint8_t buf_
 
 	module_event->type = event;
 
+	data_send_state_begin(&send_status_ble);
 	/* Update data buffer */
 	module_event->data.buffer.buf = buf;
 	module_event->data.buffer.buf_len = buf_len;
@@ -516,9 +509,9 @@ static int data_encode_for_logger() {
 	union etc_device_record record;
 	bool reclaim_status;	
 	data_encode_prepare_modem_info(&modem_dynamic);
-	send_status.record_id = etc_device_read_record(&record, &reclaim_status);
+	send_status_cloud.record_id = etc_device_read_record(&record, &reclaim_status);
 	/* Only add a record if it is valid. */
-	if (send_status.record_id > 0) {
+	if (send_status_cloud.record_id > 0) {
 		ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
 		if (ret != 0) {
 			LOG_WRN("Error populating data codec");
@@ -559,7 +552,7 @@ static int data_encode_for_logger() {
 			data_codec_update_reclaim_state(&codec, RECLAIM_SUCCESS);
 			reclaim_active = false;
 		}
-	} else if (send_status.record_id == 0) {
+	} else if (send_status_cloud.record_id == 0) {
 		return STATUS_DONE;
 	}
 	return STATUS_IN_PROCESS;
@@ -576,9 +569,10 @@ static void data_encode_for_cloud(bool split, bool is_relay)
 {
 	int ret;
 
-	if (send_status.active_send) {
+	if (send_status_cloud.active) {
 		LOG_WRN("Not sending new record."
-			"Record ID %u is already being sent.", send_status.record_id);
+			"Record ID %u is already being sent.",
+			send_status_cloud.record_id);
 		return;
 	}
 
@@ -639,9 +633,17 @@ static void data_encode_for_ble()
 	int ret;
 	uint8_t data_payload_len = sizeof(data_payload_buf);
 	bool reclaim_status;
-	send_status.record_id = etc_device_read_record(&record, &reclaim_status);
+
+	if (send_status_ble.active) {
+		LOG_WRN("Not sending new record over BLE. "
+			"Record ID %d is already being sent.",
+			send_status_ble.record_id);
+		return;
+	}
+
+	send_status_ble.record_id = etc_device_read_record(&record, &reclaim_status);
 	/* Only add a record if it is valid. */
-	if (send_status.record_id > 0) {
+	if (send_status_ble.record_id > 0) {
 #ifdef CONFIG_ETC_BLE_PAYLOAD_LEGACY_FORMAT
 		ret = etc_common_prepare_logger_legacy_data(record, reclaim_status,
 			data_payload_buf, &data_payload_len);
@@ -652,13 +654,20 @@ static void data_encode_for_ble()
 		ret = data_codec_prepare_ble_packet(&ble_codec, &record);
 #endif
 		if (ret != 0) {
-			LOG_WRN("No message to send over BLE");
+			LOG_WRN("No message to send over BLE (err %d)", ret);
+			data_send_state_finish(&send_status_ble);
+			if (reclaim_active) {
+				etc_ble_notify_error(ETC_BLE_ERR_RECLAIM_TYPE, ret);
+				reclaim_active = false;
+			} else {
+				etc_ble_notify_error(ETC_BLE_ERR_RETRIEVE_TYPE, ret);
+			}
 			return;
 		}
 	}
 
-	/* Update reclaim status */							   
-	if (send_status.record_id == 0) {
+	/* Update reclaim status */
+	if (send_status_ble.record_id == 0) {
 		LOG_INF("No record found");
 		if (reclaim_active) {
 			etc_ble_notify_reclaim_status(0);
@@ -765,7 +774,7 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 			need_interval_tx_send = true;
 			data_encode_for_cloud(false, etc_device_is_relay());
 		} else if (etc_device_is_relay()) {
-			reset_send_status(&send_status);
+			data_send_state_finish(&send_status_cloud);
 			need_interval_tx_send = true;
 			data_encode_for_cloud(false, true);
 		}
@@ -815,7 +824,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
 		/* Reset send status to allow future sends. */
 		data_do_check_calibration();
-		reset_send_status(&send_status);
+		data_send_state_finish(&send_status_cloud);
 		send_fail_count = 0;
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
@@ -954,12 +963,13 @@ static void on_all_states(struct data_msg_data *msg)
 			}
 			etc_calibration_set_idle();
 		}
-		if (send_status.record_id > 0) {
+		int record_id = data_send_state_finish(&send_status_cloud);
+
+		if (record_id > 0) {
 			/* Acknowledge record and encode more data, if connected to cloud */
-			etc_device_set_ack_record(send_status.record_id);
+			etc_device_set_ack_record(record_id);
 		}
 		send_fail_count = 0;
-		reset_send_status(&send_status);
 		data_codec_clear_data(&codec);
 		/* The flag (if any) was carried by the send just acknowledged; clear it
 		 * so it is not reported on later whole-Info-object sends.
@@ -980,23 +990,36 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, ble, BLE_EVT_DATA_SEND_ACK)) {
-		data_codec_clear_data(&codec);
-		LOG_DBG("Record ID %d", send_status.record_id);
-		if (send_status.record_id > 0) {
-			/* Acknowledge record and encode more data, if connected to cloud */
-			etc_device_set_ack_record(send_status.record_id);
+		int record_id = data_send_state_finish(&send_status_ble);
+
+		LOG_DBG("Record ID %d", record_id);
+		if (record_id > 0) {
+			etc_device_set_ack_record(record_id);
 		}
-		reset_send_status(&send_status);
+		ble_send_fail_count = 0;
 		data_encode_for_ble();
 	}
 
+	if (IS_EVENT(msg, ble, BLE_EVT_DISCONNECTED)) {
+		data_send_state_finish(&send_status_ble);
+		ble_send_fail_count = 0;
+	}
+
 	if (IS_EVENT(msg, ble, BLE_EVT_DATA_SEND_FAIL)) {
-		/* Reset send status on fail */
-		reset_send_status(&send_status);
-		if (msg->module.ble.data.err == -ENOTCONN) {
-			/* No connection, notify send complete */
-			SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
+		int err = msg->module.ble.data.err;
+
+		data_send_state_finish(&send_status_ble);
+		/* The record is still unacknowledged, so a retry resends it. */
+		if (err != -ENOTCONN && ++ble_send_fail_count <= DATA_SEND_FAIL_RETRY_MAX) {
+			data_encode_for_ble();
+			return;
 		}
+		ble_send_fail_count = 0;
+		if (reclaim_active) {
+			etc_ble_notify_error(ETC_BLE_ERR_RECLAIM_TYPE, err);
+			reclaim_active = false;
+		}
+		SEND_EVENT(data, DATA_EVT_SEND_COMPLETE);
 	}
  
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_DATA_SEND_FAIL)) {
@@ -1007,7 +1030,7 @@ static void on_all_states(struct data_msg_data *msg)
 			split = true;
 		}
 		/* Reset send status on fail */
-		reset_send_status(&send_status);
+		data_send_state_finish(&send_status_cloud);
 		if (state == STATE_CLOUD_CONNECTED) {
 			if (++send_fail_count > DATA_SEND_FAIL_RETRY_MAX) {
 				LOG_WRN("Send failed %u times in a row, "
@@ -1020,7 +1043,7 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
-		reset_send_status(&send_status);
+		data_send_state_finish(&send_status_cloud);
 	}
 	
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {

@@ -321,7 +321,11 @@ static void on_connected_states(struct ble_msg_data *msg)
 /* Message handler for all states. */
 static void on_all_states(struct ble_msg_data *msg)
 {
-
+	/* A record queued before the link is secured has no receiver; fail it
+	 * so the data module does not wait for an ACK that never comes. */
+	if (state != STATE_BLE_CONNECTED && IS_EVENT(msg, data, DATA_EVT_DATA_SEND_BLE)) {
+		SEND_ERROR(ble, BLE_EVT_DATA_SEND_FAIL, -ENOTCONN);
+	}
 }
 
 void ble_module_thread_fn(void)
