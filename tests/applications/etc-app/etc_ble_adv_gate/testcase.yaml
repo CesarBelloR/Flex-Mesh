@@ -1,0 +1,6 @@
+tests:
+  tests.applications.etc-app.etc_ble_adv_gate:
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim

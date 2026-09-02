@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(etc_ble);
 #include "etc_settings.h"
 #include "etc_util.h"
 #include "ble_helpers.h"
+#include "etc_ble_adv_gate.h"
 
 #define DEVICE_NAME	CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
@@ -60,7 +61,9 @@ static K_WORK_DELAYABLE_DEFINE(flex_ble_sensor_work, flex_ble_sensor_work_handle
 static void flex_ble_adv_magnet_work_handler(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(flex_ble_adv_magnet_work, flex_ble_adv_magnet_work_handler);
 
-static struct k_work advertise_work;
+static void advertise(struct k_work *work);
+static K_WORK_DEFINE(advertise_work, advertise);
+static struct etc_ble_adv_gate adv_gate;
 static char flex_device_name[CONFIG_BT_DEVICE_NAME_MAX] = {0x00};
 static struct bt_conn *current_conn;
 static uint8_t msg_id_cnt = 0;
@@ -740,14 +743,28 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler)
 	for (int i = 0; i < ARRAY_SIZE(last_sensor_data.sensor); i++) {
 		last_sensor_data.sensor[i] = SENSOR_TEMP_NO_CONNECTED;
 	}
-	k_work_init(&advertise_work, advertise);
 	etc_ble_notify_evt(ETC_BLE_EVT_DISCONNECTED);
 	adv_state.is_advertising = false;
+
+	/* Replay a request that arrived while the stack was still enabling. */
+	switch (etc_ble_adv_gate_open(&adv_gate)) {
+	case ETC_BLE_ADV_START:
+		etc_ble_start_adv();
+		break;
+	case ETC_BLE_ADV_START_TIMEOUT:
+		etc_ble_start_adv_with_timeout();
+		break;
+	default:
+		break;
+	}
 	return 0;
 }
 
 void etc_ble_start_adv(void)
 {
+	if (!etc_ble_adv_gate_request(&adv_gate, ETC_BLE_ADV_START)) {
+		return;
+	}
 	/* Force to cancel this work. Since BLE mode always advertise */
 	k_work_cancel_delayable(&flex_ble_adv_magnet_work);
 	adv_state.is_magnet_trigger = false;
@@ -761,6 +778,7 @@ void etc_ble_stop_adv(void)
 		bt_conn_disconnect(current_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 	}
 	if (adv_state.set != NULL) {
+		LOG_WRN("BLE not ready, advertising request latched");
 		bt_le_ext_adv_stop(adv_state.set);
 	}
 }
@@ -768,6 +786,9 @@ void etc_ble_stop_adv(void)
 void etc_ble_start_adv_with_timeout(void)
 {
 	if (current_conn != NULL) {
+		return;
+	}
+	if (!etc_ble_adv_gate_request(&adv_gate, ETC_BLE_ADV_START_TIMEOUT)) {
 		return;
 	}
 
@@ -785,6 +806,7 @@ void etc_ble_set_current_sensor(struct sensor_data *data)
 {
 	if (!adv_state.is_advertising) {
 		return;
+		LOG_WRN("BLE not ready, advertising request latched");
 	}
 
 	memcpy(&last_sensor_data, data, sizeof(last_sensor_data));
