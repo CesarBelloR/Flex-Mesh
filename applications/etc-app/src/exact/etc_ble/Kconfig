@@ -18,6 +18,14 @@ config ETC_BLE_PAYLOAD_LEGACY_FORMAT
 	bool "Enabe/disable the format payload"
 	default y
 
+config ETC_BLE_ADV_WATCH_PERIOD_SEC
+	int "Period in seconds of the check that restarts a silently stopped advertiser"
+	default 60
+
+config ETC_BLE_TEST_SHELL
+	bool "Shell commands that break BLE state for HIL tests"
+	depends on SHELL
+
 module = ETC_BLE
 module-str = ble
 source "subsys/logging/Kconfig.template.log_config"

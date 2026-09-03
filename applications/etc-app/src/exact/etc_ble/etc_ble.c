@@ -61,8 +61,18 @@ static K_WORK_DELAYABLE_DEFINE(flex_ble_sensor_work, flex_ble_sensor_work_handle
 static void flex_ble_adv_magnet_work_handler(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(flex_ble_adv_magnet_work, flex_ble_adv_magnet_work_handler);
 
+static void flex_ble_adv_watch_work_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(flex_ble_adv_watch_work, flex_ble_adv_watch_work_handler);
+#define FLEX_BLE_ADV_WATCH_PERIOD K_SECONDS(CONFIG_ETC_BLE_ADV_WATCH_PERIOD_SEC)
+
 static void advertise(struct k_work *work);
 static K_WORK_DEFINE(advertise_work, advertise);
+static void flex_ble_adv_resume_work_handler(struct k_work *work);
+static K_WORK_DEFINE(flex_ble_adv_resume_work, flex_ble_adv_resume_work_handler);
+/* Serialises the app's calls on the advertising set. Stopping a connectable set
+ * releases its pending connection, which reaches recycled() before the stop has
+ * finished; a restart must not interleave with that stop. */
+static K_MUTEX_DEFINE(adv_lock);
 static struct etc_ble_adv_gate adv_gate;
 static char flex_device_name[CONFIG_BT_DEVICE_NAME_MAX] = {0x00};
 static struct bt_conn *current_conn;
@@ -455,6 +465,7 @@ static void advertise(struct k_work *work)
 		BT_DATA(BT_DATA_NAME_COMPLETE, flex_device_name, strlen(flex_device_name)),
 	};
 
+	k_mutex_lock(&adv_lock, K_FOREVER);
 	/* Recreate the set if the required PDU type changed (a splitter was attached
 	 * or removed since the last advertisement). Rare - not per-sample. */
 	if (adv_state.set != NULL && adv_state.set_is_ext != want_ext) {
@@ -469,7 +480,7 @@ static void advertise(struct k_work *work)
 		rc = bt_le_ext_adv_create(param, NULL, &adv_state.set);
 		if (rc) {
 			LOG_ERR("Failed to create advertising set (rc %d)", rc);
-			return;
+			goto out;
 		}
 		adv_state.set_is_ext = want_ext;
 	} else {
@@ -486,16 +497,18 @@ static void advertise(struct k_work *work)
 	}
 	if (rc) {
 		LOG_ERR("Failed to set advertising data (rc %d)", rc);
-		return;
+		goto out;
 	}
 
 	rc = bt_le_ext_adv_start(adv_state.set, BT_LE_EXT_ADV_START_DEFAULT);
 	if (rc) {
 		LOG_ERR("Advertising failed to start (rc %d)", rc);
-		return;
+		goto out;
 	}
 
 	LOG_INF("Advertising successfully started (%s)", want_ext ? "extended" : "legacy");
+out:
+	k_mutex_unlock(&adv_lock);
 }
 
 static void flex_ble_sensor_work_handler(struct k_work *work)
@@ -507,9 +520,74 @@ static void flex_ble_adv_magnet_work_handler(struct k_work *work)
 {
 	adv_state.is_magnet_trigger = false;
 	adv_state.is_advertising = false;
+	k_work_cancel_delayable(&flex_ble_adv_watch_work);
 	/* Stop adv */
+	k_mutex_lock(&adv_lock, K_FOREVER);
 	if (adv_state.set != NULL) {
 		bt_le_ext_adv_stop(adv_state.set);
+	}
+	k_mutex_unlock(&adv_lock);
+}
+
+/**
+ * @brief Re-enable the advertising set if the host has stopped it.
+ *
+ * Starting a running set returns -EALREADY, so a healthy advertiser is left
+ * alone. Re-enabling never releases a connection object, so it cannot trigger
+ * recycled() again.
+ *
+ * @return 0 when the set was restarted, -EALREADY when nothing had to be done,
+ *         otherwise the error from the host (a full advertise() is then queued).
+ */
+static int flex_ble_adv_resume(void)
+{
+	int rc = -EALREADY;
+
+	k_mutex_lock(&adv_lock, K_FOREVER);
+	if (adv_state.is_advertising && current_conn == NULL) {
+		if (adv_state.set == NULL) {
+			rc = -ENOENT;
+		} else {
+			rc = bt_le_ext_adv_start(adv_state.set, BT_LE_EXT_ADV_START_DEFAULT);
+		}
+		if (rc != 0 && rc != -EALREADY) {
+			k_work_submit(&advertise_work);
+		}
+	}
+	k_mutex_unlock(&adv_lock);
+	return rc;
+}
+
+/* The host released a connection object: after a disconnect, or after a
+ * connection attempt that failed to establish and ended advertising. */
+static void flex_ble_adv_resume_work_handler(struct k_work *work)
+{
+	int rc = flex_ble_adv_resume();
+
+	if (rc == 0) {
+		LOG_INF("Advertising resumed");
+	} else if (rc != -EALREADY) {
+		LOG_WRN("Advertising failed to resume (rc %d)", rc);
+	}
+}
+
+/* Periodic fallback for a set the host disabled without releasing a
+ * connection object, such as a failed private-address rotation. */
+static void flex_ble_adv_watch_work_handler(struct k_work *work)
+{
+	if (!adv_state.is_advertising) {
+		return;
+	}
+
+	int rc = flex_ble_adv_resume();
+
+	if (rc == 0) {
+		LOG_WRN("Advertising had stopped, restarted");
+	} else if (rc != -EALREADY) {
+		LOG_WRN("Advertising had stopped, restarting (rc %d)", rc);
+	}
+	if (adv_state.is_advertising) {
+		k_work_reschedule(&flex_ble_adv_watch_work, FLEX_BLE_ADV_WATCH_PERIOD);
 	}
 }
 
@@ -554,8 +632,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	atomic_clear_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED);
 	atomic_clear_bit(flex_ccc_reclaim, FLEX_CCC_SUBSCRIBED);
 
-	/* Submit work for advertise */
-	k_work_submit(&advertise_work);
+	/* Advertising resumes from recycled() once the host releases the object. */
 	/* Restart the scheduler for magnet advertising */
 	if (adv_state.is_magnet_trigger) {
 		k_work_reschedule(&flex_ble_adv_magnet_work,
@@ -581,9 +658,21 @@ static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_
 }
 #endif
 
+/**
+ * The host released the connection object. This is the only notification for a
+ * connection attempt that failed to establish, which also ended advertising.
+ */
+static void recycled(void)
+{
+	if (adv_state.is_advertising && current_conn == NULL) {
+		k_work_submit(&flex_ble_adv_resume_work);
+	}
+}
+
 BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected = connected,
 	.disconnected = disconnected,
+	.recycled = recycled,
 #if defined(CONFIG_BT_SMP)
 	.security_changed = security_changed,
 #endif
@@ -763,6 +852,7 @@ int etc_ble_init(etc_ble_evt_handler_t evt_handler)
 void etc_ble_start_adv(void)
 {
 	if (!etc_ble_adv_gate_request(&adv_gate, ETC_BLE_ADV_START)) {
+		LOG_WRN("BLE not ready, advertising request latched");
 		return;
 	}
 	/* Force to cancel this work. Since BLE mode always advertise */
@@ -770,17 +860,21 @@ void etc_ble_start_adv(void)
 	adv_state.is_magnet_trigger = false;
 	adv_state.is_advertising = true;
 	k_work_submit(&advertise_work);
+	k_work_reschedule(&flex_ble_adv_watch_work, FLEX_BLE_ADV_WATCH_PERIOD);
 }
 
 void etc_ble_stop_adv(void)
 {
+	adv_state.is_advertising = false;
+	k_work_cancel_delayable(&flex_ble_adv_watch_work);
 	if (current_conn != NULL) {
 		bt_conn_disconnect(current_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 	}
+	k_mutex_lock(&adv_lock, K_FOREVER);
 	if (adv_state.set != NULL) {
-		LOG_WRN("BLE not ready, advertising request latched");
 		bt_le_ext_adv_stop(adv_state.set);
 	}
+	k_mutex_unlock(&adv_lock);
 }
 
 void etc_ble_start_adv_with_timeout(void)
@@ -789,6 +883,7 @@ void etc_ble_start_adv_with_timeout(void)
 		return;
 	}
 	if (!etc_ble_adv_gate_request(&adv_gate, ETC_BLE_ADV_START_TIMEOUT)) {
+		LOG_WRN("BLE not ready, advertising request latched");
 		return;
 	}
 
@@ -800,13 +895,14 @@ void etc_ble_start_adv_with_timeout(void)
 				K_SECONDS(CONFIG_ETC_BLE_ADV_MAGNET_TIMEOUT_SEC));
 	}
 	k_work_submit(&advertise_work);
+	/* Like the magnet timeout, a repeated swipe does not move the deadline. */
+	k_work_schedule(&flex_ble_adv_watch_work, FLEX_BLE_ADV_WATCH_PERIOD);
 }
 
 void etc_ble_set_current_sensor(struct sensor_data *data)
 {
 	if (!adv_state.is_advertising) {
 		return;
-		LOG_WRN("BLE not ready, advertising request latched");
 	}
 
 	memcpy(&last_sensor_data, data, sizeof(last_sensor_data));
@@ -903,3 +999,34 @@ int etc_ble_notify_status(int type, int status)
 
 	return 0;
 }
+
+#ifdef CONFIG_ETC_BLE_TEST_SHELL
+#include <zephyr/shell/shell.h>
+
+/* Stop the advertising set behind the app's back, as a failed connection
+ * attempt does, so HIL tests can check the watchdog restarts it. */
+static int cmd_ble_adv_kill(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	k_mutex_lock(&adv_lock, K_FOREVER);
+	if (adv_state.set == NULL) {
+		k_mutex_unlock(&adv_lock);
+		shell_error(sh, "No advertising set");
+		return -ENOENT;
+	}
+	int rc = bt_le_ext_adv_stop(adv_state.set);
+
+	k_mutex_unlock(&adv_lock);
+	shell_print(sh, "Advertising set stopped (rc %d)", rc);
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_ble,
+			       SHELL_CMD(adv_kill, NULL,
+					 "Stop the advertising set without the app knowing.",
+					 cmd_ble_adv_kill),
+			       SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(ble, &sub_ble, "BLE HIL test commands (FW-1203)", NULL);
+#endif /* CONFIG_ETC_BLE_TEST_SHELL */
