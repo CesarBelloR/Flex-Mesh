@@ -57,60 +57,65 @@ char *ble_helpers_prepare_response(const char *response_type, const char *type, 
 	return response_msg;
 }
 
-void ble_helpers_handle_reclaim_request(cJSON *json, etc_ble_evt_handler_t handler)
+int ble_helpers_handle_reclaim_request(cJSON *json, etc_ble_evt_handler_t handler)
 {
 	/* {"request" : "reclaim", "start" : xxx, "end" : xxxx} */
 	LOG_DBG("Reclaim request");
 	struct ble_reclaim_info reclaim_info = {0x00};
 	int rc = ble_helpers_get_reclaim_info(json, &reclaim_info);
-	if (!rc) {
+	if (rc) {
+		return rc;
+	}
+	if (handler != NULL) {
+		struct etc_ble_evt evt = {
+			.type = ETC_BLE_EVT_CCC_RECLAIM_READY,
+			.reclaim.start_time_s = reclaim_info.start,
+			.reclaim.end_time_s = reclaim_info.end,
+		};
+		handler(&evt);
+	}
+	return 0;
+}
+
+int ble_helpers_handle_query_request(cJSON *json, etc_ble_evt_handler_t handler)
+{
+	/* {"request" : "query", "type" : "xxx"} */
+	LOG_DBG("Query request");
+	cJSON *type_json = cJSON_GetObjectItem(json, "type");
+	if (!cJSON_IsString(type_json) || type_json->valuestring == NULL) {
+		LOG_ERR("Missing type parameter");
+		return -EINVAL;
+	}
+	if (strstr(type_json->valuestring, "unack") != NULL) {
+		LOG_DBG("Query the current number of unacknowledged samples");
+		uint16_t unack_data = etc_device_nack_count();
+		char *response_msg =
+			ble_helpers_prepare_response("query", "unack", true, unack_data);
+		if (response_msg == NULL) {
+			return -ENOMEM;
+		}
+		LOG_INF("Response message %s", response_msg);
+		etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+		cJSON_free(response_msg);
+		return 0;
+	}
+	if (strstr(type_json->valuestring, "reclaim") != NULL) {
+		LOG_DBG("Query reclaim");
+		struct ble_reclaim_info reclaim_info = {0x00};
+		int rc = ble_helpers_get_reclaim_info(json, &reclaim_info);
+		if (rc) {
+			return rc;
+		}
 		if (handler != NULL) {
 			struct etc_ble_evt evt = {
-				.type = ETC_BLE_EVT_CCC_RECLAIM_READY,
+				.type = ETC_BLE_EVT_CCC_QUERY_RECLAIM,
 				.reclaim.start_time_s = reclaim_info.start,
 				.reclaim.end_time_s = reclaim_info.end,
 			};
 			handler(&evt);
 		}
+		return 0;
 	}
-}
-
-void ble_helpers_handle_query_request(cJSON *json, etc_ble_evt_handler_t handler)
-{
-	/* {"request" : "query", "type" : "xxx"} */
-	LOG_DBG("Query request");
-	cJSON *type_json = cJSON_GetObjectItem(json, "type");
-	if (type_json == NULL) {
-		LOG_ERR("Missing type parameter");
-	} else {
-		if (strstr(type_json->valuestring, "unack") != NULL) {
-			LOG_DBG("Query the current number of unacknowledged samples");
-			uint16_t unack_data = etc_device_nack_count();
-			char *response_msg = ble_helpers_prepare_response("query", "unack", true, unack_data);
-			if (response_msg == NULL) {
-				return;
-			} else {
-				LOG_INF("Response message %s", response_msg);
-				etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg,
-					       strlen(response_msg), false);
-				cJSON_free(response_msg);
-			}
-		} else if (strstr(type_json->valuestring, "reclaim") != NULL) {
-			LOG_DBG("Query reclaim");
-			struct ble_reclaim_info reclaim_info = {0x00};
-			int rc = ble_helpers_get_reclaim_info(json, &reclaim_info);
-			if (!rc) {
-				if (handler != NULL) {
-					struct etc_ble_evt evt = {
-						.type = ETC_BLE_EVT_CCC_QUERY_RECLAIM,
-						.reclaim.start_time_s = reclaim_info.start,
-						.reclaim.end_time_s = reclaim_info.end,
-					};
-					handler(&evt);
-				}
-			}
-		} else {
-			LOG_DBG("Unknown request type %s", type_json->valuestring);
-		}
-	}
+	LOG_DBG("Unknown request type %s", type_json->valuestring);
+	return -EINVAL;
 }

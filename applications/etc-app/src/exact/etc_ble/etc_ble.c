@@ -230,26 +230,29 @@ static ssize_t flex_config_on_write(struct bt_conn *conn, const struct bt_gatt_a
 	cJSON *json = cJSON_ParseWithLength(buf, len);
 	if (json == NULL) {
 		LOG_ERR("Failed in parsering config command");
-		return -EINVAL;
+		return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
 	}
 
 	cJSON *request_json = cJSON_GetObjectItem(json, "request");
-	if (request_json == NULL) {
+	if (!cJSON_IsString(request_json) || request_json->valuestring == NULL) {
 		LOG_ERR("Failed in parsering request information");
 		cJSON_Delete(json);
-		return -EINVAL;
+		return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
 	}
 
+	int rc;
+
 	if (strstr(request_json->valuestring, "reclaim") != NULL) {
-		ble_helpers_handle_reclaim_request(json, ble_evt_handler);
+		rc = ble_helpers_handle_reclaim_request(json, ble_evt_handler);
 	} else if (strstr(request_json->valuestring, "query") != NULL) {
-		ble_helpers_handle_query_request(json, ble_evt_handler);
+		rc = ble_helpers_handle_query_request(json, ble_evt_handler);
 	} else {
 		LOG_WRN("Unsupported request %s", request_json->valuestring);
+		rc = -EINVAL;
 	}
 
 	cJSON_Delete(json);
-	return 0;
+	return rc ? BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED) : len;
 }
 
 int flex_attr_get_index(int channel)
