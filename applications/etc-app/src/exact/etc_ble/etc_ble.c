@@ -34,6 +34,11 @@ ATOMIC_DEFINE(flex_ccc_sensor, FLEX_CCC_NUM_FLAGS);
 ATOMIC_DEFINE(flex_ccc_config, FLEX_CCC_NUM_FLAGS);
 ATOMIC_DEFINE(flex_ccc_reclaim, FLEX_CCC_NUM_FLAGS);
 K_SEM_DEFINE(flex_ble_notify_sem, 0, 1);
+/* Notifications are built in one shared frame from the BLE and data module
+ * threads. Never notify from the system workqueue: the completion that releases
+ * flex_ble_notify_sem is delivered there. */
+K_MUTEX_DEFINE(flex_ble_notify_mtx);
+#define FLEX_BLE_NOTIFY_TIMEOUT K_SECONDS(10)
 
 #define BT_UUID_SERVICE_VAL BT_UUID_128_ENCODE(0x24eb85c0, 0x1114, 0x46fd, 0xa9a3, 0x1559361c6a95)
 
@@ -186,7 +191,8 @@ static void flex_sensor_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_
 		k_work_schedule(&flex_ble_sensor_work,
 				K_SECONDS(FLEX_BT_SENSOR_WORK_DELAY_SECONDS));
 	} else {
-		atomic_clear_bit(flex_ccc_reclaim, FLEX_CCC_SUBSCRIBED);
+		atomic_clear_bit(flex_ccc_sensor, FLEX_CCC_SUBSCRIBED);
+		k_work_cancel_delayable(&flex_ble_sensor_work);
 	}
 	LOG_DBG("Notification has been turned %s", value == BT_GATT_CCC_NOTIFY ? "on" : "off");
 }
@@ -350,6 +356,11 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len, bool need_enc
 	}
 	int mtu_size = bt_gatt_get_mtu(current_conn) - BT_OP_OFFSET;
 
+	/* An MTU of 0 means the ATT bearer is already gone. */
+	if (mtu_size <= 0) {
+		return -ENOTCONN;
+	}
+
 	uint16_t encrypted_len = 0;
 	uint8_t *encrypted_buf;
 	if (need_encrypt) {
@@ -371,6 +382,10 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len, bool need_enc
 	int remain = encrypted_len % mtu_size;
 	int rc = 0;
 
+	k_mutex_lock(&flex_ble_notify_mtx, K_FOREVER);
+	/* A completion that arrived after a timed-out wait must not count. */
+	k_sem_reset(&flex_ble_notify_sem);
+
 	uint8_t msg_id = msg_id_cnt;
 	msg_id_cnt = (msg_id_cnt + 1) % 255;
 
@@ -390,11 +405,16 @@ int etc_ble_notify(int channel, const uint8_t *data, uint16_t len, bool need_enc
 			LOG_ERR("Failed to notify current characteristic %d", rc);
 			goto done;
 		}
-		k_sem_take(&flex_ble_notify_sem, K_FOREVER);
+		if (k_sem_take(&flex_ble_notify_sem, FLEX_BLE_NOTIFY_TIMEOUT) != 0) {
+			LOG_ERR("Notification %u frame %d not completed", msg_id, i);
+			rc = -ETIMEDOUT;
+			goto done;
+		}
 	}
 
 	LOG_DBG("Notified success");
 done:
+	k_mutex_unlock(&flex_ble_notify_mtx);
 	if (need_encrypt) {
 #ifdef CONFIG_ETC_BLE_ENCRYPTION
 		if (encrypted_buf) {
@@ -932,9 +952,10 @@ int etc_ble_notify_reclaim_status(int reclaim_status)
 	}
 
 	LOG_INF("Response message %s", response_msg);
-	etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+	int rc = etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+
 	cJSON_free(response_msg);
-	return 0;
+	return rc;
 }
 
 int etc_ble_notify_query_reclaim(int reclaim_status)
@@ -945,9 +966,24 @@ int etc_ble_notify_query_reclaim(int reclaim_status)
 	}
 
 	LOG_INF("Response message %s", response_msg);
-	etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+	int rc = etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+
 	cJSON_free(response_msg);
-	return 0;
+	return rc;
+}
+
+int etc_ble_notify_query_unack(uint16_t unack)
+{
+	char *response_msg = ble_helpers_prepare_response("query", "unack", true, unack);
+	if (response_msg == NULL) {
+		return -EINVAL;
+	}
+
+	LOG_INF("Response message %s", response_msg);
+	int rc = etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
+
+	cJSON_free(response_msg);
+	return rc;
 }
 
 int etc_ble_notify_battery(uint8_t level)
@@ -981,10 +1017,10 @@ int etc_ble_notify_error(int type, int error)
 	}
 
 	LOG_INF("Response message %s", response_msg);
-	etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
-	cJSON_free(response_msg);
+	int rc = etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
 
-	return 0;
+	cJSON_free(response_msg);
+	return rc;
 }
 
 int etc_ble_notify_status(int type, int status)
@@ -997,10 +1033,10 @@ int etc_ble_notify_status(int type, int status)
 	}
 
 	LOG_INF("Response message %s", response_msg);
-	etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
-	cJSON_free(response_msg);
+	int rc = etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
 
-	return 0;
+	cJSON_free(response_msg);
+	return rc;
 }
 
 #ifdef CONFIG_ETC_BLE_TEST_SHELL

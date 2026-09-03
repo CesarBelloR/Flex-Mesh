@@ -1,5 +1,4 @@
 #include "ble_helpers.h"
-#include "etc_device.h"
 #define LOG_LEVEL LOG_LEVEL_DBG
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ble_helpers);
@@ -88,15 +87,12 @@ int ble_helpers_handle_query_request(cJSON *json, etc_ble_evt_handler_t handler)
 	}
 	if (strstr(type_json->valuestring, "unack") != NULL) {
 		LOG_DBG("Query the current number of unacknowledged samples");
-		uint16_t unack_data = etc_device_nack_count();
-		char *response_msg =
-			ble_helpers_prepare_response("query", "unack", true, unack_data);
-		if (response_msg == NULL) {
-			return -ENOMEM;
+		/* Answered from the data module thread: this runs on the
+		 * Bluetooth RX thread, which must not wait on a notification. */
+		if (handler != NULL) {
+			struct etc_ble_evt evt = {.type = ETC_BLE_EVT_CCC_QUERY_UNACK};
+			handler(&evt);
 		}
-		LOG_INF("Response message %s", response_msg);
-		etc_ble_notify(ETC_BLE_CONFIG_CHAR, response_msg, strlen(response_msg), false);
-		cJSON_free(response_msg);
 		return 0;
 	}
 	if (strstr(type_json->valuestring, "reclaim") != NULL) {

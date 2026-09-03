@@ -205,6 +205,10 @@ static void ble_module_evt_handler(const struct etc_ble_evt *evt)
 			APP_EVENT_SUBMIT(ble_evt);
 			break;
 		}
+		case ETC_BLE_EVT_CCC_QUERY_UNACK: {
+			SEND_EVENT(ble, BLE_EVT_QUERY_UNACK);
+			break;
+		}
 		case ETC_BLE_EVT_FOTA_START: {
 			SEND_EVENT(ble, BLE_EVT_FOTA_START);
 			break;

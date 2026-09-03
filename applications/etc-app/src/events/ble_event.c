@@ -24,6 +24,8 @@ static char *get_evt_type_str(enum ble_event_type type)
 		return "BLE_EVT_DATA_EXPORT_FAIL";
 	case BLE_EVT_RECLAIM_REQUEST:
 		return "BLE_EVT_RECLAIM_REQUEST";
+	case BLE_EVT_QUERY_UNACK:
+		return "BLE_EVT_QUERY_UNACK";
 	case BLE_EVT_FOTA_START:
 		return "BLE_EVT_FOTA_START";
 	case BLE_EVT_FOTA_DOWNLOADED:

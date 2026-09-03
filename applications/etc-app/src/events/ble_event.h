@@ -46,7 +46,10 @@ enum ble_event_type {
 
 	/** Query record for reclaiming data */
 	BLE_EVT_QUERY_RECLAIM,
-	
+
+	/** Query the number of unacknowledged records */
+	BLE_EVT_QUERY_UNACK,
+
 	/** A FOTA update has started. */
 	BLE_EVT_FOTA_START,
 

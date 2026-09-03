@@ -1143,6 +1143,11 @@ static void on_all_states(struct data_msg_data *msg)
 		return;
 	}
 
+	if (IS_EVENT(msg, ble, BLE_EVT_QUERY_UNACK)) {
+		etc_ble_notify_query_unack(etc_device_nack_count());
+		return;
+	}
+
 	if (IS_EVENT(msg, ble, BLE_EVT_QUERY_RECLAIM)) {
 		int ret;
 		bool err = false;

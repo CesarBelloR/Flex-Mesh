@@ -27,6 +27,7 @@ enum etc_ble_evt_type {
 	ETC_BLE_EVT_CCC_MEASURE_READY,
 	ETC_BLE_EVT_CCC_RECLAIM_READY,
 	ETC_BLE_EVT_CCC_QUERY_RECLAIM,
+	ETC_BLE_EVT_CCC_QUERY_UNACK,
 	ETC_BLE_EVT_FOTA_START,
 	ETC_BLE_EVT_FOTA_DOWNLOADED,
 	ETC_BLE_EVT_FOTA_DONE,
@@ -128,6 +129,14 @@ int etc_ble_notify_reclaim_status(int reclaim_status);
  * @return Return 0 on success 
  */
 int etc_ble_notify_query_reclaim(int reclaim_status);
+
+/**
+ * @brief Notify the number of unacknowledged records to central app
+ *
+ * @param unack Number of records not yet acknowledged
+ * @return Return 0 on success
+ */
+int etc_ble_notify_query_unack(uint16_t unack);
 
 /** @brief Update battery level value.
  *
