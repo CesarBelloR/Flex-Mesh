@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <math.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
@@ -36,6 +37,26 @@ static uint16_t saved_rr_value;
 static int16_t saved_functional_test_rsrp;
 static enum etc_serial_number_types saved_serial_number_type;
 struct etc_config etc_cfg;
+
+#define ETC_THRESHOLD_NVS_VERSION 1
+
+/** @brief On-flash representation of one threshold slot. */
+struct etc_threshold_nvs {
+	uint8_t version;
+	uint8_t enabled;
+	uint8_t value_type;
+	uint8_t alert_type;
+	float value;
+} __packed;
+
+static struct etc_threshold etc_thresholds[ETC_THRESHOLD_SLOT_COUNT];
+
+static const uint16_t etc_threshold_setting_ids[ETC_THRESHOLD_SLOT_COUNT] = {
+	ETC_SETTING_THRESHOLD_0_ID,
+	ETC_SETTING_THRESHOLD_1_ID,
+	ETC_SETTING_THRESHOLD_2_ID,
+	ETC_SETTING_THRESHOLD_3_ID,
+};
 
 const uint8_t etc_setting_production_code_valid[] = {
 	10, 11
@@ -196,6 +217,63 @@ static int etc_clip_wake_early(void)
 	}
 
 	return 0;
+}
+
+/**
+ * @brief Persist one threshold slot from its in-RAM copy.
+ * The caller must hold setting_mutex.
+ */
+static int etc_threshold_store(uint8_t slot)
+{
+	struct etc_threshold_nvs nvs = {
+		.version = ETC_THRESHOLD_NVS_VERSION,
+		.enabled = etc_thresholds[slot].enabled,
+		.value_type = etc_thresholds[slot].value_type,
+		.alert_type = etc_thresholds[slot].alert_type,
+		.value = etc_thresholds[slot].value,
+	};
+
+	return etc_device_write_setting(etc_threshold_setting_ids[slot], &nvs, sizeof(nvs));
+}
+
+/** @brief Whether an on-flash threshold record is usable as-is. */
+static bool etc_threshold_nvs_is_valid(const struct etc_threshold_nvs *nvs)
+{
+	return nvs->version == ETC_THRESHOLD_NVS_VERSION &&
+	       nvs->value_type >= ETC_SETTING_THRESHOLD_VALUE_TYPE_MIN &&
+	       nvs->value_type <= ETC_SETTING_THRESHOLD_VALUE_TYPE_MAX &&
+	       nvs->alert_type <= ETC_THRESHOLD_ALERT_DROPS_BELOW && isfinite(nvs->value);
+}
+
+/**
+ * @brief Load one threshold slot from NVS, falling back to the defaults.
+ * An unreadable, short, unknown-version or out-of-range record is replaced by
+ * the defaults, so that a wedged slot cannot reject every later write.
+ */
+static void etc_threshold_load(uint8_t slot)
+{
+	struct etc_threshold_nvs nvs;
+	int ret;
+
+	ret = etc_device_read_setting_with_len(etc_threshold_setting_ids[slot], &nvs, sizeof(nvs));
+	if (ret == sizeof(nvs) && etc_threshold_nvs_is_valid(&nvs)) {
+		etc_thresholds[slot].enabled = nvs.enabled;
+		etc_thresholds[slot].value_type = nvs.value_type;
+		etc_thresholds[slot].alert_type = nvs.alert_type;
+		etc_thresholds[slot].value = nvs.value;
+		return;
+	}
+
+	LOG_WRN("Threshold %u not stored or invalid (%d), using defaults", slot, ret);
+	etc_thresholds[slot].enabled = ETC_SETTING_THRESHOLD_ENABLED_DEFAULT;
+	etc_thresholds[slot].value_type = ETC_SETTING_THRESHOLD_VALUE_TYPE_DEFAULT;
+	etc_thresholds[slot].alert_type = ETC_SETTING_THRESHOLD_ALERT_TYPE_DEFAULT;
+	etc_thresholds[slot].value = ETC_SETTING_THRESHOLD_VALUE_DEFAULT;
+
+	ret = etc_threshold_store(slot);
+	if (ret != 0) {
+		LOG_WRN("Failed to store threshold %u defaults: %d", slot, ret);
+	}
 }
 
 int etc_settings_init(void)
@@ -394,6 +472,12 @@ int etc_settings_init(void)
 		etc_set_rx_timeout_secs(ETC_SETTING_RX_TIMEOUT_SECS_DEFAULT);
 	}
 
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	for (uint8_t slot = 0; slot < ETC_THRESHOLD_SLOT_COUNT; slot++) {
+		etc_threshold_load(slot);
+	}
+	k_mutex_unlock(&setting_mutex);
+
 	LOG_DBG("Load settings successfully");
 	return 0;
 }
@@ -480,6 +564,108 @@ done:
 		LOG_ERR("Error changing value: %d", rc);
 		etc_settings_sync_config();
 	}
+}
+
+void etc_settings_sync_thresholds(void)
+{
+	int rc;
+
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	rc = data_codec_sync_thresholds(etc_thresholds);
+	k_mutex_unlock(&setting_mutex);
+	if (rc != 0) {
+		LOG_ERR("Failed to sync thresholds to cloud");
+	}
+}
+
+int etc_get_threshold(uint8_t slot, struct etc_threshold *out)
+{
+	if (slot >= ETC_THRESHOLD_SLOT_COUNT || out == NULL) {
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	*out = etc_thresholds[slot];
+	k_mutex_unlock(&setting_mutex);
+	return 0;
+}
+
+void etc_get_thresholds(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT])
+{
+	if (out == NULL) {
+		return;
+	}
+
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	memcpy(out, etc_thresholds, sizeof(etc_thresholds));
+	k_mutex_unlock(&setting_mutex);
+}
+
+int etc_set_threshold(uint8_t slot, const struct etc_threshold *in)
+{
+	int rc;
+
+	if (slot >= ETC_THRESHOLD_SLOT_COUNT || in == NULL) {
+		return -EINVAL;
+	}
+
+	if (in->value_type < ETC_SETTING_THRESHOLD_VALUE_TYPE_MIN ||
+	    in->value_type > ETC_SETTING_THRESHOLD_VALUE_TYPE_MAX) {
+		return -EINVAL;
+	}
+
+	if (in->alert_type > ETC_THRESHOLD_ALERT_DROPS_BELOW) {
+		return -EINVAL;
+	}
+
+	if (!isfinite(in->value)) {
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_thresholds[slot].enabled == in->enabled &&
+	    etc_thresholds[slot].value_type == in->value_type &&
+	    etc_thresholds[slot].alert_type == in->alert_type &&
+	    etc_thresholds[slot].value == in->value) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+
+	etc_thresholds[slot] = *in;
+	rc = etc_threshold_store(slot);
+	if (rc == 0) {
+		LOG_DBG("set threshold %u: en %u type %u alert %u value %f", slot, in->enabled,
+			in->value_type, in->alert_type, (double)in->value);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
+int etc_settings_update_thresholds(const struct etc_threshold in[ETC_THRESHOLD_SLOT_COUNT])
+{
+	int rc = 0;
+
+	if (in == NULL) {
+		return -EINVAL;
+	}
+
+	/* Every slot is applied; a rejected one does not hold back the others. */
+	for (uint8_t slot = 0; slot < ETC_THRESHOLD_SLOT_COUNT; slot++) {
+		int slot_rc = etc_set_threshold(slot, &in[slot]);
+
+		if (slot_rc != 0) {
+			LOG_ERR("Error changing threshold %u: %d", slot, slot_rc);
+			if (rc == 0) {
+				rc = slot_rc;
+			}
+		}
+	}
+
+	if (rc != 0) {
+		etc_settings_sync_thresholds();
+	}
+
+	return rc;
 }
 
 int etc_set_device_mode(enum etc_device_mode mode)

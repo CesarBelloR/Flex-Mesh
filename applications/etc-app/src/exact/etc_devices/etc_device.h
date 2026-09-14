@@ -125,6 +125,10 @@ enum etc_setting_id {
 	ETC_SETTING_GNSS_INTERVAL_SEC_ID,
 	ETC_SETTING_GNSS_TIMEOUT_SEC_ID,
 	ETC_SETTING_RX_TIMEOUT_SEC_ID,
+	ETC_SETTING_THRESHOLD_0_ID,
+	ETC_SETTING_THRESHOLD_1_ID,
+	ETC_SETTING_THRESHOLD_2_ID,
+	ETC_SETTING_THRESHOLD_3_ID,
 	ETC_FUNCTIONAL_TEST_RSRP_ID = 0xE00,
 	ETC_CALIBRATION_OFFSET_ID = 0xFF0,
 	ETC_CALIBRATION_RAWHIGH_ID,
@@ -158,6 +162,27 @@ struct etc_config {
 	uint16_t lte_probe_offset_secs;
 	uint16_t gnss_timeout_secs;
 	uint8_t rx_timeout_secs;
+};
+
+/* Number of immediate report threshold slots held by the device */
+#define ETC_THRESHOLD_SLOT_COUNT 4
+
+/** @brief Trigger direction of an immediate report threshold. */
+enum etc_threshold_alert_type {
+	ETC_THRESHOLD_ALERT_EXCEEDS = 0,
+	ETC_THRESHOLD_ALERT_DROPS_BELOW = 1,
+};
+
+/** @brief One immediate report threshold slot (EXACT Threshold object 48944). */
+struct etc_threshold {
+	/* Slot is evaluated */
+	bool enabled;
+	/* Flex 2.0 value type, 1..12 */
+	uint8_t value_type;
+	/* One of @ref enum etc_threshold_alert_type */
+	uint8_t alert_type;
+	/* Threshold in the value type's default unit */
+	float value;
 };
 
 struct etc_device_relay_record {

@@ -354,6 +354,14 @@ int data_codec_update_location_dummy(struct cloud_codec_data *cloud_data);
 int data_codec_sync_config(struct etc_config *cfg);
 
 /**
+ * Sync the immediate report thresholds from local device to cloud
+ *
+ * @param thresholds All threshold slots held by the device
+ * @retval 0 success
+ */
+int data_codec_sync_thresholds(const struct etc_threshold thresholds[ETC_THRESHOLD_SLOT_COUNT]);
+
+/**
  * Prepare the configuration package for next LwM2M message
  *
  * @retval 0 success

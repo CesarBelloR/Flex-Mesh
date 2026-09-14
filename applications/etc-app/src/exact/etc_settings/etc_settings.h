@@ -29,6 +29,13 @@ enum etc_serial_number_types {
 #define ETC_SETTING_GNSS_TIMEOUT_SECS_DEFAULT	    CONFIG_MODEM_MODULE_GNSS_TIMEOUT_S
 #define ETC_SETTING_RX_TIMEOUT_SECS_DEFAULT	    10
 
+#define ETC_SETTING_THRESHOLD_ENABLED_DEFAULT	 false
+#define ETC_SETTING_THRESHOLD_VALUE_TYPE_DEFAULT 1
+#define ETC_SETTING_THRESHOLD_ALERT_TYPE_DEFAULT ETC_THRESHOLD_ALERT_EXCEEDS
+#define ETC_SETTING_THRESHOLD_VALUE_DEFAULT	 0.0f
+#define ETC_SETTING_THRESHOLD_VALUE_TYPE_MIN	 1
+#define ETC_SETTING_THRESHOLD_VALUE_TYPE_MAX	 12
+
 #define ETC_SETTING_POWER_MODE_MIN		ETC_POWER_MODE_ALWAYS_ON
 #define ETC_SETTING_LOG_INTERVAL_SECS_MAX	86400
 #define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MAX 86400
@@ -277,5 +284,48 @@ int16_t etc_get_functional_test_rsrp_value(void);
  * LwM2M are up to date.
  */
 void etc_settings_sync_config(void);
+
+/**
+ * @brief Copy one immediate report threshold slot.
+ *
+ * @param slot Slot index, 0..ETC_THRESHOLD_SLOT_COUNT - 1.
+ * @param out Buffer the slot is copied to.
+ * @return 0 on success, -EINVAL on an invalid slot or NULL buffer.
+ */
+int etc_get_threshold(uint8_t slot, struct etc_threshold *out);
+
+/**
+ * @brief Set one immediate report threshold slot and persist it.
+ * The slot is only written if any of its values changed.
+ *
+ * @param slot Slot index, 0..ETC_THRESHOLD_SLOT_COUNT - 1.
+ * @param in New slot configuration.
+ * @return 0 on success, -EINVAL on an invalid slot, NULL buffer or out of
+ * range values, <0 on a storage error.
+ */
+int etc_set_threshold(uint8_t slot, const struct etc_threshold *in);
+
+/**
+ * @brief Copy all immediate report threshold slots.
+ *
+ * @param out Buffer of ETC_THRESHOLD_SLOT_COUNT slots.
+ */
+void etc_get_thresholds(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT]);
+
+/**
+ * @brief Update all immediate report threshold slots with the given values.
+ * Every slot is applied even if an earlier one was rejected. If any slot
+ * failed, the in-RAM slots are pushed back to the cloud object once.
+ *
+ * @param in Buffer of ETC_THRESHOLD_SLOT_COUNT slots.
+ * @return 0 when every slot was applied, otherwise the first setter error.
+ */
+int etc_settings_update_thresholds(const struct etc_threshold in[ETC_THRESHOLD_SLOT_COUNT]);
+
+/**
+ * Sync the immediate report thresholds to the cloud. This ensures that values
+ * read through LwM2M are up to date.
+ */
+void etc_settings_sync_thresholds(void);
 
 #endif /* ETC_SETTINGS_H__ */

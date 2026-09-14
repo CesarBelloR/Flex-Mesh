@@ -10,6 +10,12 @@ static int data_codec_sync_config(struct etc_config *cfg)
 	return 0;
 }
 
+static inline int
+data_codec_sync_thresholds(const struct etc_threshold thresholds[ETC_THRESHOLD_SLOT_COUNT])
+{
+	return 0;
+}
+
 static inline bool data_codec_compare_temperature_is_valid(float temperature) {
 	if ((temperature >= SENSOR_TEMP_C_MIN) && 
 	    (temperature <= SENSOR_TEMP_C_MAX)) {
