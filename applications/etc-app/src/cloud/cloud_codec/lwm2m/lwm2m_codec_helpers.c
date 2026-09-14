@@ -36,6 +36,18 @@ BUILD_ASSERT(ETC_CALIBRATION_ADJUSTMENT_MAX_SIZE == ETC_ADJUSTMENT_MAX_STR_SIZE,
 BUILD_ASSERT(ETC_CALIBRATION_REF_MAX_SIZE == ETC_REFERENCE_MAX_STR_SIZE,
 	     "48939/0/5 buffer must match calibration_status.reference");
 
+BUILD_ASSERT(ETC_THRESHOLD_SLOT_COUNT == ETC_THRESHOLD_OBJ_MAX_INSTANCE_COUNT,
+	     "Object 48944 must expose one instance per stored threshold slot");
+
+BUILD_ASSERT(ETC_SETTING_THRESHOLD_VALUE_TYPE_MIN == ETC_THRESHOLD_OBJ_R_VALUE_TYPE_MIN_VAL,
+	     "48944/*/2 range must match the stored value type range");
+
+BUILD_ASSERT(ETC_SETTING_THRESHOLD_VALUE_TYPE_MAX == ETC_THRESHOLD_OBJ_R_VALUE_TYPE_MAX_VAL,
+	     "48944/*/2 range must match the stored value type range");
+
+BUILD_ASSERT(ETC_THRESHOLD_ALERT_DROPS_BELOW == ETC_THRESHOLD_OBJ_R_ALERT_TYPE_MAX_VAL,
+	     "48944/*/3 range must match enum etc_threshold_alert_type");
+
 /* Some resources does not have designated buffers. Therefore we define those in here. */
 static uint8_t bearers[2] = { LTE_FDD_BEARER, NB_IOT_BEARER };
 static int battery_voltage;
@@ -172,6 +184,39 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id, uint16_t
 		rc = util_validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_RX_TIMEOUT_MIN_VAL,
 				       ETC_CFG_OBJ_R_RX_TIMEOUT_MAX_VAL);
 		break;
+	}
+	return rc;
+}
+
+static int validate_threshold_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst_id,
+				 uint8_t *data, uint16_t data_len, bool last_block,
+				 size_t total_size, size_t offset)
+{
+	int rc = 0;
+
+	switch (res_id) {
+	case ETC_THRESHOLD_OBJ_R_VALUE_TYPE:
+		rc = util_validate_u8(*(uint8_t *)data, ETC_THRESHOLD_OBJ_R_VALUE_TYPE_MIN_VAL,
+				      ETC_THRESHOLD_OBJ_R_VALUE_TYPE_MAX_VAL);
+		break;
+	case ETC_THRESHOLD_OBJ_R_ALERT_TYPE:
+		rc = util_validate_u8(*(uint8_t *)data, ETC_THRESHOLD_OBJ_R_ALERT_TYPE_MIN_VAL,
+				      ETC_THRESHOLD_OBJ_R_ALERT_TYPE_MAX_VAL);
+		break;
+	case ETC_THRESHOLD_OBJ_R_THRESHOLD_VALUE: {
+		double *value = (double *)data;
+
+		if (!isfinite(*value)) {
+			rc = -EINVAL;
+			break;
+		}
+		/* The engine copies this buffer into the resource, so rounding
+		 * through float here keeps the resource identical to the stored
+		 * single-precision value.
+		 */
+		*value = (double)(float)*value;
+		break;
+	}
 	}
 	return rc;
 }
@@ -645,6 +690,132 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 			   &cfg->rx_timeout_secs);
 	if (err) {
 		return err;
+	}
+
+	return 0;
+}
+
+/* Server-writable resources of the EXACT Threshold object. */
+static const uint16_t threshold_config_res_ids[] = {
+	ETC_THRESHOLD_OBJ_R_ENABLED,
+	ETC_THRESHOLD_OBJ_R_VALUE_TYPE,
+	ETC_THRESHOLD_OBJ_R_ALERT_TYPE,
+	ETC_THRESHOLD_OBJ_R_THRESHOLD_VALUE,
+};
+
+int lwm2m_codec_helpers_set_callback_for_threshold_object(lwm2m_engine_set_data_cb_t callback)
+{
+	int err;
+
+	for (uint16_t inst = 0; inst < ETC_THRESHOLD_SLOT_COUNT; inst++) {
+		for (size_t i = 0; i < ARRAY_SIZE(threshold_config_res_ids); i++) {
+			const uint16_t res_id = threshold_config_res_ids[i];
+
+			err = lwm2m_register_post_write_callback(
+				&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, inst, res_id), callback);
+			if (err) {
+				return err;
+			}
+
+			err = lwm2m_register_validate_callback(
+				&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, inst, res_id),
+				validate_threshold_cb);
+			if (err) {
+				return err;
+			}
+		}
+	}
+
+	return 0;
+}
+
+int lwm2m_codec_helpers_setup_threshold_object(
+	const struct etc_threshold thresholds[ETC_THRESHOLD_SLOT_COUNT],
+	lwm2m_engine_set_data_cb_t callback)
+{
+	int first_err = 0;
+	int err;
+
+	/* Only the configuration resources are seeded; the alert and status
+	 * resources are volatile and owned by the threshold evaluation. Every
+	 * slot is seeded and the callbacks are always registered, so a single
+	 * failure cannot leave the object partly unguarded.
+	 */
+	for (uint16_t i = 0; i < ETC_THRESHOLD_SLOT_COUNT; i++) {
+		err = lwm2m_set_bool(
+			&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, i, ETC_THRESHOLD_OBJ_R_ENABLED),
+			thresholds[i].enabled);
+		if (err && !first_err) {
+			first_err = err;
+		}
+
+		err = lwm2m_set_u8(
+			&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, i, ETC_THRESHOLD_OBJ_R_VALUE_TYPE),
+			thresholds[i].value_type);
+		if (err && !first_err) {
+			first_err = err;
+		}
+
+		err = lwm2m_set_u8(
+			&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, i, ETC_THRESHOLD_OBJ_R_ALERT_TYPE),
+			thresholds[i].alert_type);
+		if (err && !first_err) {
+			first_err = err;
+		}
+
+		err = lwm2m_set_f64(
+			&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, i, ETC_THRESHOLD_OBJ_R_THRESHOLD_VALUE),
+			(double)thresholds[i].value);
+		if (err && !first_err) {
+			first_err = err;
+		}
+	}
+
+	if (callback) {
+		err = lwm2m_codec_helpers_set_callback_for_threshold_object(callback);
+		if (err && !first_err) {
+			first_err = err;
+		}
+	}
+
+	return first_err;
+}
+
+int lwm2m_codec_helpers_get_threshold_object(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT])
+{
+	int err;
+
+	for (uint16_t i = 0; i < ETC_THRESHOLD_SLOT_COUNT; i++) {
+		err = lwm2m_get_bool(
+			&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, i, ETC_THRESHOLD_OBJ_R_ENABLED),
+			&out[i].enabled);
+		if (err) {
+			return err;
+		}
+
+		err = lwm2m_get_u8(
+			&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, i, ETC_THRESHOLD_OBJ_R_VALUE_TYPE),
+			&out[i].value_type);
+		if (err) {
+			return err;
+		}
+
+		err = lwm2m_get_u8(
+			&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, i, ETC_THRESHOLD_OBJ_R_ALERT_TYPE),
+			&out[i].alert_type);
+		if (err) {
+			return err;
+		}
+
+		double value;
+
+		err = lwm2m_get_f64(
+			&LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, i, ETC_THRESHOLD_OBJ_R_THRESHOLD_VALUE),
+			&value);
+		if (err) {
+			return err;
+		}
+		out[i].value = (float)value;
 	}
 
 	return 0;

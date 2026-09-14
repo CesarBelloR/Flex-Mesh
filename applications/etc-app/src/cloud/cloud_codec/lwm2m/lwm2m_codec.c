@@ -63,6 +63,42 @@ static int config_update_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_
 	return 0;
 }
 
+/* Function that is called whenever a threshold object configuration resource is written to. */
+static int threshold_update_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst_id,
+			       uint8_t *data, uint16_t data_len, bool last_block, size_t total_size,
+			       size_t offset)
+{
+	/* The settings layer applies all slots at once, so the whole object is
+	 * snapshotted whenever one of its resources changes.
+	 */
+	ARG_UNUSED(obj_inst_id);
+	ARG_UNUSED(res_id);
+	ARG_UNUSED(res_inst_id);
+	ARG_UNUSED(data);
+	ARG_UNUSED(data_len);
+	ARG_UNUSED(last_block);
+	ARG_UNUSED(total_size);
+	ARG_UNUSED(offset);
+
+	struct etc_threshold thresholds[ETC_THRESHOLD_SLOT_COUNT];
+	int err;
+
+	err = lwm2m_codec_helpers_get_threshold_object(thresholds);
+	if (err) {
+		LOG_ERR("lwm2m_codec_helpers_get_threshold_object, error: %d", err);
+		return err;
+	}
+
+	err = etc_settings_update_thresholds(thresholds);
+	if (err) {
+		LOG_ERR("etc_settings_update_thresholds, error: %d", err);
+		/* A rejected value must answer 4.00 Bad Request, not 5.00. */
+		return err == -EINVAL ? -EEXIST : err;
+	}
+
+	return 0;
+}
+
 int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_handler)
 {
 	int err;
@@ -83,6 +119,16 @@ int data_codec_init(struct etc_config *cfg, cloud_codec_evt_handler_t event_hand
 	if (err) {
 		LOG_ERR("lwm2m_codec_helpers_setup_configuration_object, error: %d",
 			err);
+		return err;
+	}
+
+	struct etc_threshold thresholds[ETC_THRESHOLD_SLOT_COUNT];
+
+	etc_get_thresholds(thresholds);
+
+	err = lwm2m_codec_helpers_setup_threshold_object(thresholds, threshold_update_cb);
+	if (err) {
+		LOG_ERR("lwm2m_codec_helpers_setup_threshold_object, error: %d", err);
 		return err;
 	}
 
@@ -541,6 +587,22 @@ int data_codec_sync_config(struct etc_config *cfg)
 	} else {
 		LOG_ERR("Can't sync configuration err %d", rc);
 	}
+	return rc;
+}
+
+int data_codec_sync_thresholds(const struct etc_threshold thresholds[ETC_THRESHOLD_SLOT_COUNT])
+{
+	/* Re-seed only: the troubleshooting resources must never be sent
+	 * proactively, so no event is emitted and no packet is queued.
+	 */
+	lwm2m_codec_helpers_set_callback_for_threshold_object(NULL);
+
+	int rc = lwm2m_codec_helpers_setup_threshold_object(thresholds, threshold_update_cb);
+
+	if (rc != 0) {
+		LOG_ERR("Can't sync thresholds err %d", rc);
+	}
+
 	return rc;
 }
 

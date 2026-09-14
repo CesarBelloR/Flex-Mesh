@@ -258,6 +258,46 @@ int lwm2m_codec_helpers_update_calibration_status(struct cloud_codec_data *cloud
 */
 int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_data_cb_t callback);
 
+/**
+ * @brief Register or unregister the callbacks of the EXACT Threshold object.
+ *
+ * Covers the server-writable resources (RIDs 1-4) of every threshold slot. The
+ * validate callback rejects out-of-range writes before they reach the object.
+ *
+ * @param callback Post-write handler, or NULL to unregister it. The validate
+ *                 callback is always registered.
+ *
+ * @retval 0 success
+ * @retval <0 error
+ */
+int lwm2m_codec_helpers_set_callback_for_threshold_object(lwm2m_engine_set_data_cb_t callback);
+
+/**
+ * @brief Set the EXACT Threshold object to the stored configuration and register callbacks.
+ *
+ * Writes the configuration resources (RIDs 1-4) of every slot; the volatile
+ * alert and status resources (RIDs 5-7) are left untouched.
+ *
+ * @param[in] thresholds All threshold slots held by the device.
+ * @param[in] callback Handler to receive threshold updates, or NULL to only set the values.
+ *
+ * @retval 0 success
+ * @retval <0 error
+ */
+int lwm2m_codec_helpers_setup_threshold_object(
+	const struct etc_threshold thresholds[ETC_THRESHOLD_SLOT_COUNT],
+	lwm2m_engine_set_data_cb_t callback);
+
+/**
+ * @brief Read the configuration resources of every EXACT Threshold slot.
+ *
+ * @param[out] out Buffer populated with the current values of RIDs 1-4.
+ *
+ * @retval 0 success
+ * @retval <0 error
+ */
+int lwm2m_codec_helpers_get_threshold_object(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT]);
+
 #ifdef __cplusplus
 }
 #endif
