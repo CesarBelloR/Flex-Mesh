@@ -72,6 +72,7 @@ pytest tests/hil/soak_reclaim_reliability.py -v -s --port /dev/ttyACM0 --soak-ho
 | `test_ble_adv_watchdog.py` | FW-1203: an advertising set stopped behind the app's back (`ble adv_kill`, as a connection attempt that fails to establish does) must be restarted by the advertising watchdog within one period, and a healthy advertiser must be left alone. Needs `overlay-hil.conf`; the on-air check uses `bleak` when installed |
 | `test_rh_probe.py` | FW-1195: operator-attended check that an RH probe is read on port 1, after a same-port reconnect, on port 2, and again on port 1 after a cold boot; the last test cross-checks 48936/0 on Coiote when creds are given. Needs `overlay-hil.conf` (uses `magnet sample`) and one RH probe; run the file in order and follow the wiring prompts |
 | `test_ble_ccc_reclaim.py` | FW-1200: one BLE session that unsubscribes the SENSOR characteristic (only sensor notifications may stop), runs a reclaim to completion on CONFIG while live readings are triggered, and checks every notified frame reassembles without interleaving. Finds the DUT by its advertisement layout (BlueZ drops the scan response carrying the name), forgets stale host bonds, and needs `overlay-hil.conf`, BlueZ + `bleak` + `dbus-fast`; allow ~6 min because the request first walks the whole record store |
+| `test_threshold_coiote.py` | FW-1178: cloud checks for the EXACT Threshold object (48944): writing a slot's four configuration resources (Value Type / Alert Type / Threshold Value / Enabled) reads back unchanged for an integral, a fractional and a float32-rounded Threshold Value, RIDs 1-4 survive a cold reboot while Alert (RID 5) and Trigger Count (RID 7) reset at boot, and an out-of-range Value Type / Alert Type write is rejected and leaves the stored configuration untouched. Needs Coiote creds and the 48944 DDF uploaded to the tenant; queue-mode latency means ~20 min for the file |
 | `acquisition.py` | Shared helpers for the splitter and RH-probe suites: triggers one acquisition with `magnet sample` (anchored on the command echo) and parses the `detect: splitter`, `detect: parts`, `ADC[n]` and `digital: humid` log lines |
 
 ## Cloud E2E test (Coiote)
@@ -98,3 +99,35 @@ minutes of latency). The test deletes every task it creates.
 > (`EXACT Relay.0.Command` / `EXACT Relay.0.Response`, derived from the DDF). If
 > your Coiote tenant expects raw LwM2M paths instead, change `COMMAND_KEY` /
 > `RESPONSE_KEY` at the top of the test to `/48935/0/3` / `/48935/0/4`.
+
+## Threshold object test (Coiote)
+
+`test_threshold_coiote.py` (FW-1178) exercises the EXACT Threshold object
+(48944) over the same cloud path. It needs the device **LTE/cloud-connected**,
+Coiote credentials, and `--port` (the persistence test cold-reboots the DUT over
+the serial console). Flash a debug build **without** `rtt.conf`: `dut.reboot()`
+waits for the `Load settings successfully` console line, which an rtt build
+never prints to the serial console.
+
+```bash
+pytest tests/hil/test_threshold_coiote.py -v -s \
+  --port /dev/serial/by-id/usb-ZEPHYR_USB-DEV_0A978428BAEE9D23-if00 \
+  --coiote-config /path/to/etc-tools/coiote_api/config.json
+```
+
+Tests: configuration write + read-back of slots 0 and 1 — slot 0 with an
+integral Threshold Value (10.0, which Coiote sends as a CBOR integer) and slot 1
+with a fractional one (20.25), followed by a re-write of 21.1 to check the
+float32 rounding — persistence of RIDs 1-4 across `dut.reboot()` together with
+Alert (RID 5) = false and Trigger Count (RID 7) = 0 on the freshly booted
+device, and rejection of out-of-range Value Type / Alert Type writes with the
+stored configuration left unchanged. The test leaves slots 0 and 1 disabled on
+the way out (best effort).
+
+> **Addressing note:** the object is addressed by named data-model keys
+> (`EXACT Threshold.0.Value Type`, ... , derived from the DDF), so the 48944 DDF
+> must be uploaded to the Coiote tenant data model. Without the DDF, fall back to
+> raw keys by setting `OBJECT = "48944"` and the resource names to their RIDs,
+> giving the **dot-separated** form `48944.<slot>.<rid>`, e.g. `48944.0.2` for
+> Value Type. The slashed spellings (`/48944/0/2`, `48944/0/2`) are rejected by
+> the tenant dialect and do not work.
