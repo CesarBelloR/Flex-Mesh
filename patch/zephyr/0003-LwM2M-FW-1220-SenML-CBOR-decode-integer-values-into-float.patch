@@ -1,0 +1,101 @@
+From f8559326e71060975e6909a18645bd95f9b71090 Mon Sep 17 00:00:00 2001
+From: Andi Gerl <andi.gerl@exacttechnology.com>
+Date: Tue, 15 Sep 2026 09:33:44 -0400
+Subject: [PATCH] LwM2M: FW-1220: SenML CBOR decode integer values into float
+ resources
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The SenML CBOR getters read the decoded record union without consulting
+record_union_choice. A server that writes a whole number to a Float
+resource (Coiote does this) encodes it as a CBOR integer, so the value
+lands in union_vi while get_float() reads union_vf — the device stored
+0.0 and still acknowledged 2.04 Changed. Writing 10.0 to a Float
+resource stored 0.0; writing 10.5 stored 10.5.
+
+Honour the union choice in get_float(), get_s32(), get_s64() and
+get_bool(): convert between the integer and float encodings, and reject
+any other choice with -EINVAL instead of reinterpreting the union.
+---
+ subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c | 43 ++++++++++++++++++++--
+ 1 file changed, 40 insertions(+), 3 deletions(-)
+
+diff --git a/subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c b/subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c
+index 1f66d66fe00..5b50599d557 100644
+--- a/subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c
++++ b/subsys/net/lib/lwm2m/lwm2m_rw_senml_cbor.c
+@@ -593,7 +593,18 @@ static int get_s32(struct lwm2m_input_context *in, int32_t *value)
+ 		return -EINVAL;
+ 	}
+ 
+-	*value = fd->current->record_union.union_vi;
++	/* A server may encode a whole number for an Integer resource as a CBOR float. */
++	switch (fd->current->record_union.record_union_choice) {
++	case union_vi_c:
++		*value = (int32_t)fd->current->record_union.union_vi;
++		break;
++	case union_vf_c:
++		*value = (int32_t)fd->current->record_union.union_vf;
++		break;
++	default:
++		return -EINVAL;
++	}
++
+ 	fd->current = NULL;
+ 
+ 	return 0;
+@@ -608,7 +619,18 @@ static int get_s64(struct lwm2m_input_context *in, int64_t *value)
+ 		return -EINVAL;
+ 	}
+ 
+-	*value = fd->current->record_union.union_vi;
++	/* A server may encode a whole number for an Integer resource as a CBOR float. */
++	switch (fd->current->record_union.record_union_choice) {
++	case union_vi_c:
++		*value = fd->current->record_union.union_vi;
++		break;
++	case union_vf_c:
++		*value = (int64_t)fd->current->record_union.union_vf;
++		break;
++	default:
++		return -EINVAL;
++	}
++
+ 	fd->current = NULL;
+ 
+ 	return 0;
+@@ -634,7 +656,18 @@ static int get_float(struct lwm2m_input_context *in, double *value)
+ 		return -EINVAL;
+ 	}
+ 
+-	*value = fd->current->record_union.union_vf;
++	/* A server may encode a whole number for a Float resource as a CBOR integer. */
++	switch (fd->current->record_union.record_union_choice) {
++	case union_vi_c:
++		*value = (double)fd->current->record_union.union_vi;
++		break;
++	case union_vf_c:
++		*value = fd->current->record_union.union_vf;
++		break;
++	default:
++		return -EINVAL;
++	}
++
+ 	fd->current = NULL;
+ 
+ 	return 0;
+@@ -717,6 +750,10 @@ static int get_bool(struct lwm2m_input_context *in, bool *value)
+ 		return -EINVAL;
+ 	}
+ 
++	if (fd->current->record_union.record_union_choice != union_vb_c) {
++		return -EINVAL;
++	}
++
+ 	*value = fd->current->record_union.union_vb;
+ 	fd->current = NULL;
+ 
+-- 
+2.55.0
+
