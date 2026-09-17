@@ -217,6 +217,39 @@ int data_codec_add_priority(struct cloud_codec_data *cloud_data);
  */
 void data_codec_reset_priority(void);
 
+/**
+ * @brief Mark the triggering threshold slots in the current send.
+ *
+ * Sets the EXACT Threshold Alert resource (48944/<slot>/5) of every slot in the
+ * mask to true and adds it to the send, so the Portal is told which threshold
+ * breached. Slots that did not trigger are not touched.
+ *
+ * @param cloud_data Pointer to the cloud_data struct.
+ * @param slot_mask Bitmask of triggering threshold slots, bit = slot index.
+ * @return 0 on success, negative error code otherwise.
+ */
+int data_codec_add_threshold_alerts(struct cloud_codec_data *cloud_data, uint8_t slot_mask);
+
+/**
+ * @brief Clear the Alert flag (48944/<slot>/5) of the given threshold slots.
+ *
+ * Call once the send carrying the alerts has been delivered. Only updates the
+ * on-device values; does not add a path / does not send.
+ *
+ * @param slot_mask Bitmask of threshold slots to clear, bit = slot index.
+ */
+void data_codec_clear_threshold_alerts(uint8_t slot_mask);
+
+/**
+ * @brief Record a threshold trigger in the slot's troubleshooting resources.
+ *
+ * Updates Last Triggered (48944/<slot>/6) and Trigger Count (48944/<slot>/7).
+ * These are read-on-demand diagnostics: no path is added and nothing is sent.
+ *
+ * @param slot_mask Bitmask of threshold slots that triggered, bit = slot index.
+ */
+void data_codec_note_threshold_trigger(uint8_t slot_mask);
+
 int data_codec_prepare_modem_static_packet(struct cloud_codec_data *cloud_data,
 				    struct data_modem_static *modem_data);
 

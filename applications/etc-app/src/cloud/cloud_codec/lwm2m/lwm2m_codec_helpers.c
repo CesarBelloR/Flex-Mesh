@@ -48,6 +48,9 @@ BUILD_ASSERT(ETC_SETTING_THRESHOLD_VALUE_TYPE_MAX == ETC_THRESHOLD_OBJ_R_VALUE_T
 BUILD_ASSERT(ETC_THRESHOLD_ALERT_DROPS_BELOW == ETC_THRESHOLD_OBJ_R_ALERT_TYPE_MAX_VAL,
 	     "48944/*/3 range must match enum etc_threshold_alert_type");
 
+BUILD_ASSERT(ETC_THRESHOLD_VALUE_TYPE_TEMPERATURE == ETC_THRESHOLD_OBJ_R_VALUE_TYPE_MIN_VAL,
+	     "48944/*/2 range must match enum etc_threshold_value_type");
+
 /* Some resources does not have designated buffers. Therefore we define those in here. */
 static uint8_t bearers[2] = { LTE_FDD_BEARER, NB_IOT_BEARER };
 static int battery_voltage;
@@ -1806,6 +1809,22 @@ static inline bool is_path_priority(struct lwm2m_obj_path *path)
 	       (path->res_id == ETC_INFO_OBJ_R_PRIORITY);
 }
 
+/**
+ * Check if the path is an EXACT Threshold Alert resource (48944/<slot>/5).
+ * The Alert flag must stay grouped with the reading that triggered it, so it is
+ * kept in the primary send during a split, like is_path_priority().
+ *
+ * @param path Path to check.
+ * @return True if the path is an Alert resource, false otherwise.
+ */
+static inline bool is_path_threshold_alert(struct lwm2m_obj_path *path)
+{
+	__ASSERT_NO_MSG(path != NULL);
+
+	return (path->level == 3) && (path->obj_id == ETC_THRESHOLD_OBJECT_ID) &&
+	       (path->res_id == ETC_THRESHOLD_OBJ_R_ALERT);
+}
+
 bool lwm2m_codec_helpers_object_path_list_contains_measurement(struct cloud_codec_data *cloud_data)
 {
 	__ASSERT_NO_MSG(cloud_data != NULL);
@@ -1850,7 +1869,8 @@ int lwm2m_codec_helpers_object_path_list_split(struct cloud_codec_data *cloud_da
 	   them by setting the level to 0. */
 	for (int i = 0; i < cloud_data->valid_object_paths; i++) {
 		if (!is_path_measurement(&cloud_data->paths[i]) &&
-		    !is_path_priority(&cloud_data->paths[i])) {
+		    !is_path_priority(&cloud_data->paths[i]) &&
+		    !is_path_threshold_alert(&cloud_data->paths[i])) {
 			path_list[path_size].obj_id = cloud_data->paths[i].obj_id;
 			path_list[path_size].obj_inst_id = cloud_data->paths[i].obj_inst_id;
 			path_list[path_size].res_id = cloud_data->paths[i].res_id;

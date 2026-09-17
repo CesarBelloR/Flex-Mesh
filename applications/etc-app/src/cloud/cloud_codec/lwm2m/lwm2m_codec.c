@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <lwm2m_resource_ids.h>
 #include <zephyr/net/lwm2m.h>
-#include <date_time.h>
+#include "etc_date_time.h"
 
 #include "etc_device.h"
 #include "data_codec.h"
@@ -483,6 +483,108 @@ void data_codec_reset_priority(void)
 	int err = lwm2m_set_bool(&LWM2M_OBJ(ETC_INFO_OBJECT_ID, 0, ETC_INFO_OBJ_R_PRIORITY), false);
 	if (err) {
 		LOG_ERR("Failed clearing priority flag, error: %d", err);
+	}
+}
+
+/* Path of one resource of one EXACT Threshold slot. */
+#define THRESHOLD_PATH(slot, rid) LWM2M_OBJ(ETC_THRESHOLD_OBJECT_ID, (slot), (rid))
+
+/** @brief Set or clear the Alert flag of one slot on the device. */
+static int threshold_set_alert(uint16_t slot, bool value)
+{
+	int err = lwm2m_set_bool(&THRESHOLD_PATH(slot, ETC_THRESHOLD_OBJ_R_ALERT), value);
+
+	if (err) {
+		LOG_ERR("Failed %s alert flag of slot %u, error: %d",
+			value ? "setting" : "clearing", slot, err);
+	}
+
+	return err;
+}
+
+int data_codec_add_threshold_alerts(struct cloud_codec_data *cloud_data, uint8_t slot_mask)
+{
+	/* Slots already flagged, rolled back on error so a failed add never
+	 * leaves a stale Alert = true behind. */
+	uint8_t set_mask = 0;
+
+	if (cloud_data == NULL) {
+		LOG_ERR("Null cloud data");
+		return -ENOMEM;
+	}
+
+	for (uint16_t slot = 0; slot < ETC_THRESHOLD_SLOT_COUNT; slot++) {
+		if ((slot_mask & BIT(slot)) == 0) {
+			continue;
+		}
+
+		const struct lwm2m_obj_path path = THRESHOLD_PATH(slot, ETC_THRESHOLD_OBJ_R_ALERT);
+		int err = threshold_set_alert(slot, true);
+
+		if (err) {
+			data_codec_clear_threshold_alerts(set_mask);
+			return err;
+		}
+
+		set_mask |= BIT(slot);
+
+		err = lwm2m_codec_helpers_object_path_list_add(cloud_data, &path, 1);
+		if (err) {
+			LOG_ERR("Failed populating object path list, error: %d", err);
+			data_codec_clear_threshold_alerts(set_mask);
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+void data_codec_clear_threshold_alerts(uint8_t slot_mask)
+{
+	for (uint16_t slot = 0; slot < ETC_THRESHOLD_SLOT_COUNT; slot++) {
+		if ((slot_mask & BIT(slot)) != 0) {
+			(void)threshold_set_alert(slot, false);
+		}
+	}
+}
+
+void data_codec_note_threshold_trigger(uint8_t slot_mask)
+{
+	/* Read-on-demand diagnostics: updated on the device only, never sent.
+	 * Without a valid clock only the count moves, so Last Triggered keeps
+	 * the last known time instead of being reset to the epoch. */
+	int now_s = date_time_is_valid() ? date_time_now_second() : 0;
+
+	for (uint16_t slot = 0; slot < ETC_THRESHOLD_SLOT_COUNT; slot++) {
+		if ((slot_mask & BIT(slot)) == 0) {
+			continue;
+		}
+
+		const struct lwm2m_obj_path count_path =
+			THRESHOLD_PATH(slot, ETC_THRESHOLD_OBJ_R_TRIGGER_COUNT);
+		uint32_t count = 0;
+		int err;
+
+		if (now_s > 0) {
+			err = lwm2m_set_time(
+				&THRESHOLD_PATH(slot, ETC_THRESHOLD_OBJ_R_LAST_TRIGGERED),
+				(time_t)now_s);
+			if (err) {
+				LOG_ERR("Failed setting last triggered of slot %u, error: %d", slot,
+					err);
+			}
+		}
+
+		err = lwm2m_get_u32(&count_path, &count);
+		if (err) {
+			LOG_ERR("Failed reading trigger count of slot %u, error: %d", slot, err);
+			continue;
+		}
+
+		err = lwm2m_set_u32(&count_path, count + 1);
+		if (err) {
+			LOG_ERR("Failed setting trigger count of slot %u, error: %d", slot, err);
+		}
 	}
 }
 
