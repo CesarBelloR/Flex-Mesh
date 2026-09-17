@@ -28,6 +28,8 @@
 
 #include "modules_common.h"
 #include "data_send_state.h"
+#include "threshold_alert_state.h"
+#include "threshold_eval.h"
 #include "events/app_event.h"
 #include "events/cloud_event.h"
 #include "events/ble_event.h"
@@ -116,6 +118,11 @@ static uint8_t data_relay_buf[CONFIG_LWM2M_ETC_RELAY_OBJ_DATA_SIZE] = {0x00};
 struct cloud_codec_data codec = { 0 };
 struct cloud_codec_data ble_codec = { 0 };
 struct cloud_codec_data codec_backup = { 0 };
+
+/* Edge state of the immediate report thresholds, carried between samples. */
+static struct threshold_eval threshold_eval_state;
+/* Alert flags of the threshold slots awaiting delivery to the cloud. */
+static struct threshold_alert_state threshold_alerts;
 
 /* One send in flight per channel; a BLE ACK must never settle a cloud send. */
 static struct data_send_state send_status_cloud;
@@ -342,6 +349,8 @@ static int setup(void)
 	k_work_init_delayable(&data_send_work, data_send_work_fn);
 	k_work_reschedule(&data_send_work, data_publish_timeout);
 
+	threshold_eval_init(&threshold_eval_state);
+
 	etc_settings_get_config(&cfg);
 	
 	err = data_codec_init(&cfg, cloud_codec_event_handler);
@@ -515,12 +524,25 @@ static int data_encode_for_logger() {
 		ret = data_codec_prepare_cloud_packet(&codec, &record, &modem_dynamic);
 		if (ret != 0) {
 			LOG_WRN("Error populating data codec");
-		} else if (priority_reading_pending) {
-			/* Flag this reading as priority so the Portal processes it
-			 * immediately. One-shot: consume so only one record is flagged.
+		} else {
+			if (priority_reading_pending) {
+				/* Flag this reading as priority so the Portal processes
+				 * it immediately. One-shot: consume so only one record
+				 * is flagged.
+				 */
+				data_codec_add_priority(&codec);
+				priority_reading_pending = false;
+			}
+
+			/* Records are served newest first, so this send carries the
+			 * breaching sample.
 			 */
-			data_codec_add_priority(&codec);
-			priority_reading_pending = false;
+			uint8_t alerts = threshold_alert_take_for_send(&threshold_alerts);
+
+			if (alerts != 0 && data_codec_add_threshold_alerts(&codec, alerts) != 0) {
+				/* Back to pending so the next send carries them. */
+				threshold_alert_send_failed(&threshold_alerts);
+			}
 		}
 	}
 
@@ -739,6 +761,46 @@ static void data_do_check_calibration(void)
 	}
 }
 
+/**
+ * @brief Evaluate a sample against the immediate report thresholds.
+ *
+ * Flags the crossing slots and requests an immediate upload when the rate limit
+ * allows one.
+ *
+ * @param sensors Sample just written to the record store.
+ */
+static void evaluate_thresholds(const struct sensor_data *sensors)
+{
+	struct etc_threshold cfg[ETC_THRESHOLD_SLOT_COUNT];
+	struct threshold_eval_result res;
+	enum etc_device_mode mode = etc_get_device_mode();
+	uint8_t changed;
+
+	/* Thresholds are a logger feature. */
+	if ((mode != ETC_DEVICE_MODE_LTE_LOGGER) && (mode != ETC_DEVICE_MODE_LORA_LOGGER)) {
+		return;
+	}
+
+	changed = etc_take_thresholds(cfg);
+	threshold_eval_update(&threshold_eval_state, cfg, changed, sensors, k_uptime_get(), &res);
+
+	if (res.crossed != 0) {
+		data_codec_note_threshold_trigger(res.crossed);
+		/* The v1 LoRa packet has no field for the alert flag, and a flag left
+		 * standing would ride the daily LTE sync hours later.
+		 */
+		if (mode == ETC_DEVICE_MODE_LTE_LOGGER) {
+			threshold_alert_set(&threshold_alerts, res.crossed);
+		}
+		LOG_INF("Threshold crossed: slots 0x%02x upload %u", res.crossed,
+			res.request_upload);
+	}
+
+	if (res.request_upload) {
+		SEND_EVENT(data, DATA_EVT_THRESHOLD_TRIGGERED);
+	}
+}
+
 static void save_new_sensor_data(struct sensor_data *sensors)
 {
 	if (etc_device_is_relay()) {
@@ -747,7 +809,15 @@ static void save_new_sensor_data(struct sensor_data *sensors)
 		etc_device_write_record_sensor(sensors);
 		uint8_t bat_percent = etc_battery_percentage_from_voltage(sensors->battery_mV);
 		etc_ble_notify_battery(bat_percent);
+		evaluate_thresholds(sensors);
 	}
+}
+
+/** @brief Abandon the cloud send in flight; its alert flags return to pending. */
+static void data_cloud_send_abort(void)
+{
+	data_send_state_finish(&send_status_cloud);
+	threshold_alert_send_failed(&threshold_alerts);
 }
 
 static void data_send_work_fn(struct k_work *work)
@@ -824,7 +894,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	    IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTING)) {
 		/* Reset send status to allow future sends. */
 		data_do_check_calibration();
-		data_send_state_finish(&send_status_cloud);
+		data_cloud_send_abort();
 		send_fail_count = 0;
 		state_set(STATE_CLOUD_DISCONNECTED);
 		return;
@@ -975,6 +1045,11 @@ static void on_all_states(struct data_msg_data *msg)
 		 * so it is not reported on later whole-Info-object sends.
 		 */
 		data_codec_reset_priority();
+		uint8_t cleared = threshold_alert_send_acked(&threshold_alerts);
+
+		if (cleared != 0) {
+			data_codec_clear_threshold_alerts(cleared);
+		}
 		if (state == STATE_CLOUD_CONNECTED) {
 			if (etc_device_is_relay()) {
 				if (state_relay_send == STATE_RELAY_SEND_META_MODEL ||
@@ -1030,7 +1105,7 @@ static void on_all_states(struct data_msg_data *msg)
 			split = true;
 		}
 		/* Reset send status on fail */
-		data_send_state_finish(&send_status_cloud);
+		data_cloud_send_abort();
 		if (state == STATE_CLOUD_CONNECTED) {
 			if (++send_fail_count > DATA_SEND_FAIL_RETRY_MAX) {
 				LOG_WRN("Send failed %u times in a row, "
@@ -1043,7 +1118,7 @@ static void on_all_states(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_RX_OFF)) {
-		data_send_state_finish(&send_status_cloud);
+		data_cloud_send_abort();
 	}
 	
 	if (IS_EVENT(msg, lora, LORA_EVT_RX_READY)) {
