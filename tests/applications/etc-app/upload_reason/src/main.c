@@ -9,11 +9,12 @@
 static const enum app_upload_reason all_reasons[] = {
 	APP_UPLOAD_NONE,
 	APP_UPLOAD_NORMAL,
+	APP_UPLOAD_THRESHOLD,
 	APP_UPLOAD_LORA_SYNC,
 	APP_UPLOAD_MAGNET,
 };
 
-/* Rank expected from the merge: MAGNET > LORA_SYNC > NORMAL > NONE. */
+/* Rank expected from the merge: MAGNET > LORA_SYNC > THRESHOLD > NORMAL > NONE. */
 static int reason_rank(enum app_upload_reason reason)
 {
 	switch (reason) {
@@ -21,10 +22,12 @@ static int reason_rank(enum app_upload_reason reason)
 		return 0;
 	case APP_UPLOAD_NORMAL:
 		return 1;
-	case APP_UPLOAD_LORA_SYNC:
+	case APP_UPLOAD_THRESHOLD:
 		return 2;
-	case APP_UPLOAD_MAGNET:
+	case APP_UPLOAD_LORA_SYNC:
 		return 3;
+	case APP_UPLOAD_MAGNET:
+		return 4;
 	}
 	return -1;
 }
@@ -71,10 +74,29 @@ ZTEST(upload_reason, test_from_schedule)
 		APP_UPLOAD_MAGNET);
 }
 
+ZTEST(upload_reason, test_from_schedule_never_threshold)
+{
+	/* Only a threshold crossing arms APP_UPLOAD_THRESHOLD; no scheduled
+	 * wakeup may produce it. */
+	const enum app_wakeup_tx_work_type all_schedules[] = {
+		APP_WAKEUP_TX_INTERVAL_WORK,
+		APP_WAKEUP_TX_PROBE_WORK,
+		APP_WAKEUP_TX_SYNC_CLOUD_FOR_LORA_WORK,
+		APP_WAKEUP_TX_SYNC_CLOUD_FOR_MAGNET_WORK,
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(all_schedules); i++) {
+		zassert_not_equal(app_module_upload_reason_from_schedule(all_schedules[i]),
+				  APP_UPLOAD_THRESHOLD, "schedule %d yielded THRESHOLD",
+				  all_schedules[i]);
+	}
+}
+
 ZTEST(upload_reason, test_sub_job_for_reason)
 {
 	zassert_equal(app_module_sub_job_for_reason(APP_UPLOAD_NONE), ETC_TRANSMIT_NORMAL);
 	zassert_equal(app_module_sub_job_for_reason(APP_UPLOAD_NORMAL), ETC_TRANSMIT_NORMAL);
+	zassert_equal(app_module_sub_job_for_reason(APP_UPLOAD_THRESHOLD), ETC_TRANSMIT_NORMAL);
 	zassert_equal(app_module_sub_job_for_reason(APP_UPLOAD_LORA_SYNC),
 		      ETC_TRANSMIT_SYNC_CLOUD_LORA);
 	zassert_equal(app_module_sub_job_for_reason(APP_UPLOAD_MAGNET),
