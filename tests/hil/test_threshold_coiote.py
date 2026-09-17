@@ -57,6 +57,12 @@ R_THRESHOLD_VALUE = "Threshold Value"
 R_ALERT = "Alert"
 R_TRIGGER_COUNT = "Trigger Count"
 
+# Spec section 4: value type 1 is temperature in degrees Celsius; alert type 0
+# is Exceeds (the reading rises above the value), 1 is Drops Below.
+VALUE_TYPE_TEMPERATURE = "1"
+ALERT_TYPE_EXCEEDS = "0"
+ALERT_TYPE_DROPS_BELOW = "1"
+
 # The four configuration resources, in the order they must be written: Enabled
 # last, so the slot arms atomically on a complete configuration (spec 8).
 CONFIG_RESOURCES = (R_VALUE_TYPE, R_ALERT_TYPE, R_THRESHOLD_VALUE, R_ENABLED)
@@ -69,9 +75,11 @@ CONFIG_RESOURCES = (R_VALUE_TYPE, R_ALERT_TYPE, R_THRESHOLD_VALUE, R_ENABLED)
 # fraction (20.25 is exact in float32, so only a decode bug can move it).
 SLOT_LOW = 0
 SLOT_HIGH = 1
-CONFIG_LOW = {R_VALUE_TYPE: "1", R_ALERT_TYPE: "1",
+CONFIG_LOW = {R_VALUE_TYPE: VALUE_TYPE_TEMPERATURE,
+              R_ALERT_TYPE: ALERT_TYPE_DROPS_BELOW,
               R_THRESHOLD_VALUE: "10.0", R_ENABLED: "true"}
-CONFIG_HIGH = {R_VALUE_TYPE: "1", R_ALERT_TYPE: "0",
+CONFIG_HIGH = {R_VALUE_TYPE: VALUE_TYPE_TEMPERATURE,
+               R_ALERT_TYPE: ALERT_TYPE_EXCEEDS,
                R_THRESHOLD_VALUE: "20.25", R_ENABLED: "true"}
 
 # A value float32 cannot hold exactly; the read-back must be the float32
