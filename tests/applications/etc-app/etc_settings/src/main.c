@@ -259,6 +259,85 @@ ZTEST(etc_settings_test, test_threshold_update_all_slots)
 	}
 }
 
+/* The change mask etc_take_thresholds() returns drives the evaluator's re-arming,
+ * so it must name exactly the slots a write actually changed.
+ */
+static struct etc_threshold threshold_of(uint8_t value_type, float value)
+{
+	struct etc_threshold t = {
+		.enabled = true,
+		.value_type = value_type,
+		.alert_type = ETC_THRESHOLD_ALERT_EXCEEDS,
+		.value = value,
+	};
+
+	return t;
+}
+
+/* Drop the mask left behind by earlier tests. */
+static void thresholds_take_changed(void)
+{
+	struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT];
+
+	etc_take_thresholds(out);
+}
+
+ZTEST(etc_settings_test, test_threshold_change_mask_reports_the_changed_slot)
+{
+	struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT];
+	const struct etc_threshold in = threshold_of(1, 7.5f);
+
+	thresholds_reset();
+	thresholds_take_changed();
+
+	zassert_ok(etc_set_threshold(1, &in), "Set slot 1");
+	zassert_equal(etc_take_thresholds(out), BIT(1), "Slot 1 should be reported as changed");
+	zassert_equal(etc_take_thresholds(out), 0, "The mask must be cleared when it is read");
+}
+
+ZTEST(etc_settings_test, test_threshold_change_mask_ignores_an_identical_write)
+{
+	struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT];
+	const struct etc_threshold in = threshold_of(2, -3.5f);
+
+	thresholds_reset();
+	thresholds_take_changed();
+
+	zassert_ok(etc_set_threshold(0, &in), "Set slot 0");
+	zassert_equal(etc_take_thresholds(out), BIT(0), "Slot 0 should be reported as changed");
+
+	zassert_ok(etc_set_threshold(0, &in), "Rewrite slot 0 with the same values");
+	zassert_equal(etc_take_thresholds(out), 0, "An unchanged slot must not be reported");
+}
+
+ZTEST(etc_settings_test, test_threshold_change_mask_reports_every_changed_slot)
+{
+	struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT];
+	const struct etc_threshold in = threshold_of(1, 42.0f);
+
+	thresholds_reset();
+	thresholds_take_changed();
+
+	zassert_ok(etc_set_threshold(0, &in), "Set slot 0");
+	zassert_ok(etc_set_threshold(3, &in), "Set slot 3");
+	zassert_equal(etc_take_thresholds(out), BIT(0) | BIT(3), "Both slots should be reported");
+}
+
+/* A runtime factory reset reloads every slot, which must re-arm the evaluator
+ * the same way a server write does.
+ */
+ZTEST(etc_settings_test, test_threshold_change_mask_reports_a_reload)
+{
+	struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT];
+
+	thresholds_reset();
+	thresholds_take_changed();
+
+	etc_settings_init();
+	zassert_equal(etc_take_thresholds(out), BIT_MASK(ETC_THRESHOLD_SLOT_COUNT),
+		      "A reload should report every slot as changed");
+}
+
 ZTEST(etc_settings_test, test_threshold_unknown_nvs_version)
 {
 	struct test_threshold_nvs record = {

@@ -1,0 +1,6 @@
+tests:
+  tests.applications.etc-app.threshold_eval:
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim
