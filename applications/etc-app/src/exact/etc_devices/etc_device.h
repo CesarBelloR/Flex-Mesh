@@ -173,6 +173,12 @@ enum etc_threshold_alert_type {
 	ETC_THRESHOLD_ALERT_DROPS_BELOW = 1,
 };
 
+/** @brief Flex 2.0 value types the firmware evaluates. */
+enum etc_threshold_value_type {
+	ETC_THRESHOLD_VALUE_TYPE_TEMPERATURE = 1,
+	ETC_THRESHOLD_VALUE_TYPE_HUMIDITY = 2,
+};
+
 /** @brief One immediate report threshold slot (EXACT Threshold object 48944). */
 struct etc_threshold {
 	/* Slot is evaluated */

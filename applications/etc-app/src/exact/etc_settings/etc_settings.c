@@ -50,6 +50,8 @@ struct etc_threshold_nvs {
 } __packed;
 
 static struct etc_threshold etc_thresholds[ETC_THRESHOLD_SLOT_COUNT];
+/* Slots (bit = slot index) changed since the last etc_take_thresholds() */
+static uint8_t etc_thresholds_changed;
 
 static const uint16_t etc_threshold_setting_ids[ETC_THRESHOLD_SLOT_COUNT] = {
 	ETC_SETTING_THRESHOLD_0_ID,
@@ -254,6 +256,10 @@ static void etc_threshold_load(uint8_t slot)
 {
 	struct etc_threshold_nvs nvs;
 	int ret;
+
+	/* Mark the slot so a runtime reload (factory reset) re-arms the
+	 * evaluator the same way a server write does. */
+	etc_thresholds_changed |= (uint8_t)BIT(slot);
 
 	ret = etc_device_read_setting_with_len(etc_threshold_setting_ids[slot], &nvs, sizeof(nvs));
 	if (ret == sizeof(nvs) && etc_threshold_nvs_is_valid(&nvs)) {
@@ -590,6 +596,12 @@ int etc_get_threshold(uint8_t slot, struct etc_threshold *out)
 	return 0;
 }
 
+/** @brief Copy the slots out. Call with setting_mutex held. */
+static void etc_copy_thresholds(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT])
+{
+	memcpy(out, etc_thresholds, sizeof(etc_thresholds));
+}
+
 void etc_get_thresholds(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT])
 {
 	if (out == NULL) {
@@ -597,8 +609,24 @@ void etc_get_thresholds(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT])
 	}
 
 	k_mutex_lock(&setting_mutex, K_FOREVER);
-	memcpy(out, etc_thresholds, sizeof(etc_thresholds));
+	etc_copy_thresholds(out);
 	k_mutex_unlock(&setting_mutex);
+}
+
+uint8_t etc_take_thresholds(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT])
+{
+	uint8_t changed;
+
+	if (out == NULL) {
+		return 0;
+	}
+
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	etc_copy_thresholds(out);
+	changed = etc_thresholds_changed;
+	etc_thresholds_changed = 0;
+	k_mutex_unlock(&setting_mutex);
+	return changed;
 }
 
 int etc_set_threshold(uint8_t slot, const struct etc_threshold *in)
@@ -632,6 +660,7 @@ int etc_set_threshold(uint8_t slot, const struct etc_threshold *in)
 	}
 
 	etc_thresholds[slot] = *in;
+	etc_thresholds_changed |= (uint8_t)BIT(slot);
 	rc = etc_threshold_store(slot);
 	if (rc == 0) {
 		LOG_DBG("set threshold %u: en %u type %u alert %u value %f", slot, in->enabled,

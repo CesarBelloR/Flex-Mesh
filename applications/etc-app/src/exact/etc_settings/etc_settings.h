@@ -308,9 +308,25 @@ int etc_set_threshold(uint8_t slot, const struct etc_threshold *in);
 /**
  * @brief Copy all immediate report threshold slots.
  *
+ * The change mask is left untouched, so any number of callers may read the
+ * values.
+ *
  * @param out Buffer of ETC_THRESHOLD_SLOT_COUNT slots.
  */
 void etc_get_thresholds(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT]);
+
+/**
+ * @brief Copy all immediate report threshold slots and take the change mask.
+ *
+ * The returned mask names the slots whose configuration changed since the
+ * previous call. It is read-and-clear, so a single consumer must own it: the
+ * data module's threshold evaluator. Every other caller uses
+ * etc_get_thresholds().
+ *
+ * @param out Buffer of ETC_THRESHOLD_SLOT_COUNT slots.
+ * @return Bitmask of changed slots, bit = slot index.
+ */
+uint8_t etc_take_thresholds(struct etc_threshold out[ETC_THRESHOLD_SLOT_COUNT]);
 
 /**
  * @brief Update all immediate report threshold slots with the given values.

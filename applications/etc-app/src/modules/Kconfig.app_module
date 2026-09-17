@@ -19,3 +19,14 @@ config ETC_APP_LTE_SYNC_BACKOFF_MAX_S
 	help
 	  FW-789 ceiling. After consecutive failed bring-ups the spacing doubles
 	  from the floor but never exceeds this (default once per day).
+
+config ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S
+	int "Minimum spacing between threshold-triggered uploads, in seconds"
+	default 900
+	help
+	  FW-1179. All immediate report threshold slots share this hold-off: a
+	  crossing within this many seconds of the last threshold-triggered upload
+	  is still flagged but does not transmit ahead of schedule. Bounds battery
+	  and airtime cost when a reading oscillates around a threshold. The window
+	  starts when an upload is requested, so a request later dropped by the
+	  functional test or a shutdown still consumes it.
