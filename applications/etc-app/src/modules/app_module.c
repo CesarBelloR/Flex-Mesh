@@ -107,9 +107,11 @@ static enum app_wakeup_tx_work_type scheduled_tx_reason = APP_WAKEUP_TX_INTERVAL
  * app_dispatch_upload(). APP_UPLOAD_NONE means no request armed. */
 static enum app_upload_reason pending_upload_reason = APP_UPLOAD_NONE;
 static void app_soft_watchdog_work_handler(struct k_work* work);
+static void app_threshold_dispatch_work_handler(struct k_work *work);
 
 K_MUTEX_DEFINE(app_module_lock);
 K_WORK_DELAYABLE_DEFINE(app_soft_watchdog_work, app_soft_watchdog_work_handler);
+K_WORK_DELAYABLE_DEFINE(app_threshold_dispatch_work, app_threshold_dispatch_work_handler);
 
 static void app_set_scheduled_tx_reason(enum app_wakeup_tx_work_type reason)
 {
@@ -627,6 +629,10 @@ static void app_dispatch_upload(void)
 {
 	enum app_upload_reason reason = app_take_upload_reason();
 
+	/* Whoever consumes the request owns the deferred dispatch too, so the
+	 * work item can never fire on an already-dispatched request. */
+	k_work_cancel_delayable(&app_threshold_dispatch_work);
+
 	if (reason == APP_UPLOAD_NONE) {
 		LOG_DBG("Upload already dispatched");
 		return;
@@ -654,6 +660,14 @@ static void app_dispatch_upload(void)
 		LOG_DBG("Dispatch upload -> APP_EVT_DATA_TRANSMIT");
 		SEND_EVENT(app, APP_EVT_DATA_TRANSMIT);
 	}
+}
+
+/* Runs after the per-device transmit delay armed by DATA_EVT_DATA_READY. */
+static void app_threshold_dispatch_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	app_dispatch_upload();
 }
 
 static void app_peripheral_on(bool is_rtc)
@@ -947,21 +961,38 @@ static void on_all_events(struct app_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, util, UTIL_EVT_SHUTDOWN_REQUEST)) {
-		/* The module doesn't have anything to shut down and can
-		 * report back immediately.
+		/* Nothing to shut down beyond the deferred threshold dispatch,
+		 * so report back immediately.
 		 */
+		k_work_cancel_delayable(&app_threshold_dispatch_work);
 		SEND_SHUTDOWN_ACK(app, APP_EVT_SHUTDOWN_READY, self.id);
 		state_set(STATE_SHUTDOWN);
 		return;
 	}
 
+	if (IS_EVENT(msg, data, DATA_EVT_THRESHOLD_TRIGGERED)) {
+		/* Dispatched by the DATA_EVT_DATA_READY of the same sample. */
+		app_request_upload(APP_UPLOAD_THRESHOLD);
+		return;
+	}
+
 	if (IS_EVENT(msg, data, DATA_EVT_DATA_READY)) {
-		/* Dispatch on any job when a request is pending: a magnet request
-		 * whose own sample was dropped must still go out on a later LOG
-		 * wake, and app_peripheral_off() must not suspend spi2/spi3 under
-		 * an in-flight upload. A stray DATA_READY with nothing pending
-		 * lands in app_dispatch_upload()'s NONE no-op. */
-		if (etc_device_get_job() != ETC_DEVICE_JOB_LOG || app_upload_pending()) {
+		bool log_job = etc_device_get_job() == ETC_DEVICE_JOB_LOG;
+
+		if (log_job && app_peek_upload_reason() == APP_UPLOAD_THRESHOLD) {
+			/* An unscheduled wake carries no RTC-side transmit delay,
+			 * so spread the fleet here. Peripherals stay on; the upload
+			 * path powers them down when it completes. */
+			uint16_t delay_ms = etc_get_tx_delay_msec();
+
+			LOG_DBG("Threshold upload deferred by %u ms", delay_ms);
+			k_work_reschedule(&app_threshold_dispatch_work, K_MSEC(delay_ms));
+		} else if (!log_job || app_upload_pending()) {
+			/* Dispatch on any job when a request is pending: a magnet request
+			 * whose own sample was dropped must still go out on a later LOG
+			 * wake, and app_peripheral_off() must not suspend spi2/spi3 under
+			 * an in-flight upload. A stray DATA_READY with nothing pending
+			 * lands in app_dispatch_upload()'s NONE no-op. */
 			app_dispatch_upload();
 		} else {
 			app_peripheral_off();
@@ -987,6 +1018,8 @@ static void on_all_events(struct app_msg_data *msg)
 		 * reading. Drop any pending request: the device is on a charger
 		 * and functional test drives its own cloud sends. */
 		enum app_upload_reason reason = app_take_upload_reason();
+
+		k_work_cancel_delayable(&app_threshold_dispatch_work);
 		if (reason != APP_UPLOAD_NONE) {
 			LOG_WRN("Dropping pending upload request (%d): functional test", reason);
 		}

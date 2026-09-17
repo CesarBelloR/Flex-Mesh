@@ -16,6 +16,11 @@ enum data_event_type {
 	/** New data is available to be sent */
 	DATA_EVT_DATA_READY,
 
+	/** A sensor reading crossed an immediate report threshold; sent before
+	 *  DATA_EVT_DATA_READY for the same sample.
+	 */
+	DATA_EVT_THRESHOLD_TRIGGERED,
+
 	/** The option to support fast sample request */
 	DATA_EVT_TEST_DATA_READY,
 

@@ -14,6 +14,8 @@ static char *get_evt_type_str(enum data_event_type type)
 		return "DATA_EVT_RELAY_DATA_READY";
 	case DATA_EVT_DATA_READY:
 		return "DATA_EVT_DATA_READY";
+	case DATA_EVT_THRESHOLD_TRIGGERED:
+		return "DATA_EVT_THRESHOLD_TRIGGERED";
 	case DATA_EVT_SEND_COMPLETE:
 		return "DATA_EVT_SEND_DONE";
 	case DATA_EVT_UI_DATA_READY:
