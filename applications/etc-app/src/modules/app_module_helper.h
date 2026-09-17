@@ -24,6 +24,8 @@ enum app_wakeup_tx_work_type {
 enum app_upload_reason {
 	APP_UPLOAD_NONE,
 	APP_UPLOAD_NORMAL,
+	/** A sensor reading crossed an immediate report threshold (FW-1179). */
+	APP_UPLOAD_THRESHOLD,
 	APP_UPLOAD_LORA_SYNC,
 	APP_UPLOAD_MAGNET,
 };
@@ -33,7 +35,7 @@ enum app_upload_reason {
  *
  * @param a First upload reason.
  * @param b Second upload reason.
- * @return The higher-ranked reason (MAGNET > LORA_SYNC > NORMAL > NONE).
+ * @return The higher-ranked reason (MAGNET > LORA_SYNC > THRESHOLD > NORMAL > NONE).
  */
 enum app_upload_reason app_module_upload_reason_merge(enum app_upload_reason a,
 						      enum app_upload_reason b);

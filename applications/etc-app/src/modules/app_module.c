@@ -1198,6 +1198,8 @@ static const char *upload_reason_str(enum app_upload_reason reason)
 	switch (reason) {
 	case APP_UPLOAD_NORMAL:
 		return "normal";
+	case APP_UPLOAD_THRESHOLD:
+		return "threshold";
 	case APP_UPLOAD_LORA_SYNC:
 		return "lora";
 	case APP_UPLOAD_MAGNET:

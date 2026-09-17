@@ -294,8 +294,9 @@ enum app_upload_reason app_module_upload_reason_merge(enum app_upload_reason a,
 	static const uint8_t rank[] = {
 		[APP_UPLOAD_NONE] = 0,
 		[APP_UPLOAD_NORMAL] = 1,
-		[APP_UPLOAD_LORA_SYNC] = 2,
-		[APP_UPLOAD_MAGNET] = 3,
+		[APP_UPLOAD_THRESHOLD] = 2,
+		[APP_UPLOAD_LORA_SYNC] = 3,
+		[APP_UPLOAD_MAGNET] = 4,
 	};
 
 	return rank[a] >= rank[b] ? a : b;
@@ -324,6 +325,7 @@ enum etc_transmit_sub_job app_module_sub_job_for_reason(enum app_upload_reason r
 		return ETC_TRANSMIT_SYNC_MAGNET;
 	case APP_UPLOAD_NONE:
 	case APP_UPLOAD_NORMAL:
+	case APP_UPLOAD_THRESHOLD:
 	default:
 		return ETC_TRANSMIT_NORMAL;
 	}
