@@ -58,8 +58,8 @@ Related resources:
 | 3 | Alert Type | RW | Integer | 0..1 | 0 = Exceeds, 1 = Drops below. |
 | 4 | Threshold Value | RW | Float | | Threshold in the default unit of the value type (section 4). |
 | 5 | Alert | R | Boolean | | `true` while this slot has a threshold-triggered report awaiting delivery. Set when the slot triggers, cleared once the report carrying it has been sent successfully. |
-| 6 | Last Triggered | R | Time | | Timestamp of the slot's last immediate report since boot; 0 = never. Troubleshooting only. |
-| 7 | Trigger Count | R | Integer | | Immediate reports triggered by the slot since boot. Troubleshooting only. |
+| 6 | Last Triggered | R | Time | | Timestamp of the slot's last threshold crossing since boot; 0 = never. Troubleshooting only. |
+| 7 | Trigger Count | R | Integer | | Threshold crossings recorded by the slot since boot. Troubleshooting only. |
 
 Paths follow the usual scheme: `/48944/<slot>/<rid>`, slot 0–3.
 
@@ -94,7 +94,9 @@ by the re-arm rules in section 5.
 
 ### Status resources (troubleshooting only)
 
-Last Triggered (RID 6) and Trigger Count (RID 7) are diagnostic values. The
+Last Triggered (RID 6) and Trigger Count (RID 7) are diagnostic values. They
+count threshold *crossings*, not immediate reports: a crossing inside the
+rate-limit hold-off window (section 5) updates them without transmitting. The
 device does not update them towards the server on its own — they are never
 included in LwM2M Sends or notifications; a manual Read returns their current
 values. Both reset at boot (Last Triggered = 0, Trigger Count = 0). Portal must
@@ -156,7 +158,9 @@ The firmware enforces a minimum interval between threshold-triggered
 transmissions (compile-time constant, all slots combined). Crossings during the
 hold-off window do not produce an extra transmission; the readings are still
 logged and arrive with the next scheduled transmission. This bounds battery and
-airtime cost when a reading oscillates around a threshold.
+airtime cost when a reading oscillates around a threshold. A crossing inside the
+hold-off window still sets the Alert flag (RID 5) and updates the status
+resources (RIDs 6 and 7).
 
 ### Invalid readings
 
