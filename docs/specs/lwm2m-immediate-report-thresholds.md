@@ -16,9 +16,11 @@ implementation (FW-1178, FW-1179) and the software team.
 
 Related resources:
 
-- Jira: FW-1177 (this spec), FW-1178 (settings), FW-1179 (trigger), epic FW-997
+- Jira: FW-1177 (this spec), FW-1178 (settings), FW-1179 (trigger),
+  FW-1225 (configurable hold-off), epic FW-997
 - Portal design: [Figma — Hardware View, Device Threshold](https://www.figma.com/design/TpRRbpnHXob3BdftScKD7O/Hardware---View?node-id=651-1540&p=f)
-- Object definition (DDF): `applications/etc-app/src/cloud/lwm2m/exact_objects/exact-threshold_48944.xml`
+- Object definitions (DDF): `applications/etc-app/src/cloud/lwm2m/exact_objects/exact-threshold_48944.xml`,
+  `exact-configuration_48931.xml`
 - Value-type enumeration: `docs/specs/flex2-0_data_rules.md`, section 6.2
 
 ## 2. Design Constraints
@@ -155,12 +157,26 @@ threshold does not re-trigger on subsequent cycles.
 ### Rate limiting
 
 The firmware enforces a minimum interval between threshold-triggered
-transmissions (compile-time constant, all slots combined). Crossings during the
-hold-off window do not produce an extra transmission; the readings are still
-logged and arrive with the next scheduled transmission. This bounds battery and
-airtime cost when a reading oscillates around a threshold. A crossing inside the
-hold-off window still sets the Alert flag (RID 5) and updates the status
-resources (RIDs 6 and 7).
+transmissions, all slots combined. Crossings during the hold-off window do not
+produce an extra transmission; the readings are still logged and arrive with the
+next scheduled transmission. This bounds battery and airtime cost when a reading
+oscillates around a threshold. A crossing inside the hold-off window still sets
+the Alert flag (RID 5) and updates the status resources (RIDs 6 and 7).
+
+The hold-off is per device, written through the **EXACT Configuration** object
+(48931) and persisted like the other configuration resources:
+
+| Path | Name | Ops | Type | Range | Unit | Default |
+|------|------|-----|------|-------|------|---------|
+| /48931/0/16 | Threshold Report Interval | RW | Integer | 60..86400 | s | 900 |
+
+Writes are validated at the CoAP layer and rejected with 4.00 Bad Request when
+out of range, leaving the stored value unchanged. The device reads the value on
+every sampling cycle, so a write takes effect at the next sample without a
+reboot; the window is measured from the last upload *request*, so shortening it
+can open the window immediately, and lengthening it extends the window an
+earlier request already started. The first crossing after boot is never held
+off, whatever the interval is.
 
 ### Invalid readings
 
@@ -311,7 +327,7 @@ document, in the usual `EXACT Sensor` / `EXACT Chunks` form.
 | Value types | Flex 2.0 enumeration, full range accepted | Forward compatible: no API or data-model change when Flex 2.0 sensor types ship. |
 | Unit handling | Implied by value type | Same convention as Flex 2.0 data rules; avoids a redundant writable resource and unit-mismatch states. |
 | Trigger semantics | Edge-triggered with re-arm | "Notified the moment an input crosses it" without repeated reports while a value stays out of range. |
-| Rate limit | Compile-time firmware constant | Battery protection is a firmware concern; not user-tunable until a need is shown. |
+| Rate limit | Per-device setting on the configuration object (FW-1225) | Deployments differ in transmit interval and alerting appetite, so the hold-off is tuned from Portal rather than rebuilt; the 60 s floor keeps battery protection in firmware. |
 | Alert flag | Boolean on the threshold slot itself (RID 5) | Portal learns which threshold breached without re-deriving it from the readings, and without a second object to model, upload, and keep in step with the configuration. |
 | Alert flag lifetime | Set on trigger, cleared on successful send | The flag exists to mark the report it travels with. Clearing on delivery means a failed transmission retries with the marker intact, and no separate acknowledgement path is needed. |
 | Troubleshooting resources | Read-on-demand diagnostics (RIDs 6, 7) | Visibility without extra airtime: not reported proactively, reset at boot. Alerting uses the Alert flag instead. |
