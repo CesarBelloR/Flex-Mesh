@@ -766,7 +766,7 @@ static void data_do_check_calibration(void)
 /**
  * @brief Evaluate a sample against the immediate report thresholds.
  *
- * Flags the crossing slots and requests an immediate upload when the rate limit
+ * Flags the crossing slots and requests an immediate upload when the hold-off
  * allows one.
  *
  * @param sensors Sample just written to the record store.
@@ -784,7 +784,8 @@ static void evaluate_thresholds(const struct sensor_data *sensors)
 	}
 
 	changed = etc_take_thresholds(cfg);
-	threshold_eval_update(&threshold_eval_state, cfg, changed, sensors, k_uptime_get(), &res);
+	threshold_eval_update(&threshold_eval_state, cfg, changed, sensors, k_uptime_get(),
+			      etc_get_threshold_report_interval_secs(), &res);
 
 	if (res.crossed != 0) {
 		data_codec_note_threshold_trigger(res.crossed);

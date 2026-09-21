@@ -22,4 +22,3 @@ target_include_directories(app PRIVATE
         ${APP_SRC_DIR}/exact/etc_util
 )
 
-zephyr_compile_definitions(CONFIG_ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S=900)

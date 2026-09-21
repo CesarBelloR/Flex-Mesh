@@ -17,15 +17,14 @@
 extern "C" {
 #endif
 
-/** @brief Minimum spacing between threshold-triggered uploads, all slots combined. */
-#define THRESHOLD_MIN_REPORT_INTERVAL_MS                                                           \
-	((int64_t)CONFIG_ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S * MSEC_PER_SEC)
+/** @brief @ref threshold_eval.last_report_ms while no upload has been requested. */
+#define THRESHOLD_NO_REPORT_YET INT64_MIN
 
 /** @brief Edge-triggered evaluation state of the immediate report thresholds. */
 struct threshold_eval {
 	/** Per slot: ports (bit = @ref enum sensor_input) currently beyond the threshold. */
 	uint16_t beyond[ETC_THRESHOLD_SLOT_COUNT];
-	/** Uptime of the last upload request. */
+	/** Uptime of the last upload request, @ref THRESHOLD_NO_REPORT_YET until the first. */
 	int64_t last_report_ms;
 };
 
@@ -38,7 +37,7 @@ struct threshold_eval_result {
 };
 
 /**
- * @brief Reset the evaluation state; every slot starts unarmed, rate limit open.
+ * @brief Reset the evaluation state; every slot starts unarmed, hold-off open.
  *
  * @param state State to reset.
  */
@@ -56,12 +55,14 @@ void threshold_eval_init(struct threshold_eval *state);
  * @param changed Slots (bit = slot index) reconfigured since the last sample.
  * @param data Sample to evaluate.
  * @param now_ms Uptime of the sample, used for the rate limit.
+ * @param interval_s Hold-off between upload requests, all slots combined. Read
+ * per sample, so a change takes effect on the next one.
  * @param out Crossed slots and whether an immediate upload may be requested.
  */
 void threshold_eval_update(struct threshold_eval *state,
 			   const struct etc_threshold cfg[ETC_THRESHOLD_SLOT_COUNT],
 			   uint8_t changed, const struct sensor_data *data, int64_t now_ms,
-			   struct threshold_eval_result *out);
+			   uint32_t interval_s, struct threshold_eval_result *out);
 
 #ifdef __cplusplus
 }

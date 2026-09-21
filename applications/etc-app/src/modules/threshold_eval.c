@@ -45,13 +45,13 @@ static bool reading_is_beyond(const struct etc_threshold *cfg, float reading)
 void threshold_eval_init(struct threshold_eval *state)
 {
 	memset(state, 0, sizeof(*state));
-	state->last_report_ms = -THRESHOLD_MIN_REPORT_INTERVAL_MS;
+	state->last_report_ms = THRESHOLD_NO_REPORT_YET;
 }
 
 void threshold_eval_update(struct threshold_eval *state,
 			   const struct etc_threshold cfg[ETC_THRESHOLD_SLOT_COUNT],
 			   uint8_t changed, const struct sensor_data *data, int64_t now_ms,
-			   struct threshold_eval_result *out)
+			   uint32_t interval_s, struct threshold_eval_result *out)
 {
 	out->crossed = 0;
 	out->request_upload = false;
@@ -96,7 +96,9 @@ void threshold_eval_update(struct threshold_eval *state,
 		return;
 	}
 
-	if ((now_ms - state->last_report_ms) < THRESHOLD_MIN_REPORT_INTERVAL_MS) {
+	/* The sentinel is never subtracted from, so no interval can underflow. */
+	if (state->last_report_ms != THRESHOLD_NO_REPORT_YET &&
+	    (now_ms - state->last_report_ms) < (int64_t)interval_s * MSEC_PER_SEC) {
 		return;
 	}
 
