@@ -51,6 +51,12 @@ BUILD_ASSERT(ETC_THRESHOLD_ALERT_DROPS_BELOW == ETC_THRESHOLD_OBJ_R_ALERT_TYPE_M
 BUILD_ASSERT(ETC_THRESHOLD_VALUE_TYPE_TEMPERATURE == ETC_THRESHOLD_OBJ_R_VALUE_TYPE_MIN_VAL,
 	     "48944/*/2 range must match enum etc_threshold_value_type");
 
+BUILD_ASSERT(ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL_MIN_VAL ==
+			     ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN &&
+		     ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL_MAX_VAL ==
+			     ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MAX,
+	     "48931/0/16 range must match the stored threshold report interval range");
+
 /* Some resources does not have designated buffers. Therefore we define those in here. */
 static uint8_t bearers[2] = { LTE_FDD_BEARER, NB_IOT_BEARER };
 static int battery_voltage;
@@ -186,6 +192,11 @@ static int lwm2m_codec_helpers_validate_config_cb(uint16_t obj_inst_id, uint16_t
 	case ETC_CFG_OBJ_R_RX_TIMEOUT:
 		rc = util_validate_u8(*(uint8_t *)data, ETC_CFG_OBJ_R_RX_TIMEOUT_MIN_VAL,
 				       ETC_CFG_OBJ_R_RX_TIMEOUT_MAX_VAL);
+		break;
+	case ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL:
+		rc = util_validate_u32(*(uint32_t *)data,
+				       ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL_MIN_VAL,
+				       ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL_MAX_VAL);
 		break;
 	}
 	return rc;
@@ -422,6 +433,19 @@ int lwm2m_codec_helpers_set_callback_for_config_object(lwm2m_engine_set_data_cb_
 		return err;
 	}
 
+	err = lwm2m_register_post_write_callback(
+		&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL),
+		callback);
+	if (err) {
+		return err;
+	}
+	err = lwm2m_register_validate_callback(
+		&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL),
+		lwm2m_codec_helpers_validate_config_cb);
+	if (err) {
+		return err;
+	}
+
 	return 0;
 }
 
@@ -587,7 +611,14 @@ int lwm2m_codec_helpers_setup_configuration_object(struct etc_config *cfg,
 	if (err) {
 		return err;
 	}
-	
+
+	err = lwm2m_set_u32(
+		&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL),
+		cfg->threshold_report_interval_secs);
+	if (err) {
+		return err;
+	}
+
 	if (callback) {
 		err = lwm2m_codec_helpers_set_callback_for_config_object(callback);
 		if (err) {
@@ -691,6 +722,13 @@ int lwm2m_codec_helpers_get_configuration_object(struct etc_config *cfg)
 
 	err = lwm2m_get_u8(&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_RX_TIMEOUT),
 			   &cfg->rx_timeout_secs);
+	if (err) {
+		return err;
+	}
+
+	err = lwm2m_get_u32(
+		&LWM2M_OBJ(ETC_CFG_OBJECT_ID, 0, ETC_CFG_OBJ_R_THRESHOLD_REPORT_INTERVAL),
+		&cfg->threshold_report_interval_secs);
 	if (err) {
 		return err;
 	}

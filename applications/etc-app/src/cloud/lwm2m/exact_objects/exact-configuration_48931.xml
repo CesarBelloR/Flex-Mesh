@@ -4,9 +4,9 @@
 		<Name>EXACT Configuration</Name>
 		<Description1 />
 		<ObjectID>48931</ObjectID>
-		<ObjectURN>urn:oma:lwm2m:x:48931:1.3</ObjectURN>
+		<ObjectURN>urn:oma:lwm2m:x:48931:1.4</ObjectURN>
 		<LWM2MVersion>1.1</LWM2MVersion>
-		<ObjectVersion>1.3</ObjectVersion>
+		<ObjectVersion>1.4</ObjectVersion>
 		<MultipleInstances>Single</MultipleInstances>
 		<Mandatory>Optional</Mandatory>
 		<Resources>
@@ -173,6 +173,17 @@ How long Relay stays in RX mode.  Only valid for DEVICE_MODE = 0.]]></Descriptio
 				<RangeEnumeration>5..60</RangeEnumeration>
 				<Units>s</Units>
 				<Description><![CDATA[Extend timeout for RX in Flex Relay]]></Description>
+			</Item>
+			<Item ID="16">
+				<Name>THRESHOLD_REPORT_INTERVAL</Name>
+				<Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Optional</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration>60..86400</RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Default value: 900
+Minimum spacing between immediate reports triggered by the EXACT Threshold object (48944), all slots combined. A threshold crossing within this many seconds of the last threshold-triggered upload is still flagged and counted, but does not transmit ahead of schedule.]]></Description>
 			</Item>
 		</Resources>
 		<Description2 />
