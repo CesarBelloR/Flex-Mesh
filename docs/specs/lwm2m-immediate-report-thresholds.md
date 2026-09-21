@@ -178,8 +178,11 @@ alert flag of the threshold(s) that breached.
 - **LTE mode**: the device connects (or uses its active session) and performs a
   regular upload via LwM2M Send. The Send additionally includes the `Alert`
   resource (RID 5) of the triggering slot(s), so Portal is told which threshold
-  breached. The flag is cleared once the Send is confirmed; slots that did not
-  trigger are not included.
+  breached, and the EXACT Info `Priority` flag (48933/0/7), so Portal processes
+  the report on arrival instead of with the periodic batch — the same treatment
+  a magnet-swipe reading gets. Both flags are cleared once the Send is
+  confirmed; slots that did not trigger are not included. A report that is
+  re-sent after a failed attempt carries both again.
 - **LoRa mode**: the device schedules an immediate LoRa transmission of the
   current sample using the normal packet format (v1 ASCII today, CBOR after
   Flex 2.0). The relay forwards it like any other packet. **Open item:** the v1
