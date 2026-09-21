@@ -57,9 +57,11 @@ R_THRESHOLD_VALUE = "Threshold Value"
 R_ALERT = "Alert"
 R_TRIGGER_COUNT = "Trigger Count"
 
-# Spec section 4: value type 1 is temperature in degrees Celsius; alert type 0
-# is Exceeds (the reading rises above the value), 1 is Drops Below.
+# Spec section 4: value type 1 is temperature in degrees Celsius, 2 relative
+# humidity in percent; alert type 0 is Exceeds (the reading rises above the
+# value), 1 is Drops Below.
 VALUE_TYPE_TEMPERATURE = "1"
+VALUE_TYPE_HUMIDITY = "2"
 ALERT_TYPE_EXCEEDS = "0"
 ALERT_TYPE_DROPS_BELOW = "1"
 

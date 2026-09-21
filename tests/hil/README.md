@@ -73,7 +73,7 @@ pytest tests/hil/soak_reclaim_reliability.py -v -s --port /dev/ttyACM0 --soak-ho
 | `test_rh_probe.py` | FW-1195: operator-attended check that an RH probe is read on port 1, after a same-port reconnect, on port 2, and again on port 1 after a cold boot; the last test cross-checks 48936/0 on Coiote when creds are given. Needs `overlay-hil.conf` (uses `magnet sample`) and one RH probe; run the file in order and follow the wiring prompts |
 | `test_ble_ccc_reclaim.py` | FW-1200: one BLE session that unsubscribes the SENSOR characteristic (only sensor notifications may stop), runs a reclaim to completion on CONFIG while live readings are triggered, and checks every notified frame reassembles without interleaving. Finds the DUT by its advertisement layout (BlueZ drops the scan response carrying the name), forgets stale host bonds, and needs `overlay-hil.conf`, BlueZ + `bleak` + `dbus-fast`; allow ~6 min because the request first walks the whole record store |
 | `test_threshold_coiote.py` | FW-1178: cloud checks for the EXACT Threshold object (48944): writing a slot's four configuration resources (Value Type / Alert Type / Threshold Value / Enabled) reads back unchanged for an integral, a fractional and a float32-rounded Threshold Value, RIDs 1-4 survive a cold reboot while Alert (RID 5) and Trigger Count (RID 7) reset at boot, and an out-of-range Value Type / Alert Type write is rejected and leaves the stored configuration untouched. Needs Coiote creds and the 48944 DDF uploaded to the tenant; queue-mode latency means ~20 min for the file |
-| `test_threshold_trigger_coiote.py` | FW-1179: cloud checks that a reading crossing an immediate report threshold transmits ahead of schedule: an Exceeds slot armed below the live port readings triggers on the next `magnet sample`, dispatches an upload and reaches Coiote with `/48944/0/5` true while a device Read shows it cleared and the slot counted; a reading that stays beyond does not re-trigger; rewriting the Threshold Value re-arms the slot, with the 900 s rate limit deciding whether that crossing transmits; a slot above every reading stays silent; a crossing found on an unscheduled RTC log wake defers its dispatch by the per-device transmit delay; and (FW-1225) a 60 s hold-off written to `/48931/0/16` lets two crossings that the 900 s default would have collapsed into one both request an upload. Needs `overlay-hil.conf` (uses `magnet sample` / `magnet status`), Coiote creds and the 48944 DDF; the tests share one armed slot, so run the file in order — budget ~85 min |
+| `test_threshold_trigger_coiote.py` | FW-1179: cloud checks that a reading crossing an immediate report threshold transmits ahead of schedule. Two slots are held at fixed values (Exceeds 25 °C, Drops Below 40 %RH) and the readings are driven across them with `sensor_sim` (FW-1234), so no probe is needed: a baseline reading stays quiet; a 30 °C reading crosses, dispatches an upload and reaches Coiote with `/48944/0/5` and `/48933/0/7` true while a device Read shows the alert cleared; a second crossing inside the 60 s hold-off (FW-1225, `/48931/0/16`) is flagged only and rides the next ordinary report; one past it transmits again; humidity falling to 30 %RH crosses the Drops Below slot; a reading that stays beyond does not fire again and rewriting the Threshold Value re-arms it; an unplugged probe (`nc`) re-arms the port without the reading returning below the threshold; a crossing on an RTC log wake defers its dispatch by the per-device transmit delay; and no later report carries Priority again. Needs `overlay-hil.conf`, Coiote creds and the 48944 DDF; run the file in order — budget ~25 min |
 | `acquisition.py` | Shared helpers for the splitter and RH-probe suites: triggers one acquisition with `magnet sample` (anchored on the command echo) and parses the `detect: splitter`, `detect: parts`, `ADC[n]` and `digital: humid` log lines |
 
 ## Cloud E2E test (Coiote)
@@ -136,11 +136,11 @@ the way out (best effort).
 ## Threshold trigger test (Coiote)
 
 `test_threshold_trigger_coiote.py` (FW-1179) is the trigger half of the same
-object: it configures a slot relative to the **live** port-1 reading (five
-degrees below it), so no thermal stimulus, water bath or freezer is needed, and
-then checks what the device does with the crossing. It needs the device
-**LTE/cloud-connected**, Coiote credentials, `--port`, and a temperature probe
-on port 1.
+object. It keeps two slots at fixed values — slot 0 Exceeds 25.0 °C on
+temperature, slot 1 Drops Below 40.0 %RH on humidity — and drives the
+**readings** across them with `sensor_sim` (FW-1234), so no probe, thermal
+stimulus or water bath is needed. It needs the device **LTE/cloud-connected**,
+Coiote credentials and `--port`.
 
 ```bash
 pytest tests/hil/test_threshold_trigger_coiote.py -v -s \
@@ -148,25 +148,39 @@ pytest tests/hil/test_threshold_trigger_coiote.py -v -s \
   --coiote-config /path/to/etc-tools/coiote_api/config.json
 ```
 
-**The order of the tests is load-bearing**: test 1 arms slot 0 and is the only
-one that lets it trigger, test 2 asserts it stays quiet while the reading stays
-beyond it, test 3 re-arms the same slot by rewriting its value and checks the
-crossing against the 900 s rate-limit window, test 4 adds a second slot on top
-of the first, and test 5 re-arms slot 0 once more — after waiting out the rate
-limit — to reach the deferred-dispatch path. Test 6 (FW-1225) arms its own slot
-and restores the default hold-off, so it is the one test besides test 1 that can
-be run on its own. The DUT is never rebooted (FW-1221,
-and the trigger state is RAM-only), and slots 0 and 1 are disabled again on the
-way out — by a fixture after the last test, or as a queued Coiote task if the
-run stops early.
-
-Test 5 is the only one that shortens the log interval (to its 60 s minimum,
-restored afterwards) and then stops nudging: every other test drives its Coiote
-task with `app_module trigger_tx`, which arms an upload of its own, so their
-crossings dispatch immediately instead of waiting out the transmit delay.
+**The order of the tests is load-bearing**: the first arms both slots and leaves
+them enabled for the rest, and the last compares the Priority flag against the
+one the Exceeds test recorded. The hold-off is shortened to 60 s from Coiote
+(FW-1225, `EXACT Configuration.0.THRESHOLD_REPORT_INTERVAL`, i.e. `/48931/0/16`) for
+the whole file and restored to 900 s on the way
+out, along with disabling both slots — by a fixture after the last test, or as a
+queued Coiote task if the run stops early. The DUT is never rebooted (FW-1221,
+and the trigger state is RAM-only). Budget ~25 min.
 
 Three device log lines carry the assertions, so build **without** `rtt.conf` and
-with debug logs on: `Channel <n> temp <c>` (the reading the evaluation sees),
-`Threshold crossed: slots 0x<mask> upload <0|1>`, and
+with debug logs on: `Sensor sim active mask 0x<mask>` (the injected readings
+reached the sample), `Threshold crossed: slots 0x<mask> upload <0|1>`, and
 `Threshold upload deferred by <n> ms`.
 
+### `sensor_sim`: driving readings from the shell
+
+`CONFIG_ETC_SENSOR_SIM_SHELL` (on in `overlay-hil.conf`, off everywhere else)
+adds a `sensor_sim` command group. A simulated value replaces the physical one
+in the sample after the probes are read and before the sensor event is
+submitted, so flash records, threshold evaluation, LwM2M, LoRa, BLE and the
+functional test all treat it as a real reading.
+
+| Command | Effect |
+| --- | --- |
+| `sensor_sim set <in1..in8\|ambient\|humid> <milli-units>` | Drive one input. Integer milli-degrees C or milli-%RH, e.g. `sensor_sim set in1 30000` for 30.0 °C |
+| `sensor_sim set <input> nc` | Drive one input to its "no probe" sentinel, so the reading is invalid |
+| `sensor_sim clear [input]` | Stop simulating one input, or all of them with no argument |
+| `sensor_sim status` | The active mask and one line per simulated input, in milli-units |
+
+Setting a value does not take a sample: the next `magnet sample` or scheduled
+acquisition picks it up. The state is RAM only and never written to NVS, so a
+reboot clears it.
+
+The probe-connected LED state is derived inside `etc_sensor_run_acquisition()`,
+upstream of the substitution, so a port with no probe still shows as
+disconnected on the UI even while it reports a simulated reading.
