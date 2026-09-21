@@ -525,15 +525,6 @@ static int data_encode_for_logger() {
 		if (ret != 0) {
 			LOG_WRN("Error populating data codec");
 		} else {
-			if (priority_reading_pending) {
-				/* Flag this reading as priority so the Portal processes
-				 * it immediately. One-shot: consume so only one record
-				 * is flagged.
-				 */
-				data_codec_add_priority(&codec);
-				priority_reading_pending = false;
-			}
-
 			/* Records are served newest first, so this send carries the
 			 * breaching sample.
 			 */
@@ -542,6 +533,17 @@ static int data_encode_for_logger() {
 			if (alerts != 0 && data_codec_add_threshold_alerts(&codec, alerts) != 0) {
 				/* Back to pending so the next send carries them. */
 				threshold_alert_send_failed(&threshold_alerts);
+				alerts = 0;
+			}
+
+			/* Priority makes the Portal process the reading immediately.
+			 * One-shot for the magnet / first reading; derived from the
+			 * alert mask for a threshold report, so a re-sent alert is
+			 * flagged again after the ack cleared the resource.
+			 */
+			if ((priority_reading_pending || alerts != 0) &&
+			    data_codec_add_priority(&codec) == 0) {
+				priority_reading_pending = false;
 			}
 		}
 	}

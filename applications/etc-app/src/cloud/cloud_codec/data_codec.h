@@ -202,7 +202,8 @@ int data_codec_prepare_next_tx_transmit_info(struct cloud_codec_data *cloud_data
  * Sets the EXACT Info object Priority resource (48933/0/7) to true and adds it
  * to the send so the Portal processes the reading immediately instead of waiting
  * for the periodic batch. Only called for priority readings (magnet swipe, first
- * reading after boot); the resource is omitted for normal readings.
+ * reading after boot, threshold-triggered report); the resource is omitted for
+ * normal readings.
  *
  * @param cloud_data Pointer to the cloud_data struct.
  * @return 0 on success, negative error code otherwise.
