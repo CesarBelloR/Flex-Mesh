@@ -380,4 +380,68 @@ ZTEST(etc_settings_test, test_threshold_stored_value_type_out_of_range)
 	assert_threshold_is_default(&out, 1);
 }
 
+/* FW-1225: the threshold hold-off is a stored setting the evaluator reads per
+ * sample, so an out-of-range write must leave the running value alone.
+ */
+ZTEST(etc_settings_test, test_threshold_report_interval_default)
+{
+	etc_device_delete_setting(ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_ID);
+	etc_settings_init();
+
+	zassert_equal(etc_get_threshold_report_interval_secs(),
+		      ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_DEFAULT,
+		      "A device without a stored hold-off should use the default");
+}
+
+ZTEST(etc_settings_test, test_threshold_report_interval_range)
+{
+	const uint32_t accepted = ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN;
+
+	zassert_ok(etc_set_threshold_report_interval_secs(accepted), "Set the minimum");
+	zassert_ok(etc_set_threshold_report_interval_secs(
+			   ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MAX),
+		   "Set the maximum");
+
+	zassert_ok(etc_set_threshold_report_interval_secs(accepted), "Set the minimum again");
+	zassert_equal(etc_set_threshold_report_interval_secs(
+			      ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN - 1),
+		      -EINVAL, "Below the minimum should be rejected");
+	zassert_equal(etc_set_threshold_report_interval_secs(
+			      ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MAX + 1),
+		      -EINVAL, "Above the maximum should be rejected");
+	zassert_equal(etc_set_threshold_report_interval_secs(0), -EINVAL,
+		      "Zero should be rejected");
+	zassert_equal(etc_get_threshold_report_interval_secs(), accepted,
+		      "A rejected write must leave the stored hold-off alone");
+}
+
+ZTEST(etc_settings_test, test_threshold_report_interval_persistence)
+{
+	const uint32_t stored = 1234;
+
+	zassert_ok(etc_set_threshold_report_interval_secs(stored), "Set the hold-off");
+
+	/* Reload as after a reboot */
+	etc_settings_init();
+
+	zassert_equal(etc_get_threshold_report_interval_secs(), stored,
+		      "The hold-off should survive a reload");
+}
+
+/* A record written by an older or corrupted image must not reach the evaluator. */
+ZTEST(etc_settings_test, test_threshold_report_interval_stored_out_of_range)
+{
+	const uint32_t bad = ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MAX + 1;
+
+	zassert_ok(etc_device_write_setting(ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_ID, &bad,
+					    sizeof(bad)),
+		   "Write raw record");
+
+	etc_settings_init();
+
+	zassert_equal(etc_get_threshold_report_interval_secs(),
+		      ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_DEFAULT,
+		      "An out-of-range stored hold-off should fall back to the default");
+}
+
 ZTEST_SUITE(etc_settings_test, NULL, test_setup, NULL, NULL, test_teardown);

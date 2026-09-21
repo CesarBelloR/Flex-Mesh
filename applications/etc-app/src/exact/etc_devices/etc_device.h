@@ -129,6 +129,7 @@ enum etc_setting_id {
 	ETC_SETTING_THRESHOLD_1_ID,
 	ETC_SETTING_THRESHOLD_2_ID,
 	ETC_SETTING_THRESHOLD_3_ID,
+	ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_ID,
 	ETC_FUNCTIONAL_TEST_RSRP_ID = 0xE00,
 	ETC_CALIBRATION_OFFSET_ID = 0xFF0,
 	ETC_CALIBRATION_RAWHIGH_ID,
@@ -154,6 +155,8 @@ struct etc_config {
 	uint32_t tx_interval_alarm_secs;
 	uint32_t tx_probe_secs;
 	uint32_t gnss_interval_secs;
+	/* Hold-off between threshold-triggered uploads, all slots combined */
+	uint32_t threshold_report_interval_secs;
 	uint16_t wake_early_secs;
 	uint16_t tx_delay_msec;
 	uint16_t rx_duration_secs;

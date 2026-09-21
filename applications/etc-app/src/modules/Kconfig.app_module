@@ -21,7 +21,8 @@ config ETC_APP_LTE_SYNC_BACKOFF_MAX_S
 	  from the floor but never exceeds this (default once per day).
 
 config ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S
-	int "Minimum spacing between threshold-triggered uploads, in seconds"
+	int "Default spacing between threshold-triggered uploads, in seconds"
+	range 60 86400
 	default 900
 	help
 	  FW-1179. All immediate report threshold slots share this hold-off: a
@@ -30,3 +31,6 @@ config ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S
 	  and airtime cost when a reading oscillates around a threshold. The window
 	  starts when an upload is requested, so a request later dropped by the
 	  functional test or a shutdown still consumes it.
+
+	  Default only: the live hold-off is the stored setting the server writes
+	  through EXACT Configuration (48931) resource 16.

@@ -36,6 +36,11 @@ enum etc_serial_number_types {
 #define ETC_SETTING_THRESHOLD_VALUE_TYPE_MIN	 1
 #define ETC_SETTING_THRESHOLD_VALUE_TYPE_MAX	 12
 
+#define ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_DEFAULT                                         \
+	CONFIG_ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S
+#define ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN 60
+#define ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MAX 86400
+
 #define ETC_SETTING_POWER_MODE_MIN		ETC_POWER_MODE_ALWAYS_ON
 #define ETC_SETTING_LOG_INTERVAL_SECS_MAX	86400
 #define ETC_SETTING_LOG_INTERVAL_ALARM_SECS_MAX 86400
@@ -157,6 +162,18 @@ int etc_set_gnss_timeout_secs(uint16_t timeout_secs);
 int etc_set_rx_timeout_secs(uint8_t timeout_secs);
 
 /**
+ * Set the hold-off between threshold-triggered uploads and save it to
+ * non-volatile memory. It takes effect on the next sample.
+ *
+ * @param second Hold-off in seconds,
+ * ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN..MAX.
+ *
+ * @retval 0 success
+ * @retval <0 error
+ */
+int etc_set_threshold_report_interval_secs(uint32_t second);
+
+/**
  * Set the Rr value for temperature compensation
  *
  * @param value: the input Rr that will store to @ref ETC_ADC_TEMPERATURE_REFERENCE 
@@ -257,6 +274,15 @@ uint16_t etc_get_gnss_timeout_secs(void);
  * @return Current rx timoeut in seconds.
 */
 uint8_t etc_get_rx_timeout_secs(void);
+
+/**
+ * Get the hold-off between threshold-triggered uploads.
+ *
+ * Unlocked: it is read on the per-sample path.
+ *
+ * @return Current hold-off in seconds.
+ */
+uint32_t etc_get_threshold_report_interval_secs(void);
 
 /**
  * Get the Rr value for temperature compensation

@@ -49,6 +49,12 @@ struct etc_threshold_nvs {
 	float value;
 } __packed;
 
+BUILD_ASSERT(ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_DEFAULT >=
+			     ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN &&
+		     ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_DEFAULT <=
+			     ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MAX,
+	     "The threshold report interval default must be one the setter accepts");
+
 static struct etc_threshold etc_thresholds[ETC_THRESHOLD_SLOT_COUNT];
 /* Slots (bit = slot index) changed since the last etc_take_thresholds() */
 static uint8_t etc_thresholds_changed;
@@ -478,6 +484,16 @@ int etc_settings_init(void)
 		etc_set_rx_timeout_secs(ETC_SETTING_RX_TIMEOUT_SECS_DEFAULT);
 	}
 
+	ret = etc_device_read_setting(ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_ID,
+				      &etc_cfg.threshold_report_interval_secs,
+				      sizeof(etc_cfg.threshold_report_interval_secs));
+	if (ret || util_validate_u32(etc_cfg.threshold_report_interval_secs,
+				     ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN,
+				     ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MAX) != 0) {
+		etc_set_threshold_report_interval_secs(
+			ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_DEFAULT);
+	}
+
 	k_mutex_lock(&setting_mutex, K_FOREVER);
 	for (uint8_t slot = 0; slot < ETC_THRESHOLD_SLOT_COUNT; slot++) {
 		etc_threshold_load(slot);
@@ -560,6 +576,10 @@ void etc_settings_update(const struct etc_config *new_config)
 	}
 	if (etc_cfg.rx_timeout_secs != new_config->rx_timeout_secs) {
 		rc = etc_set_rx_timeout_secs(new_config->rx_timeout_secs);
+	}
+	if (etc_cfg.threshold_report_interval_secs != new_config->threshold_report_interval_secs) {
+		rc = etc_set_threshold_report_interval_secs(
+			new_config->threshold_report_interval_secs);
 	}
 done:
 	if (rc == 1) {
@@ -963,6 +983,30 @@ int etc_set_tx_delay_msec(uint16_t msecond)
 	return rc;
 }
 
+int etc_set_threshold_report_interval_secs(uint32_t second)
+{
+	int rc = util_validate_u32(second, ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN,
+				   ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MAX);
+
+	if (rc != 0) {
+		return rc;
+	}
+	k_mutex_lock(&setting_mutex, K_FOREVER);
+	if (etc_cfg.threshold_report_interval_secs == second) {
+		k_mutex_unlock(&setting_mutex);
+		return 0;
+	}
+	etc_cfg.threshold_report_interval_secs = second;
+	rc = etc_device_write_setting(ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_ID,
+				      &etc_cfg.threshold_report_interval_secs,
+				      sizeof(etc_cfg.threshold_report_interval_secs));
+	if (rc == 0) {
+		LOG_DBG("set %u", second);
+	}
+	k_mutex_unlock(&setting_mutex);
+	return rc;
+}
+
 int etc_set_rx_duration_secs(uint16_t second)
 {
 	if ((second > ETC_SETTING_RX_DURATION_SECS_MAX) ||
@@ -1294,6 +1338,12 @@ uint16_t etc_get_tx_delay_msec(void)
 	msecond = etc_cfg.tx_delay_msec;
 	k_mutex_unlock(&setting_mutex);
 	return msecond;
+}
+
+uint32_t etc_get_threshold_report_interval_secs(void)
+{
+	/* Read on the per-sample path; an aligned 32-bit load needs no lock. */
+	return etc_cfg.threshold_report_interval_secs;
 }
 
 uint16_t etc_get_rx_duration_secs(void)
