@@ -21,11 +21,14 @@ Covered here:
   * a reading that stays beyond does not trigger again (edge-triggered, section
     5 "Re-arming"),
   * rewriting the Threshold Value re-arms the slot, and the rate limit
-    (``CONFIG_ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S``, 900 s) decides whether
-    that second crossing transmits or is only flagged,
+    (``/48931/0/16``, 900 s by default) decides whether that second crossing
+    transmits or is only flagged,
   * a slot configured above every reading stays silent,
   * a crossing found on an unscheduled RTC log wake defers its dispatch by the
-    per-device transmit delay (test 5, the only one that reaches that path).
+    per-device transmit delay (test 5, the only one that reaches that path),
+  * a hold-off shortened from Coiote (FW-1225) lets two crossings that the 900 s
+    default would have collapsed into one both request an upload (test 6, which
+    arms its own slot and does not depend on the tests above).
 
 **The order of the tests in this file is load-bearing.** Test 1 arms slot 0 and
 is the only one that lets it trigger; test 2 asserts the slot stays quiet while
@@ -33,7 +36,7 @@ the reading stays beyond it; test 3 re-arms that same slot by rewriting its
 value and compares its upload flag against the time test 1 triggered; test 4
 adds a second slot on top of the still-enabled first one; test 5 re-arms slot 0
 once more and waits out the rate limit first. Running a test on its own is fine
-only for test 1.
+only for tests 1 and 6.
 
 The device is never rebooted: FW-1221 makes a cold boot fail an assert in the
 app module, and the trigger state this file exercises is RAM-only anyway, so a
@@ -43,7 +46,8 @@ Timing. The DUT is a queue-mode (PSM/eDRX) cellular device, so every configure
 and read task is delivered on a registration update; each is nudged along with
 ``app_module trigger_tx`` and can still take minutes. The immediate upload
 itself adds an LTE bring-up, and test 5 may sit out most of the 900 s rate-limit
-window before it arms. Budget ~70 min for the file.
+window before it arms. Test 6 adds two more configure tasks and a 90 s wait.
+Budget ~85 min for the file.
 
 Requirements:
   * the board flashed (HIL debug build, no rtt.conf) and **LTE/cloud connected**
@@ -101,9 +105,10 @@ BELOW_MARGIN_REARM_C = 6.0
 BELOW_MARGIN_LOG_WAKE_C = 7.0
 ABOVE_MARGIN_C = 10.0
 
-# Mirrors CONFIG_ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S (900 s). A crossing
-# inside this window of the previous threshold upload is flagged but does not
-# transmit ahead of schedule.
+# The device's default hold-off (CONFIG_ETC_APP_THRESHOLD_MIN_REPORT_INTERVAL_S,
+# 900 s), which tests 1-5 assume is in force. A crossing inside this window of
+# the previous threshold upload is flagged but does not transmit ahead of
+# schedule. Test 6 writes a shorter one and restores this value.
 RATE_LIMIT_S = 900
 # Elapsed times this close to the rate limit are ambiguous (the device measures
 # it from its own uptime at the sample, the test from the host clock at the log
@@ -702,3 +707,107 @@ def test_threshold_log_wake_defers_dispatch(coiote, dut, request):
     print(f"  [dut] status after the deferred dispatch: {status}")
     assert status["subjob"] == "normal", (
         f"A threshold upload transmits as a plain report: {status}")
+
+
+# --------------------------------------------------------------------------- #
+# 6 - a shortened hold-off lets two crossings inside the default window upload
+# --------------------------------------------------------------------------- #
+
+# FW-1225: the hold-off is a configuration resource of EXACT Configuration
+# (48931), written by raw LwM2M path because the resource is newer than the DDF
+# most tenants hold. Switch to the data-model key once the DDF is uploaded.
+THRESHOLD_REPORT_INTERVAL_PATH = "/48931/0/16"
+# What this test writes; the settings layer's floor
+# (ETC_SETTING_THRESHOLD_REPORT_INTERVAL_SECS_MIN).
+SHORT_INTERVAL_S = 60
+# Margin on top of the short hold-off before the second crossing is armed, so a
+# few seconds of clock skew between the device's uptime and the host cannot
+# leave the crossing inside the window.
+SHORT_INTERVAL_GUARD_S = 30
+# Still below every port, and distinct from the earlier tests' offsets so the
+# rewrite is always a real change.
+BELOW_MARGIN_SHORT_ARM_C = 8.0
+BELOW_MARGIN_SHORT_REARM_C = 9.0
+
+
+def _write_report_interval(coiote, dut, device, seconds, op_timeout):
+    """Write the threshold hold-off and assert the task landed."""
+    task_id = coiote.configure_task(
+        device,
+        [{"write": {"key": THRESHOLD_REPORT_INTERVAL_PATH, "value": str(seconds)}}],
+        name="hil-threshold-report-interval")
+    report = _drive_task(coiote, dut, device, task_id, op_timeout)
+    status = report.get("status")
+    print(f"  [coiote] {THRESHOLD_REPORT_INTERVAL_PATH} = {seconds} -> "
+          f"status={status!r}")
+    assert status in ("Success", "Warning"), (
+        f"Writing a {seconds}s threshold report interval ended in {status!r}. "
+        f"Report: {report}")
+
+
+def test_threshold_report_interval_shortens_the_hold_off(coiote, dut, request):
+    """A 60 s hold-off written from Coiote lets two crossings that the 900 s
+    default would have collapsed into one both request an upload.
+
+    Self-contained: it arms slot 0 from scratch rather than inheriting the state
+    of the tests above, and restores the default hold-off however it ends. The
+    device is not rebooted, so its first crossing may still be inside a hold-off
+    an earlier run started; that one only anchors the wait. The proof is the
+    second crossing, which falls inside the 900 s default window where the
+    firmware before FW-1225 could only have flagged it.
+    """
+    device = request.config.getoption("--coiote-device")
+    op_timeout = request.config.getoption("--coiote-op-timeout")
+    _require_online(coiote, device)
+
+    _write_report_interval(coiote, dut, device, SHORT_INTERVAL_S, op_timeout)
+    try:
+        temps = _sample_port_temps(dut)
+        coldest_c = min(temps.values())
+
+        # Arming rewrites every resource of the slot, so this crossing does not
+        # depend on what the earlier tests left behind.
+        _write_slot(coiote, dut, device, SLOT_EXCEEDS,
+                    coldest_c - BELOW_MARGIN_SHORT_ARM_C, op_timeout)
+        # Only an anchor for the wait below: the device may still be inside a
+        # hold-off left by an earlier threshold upload, which is not this test's
+        # business either way.
+        slots, _ = _await_crossing(dut)
+        first_crossing_s = time.monotonic()
+        assert slots == 1 << SLOT_EXCEEDS, (
+            f"Expected only slot {SLOT_EXCEEDS} to cross, got mask 0x{slots:02x}")
+
+        # Measured from the first crossing, which is at or after the last
+        # upload the device granted, so this covers the hold-off either way.
+        wait_s = SHORT_INTERVAL_S + SHORT_INTERVAL_GUARD_S - (
+            time.monotonic() - first_crossing_s)
+        if wait_s > 0:
+            print(f"  [test] waiting {wait_s:.0f}s for the {SHORT_INTERVAL_S}s "
+                  f"hold-off to expire")
+            time.sleep(wait_s)
+
+        # Rewriting the Threshold Value re-arms the slot without moving any
+        # reading to the other side of it.
+        rearm_c = coldest_c - BELOW_MARGIN_SHORT_REARM_C
+        _write_threshold_value(coiote, dut, device, SLOT_EXCEEDS,
+                               f"{rearm_c:.1f}", op_timeout)
+        slots, upload = _await_crossing(dut)
+        elapsed = time.monotonic() - first_crossing_s
+        assert slots == 1 << SLOT_EXCEEDS, (
+            f"Expected only slot {SLOT_EXCEEDS} to cross, got mask 0x{slots:02x}")
+        if elapsed >= RATE_LIMIT_S - RATE_LIMIT_GUARD_S:
+            pytest.skip(
+                f"The second crossing came {elapsed:.0f}s after the first, at "
+                f"or beyond the {RATE_LIMIT_S}s default hold-off, so an upload "
+                f"proves nothing about the {SHORT_INTERVAL_S}s one that was "
+                f"written")
+        assert upload == 1, (
+            f"The second crossing came {elapsed:.0f}s after the first, past the "
+            f"{SHORT_INTERVAL_S}s hold-off that was written, so it must request "
+            f"an immediate upload (upload 1)")
+    finally:
+        try:
+            _write_report_interval(coiote, dut, device, RATE_LIMIT_S, op_timeout)
+        except Exception as exc:  # never mask the failure under test
+            print(f"  [cleanup] WARNING: the hold-off is still "
+                  f"{SHORT_INTERVAL_S}s, restore it by hand: {exc}")
