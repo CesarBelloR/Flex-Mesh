@@ -3,8 +3,8 @@
 FW-1178 put the EXACT Threshold object (48944) on the device; this file covers
 what the device *does* with it: a reading beyond an enabled slot must wake the
 radio and push the current sample ahead of schedule, carrying the Alert flag of
-the slot that breached (docs/specs/lwm2m-immediate-report-thresholds.md,
-sections 5 and 6).
+the slot that breached and the EXACT Info Priority flag
+(docs/specs/lwm2m-immediate-report-thresholds.md, sections 5 and 6).
 
 No physical stimulus is needed. The threshold is placed relative to the live
 port readings — five degrees below the coldest port for the positive cases, ten
@@ -14,8 +14,10 @@ intended side of every port from the moment it arms.
 Covered here:
 
   * an Exceeds slot armed below the current reading triggers on the next sample,
-    dispatches an upload, and the Send reaches Coiote with ``/48944/0/5`` true
-    while the device's own read-back shows it cleared and the slot counted,
+    dispatches an upload, and the Send reaches Coiote with ``/48944/0/5`` and
+    ``/48933/0/7`` true while the device's own read-back shows the alert cleared
+    and the slot counted,
+  * no later report carries the Priority flag again,
   * a reading that stays beyond does not trigger again (edge-triggered, section
     5 "Re-arming"),
   * rewriting the Threshold Value re-arms the slot, and the rate limit
@@ -128,6 +130,9 @@ NO_CROSSING_WINDOW_S = 30
 DISPATCH_MARGIN_S = 45
 # LTE bring-up, Send, and Coiote ingesting it.
 UPLOAD_TIMEOUT_S = 420
+# Both flags ride the same Send, so once one is in the cached model the other is
+# too; this only absorbs the portal applying them a moment apart.
+SAME_SEND_TIMEOUT_S = 60
 
 # Per-port temperature of one acquisition, 0-based channel (channel 0 = port 1):
 #   Channel 0 temp 21.500000
@@ -155,9 +160,19 @@ REARM_WAIT_BUDGET_S = 20 * 60
 # has no constant for it; it never reads one.
 R_LAST_TRIGGERED = "Last Triggered"
 
+# EXACT Info Priority (48933/0/7): "process this report now". A threshold report
+# carries it beside the slot's Alert, so Portal handles it like a magnet-swipe
+# reading instead of holding it for the periodic batch (spec section 6).
+PRIORITY_KEY = "EXACT Info.0.Priority"
+
 # Monotonic timestamp of the first trigger, so test 3 can tell whether its own
 # crossing falls inside the rate-limit window. None until test 1 has triggered.
 _first_trigger_s = None
+# True once test 1 has seen Priority on the triggered report, and the portal
+# timestamp of that flag, so test 2 can tell a stale true apart from one a later
+# report sent. The timestamp stays None on a tenant that carries no update times.
+_priority_seen = False
+_priority_sent_at = None
 # Monotonic timestamp of the most recent crossing that was granted an upload —
 # the point the device restarts the rate-limit window from. Test 5 waits this
 # out so its own crossing is never the flagged-only kind.
@@ -329,31 +344,66 @@ def _write_slot(coiote, dut, device, slot, threshold_c, op_timeout):
         f"{status!r}. Report: {report}")
 
 
-def _await_sent_alert(coiote, device, slot, since, timeout=UPLOAD_TIMEOUT_S):
-    """Wait for the cached Alert of ``slot`` to show the report it arrived with.
+def _await_sent_flag(coiote, device, key, since, what, timeout=UPLOAD_TIMEOUT_S):
+    """Wait for a cached flag to show the report it arrived with.
 
     read_cached reflects what the device last *sent*, so a true here is proof of
     a threshold-marked upload rather than of the device's live state — the
-    device clears the flag after the ACK and only a Read shows that (spec
-    section 3). Returns the time the portal recorded for that value, or None
-    when the tenant does not carry one.
+    device clears both flags after the ACK and only a Read shows that (spec
+    sections 3 and 6). Returns the time the portal recorded for that value, or
+    None when the tenant does not carry one.
     """
     deadline = time.time() + timeout
     value, updated = None, None
     while time.time() < deadline:
         try:
-            value, updated = coiote.read_cached(device, _key(slot, R_ALERT))
+            value, updated = coiote.read_cached(device, key)
         except CoioteError:
-            # The resource is only ever sent when it is true, so it can be
-            # absent from the cached model until the first threshold upload.
+            # Both flags are only ever sent when true, so either can be absent
+            # from the cached model until the first threshold upload.
             time.sleep(10)
             continue
         if _as_bool(value) is True and (updated is None or updated >= since):
-            print(f"  [coiote] slot {slot} Alert={value!r} sent at {updated}")
+            print(f"  [coiote] {what}={value!r} sent at {updated}")
             return updated
         time.sleep(10)
-    pytest.fail(f"Slot {slot} Alert never reached Coiote as true within "
-                f"{timeout}s (last {value!r} at {updated})")
+    pytest.fail(f"{what} never reached Coiote as true within {timeout}s "
+                f"(last {value!r} at {updated})")
+
+
+def _assert_sent_after_contact(what, sent_at, before_contact):
+    """Fail when a cached true predates the upload under test."""
+    assert sent_at is None or before_contact is None or sent_at > before_contact, (
+        f"{what} was last sent at {sent_at}, not after the pre-upload contact "
+        f"at {before_contact}: the true is left over from an earlier report")
+
+
+def _assert_priority_not_resent(coiote, device):
+    """No report after the triggered one may carry the Priority flag again.
+
+    The flag belongs to the report it arrived with, so a later report either
+    carries Priority false (the whole EXACT Info object rides a non-PSM attach)
+    or omits the resource, leaving the earlier true in the cached model. Only a
+    *newer* true is a regression: an ordinary report went out flagged.
+    """
+    if not _priority_seen:
+        pytest.skip("Test 1 did not record a Priority flag; run the file in order")
+    try:
+        value, updated = coiote.read_cached(device, PRIORITY_KEY)
+    except CoioteError:
+        pytest.fail("EXACT Info Priority is absent from the cached data model; "
+                    "the threshold report of test 1 should have carried it")
+    print(f"  [coiote] EXACT Info Priority={value!r} sent at {updated}")
+    if _as_bool(value) is not True:
+        return
+    if updated is None or _priority_sent_at is None:
+        print("  [coiote] no update time to compare; the true may be the one "
+              "the threshold report sent")
+        return
+    assert updated <= _priority_sent_at, (
+        f"EXACT Info Priority is true again at {updated}, after the threshold "
+        f"report at {_priority_sent_at}: a report that no threshold triggered "
+        f"carried the Priority flag")
 
 
 def _read_status_resources(coiote, dut, device, slot, op_timeout, name):
@@ -384,8 +434,8 @@ def _is_triggered_time(value):
 
 def test_threshold_exceeds_triggers_immediate_upload(coiote, dut, request):
     """A slot armed below every port transmits the current sample ahead of
-    schedule, and the Send carries that slot's Alert flag."""
-    global _first_trigger_s, _last_upload_s
+    schedule, and the Send carries that slot's Alert flag and Priority."""
+    global _first_trigger_s, _last_upload_s, _priority_seen, _priority_sent_at
 
     device = request.config.getoption("--coiote-device")
     op_timeout = request.config.getoption("--coiote-op-timeout")
@@ -424,11 +474,18 @@ def test_threshold_exceeds_triggers_immediate_upload(coiote, dut, request):
                               timeout=_dispatch_timeout(dut))
     print(f"  [dut] status after the threshold dispatch: {status}")
 
-    sent_at = _await_sent_alert(coiote, device, SLOT_EXCEEDS, since)
-    assert sent_at is None or before_contact is None or sent_at > before_contact, (
-        f"Slot {SLOT_EXCEEDS} Alert was last sent at {sent_at}, not after the "
-        f"pre-upload contact at {before_contact}: the true is left over from an "
-        f"earlier report")
+    what = f"Slot {SLOT_EXCEEDS} Alert"
+    sent_at = _await_sent_flag(coiote, device, _key(SLOT_EXCEEDS, R_ALERT),
+                               since, what)
+    _assert_sent_after_contact(what, sent_at, before_contact)
+
+    # The same Send must carry Priority, so Portal acts on the report at once.
+    _priority_sent_at = _await_sent_flag(coiote, device, PRIORITY_KEY, since,
+                                         "EXACT Info Priority",
+                                         timeout=SAME_SEND_TIMEOUT_S)
+    _priority_seen = True
+    _assert_sent_after_contact("EXACT Info Priority", _priority_sent_at,
+                               before_contact)
 
     alert, count, last_triggered = _read_status_resources(
         coiote, dut, device, SLOT_EXCEEDS, op_timeout,
@@ -468,6 +525,10 @@ def test_threshold_does_not_retrigger_while_beyond(coiote, dut, request):
     assert alert is False, (
         f"Slot {SLOT_EXCEEDS} Alert is {alert!r}; nothing triggered, so nothing "
         f"should be awaiting delivery")
+
+    # The read task above was nudged along with `app_module trigger_tx`, so at
+    # least one ordinary report has gone out since the threshold one.
+    _assert_priority_not_resent(coiote, device)
 
 
 # --------------------------------------------------------------------------- #
