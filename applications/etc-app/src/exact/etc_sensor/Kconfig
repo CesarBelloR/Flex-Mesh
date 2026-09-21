@@ -26,6 +26,15 @@ config ETC_SENSOR_TMP1826_GPIO_RETRIES
 	help
 	  Number of retries to set GPIO for TMP1826.
 
+config ETC_SENSOR_SIM_SHELL
+	bool "Simulated sensor reading shell commands"
+	depends on SHELL
+	help
+	  Adds shell commands (sensor_sim set/clear/status) that substitute
+	  simulated readings into the sample before the sensor event is
+	  submitted, so hardware-in-the-loop tests can drive a reading without
+	  moving a physical probe. Test/diagnostic use only.
+
 config ETC_SENSOR_HW_LOCK_TIMEOUT_S
 	int "Timeout acquiring the analog front-end lock, in seconds"
 	default 15

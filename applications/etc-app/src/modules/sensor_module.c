@@ -10,6 +10,7 @@
 #include "etc_settings.h"
 #include "etc_device.h"
 #include "etc_sensor.h"
+#include "etc_sensor_sim.h"
 #include "etc_battery.h"
 #include "etc_ble.h"
 #include "watchdog_app.h"
@@ -344,6 +345,9 @@ static int sensor_poll_handler(enum sensor_sample_type sample_type)
 
 	data->sensor[SENSOR_INPUT_HUMID] = etc_sensor_get_probe_humid();
 	LOG_DBG("Humid %2.2f%% at port %d", data->sensor[SENSOR_INPUT_HUMID], etc_sensor_get_probe_humid_index());
+
+	/* Test-only override, upstream of every consumer of the sample. */
+	etc_sensor_sim_apply(data);
 	data->battery_mV = etc_battery_get_voltage_mV();
 	LOG_DBG("Battery %u mV", data->battery_mV);
 	data->battery_status = etc_battery_get_status();
