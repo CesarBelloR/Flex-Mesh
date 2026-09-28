@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.13.1)
 
-set(PROJECT_VERSION_MAJOR 2)
-set(PROJECT_VERSION_MINOR 3)
-set(PROJECT_VERSION_PATCH 0)
+set(PROJECT_VERSION_MAJOR 4)
+set(PROJECT_VERSION_MINOR 1)
+set(PROJECT_VERSION_PATCH 1)
 set(PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
 
 # set(PROJECT_VERSION_DEV 1)
-set(PROJECT_VERSION_RC 3)
+# set(PROJECT_VERSION_RC 3)
 set(PROJECT_VERSION_CARRIER "" CACHE STRING "Carrier identifier suffix (e.g. sora, teal)")
 
 if(PROJECT_VERSION_RC)
@@ -35,6 +35,23 @@ set(PM_STATIC_YML_FILE
 configure_file(app_version.h.in ${CMAKE_BINARY_DIR}/app/include/app_version.h)
 configure_file(version.h.in ${CMAKE_BINARY_DIR}/app/config/mcu_version.conf)
 list(APPEND OVERLAY_CONFIG ${CMAKE_BINARY_DIR}/app/config/mcu_version.conf)
+
+# When tools like VS Code nRF Connect pass -DCONF_FILE="prj.conf", Zephyr skips automatic
+# inclusion of board fragments in boards/ (e.g. boards/etc_flex_nrf52840.conf and revision .conf).
+# Unsetting CONF_FILE if it is just "prj.conf" allows Zephyr to discover all board/revision configs.
+if(CONF_FILE STREQUAL "prj.conf")
+  unset(CONF_FILE)
+  unset(CONF_FILE CACHE)
+endif()
+
+# Similarly, if DTC_OVERLAY_FILE is set by the IDE or user, move it to EXTRA_DTC_OVERLAY_FILE
+# so Zephyr's default board overlays in boards/ are still automatically discovered and applied.
+if(DEFINED DTC_OVERLAY_FILE)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE ${DTC_OVERLAY_FILE})
+  unset(DTC_OVERLAY_FILE)
+  unset(DTC_OVERLAY_FILE CACHE)
+endif()
+
 # Include app_version.h for app and libraries
 include_directories(app PRIVATE ${CMAKE_BINARY_DIR}/app/include)
 

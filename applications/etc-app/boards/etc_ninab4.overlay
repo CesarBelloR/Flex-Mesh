@@ -17,6 +17,7 @@
 		b-value-k = <3434>;
 		norminal-25c-ohms = <10000>;
 		reference-res-ohms = <10000>;
+		reference-voltage-mv = <3000>;
 	};
 };
 

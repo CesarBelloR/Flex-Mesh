@@ -23,6 +23,9 @@
 #if defined(CONFIG_BT)
 #include "etc_ble.h"
 #endif
+#if defined(CONFIG_LWM2M_INTEGRATION_FIRMWARE_UPDATE_OBJ_SUPPORT)
+#include "lwm2m_firmware.h"
+#endif
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_ETC_APP_LOG_LEVEL);
 
@@ -114,6 +117,22 @@ int main(void)
 				(unsigned int)img_hdr.h.v1.sem_ver.revision,
 				(unsigned int)img_hdr.h.v1.sem_ver.build_num);
 	}
+#endif
+
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+#if defined(CONFIG_LWM2M_INTEGRATION_FIRMWARE_UPDATE_OBJ_SUPPORT)
+	lwm2m_firmware_self_confirm();
+#else
+	if (!boot_is_img_confirmed()) {
+		LOG_INF("Unconfirmed image on boot; self-confirming to prevent rollback...");
+		rc = boot_write_img_confirmed();
+		if (rc) {
+			LOG_ERR("Failed to confirm image: %d", rc);
+		} else {
+			LOG_INF("Firmware image confirmed successfully");
+		}
+	}
+#endif
 #endif
 
 	etc_device_nvs_init();

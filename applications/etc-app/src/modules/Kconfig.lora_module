@@ -16,4 +16,11 @@ config ETC_LORA_MODULE_STACK_SIZE
         int "Stack size for Lora thread"
         default 4096
 
+config ETC_LORA_XMESH_PROTOCOL
+	bool "Enable EXACT LoRa Mesh v2.1 (Heltec V3) protocol"
+	default y
+	help
+	  When enabled, transmits binary DataPkt frames (matching Heltec WiFi LoRa 32 V3 mesh)
+	  using SF9 and LoRaWAN public sync word (0x34), encoding Input 1 (temp) and Input 2 (temp/rh).
+
 endif

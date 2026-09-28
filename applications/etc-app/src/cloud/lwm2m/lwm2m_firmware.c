@@ -982,6 +982,27 @@ int lwm2m_etc_init_firmware(void)
 	return 0;
 }
 
+static bool image_was_new_on_boot = false;
+
+int lwm2m_firmware_self_confirm(void)
+{
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+	if (!boot_is_img_confirmed()) {
+		LOG_INF("Unconfirmed image on boot; self-confirming to prevent rollback...");
+		int ret = boot_write_img_confirmed();
+		if (ret) {
+			LOG_ERR("Couldn't confirm this image: %d", ret);
+			return ret;
+		}
+		image_was_new_on_boot = true;
+		LOG_INF("Firmware image confirmed successfully");
+	} else {
+		LOG_INF("Firmware image already confirmed");
+	}
+#endif
+	return 0;
+}
+
 int lwm2m_init_image(void)
 {
 	int ret = 0;
@@ -989,15 +1010,18 @@ int lwm2m_init_image(void)
 	uint8_t state = get_state(application_obj_id);
 
 	image_ok = boot_is_img_confirmed();
-	LOG_INF("Image is%s confirmed OK", image_ok ? "" : " not");
-	if (!image_ok) {
-		ret = boot_write_img_confirmed();
-		if (ret) {
-			LOG_ERR("Couldn't confirm this image: %d", ret);
-			return ret;
-		}
+	LOG_INF("Image is%s confirmed OK (new on boot: %s)", image_ok ? "" : " not",
+		image_was_new_on_boot ? "yes" : "no");
+	if (!image_ok || image_was_new_on_boot) {
+		if (!image_ok) {
+			ret = boot_write_img_confirmed();
+			if (ret) {
+				LOG_ERR("Couldn't confirm this image: %d", ret);
+				return ret;
+			}
 
-		LOG_INF("Marked image as OK");
+			LOG_INF("Marked image as OK");
+		}
 		if (state == STATE_UPDATING) {
 			LOG_INF("Firmware updated successfully");
 			set_result(application_obj_id, RESULT_SUCCESS);

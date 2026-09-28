@@ -54,6 +54,11 @@ int lwm2m_etc_init_firmware(void);
 int lwm2m_init_image(void);
 
 /**
+ * @brief Self-confirm active image on boot to prevent rollback
+ */
+int lwm2m_firmware_self_confirm(void);
+
+/**
  * @brief Trigger the OTA job if any pending
  */
 void lwm2m_firmware_start_pending_job(void);

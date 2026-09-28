@@ -1,8 +1,9 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <app_event_manager.h>
 #include <zephyr/drivers/lora.h>
-#include <zephyr/kernel.h>
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/random/random.h>
 #include <string.h>
 #include "common.h"
@@ -125,6 +126,119 @@ static uint8_t lora_pkt_counter = 0;
 /* FW-965: set once the logger has logged that it entered the shorter reclaim tx
  * delay regime for the current send burst. Reset at the start of each burst. */
 static bool reclaim_tx_delay_logged;
+
+const struct device *lora_dev = DEVICE_DT_GET(DT_ALIAS(lora0));
+
+#if defined(CONFIG_ETC_LORA_XMESH_PROTOCOL)
+/* Canonical settings matching Heltec WiFi LoRa 32 V3 (xMesh v2.1):
+ * 915 MHz, BW 125 kHz, SF9, CR 4/5, sync 0x34 (public_network=true), preamble 8
+ */
+static struct lora_modem_config etc_lora_rx_config = {
+	.frequency = CONFIG_ETC_LORA_MODULE_RX_FREQUENCY,
+	.bandwidth = BW_125_KHZ,
+	.datarate = SF_9,
+	.preamble_len = 8,
+	.coding_rate = CR_4_5,
+	.tx_power = 14,
+	.tx = false,
+	.public_network = true,
+};
+static struct lora_modem_config etc_lora_tx_config = {
+	.frequency = CONFIG_ETC_LORA_MODULE_TX_FREQUENCY,
+	.bandwidth = BW_125_KHZ,
+	.datarate = SF_9,
+	.preamble_len = 8,
+	.coding_rate = CR_4_5,
+	.tx_power = 14,
+	.tx = true,
+	.public_network = true,
+};
+
+/* xMesh v2.1 Wire Protocol Definitions (matching Heltec V3 packets.h) */
+#define XMESH_PKT_DATA         0xEA
+#define XMESH_PKT_ACK          0xF3
+#define XMESH_PKT_JOIN_REQUEST 0xF0
+#define XMESH_PKT_JOIN_OFFER   0xF1
+
+#define XMESH_DATA_PKT_SIZE    18
+#define XMESH_ACK_PKT_SIZE     13
+#define XMESH_JOIN_REQ_SIZE    4
+#define XMESH_JOIN_OFFER_SIZE  10
+
+static uint16_t g_mesh_parent_id = 0; /* 0 = Orphan (no parent adopted) */
+static uint8_t  g_mesh_req_seq = 0;
+
+static uint16_t xmesh_crc16_ccitt(const uint8_t *d, size_t n)
+{
+	uint16_t c = 0xFFFF;
+	for (size_t i = 0; i < n; i++) {
+		c ^= (uint16_t)d[i] << 8;
+		for (int b = 0; b < 8; b++) {
+			c = (c & 0x8000) ? (uint16_t)((c << 1) ^ 0x1021) : (uint16_t)(c << 1);
+		}
+	}
+	return c;
+}
+
+static uint16_t xmesh_get_origin_id(void)
+{
+	uint8_t dev_id[8];
+	ssize_t len = hwinfo_get_device_id(dev_id, sizeof(dev_id));
+	if (len >= 2) {
+		return (uint16_t)dev_id[len - 2] | ((uint16_t)dev_id[len - 1] << 8);
+	}
+	return 0xF1E1;
+}
+
+static int xmesh_join_parent(uint16_t origin_id)
+{
+	uint8_t join_req[XMESH_JOIN_REQ_SIZE];
+	join_req[0] = XMESH_PKT_JOIN_REQUEST;
+	join_req[1] = (uint8_t)(origin_id & 0xFF);
+	join_req[2] = (uint8_t)((origin_id >> 8) & 0xFF);
+	join_req[3] = ++g_mesh_req_seq;
+
+	LOG_INF("[XMESH] Discovering parents: JOIN_REQUEST seq %u (origin 0x%04X)",
+		join_req[3], origin_id);
+
+	int ret = lora_config(lora_dev, &etc_lora_tx_config);
+	if (ret < 0) {
+		LOG_ERR("[XMESH] lora_config TX failed: %d", ret);
+		return ret;
+	}
+
+	ret = lora_send(lora_dev, join_req, sizeof(join_req));
+	if (ret < 0) {
+		LOG_ERR("[XMESH] lora_send JOIN_REQUEST failed: %d", ret);
+		return ret;
+	}
+
+	ret = lora_config(lora_dev, &etc_lora_rx_config);
+	if (ret < 0) {
+		LOG_ERR("[XMESH] lora_config RX failed: %d", ret);
+		return ret;
+	}
+
+	uint8_t rx_buf[32];
+	int16_t rssi;
+	int8_t snr;
+	ret = lora_recv(lora_dev, rx_buf, sizeof(rx_buf), K_MSEC(2500), &rssi, &snr);
+	if (ret >= XMESH_JOIN_OFFER_SIZE && rx_buf[0] == XMESH_PKT_JOIN_OFFER) {
+		uint16_t to_id = (uint16_t)rx_buf[3] | ((uint16_t)rx_buf[4] << 8);
+		if (to_id == origin_id) {
+			uint16_t from_id = (uint16_t)rx_buf[1] | ((uint16_t)rx_buf[2] << 8);
+			uint16_t path_cost = (uint16_t)rx_buf[6] | ((uint16_t)rx_buf[7] << 8);
+			uint8_t hop = rx_buf[8];
+			g_mesh_parent_id = from_id;
+			LOG_INF("[XMESH] Adopted parent 0x%04X (hop %u, cost %u, rssi %d dBm)",
+				from_id, hop, path_cost, rssi);
+			return 0;
+		}
+	}
+	LOG_DBG("[XMESH] No join offer received; proceeding in orphan mode (parent=0)");
+	return -ENOENT;
+}
+#else
 static struct lora_modem_config etc_lora_rx_config = {
 	.frequency = CONFIG_ETC_LORA_MODULE_RX_FREQUENCY,
 	.bandwidth = BW_125_KHZ,
@@ -143,8 +257,8 @@ static struct lora_modem_config etc_lora_tx_config = {
 	.tx_power = 14,
 	.tx = true,
 };
+#endif
 
-const struct device *lora_dev = DEVICE_DT_GET(DT_ALIAS(lora0));
 static struct k_thread lora_rx_thread;
 static struct module_data self = {
 	.name = "lora",
@@ -722,8 +836,160 @@ retry_recv:
 	return 0;
 }
 
+#if defined(CONFIG_ETC_LORA_XMESH_PROTOCOL)
+static int module_lora_process_packet_xmesh(union etc_device_record record)
+{
+	uint16_t origin_id = xmesh_get_origin_id();
+
+	/* Attempt parent discovery if we don't have an adopted parent */
+	if (g_mesh_parent_id == 0) {
+		(void)xmesh_join_parent(origin_id);
+	}
+
+	/* Extract Input 1 (temp_c_x100) and Input 2 (rh_pct_x100) only */
+	int16_t temp_c_x100 = 0;
+	if (sensor_temperature_is_valid(record.sensor[SENSOR_INPUT_IN1])) {
+		float t1 = record.sensor[SENSOR_INPUT_IN1];
+		temp_c_x100 = (int16_t)(t1 >= 0.0f ? (t1 * 100.0f + 0.5f) : (t1 * 100.0f - 0.5f));
+	}
+
+	uint16_t rh_pct_x100 = 0;
+	if (sensor_temperature_is_valid(record.sensor[SENSOR_INPUT_IN2])) {
+		float t2 = record.sensor[SENSOR_INPUT_IN2];
+		rh_pct_x100 = (uint16_t)(t2 >= 0.0f ? (t2 * 100.0f + 0.5f) : 0);
+	} else if (sensor_humidity_is_valid(record.sensor[SENSOR_INPUT_HUMID])) {
+		float h = record.sensor[SENSOR_INPUT_HUMID];
+		rh_pct_x100 = (uint16_t)(h >= 0.0f ? (h * 100.0f + 0.5f) : 0);
+	}
+
+	uint16_t batt_mv = (uint16_t)(record.battery >= 0.0f ? (record.battery * 1000.0f + 0.5f) : 0);
+	uint32_t sampled_utc_sec = record.timestamp;
+
+	/* Calculate CRC-16/CCITT over the 6 sensor bytes (temp_c_x100, rh_pct_x100, batt_mv) */
+	uint8_t sensor_bytes[6];
+	sensor_bytes[0] = (uint8_t)(temp_c_x100 & 0xFF);
+	sensor_bytes[1] = (uint8_t)((temp_c_x100 >> 8) & 0xFF);
+	sensor_bytes[2] = (uint8_t)(rh_pct_x100 & 0xFF);
+	sensor_bytes[3] = (uint8_t)((rh_pct_x100 >> 8) & 0xFF);
+	sensor_bytes[4] = (uint8_t)(batt_mv & 0xFF);
+	sensor_bytes[5] = (uint8_t)((batt_mv >> 8) & 0xFF);
+	uint16_t orig_crc16 = xmesh_crc16_ccitt(sensor_bytes, sizeof(sensor_bytes));
+
+	/* Build binary DataPkt (18 bytes on air when path_len == 0) */
+	uint8_t tx_buf[XMESH_DATA_PKT_SIZE];
+	tx_buf[0] = XMESH_PKT_DATA; /* 0xEA */
+	tx_buf[1] = (uint8_t)(g_mesh_parent_id & 0xFF);
+	tx_buf[2] = (uint8_t)((g_mesh_parent_id >> 8) & 0xFF);
+	tx_buf[3] = 0x00; /* path_len = 0 at origin */
+	tx_buf[4] = (uint8_t)(origin_id & 0xFF);
+	tx_buf[5] = (uint8_t)((origin_id >> 8) & 0xFF);
+	tx_buf[6] = (uint8_t)(orig_crc16 & 0xFF);
+	tx_buf[7] = (uint8_t)((orig_crc16 >> 8) & 0xFF);
+	tx_buf[8] = (uint8_t)(sampled_utc_sec & 0xFF);
+	tx_buf[9] = (uint8_t)((sampled_utc_sec >> 8) & 0xFF);
+	tx_buf[10] = (uint8_t)((sampled_utc_sec >> 16) & 0xFF);
+	tx_buf[11] = (uint8_t)((sampled_utc_sec >> 24) & 0xFF);
+	memcpy(&tx_buf[12], sensor_bytes, sizeof(sensor_bytes));
+
+	LOG_INF("[XMESH] TX DATA: parent=0x%04X, origin=0x%04X, In1=%.2f C, In2=%.2f, batt=%u mV, crc=0x%04X",
+		g_mesh_parent_id, origin_id, (double)temp_c_x100 / 100.0,
+		(double)rh_pct_x100 / 100.0, batt_mv, orig_crc16);
+
+	int rc = 0;
+	uint8_t retry_cnt = 0;
+
+retry_tx:
+	{
+		SEND_EVENT(lora, LORA_EVT_SEND);
+	}
+
+	rc = lora_config(lora_dev, &etc_lora_tx_config);
+	if (rc < 0) {
+		LOG_ERR("[XMESH] lora_config TX failed: %d", rc);
+		{
+			SEND_EVENT(lora, LORA_EVT_ERROR);
+		}
+		return rc;
+	}
+
+	rc = lora_send(lora_dev, tx_buf, sizeof(tx_buf));
+	if (rc < 0) {
+		LOG_ERR("[XMESH] lora_send failed: %d", rc);
+		{
+			SEND_EVENT(lora, LORA_EVT_ERROR);
+		}
+		return rc;
+	}
+
+	/* Orphan mode (parent_id == 0): mesh repeaters and gateways ingest and
+	 * forward without sending ACK over air. Return success immediately. */
+	if (g_mesh_parent_id == 0) {
+		LOG_INF("[XMESH] Transmitted as orphan (no ACK expected)");
+		{
+			SEND_EVENT(lora, LORA_EVT_ACK);
+		}
+		return 0;
+	}
+
+	/* Joined mode: wait for PKT_ACK (0xF3) from parent */
+	rc = lora_config(lora_dev, &etc_lora_rx_config);
+	if (rc < 0) {
+		LOG_ERR("[XMESH] lora_config RX failed: %d", rc);
+		return rc;
+	}
+
+	uint8_t rx_buf[32];
+	int16_t rssi;
+	int8_t snr;
+	rc = lora_recv(lora_dev, rx_buf, sizeof(rx_buf), K_MSEC(3000), &rssi, &snr);
+	if (rc >= XMESH_ACK_PKT_SIZE && rx_buf[0] == XMESH_PKT_ACK) {
+		uint16_t ack_from = (uint16_t)rx_buf[1] | ((uint16_t)rx_buf[2] << 8);
+		uint16_t ack_to   = (uint16_t)rx_buf[3] | ((uint16_t)rx_buf[4] << 8);
+		uint16_t ack_crc  = (uint16_t)rx_buf[5] | ((uint16_t)rx_buf[6] << 8);
+		uint8_t status    = rx_buf[7];
+		uint32_t utc_sec  = (uint32_t)rx_buf[9] | ((uint32_t)rx_buf[10] << 8) |
+				    ((uint32_t)rx_buf[11] << 16) | ((uint32_t)rx_buf[12] << 24);
+
+		if (ack_to == origin_id && ack_crc == orig_crc16) {
+			LOG_INF("[XMESH] ACK from 0x%04X (status=%u, utc=%u, rssi=%d dBm)",
+				ack_from, status, utc_sec, rssi);
+			if (utc_sec >= 1700000000UL) {
+				uint32_t my_time = 0;
+				date_time_utc_second(&my_time);
+				if (abs((int)(utc_sec - my_time)) >= LORA_SYNC_TIME_DIFF_SEC) {
+					LOG_INF("[XMESH] Syncing RTC time to %u", utc_sec);
+					date_time_set_second(utc_sec);
+				}
+			}
+			{
+				SEND_EVENT(lora, LORA_EVT_ACK);
+			}
+			return 0;
+		}
+	}
+
+	/* ACK timeout or mismatch */
+	if (++retry_cnt < LORA_RETRY_MAX_TIME) {
+		LOG_WRN("[XMESH] ACK timeout, retry %u/%u", retry_cnt, LORA_RETRY_MAX_TIME);
+		k_msleep(1000 + (sys_rand32_get() % 1000));
+		goto retry_tx;
+	}
+
+	/* Failed to receive ACK after retries: invalidate parent and notify */
+	LOG_WRN("[XMESH] Max retries reached; clearing parent 0x%04X", g_mesh_parent_id);
+	g_mesh_parent_id = 0;
+	{
+		SEND_EVENT(lora, LORA_EVT_NACK);
+	}
+	return -ETIMEDOUT;
+}
+#endif
+
 static int module_lora_process_packet(union etc_device_record record)
 {
+#if defined(CONFIG_ETC_LORA_XMESH_PROTOCOL)
+	return module_lora_process_packet_xmesh(record);
+#else
 	LOG_HEXDUMP_DBG((uint8_t *)&record, sizeof(record), "RECORD");
 	int now = date_time_now_second();
 	int decoded_buf_len = 0;
@@ -866,6 +1132,7 @@ retry:
 	}
 
 	return -EINVAL;
+#endif
 }
 
 /* Message handler for STATE_CLOUD_DISCONNECTED. */
