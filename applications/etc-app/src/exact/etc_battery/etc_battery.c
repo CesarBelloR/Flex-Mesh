@@ -66,6 +66,27 @@ enum battery_status etc_battery_get_status(void) {
 	return last_battery_status;
 }
 
+const char *etc_battery_status_str(enum battery_status status)
+{
+	switch (status) {
+	case BATTERY_NORMAL:
+		return "Normal";
+	case BATTERY_CHARGE_IN_PROCESS:
+		return "Charging";
+	case BATTERY_CHARGE_COMPLETE:
+		return "Charge Complete";
+	case BATTERY_DAMAGED:
+		return "Damaged/Error";
+	case BATTERY_LOW:
+		return "Low";
+	case BATTERY_NO_INSTALLED:
+		return "Not Installed";
+	case BATTERY_UNKNOWN:
+	default:
+		return "Unknown";
+	}
+}
+
 static void etc_battery_charger_handler(uint8_t bus_status, 
 	uint8_t battery_status, uint8_t power_status) {
 	uint16_t battery_mV = etc_sensor_get_battery();

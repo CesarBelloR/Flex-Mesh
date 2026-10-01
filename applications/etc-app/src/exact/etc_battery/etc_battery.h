@@ -49,6 +49,14 @@ void etc_battery_poll_status(void);
 enum battery_status etc_battery_get_status(void);
 
 /**
+ * @brief Convert battery status enum to human-readable string.
+ *
+ * @param status Battery status.
+ * @return String description ("Normal", "Charging", "Charge Complete", etc.).
+ */
+const char *etc_battery_status_str(enum battery_status status);
+
+/**
  * @brief Get the battery in mV 
  * 
  * @return battery status @ref enum battery_status

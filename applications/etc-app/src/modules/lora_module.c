@@ -17,7 +17,12 @@
 #include "cloud/cloud_codec/data_codec.h"
 #include "common.h"
 #include "etc_util.h"
+#include "etc_sensor.h"
 #define MODULE lora_module
+
+#ifdef CONFIG_SHELL
+#include <zephyr/shell/shell.h>
+#endif
 
 #include "modules_common.h"
 #include "app_module_helper.h"
@@ -107,6 +112,10 @@ K_MSGQ_DEFINE(msgq_lora, sizeof(struct lora_msg_data), LORA_QUEUE_ENTRY_COUNT,
 
 K_SEM_DEFINE(lora_request_sem, 0, 1);
 K_MUTEX_DEFINE(lora_request_mutex);
+K_MUTEX_DEFINE(lora_hw_mutex);
+#ifdef CONFIG_SHELL
+static const struct shell *g_lora_monitor_sh = NULL;
+#endif
 static struct lora_request {
 	enum lora_request_type type;
 	int64_t uptime_ms;
@@ -182,12 +191,33 @@ static uint16_t xmesh_crc16_ccitt(const uint8_t *d, size_t n)
 
 static uint16_t xmesh_get_origin_id(void)
 {
+	uint16_t saved_id = 0;
+	if (etc_device_read_setting(ETC_SETTING_LORA_NODE_ID, &saved_id, sizeof(saved_id)) == 0 &&
+	    saved_id != 0 && saved_id != 0xFFFF) {
+		return saved_id;
+	}
+
 	uint8_t dev_id[8];
 	ssize_t len = hwinfo_get_device_id(dev_id, sizeof(dev_id));
 	if (len >= 2) {
 		return (uint16_t)dev_id[len - 2] | ((uint16_t)dev_id[len - 1] << 8);
 	}
 	return 0xF1E1;
+}
+
+static bool xmesh_is_origin_id_persistent(void)
+{
+	uint16_t saved_id = 0;
+	return (etc_device_read_setting(ETC_SETTING_LORA_NODE_ID, &saved_id, sizeof(saved_id)) == 0 &&
+		saved_id != 0 && saved_id != 0xFFFF);
+}
+
+static int xmesh_set_origin_id(uint16_t node_id)
+{
+	if (node_id == 0 || node_id == 0xFFFF) {
+		return etc_device_delete_setting(ETC_SETTING_LORA_NODE_ID);
+	}
+	return etc_device_write_setting(ETC_SETTING_LORA_NODE_ID, &node_id, sizeof(node_id));
 }
 
 static int xmesh_join_parent(uint16_t origin_id)
@@ -200,6 +230,13 @@ static int xmesh_join_parent(uint16_t origin_id)
 
 	LOG_INF("[XMESH] Discovering parents: JOIN_REQUEST seq %u (origin 0x%04X)",
 		join_req[3], origin_id);
+#ifdef CONFIG_SHELL
+	if (g_lora_monitor_sh != NULL) {
+		shell_print(g_lora_monitor_sh,
+			    "[LoRa TX] Parent Discovery: JOIN_REQUEST seq %u (origin 0x%04X)",
+			    join_req[3], origin_id);
+	}
+#endif
 
 	int ret = lora_config(lora_dev, &etc_lora_tx_config);
 	if (ret < 0) {
@@ -232,10 +269,23 @@ static int xmesh_join_parent(uint16_t origin_id)
 			g_mesh_parent_id = from_id;
 			LOG_INF("[XMESH] Adopted parent 0x%04X (hop %u, cost %u, rssi %d dBm)",
 				from_id, hop, path_cost, rssi);
+#ifdef CONFIG_SHELL
+			if (g_lora_monitor_sh != NULL) {
+				shell_print(g_lora_monitor_sh,
+					    "[LoRa RX] Adopted parent 0x%04X (hop %u, cost %u, RSSI %d dBm)",
+					    from_id, hop, path_cost, rssi);
+			}
+#endif
 			return 0;
 		}
 	}
 	LOG_DBG("[XMESH] No join offer received; proceeding in orphan mode (parent=0)");
+#ifdef CONFIG_SHELL
+	if (g_lora_monitor_sh != NULL) {
+		shell_print(g_lora_monitor_sh,
+			    "[LoRa RX] No join offer received; proceeding in orphan mode (parent=0)");
+	}
+#endif
 	return -ENOENT;
 }
 #else
@@ -664,12 +714,27 @@ retry_recv:
 			if (response.reclaim_start_time == 0 || response.reclaim_end_time == 0) {
 				LOG_DBG("Receive the ACK message from the replay %d at %d",
 					response.relay_id, response.current_time);
+#ifdef CONFIG_SHELL
+				if (g_lora_monitor_sh != NULL) {
+					shell_print(g_lora_monitor_sh,
+						    "[LoRa RX] Received Legacy ACK from Relay %d at time %d",
+						    response.relay_id, response.current_time);
+				}
+#endif
 				SEND_EVENT(lora, LORA_EVT_ACK);
 			} else {
 				LOG_DBG("Receive the RECLAIM message from the replay %d from %d to "
 					"%d",
 					response.relay_id, response.reclaim_start_time,
 					response.reclaim_end_time);
+#ifdef CONFIG_SHELL
+				if (g_lora_monitor_sh != NULL) {
+					shell_print(g_lora_monitor_sh,
+						    "[LoRa RX] Received Legacy RECLAIM from Relay %d (%d to %d)",
+						    response.relay_id, response.reclaim_start_time,
+						    response.reclaim_end_time);
+				}
+#endif
 				etc_device_record_reclaim(response.reclaim_start_time,
 							  response.reclaim_end_time, false);
 			}
@@ -894,6 +959,26 @@ static int module_lora_process_packet_xmesh(union etc_device_record record)
 	LOG_INF("[XMESH] TX DATA: parent=0x%04X, origin=0x%04X, In1=%.2f C, In2=%.2f, batt=%u mV, crc=0x%04X",
 		g_mesh_parent_id, origin_id, (double)temp_c_x100 / 100.0,
 		(double)rh_pct_x100 / 100.0, batt_mv, orig_crc16);
+#ifdef CONFIG_SHELL
+	if (g_lora_monitor_sh != NULL) {
+		shell_print(g_lora_monitor_sh,
+			    "[LoRa TX] XMESH DATA Packet:\n"
+			    "  Origin ID  : 0x%04X\n"
+			    "  Parent ID  : 0x%04X%s\n"
+			    "  In1 (Temp) : %.2f C\n"
+			    "  In2 (RH)   : %.2f\n"
+			    "  Battery    : %u mV\n"
+			    "  CRC16      : 0x%04X\n"
+			    "  UTC Time   : %u\n"
+			    "  Raw Bytes  : %02X %02X %02X %02X %02X %02X %02X %02X ...",
+			    origin_id, g_mesh_parent_id,
+			    (g_mesh_parent_id == 0) ? " (Orphan mode)" : "",
+			    (double)temp_c_x100 / 100.0, (double)rh_pct_x100 / 100.0,
+			    batt_mv, orig_crc16, sampled_utc_sec,
+			    tx_buf[0], tx_buf[1], tx_buf[2], tx_buf[3],
+			    tx_buf[4], tx_buf[5], tx_buf[6], tx_buf[7]);
+	}
+#endif
 
 	int rc = 0;
 	uint8_t retry_cnt = 0;
@@ -925,6 +1010,12 @@ retry_tx:
 	 * forward without sending ACK over air. Return success immediately. */
 	if (g_mesh_parent_id == 0) {
 		LOG_INF("[XMESH] Transmitted as orphan (no ACK expected)");
+#ifdef CONFIG_SHELL
+		if (g_lora_monitor_sh != NULL) {
+			shell_print(g_lora_monitor_sh,
+				    "[LoRa TX] Transmitted as orphan (parent=0). No ACK expected over the air.");
+		}
+#endif
 		{
 			SEND_EVENT(lora, LORA_EVT_ACK);
 		}
@@ -932,6 +1023,13 @@ retry_tx:
 	}
 
 	/* Joined mode: wait for PKT_ACK (0xF3) from parent */
+#ifdef CONFIG_SHELL
+	if (g_lora_monitor_sh != NULL) {
+		shell_print(g_lora_monitor_sh,
+			    "[LoRa RX] Waiting up to 3000 ms for ACK from 0x%04X...",
+			    g_mesh_parent_id);
+	}
+#endif
 	rc = lora_config(lora_dev, &etc_lora_rx_config);
 	if (rc < 0) {
 		LOG_ERR("[XMESH] lora_config RX failed: %d", rc);
@@ -953,6 +1051,19 @@ retry_tx:
 		if (ack_to == origin_id && ack_crc == orig_crc16) {
 			LOG_INF("[XMESH] ACK from 0x%04X (status=%u, utc=%u, rssi=%d dBm)",
 				ack_from, status, utc_sec, rssi);
+#ifdef CONFIG_SHELL
+			if (g_lora_monitor_sh != NULL) {
+				shell_print(g_lora_monitor_sh,
+					    "[LoRa RX] XMESH ACK Received!\n"
+					    "  From Parent: 0x%04X\n"
+					    "  To Node    : 0x%04X (match)\n"
+					    "  CRC Match  : 0x%04X (MATCH)\n"
+					    "  Status     : %u\n"
+					    "  Network UTC: %u\n"
+					    "  Signal     : RSSI %d dBm, SNR %d dB",
+					    ack_from, ack_to, ack_crc, status, utc_sec, rssi, snr);
+			}
+#endif
 			if (utc_sec >= 1700000000UL) {
 				uint32_t my_time = 0;
 				date_time_utc_second(&my_time);
@@ -971,12 +1082,26 @@ retry_tx:
 	/* ACK timeout or mismatch */
 	if (++retry_cnt < LORA_RETRY_MAX_TIME) {
 		LOG_WRN("[XMESH] ACK timeout, retry %u/%u", retry_cnt, LORA_RETRY_MAX_TIME);
+#ifdef CONFIG_SHELL
+		if (g_lora_monitor_sh != NULL) {
+			shell_print(g_lora_monitor_sh,
+				    "[LoRa RX] ACK timeout (retry %u/%u, retrying)...",
+				    retry_cnt, LORA_RETRY_MAX_TIME);
+		}
+#endif
 		k_msleep(1000 + (sys_rand32_get() % 1000));
 		goto retry_tx;
 	}
 
 	/* Failed to receive ACK after retries: invalidate parent and notify */
 	LOG_WRN("[XMESH] Max retries reached; clearing parent 0x%04X", g_mesh_parent_id);
+#ifdef CONFIG_SHELL
+	if (g_lora_monitor_sh != NULL) {
+		shell_print(g_lora_monitor_sh,
+			    "[LoRa RX] NACK: Max retries (%u) reached! Parent 0x%04X cleared.",
+			    LORA_RETRY_MAX_TIME, g_mesh_parent_id);
+	}
+#endif
 	g_mesh_parent_id = 0;
 	{
 		SEND_EVENT(lora, LORA_EVT_NACK);
@@ -1082,6 +1207,15 @@ retry:
 	LOG_DBG("Msg %s", decoded_buf);
 	etc_cape_encrypt(decoded_buf, encoded_buffer, decoded_buf_len, decoded_buf_len + 1, 21);
 	LOG_HEXDUMP_INF(encoded_buffer, decoded_buf_len, "ENCRYPTED");
+#ifdef CONFIG_SHELL
+	if (g_lora_monitor_sh != NULL) {
+		shell_print(g_lora_monitor_sh,
+			    "[LoRa TX] Sending Legacy Packet:\n"
+			    "  Decoded: %s\n"
+			    "  Length : %d bytes",
+			    decoded_buf, decoded_buf_len);
+	}
+#endif
 
 	if (cnt != 0) {
 		/* Generate new TX_DELAY. FW-965: during an active reclaim that has run
@@ -1199,6 +1333,7 @@ static void module_lora_rx_thread_fn(void)
 				break;
 			}
 			case LORA_REQUEST_IN_RUN_RELAY: {
+				k_mutex_lock(&lora_hw_mutex, K_FOREVER);
 				LOG_INF("Relay is listening for data");
 				{
 					SEND_EVENT(lora, LORA_EVT_RELAY_START_RX);
@@ -1212,9 +1347,11 @@ static void module_lora_rx_thread_fn(void)
 				{
 					SEND_EVENT(lora, LORA_EVT_RELAY_RX_COMPLETE);
 				}
+				k_mutex_unlock(&lora_hw_mutex);
 				break;
 			}
 			case LORA_REQUEST_IN_RUN_LOGGER: {
+				k_mutex_lock(&lora_hw_mutex, K_FOREVER);
 				LOG_INF("Logger sending data");
 				int rc = 0;
 				reclaim_tx_delay_logged = false;
@@ -1240,6 +1377,7 @@ static void module_lora_rx_thread_fn(void)
 					}
 				} while (1);
 				SEND_EVENT(lora, LORA_EVT_RX_DATA_READY);
+				k_mutex_unlock(&lora_hw_mutex);
 				break;
 			}
 			}
@@ -1285,3 +1423,417 @@ APP_EVENT_SUBSCRIBE(MODULE, app_event);
 APP_EVENT_SUBSCRIBE(MODULE, data_event);
 APP_EVENT_SUBSCRIBE(MODULE, util_event);
 APP_EVENT_SUBSCRIBE(MODULE, cloud_event);
+
+#ifdef CONFIG_SHELL
+
+static int cmd_lora_send(const struct shell *sh, size_t argc, char **argv)
+{
+	if (!device_is_ready(lora_dev)) {
+		shell_error(sh, "LoRa device is not ready!");
+		return -ENODEV;
+	}
+
+	union etc_device_record record;
+	memset(&record, 0, sizeof(record));
+	int record_id = 0;
+
+	if (argc > 1 && strcmp(argv[1], "flash") == 0) {
+		record_id = etc_device_read_record(&record, NULL);
+		if (record_id <= 0) {
+			shell_warn(sh, "[LoRa] No pending un-ACKed records in flash.");
+			return 0;
+		}
+		shell_print(sh, "[LoRa] Transmitting pending record #%d from flash", record_id);
+	} else {
+		bool fresh_sample = false;
+		if (argc > 1 && (strcmp(argv[1], "sample") == 0 || strcmp(argv[1], "fresh") == 0)) {
+			fresh_sample = true;
+		}
+
+		struct etc_logger_all_inputs all_inputs;
+		int ret = etc_sensor_read_all_inputs(&all_inputs, fresh_sample);
+		if (ret != 0 && fresh_sample) {
+			shell_warn(sh, "[LoRa] Live acquisition failed (%d), using cached readings", ret);
+			ret = etc_sensor_read_all_inputs(&all_inputs, false);
+		}
+
+		/* If no previous sample was ever taken on port 1/2 or ambient, acquire a fresh sample */
+		if (!all_inputs.in[0].connected && !all_inputs.in[1].connected &&
+		    !all_inputs.ambient_valid && !fresh_sample) {
+			shell_print(sh, "[LoRa] No previous readings; acquiring fresh sample from sensors...");
+			etc_sensor_read_all_inputs(&all_inputs, true);
+		}
+
+		record.timestamp = (uint32_t)all_inputs.timestamp;
+		record.battery = (float)all_inputs.battery_mv / 1000.0f;
+		record.flag = (uint32_t)all_inputs.battery_status;
+
+		for (int i = 0; i < ETC_DEVICE_NUM_SENSOR; i++) {
+			record.sensor[i] = SENSOR_TEMP_NO_CONNECTED;
+		}
+		for (int i = 0; i < 4; i++) {
+			record.sensor[i] = all_inputs.in[i].temp_c;
+		}
+		for (int i = 0; i < 4; i++) {
+			record.sensor[i + SENSOR_INPUT_IN5] = all_inputs.splitter[i].temp_c;
+		}
+		record.sensor[SENSOR_INPUT_AMBIENT] = all_inputs.ambient_temp_c;
+		record.sensor[SENSOR_INPUT_HUMID] = all_inputs.humidity_percent;
+
+		shell_print(sh, "[LoRa] Transmitting actual logger readings:");
+		if (all_inputs.in[0].connected) {
+			shell_print(sh, "  Port 1 (IN1) : %.2f C [%s]",
+				    (double)all_inputs.in[0].temp_c,
+				    etc_sensor_type_str(all_inputs.in[0].type));
+		} else {
+			shell_print(sh, "  Port 1 (IN1) : -- (No probe)");
+		}
+
+		if (all_inputs.in[1].connected) {
+			shell_print(sh, "  Port 2 (IN2) : %.2f C [%s]",
+				    (double)all_inputs.in[1].temp_c,
+				    etc_sensor_type_str(all_inputs.in[1].type));
+		} else if (all_inputs.humidity_valid) {
+			shell_print(sh, "  Port 2 (RH)  : %.2f %%",
+				    (double)all_inputs.humidity_percent);
+		} else {
+			shell_print(sh, "  Port 2 (IN2) : -- (No probe)");
+		}
+
+		shell_print(sh, "  Battery      : %u mV (%.2f V, %u%%, %s)",
+			    all_inputs.battery_mv,
+			    (double)record.battery,
+			    all_inputs.battery_percent,
+			    etc_battery_status_str(all_inputs.battery_status));
+	}
+
+	const struct shell *prev_sh = g_lora_monitor_sh;
+	g_lora_monitor_sh = sh;
+
+	k_mutex_lock(&lora_hw_mutex, K_FOREVER);
+	int rc = module_lora_process_packet(record);
+	k_mutex_unlock(&lora_hw_mutex);
+
+	g_lora_monitor_sh = prev_sh;
+
+	if (rc == 0) {
+		if (record_id > 0) {
+			etc_device_set_ack_record(record_id);
+		}
+		shell_print(sh, "[LoRa] Packet transmitted and ACKed successfully.");
+	} else {
+		shell_error(sh, "[LoRa] Transmission failed / unacknowledged (code %d)", rc);
+	}
+	return rc;
+}
+
+static int cmd_lora_status(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	shell_print(sh, "================== LoRa Subsystem Status ==================");
+	shell_print(sh, "Device Ready    : %s (%s)",
+		    device_is_ready(lora_dev) ? "YES" : "NO",
+		    device_is_ready(lora_dev) ? lora_dev->name : "N/A");
+	shell_print(sh, "Device Mode     : %s",
+		    etc_device_is_logger_lora() ? "LoRa Logger (Mode 1)" :
+		    etc_device_is_relay()       ? "Relay (Mode 0)" :
+		    (etc_get_device_mode() == ETC_DEVICE_MODE_LTE_LOGGER) ? "LTE Logger (Mode 2)" : "Other");
+	shell_print(sh, "TX Frequency    : %u MHz", CONFIG_ETC_LORA_MODULE_TX_FREQUENCY / 1000000);
+	shell_print(sh, "RX Frequency    : %u MHz", CONFIG_ETC_LORA_MODULE_RX_FREQUENCY / 1000000);
+#if defined(CONFIG_ETC_LORA_XMESH_PROTOCOL)
+	shell_print(sh, "Protocol        : EXACT LoRa Mesh v2.1 (Heltec V3 compatible)");
+	shell_print(sh, "Modulation      : SF9, BW 125 kHz, CR 4/5, Public Sync 0x34");
+	shell_print(sh, "Origin Node ID  : 0x%04X%s",
+		    xmesh_get_origin_id(),
+		    xmesh_is_origin_id_persistent() ? " (Persistent in NVS)" : " (Auto from HW ID)");
+	shell_print(sh, "Adopted Parent  : 0x%04X%s",
+		    g_mesh_parent_id,
+		    (g_mesh_parent_id == 0) ? " (Orphan mode - no ACK expected)" : "");
+#else
+	shell_print(sh, "Protocol        : Legacy EXACT LoRa (CAPE encrypted)");
+	shell_print(sh, "Modulation      : SF7, BW 125 kHz, CR 4/5, Private Sync 0x12");
+	shell_print(sh, "Relay Parent ID : %d", lora_parent_id);
+#endif
+	shell_print(sh, "TX Delay        : %u ms", etc_get_tx_delay_msec());
+	shell_print(sh, "TX Interval     : %u s (%u mins)",
+		    etc_get_tx_interval_secs(), etc_get_tx_interval_secs() / 60);
+	shell_print(sh, "===========================================================");
+	return 0;
+}
+
+static int cmd_lora_monitor(const struct shell *sh, size_t argc, char **argv)
+{
+	if (!device_is_ready(lora_dev)) {
+		shell_error(sh, "LoRa device is not ready!");
+		return -ENODEV;
+	}
+
+	uint32_t duration_sec = 30;
+	bool trigger_send = false;
+
+	for (size_t i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "send") == 0 || strcmp(argv[i], "--send") == 0) {
+			trigger_send = true;
+		} else {
+			int val = atoi(argv[i]);
+			if (val > 0) {
+				duration_sec = (uint32_t)val;
+			}
+		}
+	}
+
+	shell_print(sh, "==========================================================");
+	shell_print(sh, "   LoRa Live Monitor Started (%u seconds)", duration_sec);
+	shell_print(sh, "   RX Freq : %u MHz | BW: 125 kHz",
+		    CONFIG_ETC_LORA_MODULE_RX_FREQUENCY / 1000000);
+#if defined(CONFIG_ETC_LORA_XMESH_PROTOCOL)
+	shell_print(sh, "   Protocol: EXACT LoRa Mesh v2.1 (SF9, Public Sync 0x34)");
+	shell_print(sh, "   Origin  : 0x%04X | Parent: 0x%04X%s",
+		    xmesh_get_origin_id(), g_mesh_parent_id,
+		    (g_mesh_parent_id == 0) ? " (Orphan mode)" : "");
+#else
+	shell_print(sh, "   Protocol: Legacy EXACT LoRa (SF7, Private Sync 0x12)");
+#endif
+	shell_print(sh, "==========================================================");
+
+	const struct shell *prev_sh = g_lora_monitor_sh;
+	g_lora_monitor_sh = sh;
+
+	if (trigger_send) {
+		shell_print(sh, "--> Triggering live transmission...");
+		cmd_lora_send(sh, 0, NULL);
+		shell_print(sh, "--> Now listening for channel traffic...");
+	}
+
+	int64_t start_time = k_uptime_get();
+	int64_t end_time = start_time + (int64_t)duration_sec * 1000;
+	int64_t last_heartbeat = start_time;
+	uint8_t rx_buf[128];
+	int16_t rssi;
+	int8_t snr;
+	uint32_t rx_packet_count = 0;
+
+	while (k_uptime_get() < end_time) {
+		int64_t now = k_uptime_get();
+		int64_t remain_ms = end_time - now;
+		if (remain_ms <= 0) {
+			break;
+		}
+
+		uint32_t slice_ms = (remain_ms > 1000) ? 1000 : (uint32_t)remain_ms;
+
+		k_mutex_lock(&lora_hw_mutex, K_FOREVER);
+		int rc = lora_config(lora_dev, &etc_lora_rx_config);
+		if (rc < 0) {
+			k_mutex_unlock(&lora_hw_mutex);
+			shell_error(sh, "Failed to configure radio for RX: %d", rc);
+			break;
+		}
+		int ret = lora_recv(lora_dev, rx_buf, sizeof(rx_buf), K_MSEC(slice_ms), &rssi, &snr);
+		k_mutex_unlock(&lora_hw_mutex);
+
+		now = k_uptime_get();
+		if (ret > 0) {
+			rx_packet_count++;
+			double elapsed_sec = (double)(now - start_time) / 1000.0;
+			shell_print(sh, "\n[+%.1fs] [LoRa RX] Captured packet (%d bytes, RSSI: %d dBm, SNR: %d dB):",
+				    elapsed_sec, ret, rssi, snr);
+
+#if defined(CONFIG_ETC_LORA_XMESH_PROTOCOL)
+			if (rx_buf[0] == XMESH_PKT_DATA && ret >= XMESH_DATA_PKT_SIZE) {
+				uint16_t parent_id = (uint16_t)rx_buf[1] | ((uint16_t)rx_buf[2] << 8);
+				uint8_t path_len = rx_buf[3];
+				uint16_t origin_id = (uint16_t)rx_buf[4] | ((uint16_t)rx_buf[5] << 8);
+				uint16_t crc16 = (uint16_t)rx_buf[6] | ((uint16_t)rx_buf[7] << 8);
+				uint32_t utc_sec = (uint32_t)rx_buf[8] | ((uint32_t)rx_buf[9] << 8) |
+						   ((uint32_t)rx_buf[10] << 16) | ((uint32_t)rx_buf[11] << 24);
+				int16_t in1_raw = (int16_t)((uint16_t)rx_buf[12] | ((uint16_t)rx_buf[13] << 8));
+				int16_t in2_raw = (int16_t)((uint16_t)rx_buf[14] | ((uint16_t)rx_buf[15] << 8));
+				uint16_t batt_mv = (uint16_t)rx_buf[16] | ((uint16_t)rx_buf[17] << 8);
+
+				shell_print(sh, "  Type       : XMESH DATA (0xEA)\n"
+						"  Origin ID  : 0x%04X\n"
+						"  Parent ID  : 0x%04X (hops: %u)\n"
+						"  In1 (Temp) : %.2f C\n"
+						"  In2 (RH)   : %.2f\n"
+						"  Battery    : %u mV\n"
+						"  CRC16      : 0x%04X\n"
+						"  UTC Time   : %u",
+					    origin_id, parent_id, path_len,
+					    (double)in1_raw / 100.0, (double)in2_raw / 100.0,
+					    batt_mv, crc16, utc_sec);
+			} else if (rx_buf[0] == XMESH_PKT_ACK && ret >= XMESH_ACK_PKT_SIZE) {
+				uint16_t ack_from = (uint16_t)rx_buf[1] | ((uint16_t)rx_buf[2] << 8);
+				uint16_t ack_to   = (uint16_t)rx_buf[3] | ((uint16_t)rx_buf[4] << 8);
+				uint16_t ack_crc  = (uint16_t)rx_buf[5] | ((uint16_t)rx_buf[6] << 8);
+				uint8_t status    = rx_buf[7];
+				uint32_t utc_sec  = (uint32_t)rx_buf[9] | ((uint32_t)rx_buf[10] << 8) |
+						    ((uint32_t)rx_buf[11] << 16) | ((uint32_t)rx_buf[12] << 24);
+
+				shell_print(sh, "  Type       : XMESH ACK (0xF3)\n"
+						"  From Parent: 0x%04X\n"
+						"  To Node    : 0x%04X\n"
+						"  CRC Match  : 0x%04X\n"
+						"  Status     : %u\n"
+						"  Network UTC: %u",
+					    ack_from, ack_to, ack_crc, status, utc_sec);
+			} else if (rx_buf[0] == XMESH_PKT_JOIN_REQUEST && ret >= XMESH_JOIN_REQ_SIZE) {
+				uint16_t origin_id = (uint16_t)rx_buf[1] | ((uint16_t)rx_buf[2] << 8);
+				uint8_t seq = rx_buf[3];
+				shell_print(sh, "  Type       : XMESH JOIN_REQUEST (0xF0)\n"
+						"  Origin ID  : 0x%04X\n"
+						"  Sequence   : %u",
+					    origin_id, seq);
+			} else if (rx_buf[0] == XMESH_PKT_JOIN_OFFER && ret >= XMESH_JOIN_OFFER_SIZE) {
+				uint16_t from_id = (uint16_t)rx_buf[1] | ((uint16_t)rx_buf[2] << 8);
+				uint16_t to_id   = (uint16_t)rx_buf[3] | ((uint16_t)rx_buf[4] << 8);
+				uint16_t cost    = (uint16_t)rx_buf[6] | ((uint16_t)rx_buf[7] << 8);
+				uint8_t hop      = rx_buf[8];
+				shell_print(sh, "  Type       : XMESH JOIN_OFFER (0xF1)\n"
+						"  From Parent: 0x%04X\n"
+						"  To Node    : 0x%04X\n"
+						"  Hop / Cost : hop %u, cost %u",
+					    from_id, to_id, hop, cost);
+			} else
+#endif
+			{
+				char decr[128];
+				memset(decr, 0, sizeof(decr));
+				etc_cape_decrypt((char *)rx_buf, decr, MIN(ret, (int)sizeof(decr) - 1));
+				if (decr[0] == 'S' || decr[0] == 'R' || decr[0] == 'A') {
+					shell_print(sh, "  Type       : Legacy Decrypted Payload\n"
+							"  Text       : %s", decr);
+				} else {
+					shell_hexdump(sh, rx_buf, ret);
+				}
+			}
+		} else {
+			if (now - last_heartbeat >= 5000) {
+				last_heartbeat = now;
+				int remain_s = (int)((end_time - now) / 1000);
+				if (remain_s > 0) {
+					shell_print(sh, "[LoRa] Listening... (%d s remaining, %u packets captured)",
+						    remain_s, rx_packet_count);
+				}
+			}
+		}
+	}
+
+	g_lora_monitor_sh = prev_sh;
+	shell_print(sh, "==========================================================");
+	shell_print(sh, "   LoRa Live Monitor Ended (%u s elapsed | %u packets captured)",
+		    duration_sec, rx_packet_count);
+	shell_print(sh, "==========================================================");
+	return 0;
+}
+
+#if defined(CONFIG_ETC_LORA_XMESH_PROTOCOL)
+static int cmd_lora_node_id(const struct shell *sh, size_t argc, char **argv)
+{
+	if (argc == 1) {
+		uint16_t id = xmesh_get_origin_id();
+		bool is_nvs = xmesh_is_origin_id_persistent();
+		shell_print(sh, "LoRa Mesh Origin Node ID: 0x%04X (%u) [%s]",
+			    id, id, is_nvs ? "Saved in NVS Flash/EEPROM" : "Auto from Nordic HW ID");
+		return 0;
+	}
+
+	if (strcmp(argv[1], "auto") == 0 || strcmp(argv[1], "clear") == 0 || strcmp(argv[1], "default") == 0) {
+		int rc = xmesh_set_origin_id(0);
+		if (rc != 0 && rc != -ENOENT) {
+			shell_error(sh, "Failed to clear NVS Node ID: %d", rc);
+			return rc;
+		}
+		shell_print(sh, "NVS override cleared. Restored auto hardware Node ID: 0x%04X",
+			    xmesh_get_origin_id());
+		return 0;
+	}
+
+	char clean_str[32];
+	const char *src = argv[1];
+	/* Strip leading/trailing quotes if present */
+	if (*src == '"' || *src == '\'') {
+		src++;
+	}
+	size_t len = 0;
+	while (*src && *src != '"' && *src != '\'' && len < sizeof(clean_str) - 1) {
+		clean_str[len++] = *src++;
+	}
+	clean_str[len] = '\0';
+
+	/* Check if the string has 'O' or 'o' commonly mistyped for '0' */
+	bool substituted_o = false;
+	for (size_t i = 0; i < len; i++) {
+		if (clean_str[i] == 'O' || clean_str[i] == 'o') {
+			substituted_o = true;
+			clean_str[i] = '0';
+		}
+	}
+
+	char *endptr = NULL;
+	/* 1. Try parsing with base 0 (handles 0x hex and decimal) */
+	unsigned long val = strtoul(clean_str, &endptr, 0);
+
+	/* 2. If base 0 stopped on a non-decimal character (e.g. "6CE0" without "0x"), try base 16 */
+	if (*endptr != '\0') {
+		val = strtoul(clean_str, &endptr, 16);
+	}
+
+	if (*endptr != '\0' || val == 0 || val > 0xFFFF) {
+		shell_error(sh, "Invalid Node ID '%s'. Must be 1..65535 or 4-digit hex (e.g. 0x6CE0, 6CE0, or 'auto')", argv[1]);
+		return -EINVAL;
+	}
+
+	if (substituted_o) {
+		shell_warn(sh, "Interpreted letter 'O' in '%s' as digit '0' -> 0x%04lX", argv[1], val);
+	}
+
+	uint16_t new_id = (uint16_t)val;
+	int rc = xmesh_set_origin_id(new_id);
+	if (rc != 0) {
+		shell_error(sh, "Failed to write Node ID 0x%04X to NVS: %d", new_id, rc);
+		return rc;
+	}
+
+	shell_print(sh, "[OK] Node ID permanently saved to NVS Flash/EEPROM: 0x%04X (%u)", new_id, new_id);
+	shell_print(sh, "Active Origin Node ID is now: 0x%04X", xmesh_get_origin_id());
+	return 0;
+}
+#endif
+
+static int cmd_lora_default(const struct shell *sh, size_t argc, char **argv)
+{
+	if (argc <= 2) {
+		return cmd_lora_monitor(sh, argc, argv);
+	}
+	shell_help(sh);
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_lora,
+	SHELL_CMD_ARG(monitor, NULL,
+		      "Monitor LoRa sending & receiving for N seconds (default 30)\n"
+		      "Usage: lora monitor [seconds] [send]",
+		      cmd_lora_monitor, 1, 2),
+#if defined(CONFIG_ETC_LORA_XMESH_PROTOCOL)
+	SHELL_CMD_ARG(node_id, NULL,
+		      "Get or permanently save LoRa Mesh Node ID in NVS/EEPROM\n"
+		      "Usage: lora node_id [0x<hex>|<dec>|auto]",
+		      cmd_lora_node_id, 1, 1),
+#endif
+	SHELL_CMD_ARG(send, NULL,
+		      "Transmit real logger readings (Port 1, Port 2, Battery) over LoRa\n"
+		      "Usage: lora send [sample|flash]",
+		      cmd_lora_send, 1, 1),
+	SHELL_CMD(status, NULL,
+		  "Display current LoRa radio configuration and network state",
+		  cmd_lora_status),
+	SHELL_SUBCMD_SET_END);
+
+SHELL_CMD_REGISTER(lora, &sub_lora,
+		   "LoRa commands and live traffic monitor (default: 30s monitor)",
+		   cmd_lora_default);
+#endif /* CONFIG_SHELL */

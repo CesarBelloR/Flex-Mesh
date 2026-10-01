@@ -8,6 +8,34 @@
 #include <zephyr/device.h>
 #include "events/sensor_event.h"
 #include "etc_sensor_helper.h"
+#include "etc_battery.h"
+
+/**
+ * @brief Channel reading for a single temperature probe input.
+ */
+struct etc_logger_input_channel {
+	float temp_c;                 /**< Temperature reading in Celsius (or SENSOR_TEMP_NO_CONNECTED) */
+	enum sensor_type type;        /**< Probe type: SENSOR_TYPE_ANALOG, SENSOR_TYPE_DIGITAL, or SENSOR_TYPE_UNDEF */
+	bool connected;               /**< True if probe is connected and reading is valid */
+};
+
+/**
+ * @brief Aggregated readings of all inputs from the logger.
+ */
+struct etc_logger_all_inputs {
+	int64_t timestamp;                          /**< Sample timestamp: UTC epoch in seconds (or uptime if UTC not set) */
+	struct etc_logger_input_channel in[4];      /**< Primary physical inputs IN1..IN4 (Ports 1..4) */
+	struct etc_logger_input_channel splitter[4];/**< Splitter secondary inputs IN5..IN8 (Ports 1.B..4.B) */
+	float ambient_temp_c;                       /**< On-board ambient temperature in Celsius */
+	bool ambient_valid;                         /**< True if ambient reading is valid */
+	float humidity_percent;                     /**< Relative humidity in % */
+	bool humidity_valid;                        /**< True if humidity reading is valid */
+	int8_t humidity_port;                       /**< Zero-based port index (0..3) with humidity probe, or -1 if none */
+	uint16_t battery_mv;                        /**< Battery voltage in mV */
+	uint8_t battery_percent;                    /**< Battery state of charge (0..100%) */
+	enum battery_status battery_status;         /**< Battery status (Normal, Charging, Complete, Low, etc.) */
+	struct sensor_data raw_data;                /**< Standard Zephyr event / flash record representation */
+};
 
 #define ETC_CALIB_MAX_SN 99999
 #define ETC_CALIB_MIN_SN 10000
@@ -142,6 +170,29 @@ enum sensor_type etc_sensor_get_probe_type(enum sensor_input input);
  * @return the status of probed sensor (connected or no connect)
  */
 enum etc_sensor_status etc_sensor_get_status(void);
+
+/**
+ * @brief Read all inputs from the logger.
+ *
+ * Collects readings from all sensor ports (primary IN1..IN4, splitter IN5..IN8),
+ * ambient temperature, relative humidity, and battery voltage/status.
+ *
+ * @param[out] inputs Pointer to @ref etc_logger_all_inputs structure to populate.
+ * @param[in]  trigger_fresh_acquisition If true, triggers a full hardware sampling cycle
+ *             (sensor rail power-up, mux switching, ADC + 1-Wire reads) before returning.
+ *             If false, returns the latest cached values immediately without waking hardware.
+ *
+ * @return 0 on success, negative errno on failure (-EINVAL if inputs is NULL, -EBUSY if front-end is busy).
+ */
+int etc_sensor_read_all_inputs(struct etc_logger_all_inputs *inputs, bool trigger_fresh_acquisition);
+
+/**
+ * @brief Convert sensor probe type to human-readable string.
+ *
+ * @param type Probe type enum.
+ * @return String description ("Analog (NTC)", "Digital (1-Wire)", "None").
+ */
+const char *etc_sensor_type_str(enum sensor_type type);
 
 /**
  * @brief Disable the sensor voltage rail, if enabled.
