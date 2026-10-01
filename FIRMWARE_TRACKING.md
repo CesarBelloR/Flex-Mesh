@@ -199,3 +199,17 @@ Expected log outputs on packet send:
 - **Git User:** `Cesar Bello <contact@cesar-bello.com>`
 - **Tracking File Location:** [etc-firmware/FIRMWARE_TRACKING.md](file:///Users/cesar/Exact/flex1/etc-firmware/FIRMWARE_TRACKING.md)
 - **UART Shell Commands Reference:** [etc-firmware/SHELL_COMMANDS.md](file:///Users/cesar/Exact/flex1/etc-firmware/SHELL_COMMANDS.md)
+
+---
+
+## 8. Recent Modifications (October 2026)
+
+1. **Default Transmission & Log Interval to 5 Minutes:**
+   - Modified `ETC_SETTING_TX_INTERVAL_SECS_DEFAULT` in [`etc_settings.h`](file:///Users/cesar/Exact/flex1/etc-firmware/applications/etc-app/src/exact/etc_settings/etc_settings.h#L23) from `900` to `300` (5 minutes).
+   - Modified `ETC_SETTING_LOG_INTERVAL_SECS_DEFAULT` and `ETC_SETTING_LOG_INTERVAL_ALARM_SECS_DEFAULT` from `900` to `300` to synchronize logging with transmissions.
+   - Updated Kconfig defaults in [`etc_settings/Kconfig`](file:///Users/cesar/Exact/flex1/etc-firmware/applications/etc-app/src/exact/etc_settings/Kconfig).
+2. **`lora node_id` Input Parsing Enhancements:**
+   - Supports bare hex without `0x` prefix (e.g. `lora node_id 6CE0`).
+   - Automatically corrects mistyped letter `'O'` to digit `'0'` (e.g. `6CEO` -> `0x6CE0`).
+   - Strips quotes if passed with string wrappers.
+

@@ -7,13 +7,13 @@ if ETC_SETTINGS
 
 config INTERVAL_TIME_MEASUREMENT_IN_SECONDS
 	int "Interval time of measurement in seconds"
-	default 900
+	default 300
 	help
 		Setting the interval time for measurement in default
 
 config INTERVAL_TIME_TRANSMISSION_IN_SECONDS
 	int "Interval time of transmission in seconds"
-	default 900
+	default 300
 	help
 		Setting the interval time for transmission in default
 
