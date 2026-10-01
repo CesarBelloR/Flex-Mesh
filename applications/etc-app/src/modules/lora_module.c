@@ -18,6 +18,7 @@
 #include "common.h"
 #include "etc_util.h"
 #include "etc_sensor.h"
+#include "etc_battery.h"
 #define MODULE lora_module
 
 #ifdef CONFIG_SHELL

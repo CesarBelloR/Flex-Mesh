@@ -8,7 +8,6 @@
 #include <zephyr/device.h>
 #include "events/sensor_event.h"
 #include "etc_sensor_helper.h"
-#include "etc_battery.h"
 
 /**
  * @brief Channel reading for a single temperature probe input.
@@ -33,7 +32,7 @@ struct etc_logger_all_inputs {
 	int8_t humidity_port;                       /**< Zero-based port index (0..3) with humidity probe, or -1 if none */
 	uint16_t battery_mv;                        /**< Battery voltage in mV */
 	uint8_t battery_percent;                    /**< Battery state of charge (0..100%) */
-	enum battery_status battery_status;         /**< Battery status (Normal, Charging, Complete, Low, etc.) */
+	uint8_t battery_status;                     /**< Battery status (enum battery_status: Normal, Charging, Complete, Low, etc.) */
 	struct sensor_data raw_data;                /**< Standard Zephyr event / flash record representation */
 };
 
